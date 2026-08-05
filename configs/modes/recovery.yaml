@@ -1,0 +1,17 @@
+mode: recovery
+memory_ceiling_gib: 8.0
+minimum_headroom_gib: 1.5
+remote_llm_limit: 0
+hermes_limit: 1
+browser_limit: 0
+heavy_duckdb_limit: 2
+cpu_worker_limit: 1
+gpu_jobs_limit: 0
+load_shedding:
+  - archive
+  - browser
+  - hermes_skill_foundry
+  - low_priority_research
+  - training_backtests
+  - optional_model_challengers
+  - noncritical_collectors

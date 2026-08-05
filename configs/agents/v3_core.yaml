@@ -1,0 +1,12 @@
+roles:
+  - data_verifier
+  - technical_flow
+  - derivatives_regime
+  - news_event
+  - skeptic_base_rate
+  - risk_opportunity
+  - synthesizer
+minimum_paper_factor_families: 3
+minimum_paper_source_families: 2
+remote_llm_calls_standard: 2
+remote_llm_calls_deep: 4

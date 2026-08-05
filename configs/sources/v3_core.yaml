@@ -1,0 +1,31 @@
+sources:
+  - name: native_venue
+    family: crypto_market
+    origin: approved_native_venue
+    grade: execution_grade
+    intended_use: bars_trades_books_funding_open_interest
+    parser_version: native-v1
+  - name: deribit_context
+    family: derivatives
+    origin: deribit_public
+    grade: research_grade
+    intended_use: iv_skew_term_structure_basis_liquidity
+    parser_version: deribit-v1
+  - name: official_rss
+    family: news
+    origin: official_company_or_project_rss
+    grade: research_grade
+    intended_use: event_news_context
+    parser_version: rss-v1
+  - name: gdelt
+    family: news
+    origin: gdelt
+    grade: context_only
+    intended_use: event_novelty_source_reliability
+    parser_version: gdelt-v1
+  - name: lse_corroboration
+    family: equity_market
+    origin: audited_lse_cross_check
+    grade: research_grade
+    intended_use: optional_corroboration_only
+    parser_version: lse-v1

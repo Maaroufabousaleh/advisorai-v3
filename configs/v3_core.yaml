@@ -1,0 +1,48 @@
+asset_class: crypto
+universe:
+  - BTC
+  - ETH
+venue: one_approved_paper_or_testnet_venue
+primary_horizon: 1h
+observation_interval: 5m
+context_horizon: 4h
+execution: paper_testnet_only
+primary_data: native_venue_rest_websocket
+context_sources:
+  - deribit
+  - gdelt
+  - official_rss
+optional_corroboration:
+  - audited_lse_cross_check
+deterministic_models:
+  - naive
+  - statistical
+  - lightgbm
+cpu_models:
+  - ttm-r2
+  - tspulse
+gpu_model_selection:
+  choose_one:
+    - chronos-2-small
+    - kronos-mini-small
+agent_roles:
+  - data_verifier
+  - technical_flow
+  - derivatives_regime
+  - news_event
+  - skeptic_base_rate
+  - risk_opportunity
+  - synthesizer
+excluded:
+  - hermes
+  - paperclip
+  - browser-use
+  - rd-agent
+  - tradingagents
+  - qlib_backtester
+  - lean
+  - omnicloud
+  - multiple_optimizers
+storage:
+  active: local_parquet_duckdb_sqlite
+  archive: manual_tested_rclone_crypt

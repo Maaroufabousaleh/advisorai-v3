@@ -1,0 +1,10 @@
+target: one_windows_wsl2_laptop
+wsl_memory_gib_approx: 11.0
+minimum_headroom_gib: 1.5
+gpu_global_leases: 1
+browser_global_jobs: 1
+heavy_duckdb_global_jobs: 2
+cpu_bound_global_jobs: 2
+backtest_train_global_jobs: 1
+hermes_coordinators: 1
+hermes_subagents_initial: 1

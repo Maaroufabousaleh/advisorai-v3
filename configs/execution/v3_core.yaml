@@ -1,0 +1,11 @@
+environment: paper_testnet
+venue_count: 1
+order_policies:
+  - immediate
+  - passive_limit
+time_in_force:
+  - GTC
+  - IOC
+ambiguous_ack: reconcile_before_retry
+idempotency: required_for_parent_and_child
+canonical_engine: nautilus_trader

@@ -1,0 +1,21 @@
+# Measured admission profiles from architecture section 3.3. Browser is an
+# execution profile, not an Advisor mission mode, so it is separate from
+# configs/modes/.
+trade_fast:
+  wsl_ram_ceiling_gib: 6.5
+  gpu_rule: normally_idle_one_frozen_preapproved_inference_model_only
+standard:
+  wsl_ram_ceiling_gib_range: [8.0, 8.5]
+  gpu_rule: one_microbatched_inference_worker
+deep_builder:
+  wsl_ram_ceiling_gib_range: [8.5, 9.0]
+  gpu_rule: one_model_or_one_isolated_build_test_job
+browser:
+  wsl_ram_ceiling_gib_range: [7.5, 8.0]
+  gpu_rule: pause_gpu_work_unless_measured_headroom_passes
+train:
+  wsl_ram_ceiling_gib_range: [8.5, 9.0]
+  gpu_rule: exclusive_gpu_lease_browsers_and_hermes_off
+archive:
+  wsl_ram_ceiling_gib: 6.5
+  gpu_rule: no_gpu
