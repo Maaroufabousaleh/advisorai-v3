@@ -38,8 +38,13 @@ def build_direct_gateway(
     api_key = settings.secret_for("ADVISORAI_LLM_API_KEY")
     if not api_key:
         raise ValueError("ADVISORAI_LLM_API_KEY is required for a direct gateway")
-    if settings.llm_provider and settings.llm_provider.lower() != route.provider.lower():
-        raise ValueError("gateway route provider does not match configured provider")
+    if settings.llm_provider:
+        configured_provider = settings.llm_provider.lower()
+        expected_provider = (
+            route.gateway.lower() if route.gateway.lower() == "openrouter" else route.provider.lower()
+        )
+        if configured_provider != expected_provider:
+            raise ValueError("gateway route provider does not match configured provider")
     if settings.llm_model and settings.llm_model != route.model:
         raise ValueError("gateway route model does not match configured model")
     hosts = allowed_hosts or (_host(settings.llm_base_url),)

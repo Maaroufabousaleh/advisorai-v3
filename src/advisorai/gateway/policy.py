@@ -13,11 +13,13 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from hashlib import sha256
+from math import isfinite
 from time import perf_counter_ns
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.contracts.core import is_forbidden_authority_action, normalize_authority_action
 from advisorai.ports import (
@@ -238,6 +240,169 @@ def _hash_json(value: object) -> str:
     return sha256(payload.encode("utf-8")).hexdigest()
 
 
+class ProviderEndpointAdmission(BaseModel):
+    """Frozen admission for one reviewed provider endpoint inventory entry.
+
+    Provider selectors and provider display names are intentionally separate
+    identities.  A selector is an exact OpenRouter routing token; display
+    names are observed response metadata and are never derived by casing or
+    normalizing the selector.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    provider_selector_slug: str = Field(
+        min_length=1, validation_alias=AliasChoices("provider_selector_slug", "selector_slug")
+    )
+    allowed_provider_display_names: tuple[str, ...] = Field(
+        min_length=1,
+        validation_alias=AliasChoices("allowed_provider_display_names", "provider_display_names"),
+    )
+    requested_model: str = Field(min_length=1)
+    allowed_top_level_models: tuple[str, ...] = Field(min_length=1)
+    allowed_resolved_models: tuple[str, ...] = Field(min_length=1)
+    gateway: str = Field(min_length=1)
+    zdr: bool = Field(validation_alias=AliasChoices("zdr", "zdr_requirement"))
+    data_collection: Literal["deny", "allow"] = Field(
+        validation_alias=AliasChoices("data_collection", "data_collection_policy")
+    )
+    input_price_per_million: float = Field(ge=0)
+    output_price_per_million: float = Field(ge=0)
+    request_price: float = Field(
+        default=0, ge=0, validation_alias=AliasChoices("request_price", "request_price_usd")
+    )
+    inventory_artifact_hash: str = Field(
+        validation_alias=AliasChoices("inventory_artifact_hash", "inventory_hash")
+    )
+    inventory_timestamp: datetime = Field(
+        validation_alias=AliasChoices("inventory_timestamp", "reviewed_at")
+    )
+    terms_reference: str = Field(min_length=1)
+    admission_version: str = Field(min_length=1)
+    policy_hash: str | None = None
+
+    @field_validator(
+        "provider_selector_slug",
+        "requested_model",
+        "gateway",
+        "terms_reference",
+        "admission_version",
+    )
+    @classmethod
+    def require_admission_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("provider endpoint admission fields cannot be blank")
+        return value.strip()
+
+    @field_validator(
+        "allowed_provider_display_names",
+        "allowed_top_level_models",
+        "allowed_resolved_models",
+    )
+    @classmethod
+    def require_exact_identity_sets(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(item.strip() for item in value)
+        if not normalized or any(not item for item in normalized):
+            raise ValueError("provider endpoint admission identity sets cannot be blank")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("provider endpoint admission identity sets must be unique")
+        return normalized
+
+    @field_validator("inventory_artifact_hash", "policy_hash")
+    @classmethod
+    def require_optional_digest(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+            raise ValueError("provider endpoint admission hashes must be lowercase SHA-256 digests")
+        return normalized
+
+    @field_validator(
+        "input_price_per_million",
+        "output_price_per_million",
+        "request_price",
+    )
+    @classmethod
+    def require_finite_prices(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("provider endpoint admission prices must be finite")
+        return value
+
+    @field_validator("inventory_timestamp")
+    @classmethod
+    def require_aware_inventory_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("provider endpoint inventory timestamp must include a timezone")
+        return value.astimezone(UTC)
+
+    @property
+    def request_price_usd(self) -> float:
+        """Compatibility spelling used by response pricing fields."""
+
+        return self.request_price
+
+    @property
+    def selector_slug(self) -> str:
+        return self.provider_selector_slug
+
+    @property
+    def provider_display_names(self) -> tuple[str, ...]:
+        return self.allowed_provider_display_names
+
+    @property
+    def inventory_hash(self) -> str:
+        return self.inventory_artifact_hash
+
+    @property
+    def reviewed_at(self) -> datetime:
+        return self.inventory_timestamp
+
+
+class ProviderEndpointInventory(BaseModel):
+    """Immutable endpoint-inventory artifact used for provider admission."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    inventory_artifact_hash: str = Field(
+        validation_alias=AliasChoices("inventory_artifact_hash", "inventory_hash")
+    )
+    admissions: tuple[ProviderEndpointAdmission, ...] = Field(min_length=1)
+    artifact_version: str = Field(default="inventory-v1", min_length=1)
+
+    @field_validator("inventory_artifact_hash")
+    @classmethod
+    def require_inventory_digest(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+            raise ValueError("provider endpoint inventory hash must be lowercase SHA-256")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_inventory(self) -> ProviderEndpointInventory:
+        keys = [(item.provider_selector_slug, item.requested_model) for item in self.admissions]
+        if len(keys) != len(set(keys)):
+            raise ValueError("provider endpoint inventory admissions must be unique")
+        if any(item.inventory_artifact_hash != self.inventory_artifact_hash for item in self.admissions):
+            raise ValueError("provider endpoint admission inventory hash does not match artifact")
+        return self
+
+    def admission_for(self, selector_slug: str, requested_model: str) -> ProviderEndpointAdmission | None:
+        return next(
+            (
+                item
+                for item in self.admissions
+                if item.provider_selector_slug == selector_slug
+                and item.requested_model == requested_model
+            ),
+            None,
+        )
+
+    @property
+    def inventory_hash(self) -> str:
+        return self.inventory_artifact_hash
+
+
 class ProviderRoutePolicy(BaseModel):
     """Provider-selection and privacy constraints for one route class."""
 
@@ -258,6 +423,14 @@ class ProviderRoutePolicy(BaseModel):
     actual_identity_mode: Literal["exact", "allowlisted", "dynamic"] = "exact"
     reproducible: bool = True
     policy_version: str = Field(default="provider-policy-v1", min_length=1)
+    endpoint_admission: ProviderEndpointAdmission | None = Field(
+        default=None,
+        validation_alias=AliasChoices("endpoint_admission", "provider_admission"),
+    )
+    endpoint_inventory: ProviderEndpointInventory | None = Field(
+        default=None,
+        validation_alias=AliasChoices("endpoint_inventory", "inventory"),
+    )
 
     @field_validator("provider_only", "provider_order", "model_only")
     @classmethod
@@ -305,28 +478,74 @@ class ProviderRoutePolicy(BaseModel):
                 raise ValueError("private routes must disable silent provider fallback")
             if self.actual_identity_mode == "dynamic":
                 raise ValueError("private routes require exact or allowlisted provider identity")
+        if self.endpoint_admission is not None:
+            if self.provider_only and self.provider_only != (self.endpoint_admission.provider_selector_slug,):
+                raise ValueError("provider policy selector does not match endpoint admission")
+            if self.provider_order and self.provider_order != (
+                self.endpoint_admission.provider_selector_slug,
+            ):
+                raise ValueError("provider policy order does not match endpoint admission")
+            if self.model_only and self.model_only != (self.endpoint_admission.requested_model,):
+                raise ValueError("provider policy model does not match endpoint admission")
+            if self.endpoint_inventory is not None:
+                artifact_admission = self.endpoint_inventory.admission_for(
+                    self.endpoint_admission.provider_selector_slug,
+                    self.endpoint_admission.requested_model,
+                )
+                if artifact_admission != self.endpoint_admission:
+                    raise ValueError("provider endpoint admission is not the frozen inventory entry")
+            if self.endpoint_admission.zdr != self.zdr:
+                raise ValueError("provider endpoint admission ZDR does not match route policy")
+            if self.endpoint_admission.data_collection != self.data_collection:
+                raise ValueError("provider endpoint admission data policy does not match route policy")
+            if self.endpoint_admission.policy_hash is not None:
+                expected = self._policy_hash_without_admission()
+                if self.endpoint_admission.policy_hash != expected:
+                    raise ValueError("provider endpoint admission policy hash does not match route policy")
         return self
 
     def policy_hash(self) -> str:
-        return _hash_json(self.model_dump(mode="json", round_trip=True))
+        return self._policy_hash_without_admission()
 
-    def request_options(self) -> dict[str, object]:
+    def _policy_hash_without_admission(self) -> str:
+        payload = self.model_dump(
+            mode="json",
+            round_trip=True,
+            exclude={"endpoint_admission", "endpoint_inventory"},
+        )
+        return _hash_json(payload)
+
+    def request_options(self, pinned_route: GatewayRoute | None = None) -> dict[str, object]:
         """Return provider-native routing constraints for OpenAI-compatible APIs."""
 
+        admission = self.endpoint_admission
+        prompt_price = (
+            admission.input_price_per_million if admission is not None else self.max_prompt_price
+        )
+        completion_price = (
+            admission.output_price_per_million if admission is not None else self.max_completion_price
+        )
+        request_price = admission.request_price if admission is not None else self.max_request_price
         provider: dict[str, object] = {
             "data_collection": self.data_collection,
             "allow_fallbacks": self.allow_fallbacks,
             "require_parameters": self.require_parameters,
             "max_price": {
-                "prompt": self.max_prompt_price,
-                "completion": self.max_completion_price,
-                "request": self.max_request_price,
+                "prompt": prompt_price,
+                "completion": completion_price,
+                "request": request_price,
             },
         }
         if self.zdr:
             provider["zdr"] = True
-        if self.provider_only:
-            provider["only"] = list(self.provider_only)
+        selectors = self.provider_only
+        if self.endpoint_admission is not None:
+            selectors = (self.endpoint_admission.provider_selector_slug,)
+            provider["allow_fallbacks"] = False
+        if pinned_route is not None and not self.allow_fallbacks:
+            provider["allow_fallbacks"] = False
+        if selectors:
+            provider["only"] = list(selectors)
         if self.provider_order:
             provider["order"] = list(self.provider_order)
         return {"provider": provider}
@@ -340,15 +559,34 @@ class ProviderRoutePolicy(BaseModel):
         }
 
     def admits_route(self, route: GatewayRoute, *, actual: bool = False) -> bool:
-        if self.provider_only and route.provider not in self.provider_only:
+        selectors = (
+            (self.endpoint_admission.provider_selector_slug,)
+            if self.endpoint_admission is not None
+            else self.provider_only
+        )
+        if selectors and route.provider not in selectors:
             return False
-        if self.model_only and route.model not in self.model_only:
+        models = (
+            (self.endpoint_admission.requested_model,)
+            if self.endpoint_admission is not None
+            else self.model_only
+        )
+        if models and route.model not in models:
             return False
         if actual and self.actual_identity_mode == "dynamic":
             return True
         return True
 
-    def validate_response(self, response: GatewayResponse, *, pinned_route: GatewayRoute) -> None:
+    def validate_response(
+        self,
+        response: GatewayResponse,
+        *,
+        pinned_route: GatewayRoute,
+        request: GatewayRequest | None = None,
+    ) -> None:
+        if self.endpoint_admission is not None:
+            self._validate_admitted_response(response, pinned_route=pinned_route, request=request)
+            return
         actual = response.route
         actual_endpoint_variant = response.actual_endpoint_variant
         if not response.actual_provider or not response.actual_model or not response.actual_gateway:
@@ -396,6 +634,106 @@ class ProviderRoutePolicy(BaseModel):
             raise GatewayPolicyError("provider completion price exceeds the route policy cap")
         if response.request_price_usd is not None and response.request_price_usd > self.max_request_price:
             raise GatewayPolicyError("provider request price exceeds the route policy cap")
+
+    def _validate_admitted_response(
+        self,
+        response: GatewayResponse,
+        *,
+        pinned_route: GatewayRoute,
+        request: GatewayRequest | None,
+    ) -> None:
+        admission = self.endpoint_admission
+        if admission is None:  # pragma: no cover - guarded by caller
+            raise GatewayPolicyError("provider endpoint admission is missing")
+        if request is not None:
+            provider_options = request.provider_options.get("provider")
+            if not isinstance(provider_options, Mapping):
+                raise GatewayPolicyError("provider request omitted governed provider options")
+            if provider_options.get("only") != [admission.provider_selector_slug]:
+                raise GatewayPolicyError("provider request selector is not the reviewed selector")
+            if provider_options.get("allow_fallbacks") is not False:
+                raise GatewayPolicyError("pinned provider requests must disable fallback")
+            if provider_options.get("zdr") is not True:
+                raise GatewayPolicyError("pinned private provider requests must require ZDR")
+            if provider_options.get("data_collection") != "deny":
+                raise GatewayPolicyError("pinned provider requests must deny data collection")
+            if provider_options.get("require_parameters") is not True:
+                raise GatewayPolicyError("pinned provider requests must require parameters")
+            max_price = provider_options.get("max_price")
+            if isinstance(max_price, Mapping):
+                for key, limit in (
+                    ("prompt", admission.input_price_per_million),
+                    ("completion", admission.output_price_per_million),
+                    ("request", admission.request_price),
+                ):
+                    value = max_price.get(key)
+                    if isinstance(value, bool) or not isinstance(value, (int, float)) or value > limit:
+                        raise GatewayPolicyError("pinned provider request price limit is not admitted")
+        if response.endpoint_selected is not True:
+            raise GatewayPolicyError("provider response did not select exactly one endpoint")
+        if response.requested_provider_selector != admission.provider_selector_slug:
+            raise GatewayPolicyError("provider response selector differs from reviewed selector")
+        if response.observed_provider_name not in admission.allowed_provider_display_names:
+            raise GatewayPolicyError("provider response display name is not admitted")
+        if response.requested_model != admission.requested_model:
+            raise GatewayPolicyError("provider response requested model differs from admission")
+        if response.top_level_response_model not in admission.allowed_top_level_models:
+            raise GatewayPolicyError("provider top-level response model is not admitted")
+        resolved = response.resolved_endpoint_model or response.resolved_model
+        if resolved not in admission.allowed_resolved_models:
+            raise GatewayPolicyError("provider resolved endpoint model is not admitted")
+        if response.requested_gateway != admission.gateway:
+            raise GatewayPolicyError("provider response gateway differs from admission")
+        if pinned_route.gateway != admission.gateway:
+            raise GatewayPolicyError("pinned route gateway differs from admission")
+        if response.requested_endpoint_selector != pinned_route.endpoint_variant:
+            raise GatewayPolicyError("provider response endpoint selector differs from request")
+        if not response.endpoint_selector_proof or response.endpoint_selector_proof == admission.provider_selector_slug:
+            raise GatewayPolicyError("provider response endpoint selector proof is invalid")
+        if response.actual_endpoint_variant == response.observed_provider_name:
+            raise GatewayPolicyError("provider display name cannot be an endpoint variant")
+        if pinned_route.gateway.lower() == "openrouter":
+            metadata = response.routing_metadata
+            endpoints = metadata.get("endpoints") if isinstance(metadata, Mapping) else None
+            available = endpoints.get("available") if isinstance(endpoints, Mapping) else None
+            selected = (
+                [item for item in available if isinstance(item, Mapping) and item.get("selected") is True]
+                if isinstance(available, list)
+                else []
+            )
+            if len(selected) != 1:
+                raise GatewayPolicyError("OpenRouter response metadata must identify one selected endpoint")
+            selected_provider = selected[0].get("provider") or selected[0].get("provider_name")
+            selected_model = selected[0].get("model") or selected[0].get("resolved_model")
+            if selected_provider != response.observed_provider_name:
+                raise GatewayPolicyError("OpenRouter selected provider metadata does not match observation")
+            if selected_model != (response.resolved_endpoint_model or response.resolved_model):
+                raise GatewayPolicyError("OpenRouter selected model metadata does not match observation")
+        if self.allow_fallbacks is not False:
+            raise GatewayPolicyError("admitted pinned routes cannot allow fallback")
+        if response.billed_cost_usd is None:
+            raise GatewayPolicyError("provider response omitted billed usage cost")
+        input_price = (
+            response.input_price_per_million
+            if response.input_price_per_million is not None
+            else admission.input_price_per_million
+        )
+        output_price = (
+            response.output_price_per_million
+            if response.output_price_per_million is not None
+            else admission.output_price_per_million
+        )
+        request_price = (
+            response.request_price_usd
+            if response.request_price_usd is not None
+            else admission.request_price
+        )
+        if input_price > admission.input_price_per_million:
+            raise GatewayPolicyError("provider prompt price exceeds admission")
+        if output_price > admission.output_price_per_million:
+            raise GatewayPolicyError("provider completion price exceeds admission")
+        if request_price > admission.request_price:
+            raise GatewayPolicyError("provider request price exceeds admission")
 
 
 @dataclass(frozen=True, slots=True)
@@ -835,15 +1173,31 @@ class PolicyGateway:
         except Exception as exc:
             elapsed = max(0, (perf_counter_ns() - started) // 1_000_000)
             if self.recorder is not None:
-                attempt = GatewayAttempt(
-                    adapter=getattr(selected.adapter, "name", type(selected.adapter).__name__),
-                    route=attempt_request.route,
-                    succeeded=False,
-                    latency_ms=elapsed,
-                    error=f"{type(exc).__name__}: provider failure",
-                )
-                self.recorder.record(attempt)
-                self.recorder.record_call(attempt_request, attempt)
+                transport_attempts = getattr(exc, "attempt_metadata", ())
+                if transport_attempts:
+                    for provider_attempt_number, metadata in enumerate(transport_attempts, start=1):
+                        attempt = GatewayAttempt(
+                            adapter=getattr(selected.adapter, "name", type(selected.adapter).__name__),
+                            route=attempt_request.route,
+                            succeeded=False,
+                            latency_ms=elapsed,
+                            error=f"{type(exc).__name__}: provider failure",
+                            provider_attempt_number=provider_attempt_number,
+                            failure_metadata=metadata,
+                        )
+                        self.recorder.record(attempt)
+                        self.recorder.record_call(attempt_request, attempt)
+                else:
+                    attempt = GatewayAttempt(
+                        adapter=getattr(selected.adapter, "name", type(selected.adapter).__name__),
+                        route=attempt_request.route,
+                        succeeded=False,
+                        latency_ms=elapsed,
+                        error=f"{type(exc).__name__}: provider failure",
+                        failure_metadata=getattr(exc, "failure_metadata", {}),
+                    )
+                    self.recorder.record(attempt)
+                    self.recorder.record_call(attempt_request, attempt)
             raise
 
     def _select(self, decision: GatewayDecision, request: GatewayRequest) -> _SelectedRoute:
@@ -866,6 +1220,7 @@ class PolicyGateway:
     ) -> GatewayResponse:
         candidates = self._profile_candidates(decision)
         failures: list[str] = []
+        failure_records: list[Mapping[str, object]] = []
         for attempt_number, profile in enumerate(candidates):
             if not profile.terms.permits(decision.data_class):
                 failures.append(f"{profile.profile_id}:provider_terms_denied")
@@ -900,6 +1255,7 @@ class PolicyGateway:
                 profile.provider_policy.validate_response(
                     response,
                     pinned_route=attempt_request.route,
+                    request=attempt_request,
                 )
                 self._validate_response(
                     response,
@@ -907,6 +1263,7 @@ class PolicyGateway:
                     if profile.route_tier is RouteTier.CONTRIBUTOR_PUBLIC
                     else GatewayTier.PRIVATE,
                     attempt_request,
+                    provider_policy=profile.provider_policy,
                 )
                 elapsed = max(0, (perf_counter_ns() - started) // 1_000_000)
                 enriched = response.model_copy(
@@ -930,9 +1287,9 @@ class PolicyGateway:
                         "terms_verified": profile.terms.terms_verified,
                         "terms_reference": profile.terms.terms_reference,
                         "requested_route": attempt_request.route,
-                        "actual_provider": response.route.provider,
-                        "actual_model": response.route.model,
-                        "actual_gateway": response.route.gateway,
+                        "actual_provider": response.actual_provider,
+                        "actual_model": response.actual_model,
+                        "actual_gateway": response.actual_gateway or response.route.gateway,
                         "prompt_hash": request.prompt_hash(),
                         "evidence_hash": request.evidence_hash(),
                         "redaction_policy_hash": request.redaction_policy_hash,
@@ -941,6 +1298,19 @@ class PolicyGateway:
                         "latency_ms": max(response.latency_ms, elapsed),
                     }
                 )
+                preceding_attempts = response.attempt_metadata
+                for provider_attempt_number, metadata in enumerate(preceding_attempts, start=1):
+                    self._record_profile_attempt(
+                        request=attempt_request,
+                        profile=profile,
+                        response=None,
+                        succeeded=False,
+                        latency_ms=elapsed,
+                        error="GatewayTransportError: provider retry",
+                        attempt_number=attempt_number,
+                        provider_attempt_number=provider_attempt_number,
+                        failure_metadata=metadata,
+                    )
                 self._record_profile_attempt(
                     request=attempt_request,
                     profile=profile,
@@ -948,6 +1318,7 @@ class PolicyGateway:
                     succeeded=True,
                     latency_ms=elapsed,
                     attempt_number=attempt_number,
+                    provider_attempt_number=len(preceding_attempts) + 1,
                 )
                 return enriched
             except Exception as exc:
@@ -956,20 +1327,45 @@ class PolicyGateway:
                 # payload; adapters must not be able to smuggle raw prompts or
                 # response bodies into logs/evidence.
                 failures.append(f"{profile.profile_id}:{type(exc).__name__}")
-                self._record_profile_attempt(
-                    request=attempt_request,
-                    profile=profile,
-                    response=None,
-                    succeeded=False,
-                    latency_ms=elapsed,
-                    error=f"{type(exc).__name__}: provider failure",
-                    attempt_number=attempt_number,
-                )
+                transport_attempts = getattr(exc, "attempt_metadata", ())
+                if transport_attempts:
+                    for provider_attempt_number, metadata in enumerate(transport_attempts, start=1):
+                        failure_records.append(dict(metadata))
+                        self._record_profile_attempt(
+                            request=attempt_request,
+                            profile=profile,
+                            response=None,
+                            succeeded=False,
+                            latency_ms=elapsed,
+                            error=f"{type(exc).__name__}: provider failure",
+                            attempt_number=attempt_number,
+                            provider_attempt_number=provider_attempt_number,
+                            failure_metadata=metadata,
+                        )
+                else:
+                    if getattr(exc, "failure_metadata", None):
+                        failure_records.append(dict(exc.failure_metadata))
+                    self._record_profile_attempt(
+                        request=attempt_request,
+                        profile=profile,
+                        response=None,
+                        succeeded=False,
+                        latency_ms=elapsed,
+                        error=f"{type(exc).__name__}: provider failure",
+                        attempt_number=attempt_number,
+                        failure_metadata=getattr(exc, "failure_metadata", None),
+                    )
+                if getattr(exc, "no_cross_provider_fallback", False) or (
+                    profile.provider_policy.endpoint_admission is not None
+                    and profile.route_tier is not RouteTier.CONTRIBUTOR_PUBLIC
+                ):
+                    break
         if self.config.abstain_on_provider_failure:
             return self._abstain_response(
                 request,
                 decision,
                 "all admitted routes failed or were unavailable: " + " | ".join(failures),
+                failure_metadata={"attempts": tuple(failure_records)},
             )
         raise GatewayFailure("all admitted gateway routes failed: " + " | ".join(failures))
 
@@ -1015,6 +1411,8 @@ class PolicyGateway:
         latency_ms: int,
         error: str | None = None,
         attempt_number: int = 0,
+        provider_attempt_number: int = 1,
+        failure_metadata: Mapping[str, object] | None = None,
     ) -> None:
         if self.recorder is None:
             return
@@ -1027,6 +1425,8 @@ class PolicyGateway:
             error=error,
             profile_id=profile.profile_id,
             attempt_number=attempt_number,
+            provider_attempt_number=provider_attempt_number,
+            failure_metadata=dict(failure_metadata or {}),
         )
         self.recorder.record(attempt)
         self.recorder.record_call(request, attempt, response)
@@ -1036,6 +1436,7 @@ class PolicyGateway:
         request: GatewayRequest,
         decision: GatewayDecision,
         reason: str,
+        failure_metadata: Mapping[str, object] | None = None,
     ) -> GatewayResponse:
         return GatewayResponse(
             request_id=request.request_id,
@@ -1058,6 +1459,7 @@ class PolicyGateway:
             route_policy_hash=request.route_policy_hash,
             prompt_hash=request.prompt_hash(),
             evidence_hash=request.evidence_hash(),
+            failure_metadata=dict(failure_metadata or {}),
             authoritative=False,
         )
 
@@ -1073,7 +1475,7 @@ class PolicyGateway:
         if adapter_route is not None and adapter_route != request.route:
             updates["route"] = adapter_route
         if provider_policy is not None:
-            updates["provider_options"] = provider_policy.request_options()
+            updates["provider_options"] = provider_policy.request_options(adapter_route or request.route)
         if not updates:
             return request
         # Tier selection is itself an explicit, policy-owned route decision;
@@ -1116,22 +1518,55 @@ class PolicyGateway:
         response: GatewayResponse,
         tier: GatewayTier,
         request: GatewayRequest,
+        provider_policy: ProviderRoutePolicy | None = None,
     ) -> None:
-        actual_endpoint_variant = response.actual_endpoint_variant
-        if not response.actual_provider or not response.actual_model or not response.actual_gateway:
-            raise GatewayPolicyError("provider response omitted actual provider/model/gateway identity")
-        if not actual_endpoint_variant:
-            raise GatewayPolicyError("provider response omitted actual endpoint identity")
-        if (
-            response.route.provider != response.actual_provider
-            or response.route.model != response.actual_model
-            or response.route.gateway != response.actual_gateway
-        ):
-            raise GatewayPolicyError("provider response identity fields do not match its actual route")
-        if response.route.endpoint_variant and response.route.endpoint_variant != actual_endpoint_variant:
-            raise GatewayPolicyError("provider response endpoint fields do not match its actual route")
-        if request.route.endpoint_variant and request.route.endpoint_variant != actual_endpoint_variant:
-            raise GatewayPolicyError("provider response endpoint differs from its requested route")
+        governed_identity = any(
+            value is not None
+            for value in (
+                response.requested_provider_selector,
+                response.observed_provider_name,
+                response.top_level_response_model,
+                response.resolved_endpoint_model,
+                response.endpoint_selected,
+            )
+        )
+        if governed_identity:
+            if response.requested_provider_selector != request.route.provider:
+                raise GatewayPolicyError("provider response selector differs from its requested route")
+            if response.requested_model != request.route.model:
+                raise GatewayPolicyError("provider response model differs from its requested route")
+            if response.requested_gateway != request.route.gateway:
+                raise GatewayPolicyError("provider response gateway differs from its requested route")
+            if response.requested_endpoint_selector != request.route.endpoint_variant:
+                raise GatewayPolicyError("provider response endpoint selector differs from its request")
+            if response.endpoint_selected is not True:
+                raise GatewayPolicyError("provider response did not select an endpoint")
+            if not response.observed_provider_name or not response.top_level_response_model:
+                raise GatewayPolicyError("provider response omitted observed provider/model identity")
+            if not response.resolved_endpoint_model and not response.resolved_model:
+                raise GatewayPolicyError("provider response omitted resolved endpoint model")
+            if not response.actual_gateway:
+                raise GatewayPolicyError("provider response omitted actual gateway identity")
+            if response.actual_endpoint_variant == response.observed_provider_name:
+                raise GatewayPolicyError("provider display name cannot be an endpoint variant")
+            if response.endpoint_selector_proof is None:
+                raise GatewayPolicyError("provider response omitted endpoint selector proof")
+        else:
+            actual_endpoint_variant = response.actual_endpoint_variant
+            if not response.actual_provider or not response.actual_model or not response.actual_gateway:
+                raise GatewayPolicyError("provider response omitted actual provider/model/gateway identity")
+            if not actual_endpoint_variant:
+                raise GatewayPolicyError("provider response omitted actual endpoint identity")
+            if (
+                response.route.provider != response.actual_provider
+                or response.route.model != response.actual_model
+                or response.route.gateway != response.actual_gateway
+            ):
+                raise GatewayPolicyError("provider response identity fields do not match its actual route")
+            if response.route.endpoint_variant and response.route.endpoint_variant != actual_endpoint_variant:
+                raise GatewayPolicyError("provider response endpoint fields do not match its actual route")
+            if request.route.endpoint_variant and request.route.endpoint_variant != actual_endpoint_variant:
+                raise GatewayPolicyError("provider response endpoint differs from its requested route")
         if response.authoritative:
             raise GatewayPolicyError("model output cannot be authoritative")
         if response.typed_payload is None and not response.tool_calls:
@@ -1269,6 +1704,8 @@ __all__ = [
     "GatewayPolicyError",
     "ModelGateway",
     "PolicyGateway",
+    "ProviderEndpointAdmission",
+    "ProviderEndpointInventory",
     "ProviderTerms",
     "ThreeTierModelGateway",
     "classify_payload",

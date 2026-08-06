@@ -80,6 +80,31 @@ class GatewayOutputKind(StrEnum):
     COUNTERARGUMENT = "counterargument"
 
 
+class GenerationBudget(BaseModel):
+    """Caller-visible limits for one model generation.
+
+    Routing policy and generation limits are deliberately separate objects:
+    provider selection is owned by the gateway policy, while this budget only
+    bounds tokens, cost, timeout, and retry attempts.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    max_output_tokens: int = Field(default=2048, ge=1, le=1_000_000)
+    max_expected_cost_usd: float = Field(default=1.0, ge=0)
+    max_billed_cost_usd: float = Field(default=1.0, ge=0)
+    timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    maximum_attempts: int = Field(default=2, ge=1, le=3)
+    max_input_tokens: int | None = Field(default=None, ge=1, le=10_000_000)
+
+    @field_validator("max_expected_cost_usd", "max_billed_cost_usd")
+    @classmethod
+    def require_finite_budget_cost(cls, value: float) -> float:
+        if not isfinite(value):
+            raise ValueError("generation budget cost must be finite")
+        return value
+
+
 class GenericOutput(RootModel[dict[str, object]]):
     """Schema for a deliberately generic, non-authoritative mapping."""
 
@@ -313,6 +338,11 @@ class GatewayRequest(BaseModel):
     redaction_policy_hash: str | None = None
     route_policy_hash: str | None = None
     provider_options: Mapping[str, object] = Field(default_factory=dict)
+    generation_budget: GenerationBudget = Field(default_factory=GenerationBudget)
+    requested_provider_selector: str | None = None
+    requested_model: str | None = None
+    requested_gateway: str | None = None
+    requested_endpoint_selector: str | None = None
     evidence_ids: tuple[str, ...] = ()
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -390,6 +420,10 @@ class GatewayRequest(BaseModel):
             if isinstance(value, Mapping):
                 for key, child in value.items():
                     normalized = str(key).strip().lower()
+                    if normalized in {"max_tokens", "max_completion_tokens"}:
+                        if has_credential_key(child):
+                            return True
+                        continue
                     if any(
                         token in normalized
                         for token in ("api_key", "authorization", "credential", "password", "secret", "token")
@@ -403,6 +437,18 @@ class GatewayRequest(BaseModel):
 
         if has_credential_key(self.provider_options):
             raise ValueError("gateway provider options cannot contain credentials")
+        if self.requested_provider_selector is not None and (
+            self.requested_provider_selector != self.route.provider
+        ):
+            raise ValueError("requested provider selector must match the route")
+        if self.requested_model is not None and self.requested_model != self.route.model:
+            raise ValueError("requested model must match the route")
+        if self.requested_gateway is not None and self.requested_gateway != self.route.gateway:
+            raise ValueError("requested gateway must match the route")
+        if self.requested_endpoint_selector is not None and (
+            self.requested_endpoint_selector != self.route.endpoint_variant
+        ):
+            raise ValueError("requested endpoint selector must match the route")
         return self
 
     def content_hash(self) -> str:
@@ -456,12 +502,29 @@ class GatewayResponse(BaseModel):
     actual_provider: str | None = None
     actual_model: str | None = None
     actual_gateway: str | None = None
+    requested_provider_selector: str | None = None
+    requested_gateway: str | None = None
+    observed_provider_name: str | None = None
+    requested_model: str | None = None
+    top_level_response_model: str | None = None
+    resolved_model: str | None = None
+    resolved_endpoint_model: str | None = None
+    requested_endpoint_selector: str | None = None
+    endpoint_selector_proof: str | None = None
+    endpoint_selected: bool | None = None
+    routing_strategy: str | None = None
+    routing_attempt: int | None = Field(default=None, ge=1)
+    is_byok: bool | None = None
     input_price_per_million: float | None = Field(default=None, ge=0)
     output_price_per_million: float | None = Field(default=None, ge=0)
     request_price_usd: float | None = Field(default=None, ge=0)
+    expected_cost_usd: float | None = Field(default=None, ge=0)
     billed_cost_usd: float | None = Field(default=None, ge=0)
+    cost_difference_usd: float | None = None
     cost_metadata: Mapping[str, object] = Field(default_factory=dict)
     routing_metadata: Mapping[str, object] = Field(default_factory=dict)
+    failure_metadata: Mapping[str, object] = Field(default_factory=dict)
+    attempt_metadata: tuple[Mapping[str, object], ...] = ()
     prompt_hash: str | None = None
     evidence_hash: str | None = None
     redaction_policy_hash: str | None = None
@@ -506,6 +569,16 @@ class GatewayResponse(BaseModel):
             "actual_provider",
             "actual_model",
             "actual_gateway",
+            "requested_provider_selector",
+            "requested_gateway",
+            "observed_provider_name",
+            "requested_model",
+            "top_level_response_model",
+            "resolved_model",
+            "resolved_endpoint_model",
+            "requested_endpoint_selector",
+            "endpoint_selector_proof",
+            "routing_strategy",
         ):
             value = getattr(self, field_name)
             if value is not None and not value.strip():
@@ -516,10 +589,27 @@ class GatewayResponse(BaseModel):
                 len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
             ):
                 raise ValueError(f"gateway {field_name} must be a lowercase SHA-256 digest")
-        for field_name in ("billed_cost_usd",):
+        for field_name in ("expected_cost_usd", "billed_cost_usd", "cost_difference_usd"):
             value = getattr(self, field_name)
             if value is not None and not isfinite(value):
                 raise ValueError(f"gateway {field_name} must be finite")
+        if self.resolved_model is not None and self.resolved_endpoint_model is not None:
+            if self.resolved_model != self.resolved_endpoint_model:
+                raise ValueError("gateway resolved model fields must agree")
+        if self.endpoint_selected is False and any(
+            value is not None
+            for value in (
+                self.actual_provider,
+                self.actual_model,
+                self.actual_gateway,
+                self.actual_endpoint_variant,
+                self.observed_provider_name,
+                self.top_level_response_model,
+                self.resolved_model,
+                self.resolved_endpoint_model,
+            )
+        ):
+            raise ValueError("unselected gateway endpoints cannot be actual identities")
         return self
 
 

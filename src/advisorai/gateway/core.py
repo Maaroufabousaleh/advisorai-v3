@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from time import perf_counter_ns
 from uuid import UUID
@@ -37,6 +37,8 @@ class GatewayAttempt:
     error: str | None = None
     profile_id: str | None = None
     attempt_number: int = 0
+    provider_attempt_number: int = 1
+    failure_metadata: Mapping[str, object] = field(default_factory=dict)
 
 
 class GatewayCallRecord(BaseModel):
@@ -57,6 +59,8 @@ class GatewayCallRecord(BaseModel):
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     estimated_cost_usd: float = Field(default=0, ge=0)
+    expected_cost_usd: float | None = Field(default=None, ge=0)
+    cost_difference_usd: float | None = None
     provider_request_id: str | None = None
     error_class: str | None = None
     recorded_at: datetime
@@ -76,6 +80,18 @@ class GatewayCallRecord(BaseModel):
     requested_model: str | None = None
     requested_gateway: str | None = None
     requested_endpoint_variant: str | None = None
+    requested_provider_selector: str | None = None
+    requested_gateway_selector: str | None = None
+    requested_endpoint_selector: str | None = None
+    observed_provider_name: str | None = None
+    top_level_response_model: str | None = None
+    resolved_model: str | None = None
+    resolved_endpoint_model: str | None = None
+    endpoint_selector_proof: str | None = None
+    endpoint_selected: bool | None = None
+    routing_strategy: str | None = None
+    routing_attempt: int | None = None
+    is_byok: bool | None = None
     actual_provider: str | None = None
     actual_model: str | None = None
     actual_gateway: str | None = None
@@ -92,6 +108,8 @@ class GatewayCallRecord(BaseModel):
     billed_cost_usd: float | None = Field(default=None, ge=0)
     cost_metadata: dict[str, object] = Field(default_factory=dict)
     routing_metadata: dict[str, object] = Field(default_factory=dict)
+    failure_metadata: dict[str, object] = Field(default_factory=dict)
+    provider_attempt_number: int = Field(default=1, ge=1)
 
     @field_validator("request_hash")
     @classmethod
@@ -126,6 +144,15 @@ class GatewayCallRecord(BaseModel):
         "requested_model",
         "requested_gateway",
         "requested_endpoint_variant",
+        "requested_provider_selector",
+        "requested_gateway_selector",
+        "requested_endpoint_selector",
+        "observed_provider_name",
+        "top_level_response_model",
+        "resolved_model",
+        "resolved_endpoint_model",
+        "endpoint_selector_proof",
+        "routing_strategy",
         "actual_provider",
         "actual_model",
         "actual_gateway",
@@ -143,7 +170,7 @@ class GatewayCallRecord(BaseModel):
             raise ValueError("gateway optional metadata cannot be blank")
         return value.strip() if value is not None else None
 
-    @field_validator("estimated_cost_usd", "billed_cost_usd")
+    @field_validator("estimated_cost_usd", "expected_cost_usd", "billed_cost_usd", "cost_difference_usd")
     @classmethod
     def require_finite_cost(cls, value: float | None) -> float | None:
         if value is None:
@@ -230,6 +257,30 @@ class GatewayRecorder:
             requested_model=requested_route.model,
             requested_gateway=requested_route.gateway,
             requested_endpoint_variant=requested_route.endpoint_variant,
+            requested_provider_selector=(
+                response.requested_provider_selector
+                if response is not None
+                else requested_route.provider
+            ),
+            requested_gateway_selector=(
+                response.requested_gateway
+                if response is not None
+                else requested_route.gateway
+            ),
+            requested_endpoint_selector=(
+                response.requested_endpoint_selector
+                if response is not None
+                else requested_route.endpoint_variant
+            ),
+            observed_provider_name=response.observed_provider_name if response is not None else None,
+            top_level_response_model=response.top_level_response_model if response is not None else None,
+            resolved_model=response.resolved_model if response is not None else None,
+            resolved_endpoint_model=response.resolved_endpoint_model if response is not None else None,
+            endpoint_selector_proof=response.endpoint_selector_proof if response is not None else None,
+            endpoint_selected=response.endpoint_selected if response is not None else None,
+            routing_strategy=response.routing_strategy if response is not None else None,
+            routing_attempt=response.routing_attempt if response is not None else None,
+            is_byok=response.is_byok if response is not None else None,
             actual_provider=(
                 response.actual_provider
                 if response is not None
@@ -274,8 +325,16 @@ class GatewayRecorder:
             ),
             request_price_usd=response.request_price_usd if response is not None else None,
             billed_cost_usd=response.billed_cost_usd if response is not None else None,
+            expected_cost_usd=response.expected_cost_usd if response is not None else None,
+            cost_difference_usd=response.cost_difference_usd if response is not None else None,
             cost_metadata=dict(response.cost_metadata) if response is not None else {},
             routing_metadata=dict(response.routing_metadata) if response is not None else {},
+            failure_metadata=(
+                dict(response.failure_metadata)
+                if response is not None
+                else dict(attempt.failure_metadata or {})
+            ),
+            provider_attempt_number=attempt.provider_attempt_number,
             # The request creation time is stable across a retry/restart. It
             # keeps the ledger idempotent while latency still captures the
             # actual attempt duration.
@@ -290,7 +349,7 @@ class GatewayRecorder:
                     idempotency_key=(
                         f"gateway-call:{request.request_id}:"
                         f"{attempt.profile_id or attempt.adapter}:{attempt.attempt_number}:"
-                        f"{route.gateway}:{attempt.succeeded}"
+                        f"{attempt.provider_attempt_number}:{route.gateway}:{attempt.succeeded}"
                     ),
                     occurred_at=request.created_at,
                     payload={"call": record.model_dump(mode="json", round_trip=True)},
