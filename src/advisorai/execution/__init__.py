@@ -1,7 +1,7 @@
 """Deterministic paper execution boundary for Phase 2."""
 
 from .account import AccountLedger, AccountState, AccountStateSnapshot
-from .events import MarketEvent, RawEventSpool, ReplayEngine
+from .events import MarketEvent, NativeMarketMessageParser, RawEventSpool, ReplayEngine
 from .native import NativeVenueAdapter
 from .nautilus import NautilusRuntimeError, NautilusTraderPipeline
 from .oms import OrderManager, OrderStateError
@@ -25,6 +25,7 @@ __all__ = [
     "AmbiguousAcknowledgement",
     "KillSwitch",
     "MarketEvent",
+    "NativeMarketMessageParser",
     "NautilusRuntimeError",
     "NautilusTraderPipeline",
     "NativeVenueAdapter",

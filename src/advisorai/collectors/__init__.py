@@ -11,6 +11,8 @@ from .sources import (
     LseCorroborationCollector,
     NativeVenueCollector,
     PredictionMarketCollector,
+    RawHttpRecord,
+    RawHttpSpool,
     RSSCollector,
     SourceDescriptor,
 )
@@ -32,6 +34,8 @@ __all__ = [
     "LseCorroborationCollector",
     "NativeVenueCollector",
     "PredictionMarketCollector",
+    "RawHttpRecord",
+    "RawHttpSpool",
     "QualityFinding",
     "RSSCollector",
     "SourceDescriptor",

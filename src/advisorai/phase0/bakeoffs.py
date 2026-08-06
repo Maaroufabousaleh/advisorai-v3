@@ -30,6 +30,7 @@ from advisorai.ports import GatewayRequest, ModelGatewayPort
 class ComponentKind(StrEnum):
     GATEWAY = "gateway"
     FORECAST_MODEL = "forecast_model"
+    FINANCE_NLP = "finance_nlp"
     REPLAY = "replay"
     ORCHESTRATION = "orchestration"
     FEATURE_COMPUTE = "feature_compute"
@@ -274,7 +275,7 @@ def _version_for_import(import_name: str) -> str | None:
         "nautilus_trader": "nautilus-trader",
         "tabpfn_time_series": "tabpfn-time-series",
         "transformers": "transformers",
-        "Hamilton": "sf-hamilton",
+        "hamilton": "sf-hamilton",
     }
     candidates = (distribution_aliases.get(import_name, import_name),)
     for distribution in candidates:
@@ -386,6 +387,20 @@ def default_candidates() -> tuple[ComponentCandidate, ...]:
             notes="Integrity/regime candidate; not presumed a price forecaster.",
         ),
         ComponentCandidate(
+            name="finbert-family",
+            kind=ComponentKind.FINANCE_NLP,
+            import_name="transformers",
+            privacy_boundary="local_cpu_model_worker",
+            required_for_core=True,
+            notes="News triage challenger; lexical baseline remains the deterministic fallback.",
+        ),
+        ComponentCandidate(
+            name="hashing-embedder",
+            kind=ComponentKind.FEATURE_COMPUTE,
+            privacy_boundary="local_cpu_retrieval",
+            notes="Dependency-free semantic recall candidate; FTS5 remains authoritative retrieval.",
+        ),
+        ComponentCandidate(
             name="chronos-2-small",
             kind=ComponentKind.FORECAST_MODEL,
             import_name="chronos",
@@ -424,7 +439,7 @@ def default_candidates() -> tuple[ComponentCandidate, ...]:
         ComponentCandidate(
             name="hamilton",
             kind=ComponentKind.FEATURE_COMPUTE,
-            import_name="Hamilton",
+            import_name="hamilton",
             privacy_boundary="local_compute",
             required_for_core=True,
             notes="Apache Hamilton is distributed as sf-hamilton.",

@@ -147,9 +147,7 @@ class LoginRateLimiter:
 
     def _prune(self, key: str, now: float) -> list[float]:
         attempts = [
-            value
-            for value in self._failures.get(key, [])
-            if now - value < self.window_seconds
+            value for value in self._failures.get(key, []) if now - value < self.window_seconds
         ]
         if attempts:
             self._failures[key] = attempts
@@ -214,9 +212,10 @@ class SessionStore:
         if session is None:
             return None
         current = now or datetime.now(UTC)
-        if current >= session.expires_at or (
-            current - session.last_seen_at
-        ).total_seconds() >= self.config.idle_ttl_seconds:
+        if (
+            current >= session.expires_at
+            or (current - session.last_seen_at).total_seconds() >= self.config.idle_ttl_seconds
+        ):
             self._sessions.pop(session_id, None)
             return None
         session.last_seen_at = current
@@ -255,7 +254,11 @@ class SessionStore:
         if session is None or not token or not session.step_up_token:
             return False
         expires_at = session.step_up_expires_at
-        valid = bool(expires_at and current < expires_at and hmac.compare_digest(session.step_up_token, token))
+        valid = bool(
+            expires_at
+            and current < expires_at
+            and hmac.compare_digest(session.step_up_token, token)
+        )
         if valid:
             session.step_up_token = None
             session.step_up_expires_at = None
@@ -263,7 +266,9 @@ class SessionStore:
 
     def csrf_matches(self, session_id: str | None, token: str | None) -> bool:
         session = self._sessions.get(session_id or "")
-        return session is not None and bool(token) and hmac.compare_digest(session.csrf_token, token)
+        return (
+            session is not None and bool(token) and hmac.compare_digest(session.csrf_token, token)
+        )
 
 
 def configured_password_hash() -> str | None:

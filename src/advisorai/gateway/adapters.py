@@ -40,7 +40,7 @@ class TypedGatewayAdapter:
         if isinstance(raw_tool_calls, (str, bytes)) or not isinstance(raw_tool_calls, Sequence):
             raise TypeError(f"{self.name} tool_calls must be a sequence of mappings")
         content = payload.get("content")
-        if not isinstance(content, str) or not content.strip():
+        if not isinstance(content, str) or (not content.strip() and not raw_tool_calls):
             raise ValueError(f"{self.name} transport response content must be non-blank text")
         token_values: dict[str, int] = {}
         for field in ("input_tokens", "output_tokens"):

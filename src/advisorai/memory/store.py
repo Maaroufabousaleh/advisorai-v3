@@ -4,12 +4,21 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .embeddings import HashingEmbedder
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticMemoryHit:
+    record: MemoryRecord
+    score: float
 
 
 class MemoryLayer(StrEnum):
@@ -182,3 +191,38 @@ class MemoryStore:
             raise ValueError("memory search query is not valid FTS syntax") from exc
         records = tuple(self.get(UUID(row[0])) for row in rows)
         return records
+
+    def semantic_search(
+        self,
+        query: str,
+        *,
+        layer: MemoryLayer | None = None,
+        limit: int = 20,
+        embedder: HashingEmbedder | None = None,
+    ) -> tuple[SemanticMemoryHit, ...]:
+        """Return optional recall candidates without changing memory authority."""
+
+        if not query.strip():
+            raise ValueError("memory search query cannot be blank")
+        if limit < 1:
+            raise ValueError("limit must be positive")
+        embedder = embedder or HashingEmbedder()
+        query_vector = embedder.embed(query)
+        with self._connect() as connection:
+            if layer is None:
+                rows = connection.execute("SELECT record_id FROM memory_records").fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT record_id FROM memory_records WHERE layer = ?", (layer.value,)
+                ).fetchall()
+        hits = [
+            SemanticMemoryHit(
+                record=self.get(UUID(row[0])),
+                score=embedder.similarity(
+                    query_vector, embedder.embed(self.get(UUID(row[0])).body)
+                ),
+            )
+            for row in rows
+        ]
+        hits.sort(key=lambda hit: (-hit.score, str(hit.record.record_id)))
+        return tuple(hits[:limit])

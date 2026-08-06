@@ -2,6 +2,15 @@
 
 from .bundles import ConfigBundle, ConfigBundleStore
 from .modes import MissionMode, ModeConfig, load_mode_configs
+from .secrets import (
+    KNOWN_ENV_NAMES,
+    SECRET_ENV_NAMES,
+    SecretSettings,
+    load_env_file,
+    parse_env_text,
+    redact,
+    redacted_headers,
+)
 from .v3core import (
     AgentConfig,
     ExecutionConfig,
@@ -45,4 +54,11 @@ __all__ = [
     "load_risk_config",
     "load_source_registry_config",
     "load_v3_core_config",
+    "KNOWN_ENV_NAMES",
+    "SECRET_ENV_NAMES",
+    "SecretSettings",
+    "load_env_file",
+    "parse_env_text",
+    "redact",
+    "redacted_headers",
 ]

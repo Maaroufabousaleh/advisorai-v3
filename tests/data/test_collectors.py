@@ -1,14 +1,18 @@
 import json
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from advisorai.collectors import (
     CcxtCollector,
     DataQualityMonitor,
     DeribitCollector,
     GDELTCollector,
+    HttpResponse,
     LseCorroborationCollector,
     NativeVenueCollector,
     PredictionMarketCollector,
+    RawHttpSpool,
     RSSCollector,
     SourceDescriptor,
 )
@@ -39,6 +43,62 @@ def test_native_parser_preserves_first_available_and_revision(btc_usdt, timestam
     )
     assert observations[0].first_available_at == timestamp + timedelta(seconds=1)
     assert observations[0].source_revision == "r1"
+
+
+def test_native_collector_accepts_single_record_bootstrap_payload(btc_usdt, timestamp):
+    collector = NativeVenueCollector(_descriptor("native", "market", "venue"))
+    observations = collector.parse(
+        json.dumps(
+            {
+                "symbol": "BTC/USDT",
+                "price": "100",
+                "timestamp_ms": int(timestamp.timestamp() * 1000),
+            }
+        ).encode(),
+        instrument=btc_usdt,
+        available_at=timestamp,
+    )
+    assert len(observations) == 1
+
+
+def test_native_fetch_spools_exact_response_before_status_or_parse(tmp_path, btc_usdt, timestamp):
+    body = b"provider-error-without-credentials"
+
+    class Transport:
+        def get(self, url):
+            return HttpResponse(
+                status_code=503,
+                body=body,
+                fetched_at=datetime(2026, 8, 5, 15, 0, tzinfo=UTC),
+                url=url,
+            )
+
+    spool = RawHttpSpool(tmp_path / "native-http.jsonl")
+    collector = NativeVenueCollector(
+        _descriptor("native", "crypto_market", "venue", SourceGrade.EXECUTION),
+        Transport(),
+        raw_spool=spool,
+    )
+    with pytest.raises(RuntimeError, match="HTTP 503"):
+        collector.fetch("https://sandbox.example.test/market", btc_usdt)
+    records = spool.read()
+    assert len(records) == 1
+    assert records[0].payload == body
+    assert records[0].status_code == 503
+    corrupt = records[0].model_dump(mode="json")
+    corrupt["payload_b64"] = "Y29ycnVwdA=="
+    corrupt_path = tmp_path / "corrupt-http.jsonl"
+    corrupt_path.write_text(json.dumps(corrupt) + "\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="corrupted"):
+        RawHttpSpool(corrupt_path)
+    assert not spool.append(
+        HttpResponse(
+            status_code=503,
+            body=body,
+            fetched_at=datetime(2026, 8, 5, 15, 1, tzinfo=UTC),
+            url="https://sandbox.example.test/market",
+        )
+    )
 
 
 def test_deribit_result_is_normalized_as_context(btc_usdt, timestamp):

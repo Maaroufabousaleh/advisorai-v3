@@ -131,7 +131,7 @@ class GatewayResponse(BaseModel):
 
     request_id: UUID
     route: GatewayRoute
-    content: str = Field(min_length=1)
+    content: str = ""
     typed_payload: Mapping[str, object] | None = None
     tool_calls: tuple[Mapping[str, object], ...] = ()
     latency_ms: int = Field(ge=0)
@@ -149,6 +149,8 @@ class GatewayResponse(BaseModel):
 
     @model_validator(mode="after")
     def forbid_trading_tool_calls(self) -> GatewayResponse:
+        if not self.content.strip() and not self.tool_calls:
+            raise ValueError("gateway response requires text or tool calls")
         for call in self.tool_calls:
             if not isinstance(call, Mapping):
                 raise ValueError("gateway tool calls must be mapping objects")

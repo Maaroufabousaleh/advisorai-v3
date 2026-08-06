@@ -16,6 +16,7 @@ calendar-driven.
 | 5 | [typed evidence council](phase-05-evidence-council.md) | Independent evidence to target portfolio | No false quorum or contract bypass |
 | 6 | [institutional controls](phase-06-institutional-controls.md) | Portfolio/risk validity and attribution | Every paper order passes all checks |
 | 7 | [unattended paper soak](phase-07-paper-soak.md) | Continuous V3-Core proof | 60 days plus stable, safe evidence |
+| 0–7 bridge | [real API and paper-execution transition](real-api-paper-transition.md) | Real data/LLM APIs with one paper/testnet venue | Supplies evidence to existing gates; does not create a new gate |
 | 8 | [Hermes and Skill Foundry](phase-08-hermes-skill-foundry.md) | Quarantined capability creation | Active-read only, no trading authority |
 | 9 | [controlled expansion](phase-09-controlled-expansion.md) | One challenger/source at a time | Positive marginal value without regression |
 | 10 | [limited live capital](phase-10-limited-live-capital.md) | Explicitly approved bounded live operation | Correctness survives all AI/research outages |
@@ -32,3 +33,6 @@ test, and external-gate evidence matrix.
 The user-facing operator console and its security boundary are specified in
 [secure-operator-dashboard.md](secure-operator-dashboard.md); it is an interface
 over these phase-owned services, not a new trading authority.
+
+The transition's manual deployment and external-evidence work is recorded in
+[`docs/runbooks/real-api-paper-operations.md`](../runbooks/real-api-paper-operations.md).

@@ -53,12 +53,18 @@ source ./secrets.env
 set +a
 ```
 
-The current implementation has no live provider or venue connection and does not
-read provider credentials yet; external transports are injected for tests. Keep
-live broker credentials out of this file until the explicit Phase 10 approval
-gate is satisfied. On WSL, prefer copying filled secrets to a Linux-filesystem
-path such as `~/.config/advisorai-v3/secrets.env` rather than storing values on a
-shared `/mnt/c` mount.
+The transition implementation parses provider credentials through a typed,
+allowlisted loader and passes them only to the owning real-data/LLM/paper
+transport. It rejects live environments, transfer/withdrawal paths, and
+production endpoints. Prefer validating the file without shell execution:
+
+```bash
+uv run python scripts/check_transition_config.py \
+  --secrets "$HOME/.config/advisorai-v3/secrets.env"
+```
+
+On WSL, keep populated secrets on a Linux-filesystem path rather than a shared
+`/mnt/c` mount. Never put live broker credentials in this transition file.
 
 ## Dashboard status
 
@@ -81,5 +87,39 @@ cleans up both processes on Ctrl-C. Use protected authentication with:
 ```
 
 Protected-mode setup, password/MFA bootstrap, TLS, and LAN deployment guidance
-are in [dashboard/README.md](dashboard/README.md). Until a live projection is
-connected, synthetic paper values are deliberately labelled in the interface.
+are in [dashboard/README.md](dashboard/README.md). With
+`ADVISORAI_DASHBOARD_LEDGER_PATH` set, the API projects local paper/runtime
+ledgers and deliberately reports unavailable P&L or exposure values as such;
+without a ledger path it uses the clearly-labelled synthetic UI fixture.
+
+## Real API / paper transition
+
+The implementation and operator hand-off are documented in
+[the transition plan](docs/plans/real-api-paper-transition.md) and
+[the operations runbook](docs/runbooks/real-api-paper-operations.md). Install
+the optional WSS client only when explicitly enabling real connector smoke
+tests:
+
+```bash
+uv sync --extra transition
+ADVISORAI_RUN_NETWORK_SMOKE=1 \
+  uv run python scripts/smoke_transition_connectors.py \
+  --secrets "$HOME/.config/advisorai-v3/secrets.env"
+```
+
+This smoke command is read-only and opt-in. Actual venue choice, endpoint
+verification, credentials, continuous supervision, timed soak evidence, and
+human gate decisions remain operator responsibilities.
+
+To install every declared optional local runtime/model extra (without enabling
+providers, checkpoints, or live venues), use:
+
+```bash
+uv sync --group dev --extra runtimes --extra dashboard --extra transition --extra models
+```
+
+The model extra installs CPU LightGBM/Transformers dependencies. Chronos,
+Kronos, TabPFN, and FinBERT checkpoints remain quarantined until pinned
+versions, weights, resource measurements, and past-only bake-offs are recorded.
+The dependency-free hashing embedder is available as a non-authoritative
+semantic-recall candidate; FTS5 remains the default memory retrieval path.

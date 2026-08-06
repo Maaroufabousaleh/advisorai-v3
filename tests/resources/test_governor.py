@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from advisorai.config import MissionMode, load_mode_configs
+from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.resources import (
     MeasuredResources,
     ResourceGovernor,
@@ -220,3 +221,33 @@ def test_browser_gpu_overlap_rejects_insufficient_measured_headroom():
         ResourceRequest(workload=WorkloadClass.GPU, requires_gpu=True),
     )
     assert not gpu.granted
+
+
+def test_resource_measurements_and_leases_are_durably_recorded(tmp_path):
+    observed_at = datetime(2026, 8, 5, 15, 0, tzinfo=UTC)
+    governor = ResourceGovernor(
+        _configs(),
+        FixedProbe(
+            MeasuredResources(
+                memory_used_gib=4.0,
+                memory_available_gib=7.0,
+                gpu_free_mib=6000,
+                gpu_total_mib=8192,
+                observed_at=observed_at,
+            )
+        ),
+        SqliteLedgers(tmp_path / "resource.sqlite3"),
+    )
+    decision = governor.admit(
+        MissionMode.STANDARD,
+        ResourceRequest(workload=WorkloadClass.CPU_BOUND, memory_reservation_gib=0.1),
+    )
+    assert decision.granted and decision.lease is not None
+    governor.release(decision.lease.lease_id)
+    events = governor.ledgers.events(LedgerNamespace.CAPABILITY)
+    assert [event.event_type for event in events] == [
+        "resource_measurement_recorded",
+        "resource_lease_admitted",
+        "resource_lease_released",
+    ]
+    assert events[0].payload["observed_at"] == observed_at.isoformat()

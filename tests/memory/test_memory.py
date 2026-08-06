@@ -2,7 +2,14 @@ from decimal import Decimal
 
 import pytest
 
-from advisorai.memory import MemoryLayer, MemoryRecord, MemoryStore, Scorecard, ScorecardStore
+from advisorai.memory import (
+    HashingEmbedder,
+    MemoryLayer,
+    MemoryRecord,
+    MemoryStore,
+    Scorecard,
+    ScorecardStore,
+)
 
 
 def test_memory_is_append_only_evidence_linked_and_fts_searchable(tmp_path):
@@ -45,6 +52,26 @@ def test_memory_layer_filter_is_applied_before_limit(tmp_path):
                 supersedes=__import__("uuid").uuid4(),
             )
         )
+
+
+def test_optional_hashing_semantic_recall_is_deterministic_and_non_authoritative(tmp_path):
+    store = MemoryStore(tmp_path / "memory.sqlite")
+    first = store.append(
+        MemoryRecord(layer=MemoryLayer.SEMANTIC, title="market", body="BTC market volatility")
+    )
+    store.append(
+        MemoryRecord(
+            layer=MemoryLayer.SEMANTIC, title="accounting", body="quarterly revenue filing"
+        )
+    )
+    embedder = HashingEmbedder(dimension=32)
+    first_hits = store.semantic_search("BTC volatility", embedder=embedder)
+    second_hits = store.semantic_search("BTC volatility", embedder=embedder)
+    assert first_hits == second_hits
+    assert first_hits[0].record.record_id == first.record_id
+    assert -1 <= first_hits[0].score <= 1
+    with pytest.raises(ValueError, match="dimension"):
+        embedder.similarity((1.0,), (1.0,))
 
 
 def test_scorecard_store_keeps_latest_routing_measurement(tmp_path):

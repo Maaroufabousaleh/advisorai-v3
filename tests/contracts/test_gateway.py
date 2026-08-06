@@ -8,6 +8,7 @@ from advisorai.gateway import (
     LocalDeterministicGateway,
     OmniRouteGatewayAdapter,
 )
+from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.ports import GatewayMessage, GatewayRequest, GatewayRoute
 
 
@@ -63,3 +64,31 @@ def test_gateway_chain_dispatches_each_adapter_on_its_pinned_fallback_route():
     response = chain.complete(_request().model_copy(update={"route": primary_route}))
     assert response.route.gateway == "omniroute"
     assert chain.recorder.attempts[-1].succeeded
+
+
+def test_gateway_call_records_are_durable_and_do_not_store_prompt_or_secret(tmp_path):
+    ledgers = SqliteLedgers(tmp_path / "gateway.sqlite3")
+    recorder = GatewayRecorder(ledgers)
+    chain = GatewayChain((LocalDeterministicGateway(),), recorder)
+    request = _request().model_copy(
+        update={
+            "messages": (GatewayMessage(role="user", content="token=do-not-store"),),
+            "tool_version": "tools-v1",
+        }
+    )
+    chain.complete(request)
+
+    assert len(recorder.calls) == 1
+    call = recorder.calls[0]
+    assert call.request_hash == request.content_hash()
+    assert call.succeeded
+    assert call.tool_version == "tools-v1"
+    event = ledgers.events(LedgerNamespace.MODEL)[0]
+    assert event.event_type == "gateway_call_recorded"
+    serialized = str(event.payload)
+    assert "token=do-not-store" not in serialized
+    assert "secret" not in serialized.lower()
+
+    # Retrying the same request is a ledger-idempotent replay.
+    chain.complete(request)
+    assert len(ledgers.events(LedgerNamespace.MODEL)) == 1

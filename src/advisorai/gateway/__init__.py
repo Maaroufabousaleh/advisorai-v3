@@ -8,6 +8,7 @@ from .adapters import (
 )
 from .core import (
     GatewayAttempt,
+    GatewayCallRecord,
     GatewayChain,
     GatewayFailure,
     GatewayRecorder,
@@ -17,6 +18,7 @@ from .core import (
 __all__ = [
     "DirectProviderGatewayAdapter",
     "GatewayAttempt",
+    "GatewayCallRecord",
     "GatewayChain",
     "GatewayFailure",
     "GatewayRecorder",

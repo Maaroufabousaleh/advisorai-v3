@@ -33,7 +33,7 @@ def _status(
         aliases = {
             "pydantic_ai": "pydantic-ai",
             "pydantic_graph": "pydantic-graph",
-            "Hamilton": "sf-hamilton",
+            "hamilton": "sf-hamilton",
         }
         distributions = (aliases.get(import_name, import_name),)
         version = next(
@@ -127,7 +127,7 @@ class HamiltonRuntime:
     ) -> None:
         self.status = _status(
             "hamilton",
-            "Hamilton",
+            "hamilton",
             phase0_admitted=phase0_admitted,
             gate_registry=gate_registry,
         )

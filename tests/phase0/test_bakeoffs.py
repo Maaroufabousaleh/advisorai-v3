@@ -26,6 +26,8 @@ def test_default_candidate_inventory_contains_the_architecture_set():
         "omniroute",
         "ttm-r2",
         "tspulse",
+        "finbert-family",
+        "hashing-embedder",
         "chronos-2-small",
         "kronos-mini-small",
         "tabpfn-ts",
@@ -36,6 +38,8 @@ def test_default_candidate_inventory_contains_the_architecture_set():
         "hermes-agent",
         "rclone-crypt",
     } <= names
+    hamilton = next(candidate for candidate in default_candidates() if candidate.name == "hamilton")
+    assert hamilton.import_name == "hamilton"
 
 
 def test_availability_inventory_quarantines_missing_dependencies():

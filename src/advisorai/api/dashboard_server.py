@@ -7,9 +7,7 @@ def main() -> None:
     try:
         import uvicorn
     except ImportError as exc:  # pragma: no cover - environment dependent
-        raise SystemExit(
-            "Install the dashboard extra first: uv sync --extra dashboard"
-        ) from exc
+        raise SystemExit("Install the dashboard extra first: uv sync --extra dashboard") from exc
     uvicorn.run(
         "advisorai.api.dashboard_server:app",
         host="127.0.0.1",

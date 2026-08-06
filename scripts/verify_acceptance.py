@@ -31,7 +31,11 @@ class PhaseSuite:
 
 
 PHASE_SUITES: tuple[PhaseSuite, ...] = (
-    PhaseSuite(0, "contracts and bakeoffs", ("tests/phase0", "tests/gates")),
+    PhaseSuite(
+        0,
+        "contracts and bakeoffs",
+        ("tests/phase0", "tests/gates", "tests/contracts/test_gateway.py"),
+    ),
     PhaseSuite(
         1,
         "safety, data truth and resources",
@@ -51,12 +55,17 @@ PHASE_SUITES: tuple[PhaseSuite, ...] = (
             "tests/services",
         ),
     ),
-    PhaseSuite(2, "deterministic paper core", ("tests/execution",)),
+    PhaseSuite(
+        2,
+        "deterministic paper core",
+        ("tests/execution", "tests/integrations", "tests/runtime"),
+    ),
     PhaseSuite(
         3,
         "V3-Core data spine",
         (
             "tests/data/test_collectors.py",
+            "tests/data/test_market_events.py",
             "tests/data/test_official.py",
             "tests/data/test_acquisition.py",
         ),
@@ -64,7 +73,11 @@ PHASE_SUITES: tuple[PhaseSuite, ...] = (
     PhaseSuite(4, "quantitative baseline council", ("tests/models",)),
     PhaseSuite(5, "typed evidence council", ("tests/agents", "tests/api")),
     PhaseSuite(6, "institutional controls", ("tests/institutional",)),
-    PhaseSuite(7, "unattended paper soak", ("tests/recovery/test_soak.py",)),
+    PhaseSuite(
+        7,
+        "unattended paper soak",
+        ("tests/recovery/test_soak.py", "tests/learning"),
+    ),
     PhaseSuite(8, "Hermes and Skill Foundry", ("tests/capabilities",)),
     PhaseSuite(9, "controlled expansion", ("tests/expansion",)),
     PhaseSuite(10, "limited live capital guard", ("tests/live",)),

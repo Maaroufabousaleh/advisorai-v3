@@ -154,6 +154,7 @@ export interface CommandReceipt {
   audit_event_id: string
   requested_mode?: string | null
   config_patch?: Record<string, string> | null
+  config_hash?: string | null
 }
 
 export interface AuthStatus {

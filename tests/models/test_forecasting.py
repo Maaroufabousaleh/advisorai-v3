@@ -134,6 +134,26 @@ def test_named_model_adapters_require_pinned_runner_and_checkpoint():
             model.predict((Decimal("1"), Decimal("2")), 1)
 
 
+def test_optional_forecast_runner_is_typed_and_checkpoint_bound():
+    model = TTMR2ForecastAdapter(
+        runner=lambda values, horizon: [
+            values[-1] + Decimal(index) for index in range(1, horizon + 1)
+        ],
+        checkpoint_hash="a" * 64,
+    )
+    model.available = True
+    assert model.predict((Decimal("1"), Decimal("2")), 2) == (Decimal("3"), Decimal("4"))
+
+
+def test_tspulse_runner_can_emit_typed_integrity_features():
+    model = TSPulseAdapter(
+        runner=lambda values, _horizon: (sum(values) / Decimal(len(values)),),
+        checkpoint_hash="b" * 64,
+    )
+    model.available = True
+    assert model.extract_features((Decimal("1"), Decimal("3"))) == (Decimal("2"),)
+
+
 def test_tspulse_is_integrity_feature_only():
     model = TSPulseAdapter()
     with pytest.raises(ModelUnavailable, match="integrity/regime"):

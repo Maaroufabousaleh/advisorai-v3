@@ -8,6 +8,7 @@ in the load-shedding set.
 
 from __future__ import annotations
 
+import hashlib
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ from uuid import UUID, uuid4
 import psutil
 
 from advisorai.config import MissionMode, ModeConfig
+from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
 
 
 class WorkloadClass(StrEnum):
@@ -177,12 +179,18 @@ class LeaseDecision:
 
 
 class ResourceGovernor:
-    def __init__(self, configs: dict[MissionMode, ModeConfig], probe: MetricsProbe) -> None:
+    def __init__(
+        self,
+        configs: dict[MissionMode, ModeConfig],
+        probe: MetricsProbe,
+        ledgers: SqliteLedgers | None = None,
+    ) -> None:
         missing = set(MissionMode).difference(configs)
         if missing:
             raise ValueError(f"resource governor is missing mode configs: {sorted(missing)}")
         self.configs = configs
         self.probe = probe
+        self.ledgers = ledgers
         self._leases: dict[UUID, ResourceLease] = {}
 
     def admit(self, mode: MissionMode, request: ResourceRequest) -> LeaseDecision:
@@ -191,6 +199,7 @@ class ResourceGovernor:
         except KeyError as exc:
             raise ValueError(f"unknown resource mode: {mode}") from exc
         measured = self.probe.measure()
+        self._record_measurement(mode, request, measured)
         active = tuple(self._leases.values())
         concurrent_reason = self._concurrency_rejection(config, request, active)
         if concurrent_reason:
@@ -243,6 +252,7 @@ class ResourceGovernor:
             profile=request.profile,
         )
         self._leases[lease.lease_id] = lease
+        self._record_lease("resource_lease_admitted", lease)
         return LeaseDecision(
             granted=True, reason="admitted from measured resource state", lease=lease
         )
@@ -364,10 +374,57 @@ class ResourceGovernor:
         return decision
 
     def release(self, lease_id: UUID) -> None:
-        self._leases.pop(lease_id, None)
+        lease = self._leases.pop(lease_id, None)
+        if lease is not None:
+            self._record_lease("resource_lease_released", lease)
 
     def active_leases(self) -> tuple[ResourceLease, ...]:
         return tuple(self._leases.values())
+
+    def _record_measurement(
+        self, mode: MissionMode, request: ResourceRequest, measured: MeasuredResources
+    ) -> None:
+        if self.ledgers is None:
+            return
+        payload = {
+            "mode": mode.value,
+            "workload": request.workload.value,
+            "memory_used_gib": measured.memory_used_gib,
+            "memory_available_gib": measured.memory_available_gib,
+            "gpu_free_mib": measured.gpu_free_mib,
+            "gpu_total_mib": measured.gpu_total_mib,
+            "observed_at": measured.observed_at.isoformat(),
+        }
+        digest = hashlib.sha256(repr(sorted(payload.items())).encode()).hexdigest()
+        self.ledgers.append(
+            LedgerEvent(
+                namespace=LedgerNamespace.CAPABILITY,
+                event_type="resource_measurement_recorded",
+                idempotency_key=f"resource-measurement:{digest}",
+                occurred_at=measured.observed_at,
+                payload=payload,
+            )
+        )
+
+    def _record_lease(self, event_type: str, lease: ResourceLease) -> None:
+        if self.ledgers is None:
+            return
+        self.ledgers.append(
+            LedgerEvent(
+                namespace=LedgerNamespace.CAPABILITY,
+                event_type=event_type,
+                idempotency_key=f"resource-lease:{lease.lease_id}:{event_type}",
+                occurred_at=lease.granted_at,
+                payload={
+                    "lease_id": str(lease.lease_id),
+                    "mode": lease.mode.value,
+                    "workload": lease.request.workload.value,
+                    "memory_reservation_gib": lease.request.memory_reservation_gib,
+                    "requires_gpu": lease.request.requires_gpu,
+                    "profile": lease.profile.value if lease.profile is not None else None,
+                },
+            )
+        )
 
     @staticmethod
     def load_shedding_candidates() -> tuple[WorkloadClass, ...]:

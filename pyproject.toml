@@ -34,6 +34,13 @@ dashboard = [
   "fastapi>=0.115,<1",
   "uvicorn[standard]>=0.34,<1",
 ]
+transition = [
+  "websockets>=13,<17",
+]
+models = [
+  "lightgbm>=4.6,<5",
+  "transformers>=4.48,<5",
+]
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]

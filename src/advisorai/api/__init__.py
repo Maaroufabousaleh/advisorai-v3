@@ -11,6 +11,7 @@ from .dashboard import (
     DashboardStatus,
     LiveReadinessView,
     build_demo_overview,
+    build_ledger_overview,
     create_dashboard_app,
 )
 from .service import AdvisorService, DecisionPipelineResult
@@ -28,5 +29,6 @@ __all__ = [
     "DecisionPipelineResult",
     "LiveReadinessView",
     "build_demo_overview",
+    "build_ledger_overview",
     "create_dashboard_app",
 ]
