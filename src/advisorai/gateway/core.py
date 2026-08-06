@@ -35,6 +35,8 @@ class GatewayAttempt:
     succeeded: bool
     latency_ms: int
     error: str | None = None
+    profile_id: str | None = None
+    attempt_number: int = 0
 
 
 class GatewayCallRecord(BaseModel):
@@ -78,6 +80,8 @@ class GatewayCallRecord(BaseModel):
     actual_model: str | None = None
     actual_gateway: str | None = None
     actual_endpoint_variant: str | None = None
+    profile_id: str | None = None
+    attempt_number: int = Field(default=0, ge=0)
     route_tier: RouteTier | None = None
     decision_impact: DecisionImpact | None = None
     redaction_policy_hash: str | None = None
@@ -85,6 +89,9 @@ class GatewayCallRecord(BaseModel):
     input_price_per_million: float | None = Field(default=None, ge=0)
     output_price_per_million: float | None = Field(default=None, ge=0)
     request_price_usd: float | None = Field(default=None, ge=0)
+    billed_cost_usd: float | None = Field(default=None, ge=0)
+    cost_metadata: dict[str, object] = Field(default_factory=dict)
+    routing_metadata: dict[str, object] = Field(default_factory=dict)
 
     @field_validator("request_hash")
     @classmethod
@@ -136,9 +143,11 @@ class GatewayCallRecord(BaseModel):
             raise ValueError("gateway optional metadata cannot be blank")
         return value.strip() if value is not None else None
 
-    @field_validator("estimated_cost_usd")
+    @field_validator("estimated_cost_usd", "billed_cost_usd")
     @classmethod
-    def require_finite_cost(cls, value: float) -> float:
+    def require_finite_cost(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
         if value != value or value in {float("inf"), float("-inf")}:
             raise ValueError("gateway call cost must be finite")
         return value
@@ -223,22 +232,24 @@ class GatewayRecorder:
             requested_endpoint_variant=requested_route.endpoint_variant,
             actual_provider=(
                 response.actual_provider
-                if response is not None and response.actual_provider
-                else route.provider
+                if response is not None
+                else None
             ),
             actual_model=(
-                response.actual_model if response is not None and response.actual_model else route.model
+                response.actual_model if response is not None else None
             ),
             actual_gateway=(
                 response.actual_gateway
-                if response is not None and response.actual_gateway
-                else route.gateway
+                if response is not None
+                else None
             ),
             actual_endpoint_variant=(
-                response.endpoint_variant
-                if response is not None and response.endpoint_variant
-                else route.endpoint_variant
+                response.actual_endpoint_variant
+                if response is not None
+                else None
             ),
+            profile_id=attempt.profile_id,
+            attempt_number=attempt.attempt_number,
             route_tier=response.route_tier if response is not None else route_tier,
             decision_impact=(
                 response.decision_impact
@@ -262,6 +273,9 @@ class GatewayRecorder:
                 response.output_price_per_million if response is not None else None
             ),
             request_price_usd=response.request_price_usd if response is not None else None,
+            billed_cost_usd=response.billed_cost_usd if response is not None else None,
+            cost_metadata=dict(response.cost_metadata) if response is not None else {},
+            routing_metadata=dict(response.routing_metadata) if response is not None else {},
             # The request creation time is stable across a retry/restart. It
             # keeps the ledger idempotent while latency still captures the
             # actual attempt duration.
@@ -274,7 +288,8 @@ class GatewayRecorder:
                     namespace=LedgerNamespace.MODEL,
                     event_type="gateway_call_recorded",
                     idempotency_key=(
-                        f"gateway-call:{request.request_id}:{attempt.adapter}:"
+                        f"gateway-call:{request.request_id}:"
+                        f"{attempt.profile_id or attempt.adapter}:{attempt.attempt_number}:"
                         f"{route.gateway}:{attempt.succeeded}"
                     ),
                     occurred_at=request.created_at,
@@ -333,7 +348,7 @@ class GatewayChain:
     def complete(self, request: GatewayRequest) -> GatewayResponse:
         failures: list[str] = []
         permitted_gateways = {request.route.gateway, *request.route.fallback_chain}
-        for adapter in self.adapters:
+        for attempt_number, adapter in enumerate(self.adapters):
             started = perf_counter_ns()
             attempt_request = request
             adapter_route = getattr(adapter, "route", None)
@@ -347,6 +362,8 @@ class GatewayChain:
                         succeeded=False,
                         latency_ms=0,
                         error="RouteNotPermitted: route not in fallback chain",
+                        profile_id=adapter.name,
+                        attempt_number=attempt_number,
                     )
                     self.recorder.record(attempt)
                     self.recorder.record_call(request, attempt)
@@ -376,6 +393,8 @@ class GatewayChain:
                     route=response.route,
                     succeeded=True,
                     latency_ms=elapsed,
+                    profile_id=adapter.name,
+                    attempt_number=attempt_number,
                 )
                 self.recorder.record(attempt)
                 self.recorder.record_call(attempt_request, attempt, response)
@@ -389,6 +408,8 @@ class GatewayChain:
                     succeeded=False,
                     latency_ms=elapsed,
                     error=f"{type(exc).__name__}: provider failure",
+                    profile_id=adapter.name,
+                    attempt_number=attempt_number,
                 )
                 self.recorder.record(attempt)
                 self.recorder.record_call(attempt_request, attempt)

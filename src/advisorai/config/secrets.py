@@ -168,8 +168,16 @@ class CredentialScope(StrEnum):
     PUBLIC_DATA = "public_data"
     MODEL_REGISTRY = "model_registry"
     PAPER_VENUE = "paper_venue"
+    PAPER_VENUE_CCXT = "paper_venue_ccxt"
+    PAPER_VENUE_KALSHI = "paper_venue_kalshi"
+    PAPER_VENUE_POLYMARKET = "paper_venue_polymarket"
+    PAPER_VENUE_DERIBIT = "paper_venue_deribit"
     DERIBIT_PUBLIC = "deribit_public"
     ARCHIVE_RCLONE = "archive_rclone"
+    ARCHIVE_AWS = "archive_aws"
+    ARCHIVE_AZURE = "archive_azure"
+    ARCHIVE_GOOGLE = "archive_google"
+    ARCHIVE_OMNICLOUD = "archive_omnicloud"
     EVENT_BUS = "event_bus"
     INTERNAL_APP = "internal_app"
 
@@ -270,15 +278,31 @@ CREDENTIAL_SCOPES: Mapping[CredentialScope, frozenset[str]] = MappingProxyType(
                 "ADVISORAI_VENUE_API_KEY",
                 "ADVISORAI_VENUE_API_SECRET",
                 "ADVISORAI_VENUE_PASSPHRASE",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_CCXT: frozenset(
+            {
                 "CCXT_EXCHANGE_ID",
                 "CCXT_API_KEY",
                 "CCXT_API_SECRET",
                 "CCXT_PASSWORD",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_KALSHI: frozenset(
+            {
                 "KALSHI_API_KEY_ID",
                 "KALSHI_PRIVATE_KEY_PATH",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_POLYMARKET: frozenset(
+            {
                 "POLYMARKET_API_KEY",
                 "POLYMARKET_API_SECRET",
                 "POLYMARKET_API_PASSPHRASE",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_DERIBIT: frozenset(
+            {
                 "DERIBIT_API_KEY",
                 "DERIBIT_API_SECRET",
                 "DERIBIT_CLIENT_ID",
@@ -301,15 +325,31 @@ CREDENTIAL_SCOPES: Mapping[CredentialScope, frozenset[str]] = MappingProxyType(
                 "RCLONE_S3_REGION",
                 "RCLONE_S3_SECRET_ACCESS_KEY",
                 "RCLONE_S3_SESSION_TOKEN",
+            }
+        ),
+        CredentialScope.ARCHIVE_AWS: frozenset(
+            {
                 "AWS_ACCESS_KEY_ID",
                 "AWS_PROFILE",
                 "AWS_REGION",
                 "AWS_SECRET_ACCESS_KEY",
                 "AWS_SESSION_TOKEN",
+            }
+        ),
+        CredentialScope.ARCHIVE_AZURE: frozenset(
+            {
                 "AZURE_STORAGE_ACCOUNT",
                 "AZURE_STORAGE_KEY",
                 "AZURE_STORAGE_SAS_TOKEN",
+            }
+        ),
+        CredentialScope.ARCHIVE_GOOGLE: frozenset(
+            {
                 "GOOGLE_APPLICATION_CREDENTIALS",
+            }
+        ),
+        CredentialScope.ARCHIVE_OMNICLOUD: frozenset(
+            {
                 "OMNICLOUD_API_KEY",
                 "OMNICLOUD_API_SECRET",
                 "OMNICLOUD_BASE_URL",

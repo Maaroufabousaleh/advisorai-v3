@@ -1,12 +1,21 @@
 """Replaceable model gateway adapters with explicit route/fallback records."""
 
 from advisorai.ports import (
+    GATEWAY_OUTPUT_SCHEMAS,
+    Claim,
+    ClaimList,
+    CodePatchProposal,
+    Counterargument,
     DataClassification,
     DecisionImpact,
     GatewayDataClass,
     GatewayOutputKind,
     GatewayTier,
+    GenericOutput,
+    NewsExtraction,
+    ResearchQuestion,
     RouteTier,
+    validate_gateway_output,
 )
 
 from .adapters import (
@@ -48,6 +57,15 @@ __all__ = [
     "GatewayRecorder",
     "GatewayDecision",
     "GatewayDataClass",
+    "GenericOutput",
+    "NewsExtraction",
+    "Claim",
+    "ClaimList",
+    "CodePatchProposal",
+    "ResearchQuestion",
+    "Counterargument",
+    "GATEWAY_OUTPUT_SCHEMAS",
+    "validate_gateway_output",
     "GatewayOutputKind",
     "GatewayPolicyConfig",
     "GatewayPolicyError",

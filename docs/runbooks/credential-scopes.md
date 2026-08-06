@@ -17,8 +17,9 @@ llm_env = resolver.resolve_for_process(CredentialScope.DIRECT_LLM)
 ```
 
 The available scopes are `DIRECT_LLM`, `LITELLM`, `OMNIROUTE`, `PUBLIC_DATA`,
-`MODEL_REGISTRY`, `PAPER_VENUE`, `DERIBIT_PUBLIC`, `ARCHIVE_RCLONE`,
-`EVENT_BUS`, and `INTERNAL_APP`. Each scope has a reviewed allowlist in
+`MODEL_REGISTRY`, the connector-specific `PAPER_VENUE*` scopes,
+`DERIBIT_PUBLIC`, the connector-specific `ARCHIVE_*` scopes, `EVENT_BUS`,
+and `INTERNAL_APP`. Each scope has a reviewed allowlist in
 `advisorai.config.secrets.CREDENTIAL_SCOPES`; an unscoped or `all` request is
 rejected. Empty assignments are ignored.
 

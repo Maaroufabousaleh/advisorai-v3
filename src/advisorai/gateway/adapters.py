@@ -65,20 +65,9 @@ class TypedGatewayAdapter:
         actual_identity: dict[str, str] = {}
         for field in ("actual_provider", "actual_model", "actual_gateway"):
             value = payload.get(field)
-            if value is not None and (not isinstance(value, str) or not value.strip()):
-                raise TypeError(f"{self.name} {field} must be non-blank text")
-            actual_identity[field] = value.strip() if isinstance(value, str) else getattr(
-                self.route, field.removeprefix("actual_"), None
-            )
-        actual_route = self.route.model_copy(
-            update={
-                "provider": actual_identity["actual_provider"],
-                "model": actual_identity["actual_model"],
-                "gateway": actual_identity["actual_gateway"],
-                "fallback_chain": self.route.fallback_chain,
-            }
-        )
-
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{self.name} response omitted {field}")
+            actual_identity[field] = value.strip()
         def optional_price(field: str) -> float | None:
             value = payload.get(field)
             if value is None:
@@ -90,10 +79,17 @@ class TypedGatewayAdapter:
             return float(value)
 
         actual_endpoint_variant = payload.get("actual_endpoint_variant")
-        if actual_endpoint_variant is not None and (
-            not isinstance(actual_endpoint_variant, str) or not actual_endpoint_variant.strip()
-        ):
-            raise TypeError(f"{self.name} actual_endpoint_variant must be non-blank text")
+        if not isinstance(actual_endpoint_variant, str) or not actual_endpoint_variant.strip():
+            raise ValueError(f"{self.name} response omitted actual_endpoint_variant")
+        actual_route = self.route.model_copy(
+            update={
+                "provider": actual_identity["actual_provider"],
+                "model": actual_identity["actual_model"],
+                "gateway": actual_identity["actual_gateway"],
+                "endpoint_variant": actual_endpoint_variant.strip(),
+                "fallback_chain": self.route.fallback_chain,
+            }
+        )
 
         return GatewayResponse(
             request_id=request.request_id,
@@ -113,12 +109,22 @@ class TypedGatewayAdapter:
             actual_provider=actual_route.provider,
             actual_model=actual_route.model,
             actual_gateway=actual_route.gateway,
-            endpoint_variant=actual_endpoint_variant.strip()
-            if isinstance(actual_endpoint_variant, str)
-            else self.route.endpoint_variant,
+            endpoint_variant=actual_endpoint_variant.strip(),
+            actual_endpoint_variant=actual_endpoint_variant.strip(),
             input_price_per_million=optional_price("input_price_per_million"),
             output_price_per_million=optional_price("output_price_per_million"),
             request_price_usd=optional_price("request_price_usd"),
+            billed_cost_usd=optional_price("billed_cost_usd"),
+            cost_metadata=(
+                dict(payload.get("cost_metadata"))
+                if isinstance(payload.get("cost_metadata"), Mapping)
+                else {}
+            ),
+            routing_metadata=(
+                dict(payload.get("routing_metadata"))
+                if isinstance(payload.get("routing_metadata"), Mapping)
+                else {}
+            ),
         )
 
 

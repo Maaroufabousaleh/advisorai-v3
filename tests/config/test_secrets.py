@@ -78,7 +78,9 @@ def test_credential_scopes_are_explicit_and_return_only_the_requested_subset():
         "ADVISORAI_LLM_API_KEY": "direct-secret",
         "OPENAI_API_KEY": "worker-secret",
         "ADVISORAI_VENUE_API_SECRET": "venue-secret",
+        "CCXT_API_SECRET": "ccxt-secret",
         "NATS_PASSWORD": "event-secret",
+        "RCLONE_CONFIG_PASS": "rclone-secret",
         "AWS_SECRET_ACCESS_KEY": "archive-secret",
     }
     resolver = CredentialResolver.from_mapping(values)
@@ -90,8 +92,14 @@ def test_credential_scopes_are_explicit_and_return_only_the_requested_subset():
     assert resolver.resolve(CredentialScope.PAPER_VENUE) == {
         "ADVISORAI_VENUE_API_SECRET": "venue-secret"
     }
+    assert resolver.resolve(CredentialScope.PAPER_VENUE_CCXT) == {
+        "CCXT_API_SECRET": "ccxt-secret"
+    }
     assert resolver.resolve(CredentialScope.EVENT_BUS) == {"NATS_PASSWORD": "event-secret"}
     assert resolver.resolve(CredentialScope.ARCHIVE_RCLONE) == {
+        "RCLONE_CONFIG_PASS": "rclone-secret"
+    }
+    assert resolver.resolve(CredentialScope.ARCHIVE_AWS) == {
         "AWS_SECRET_ACCESS_KEY": "archive-secret"
     }
     assert "direct-secret" not in repr(resolver)

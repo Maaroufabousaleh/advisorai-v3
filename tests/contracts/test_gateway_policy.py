@@ -30,6 +30,7 @@ def _routes() -> tuple[GatewayRoute, GatewayRoute]:
         provider="contributor-provider",
         model="worker-v1",
         gateway="contributor-direct",
+        endpoint_variant="contributor-endpoint",
         retention_policy="30d",
         training_policy="opt_out_no_training",
         terms_verified=True,
@@ -39,6 +40,7 @@ def _routes() -> tuple[GatewayRoute, GatewayRoute]:
         provider="private-provider",
         model="private-v1",
         gateway="private-direct",
+        endpoint_variant="private-endpoint",
         retention_policy="zero",
         training_policy="no_training_zdr",
         terms_verified=True,
@@ -49,17 +51,33 @@ def _routes() -> tuple[GatewayRoute, GatewayRoute]:
 
 def _gateway(*, contributor_transport=None, private_transport=None, recorder=None):
     contributor_route, private_route = _routes()
+    def payload_with_identity(request, payload):
+        return {
+            **payload,
+            "actual_provider": payload.get("actual_provider", request.route.provider),
+            "actual_model": payload.get("actual_model", request.route.model),
+            "actual_gateway": payload.get("actual_gateway", request.route.gateway),
+            "actual_endpoint_variant": payload.get(
+                "actual_endpoint_variant", request.route.endpoint_variant or "endpoint"
+            ),
+            "billed_cost_usd": payload.get("billed_cost_usd", 0),
+        }
+
+    contributor_transport = contributor_transport or (
+        lambda _: {"content": "worker", "typed_payload": {"claims": []}}
+    )
+    private_transport = private_transport or (
+        lambda _: {"content": "private", "typed_payload": {"thesis": "review"}}
+    )
     contributor = TypedGatewayAdapter(
         "contributor",
         contributor_route,
-        contributor_transport
-        or (lambda _: {"content": "worker", "typed_payload": {"claims": []}}),
+        lambda request: payload_with_identity(request, contributor_transport(request)),
     )
     private = TypedGatewayAdapter(
         "private",
         private_route,
-        private_transport
-        or (lambda _: {"content": "private", "typed_payload": {"thesis": "review"}}),
+        lambda request: payload_with_identity(request, private_transport(request)),
     )
     config = GatewayPolicyConfig(
         contributor_terms=ProviderTerms.from_route(
@@ -89,6 +107,7 @@ def _request(route: GatewayRoute, **updates) -> GatewayRequest:
         "route": route,
         "messages": (GatewayMessage(role="user", content="summarize this public article"),),
         "prompt_version": "policy-test-v1",
+        "data_class": GatewayDataClass.PUBLIC,
     }
     values.update(updates)
     return GatewayRequest(**values)
@@ -241,7 +260,7 @@ def test_private_tool_calls_cannot_smuggle_account_or_execution_arguments():
         contributor_route,
         data_class=GatewayDataClass.CONFIDENTIAL,
     )
-    with pytest.raises(GatewayPolicyError, match="forbidden field"):
+    with pytest.raises(GatewayPolicyError, match="not requested"):
         gateway.complete(request)
 
 
@@ -282,7 +301,14 @@ def test_policy_gateway_accepts_only_explicit_fallback_routes():
             TypedGatewayAdapter(
                 "fallback",
                 fallback_route,
-                lambda _: {"content": "fallback", "typed_payload": {"ok": True}},
+                lambda _: {
+                    "content": "fallback",
+                    "typed_payload": {"ok": True},
+                    "actual_provider": "contributor-provider",
+                    "actual_model": "worker-v1",
+                    "actual_gateway": "contributor-fallback",
+                    "actual_endpoint_variant": "contributor-endpoint",
+                },
             ),
         )
     )
@@ -299,10 +325,10 @@ def test_policy_gateway_accepts_only_explicit_fallback_routes():
 
 
 def test_classify_payload_is_conservative_for_internal_artifacts():
-    assert classify_payload({"article_text": "public"}) is GatewayDataClass.PUBLIC
-    assert classify_payload({"position_weight_bucket": "high"}) is GatewayDataClass.INTERNAL_SANITIZED
-    assert classify_payload({"position_exposure": 0.2}) is GatewayDataClass.CONFIDENTIAL
-    assert classify_payload({"api_key": "secret"}) is GatewayDataClass.SECRET_EXECUTION
+    assert classify_payload({"article_text": "public"}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.PUBLIC
+    assert classify_payload({"position_weight_bucket": "high"}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.INTERNAL_SANITIZED
+    assert classify_payload({"position_exposure": 0.2}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.CONFIDENTIAL
+    assert classify_payload({"api_key": "secret"}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.SECRET_EXECUTION
 
 
 def test_private_terms_must_prove_no_training_or_zdr():
@@ -350,6 +376,7 @@ def _profile_gateway(
         provider="openrouter",
         model="openrouter/free",
         gateway="openrouter",
+        endpoint_variant="openrouter/free",
         retention_policy="provider-terms",
         training_policy="public-only-contract",
         terms_verified=True,
@@ -414,7 +441,6 @@ def _profile_gateway(
         route_tier=RouteTier.PRIVATE_WORKER,
         provider_only=(worker_route.provider,),
         model_only=(worker_route.model,),
-        endpoint_variants=(worker_route.endpoint_variant,),
         data_collection="deny",
         zdr=True,
         allow_fallbacks=False,
@@ -427,7 +453,6 @@ def _profile_gateway(
         route_tier=RouteTier.PRIVATE_REVIEWER,
         provider_only=(reviewer_route.provider,),
         model_only=(reviewer_route.model,),
-        endpoint_variants=(reviewer_route.endpoint_variant,),
         data_collection="deny",
         zdr=True,
         allow_fallbacks=False,
@@ -444,29 +469,48 @@ def _profile_gateway(
             "input_price_per_million": prices[0],
             "output_price_per_million": prices[1],
             "request_price_usd": prices[2],
+            "billed_cost_usd": 0,
         }
 
+    def with_identity(request, payload):
+        return {
+            **payload,
+            "actual_provider": payload.get("actual_provider", request.route.provider),
+            "actual_model": payload.get("actual_model", request.route.model),
+            "actual_gateway": payload.get("actual_gateway", request.route.gateway),
+            "actual_endpoint_variant": payload.get(
+                "actual_endpoint_variant", request.route.endpoint_variant or "endpoint"
+            ),
+            "billed_cost_usd": payload.get("billed_cost_usd", 0),
+        }
+
+    public_transport = public_transport or (
+        lambda _: response(
+            "public",
+            {"claims": []},
+        )
+        | {"actual_provider": "openrouter", "actual_model": "free-worker"}
+    )
+    worker_transport = worker_transport or (
+        lambda _: response("worker", {"claims": []}, prices=(0.01, 0.03, 0.0))
+    )
+    reviewer_transport = reviewer_transport or (
+        lambda _: response("reviewer", {"review": True}, prices=(0.1, 0.3, 0.0))
+    )
     public_adapter = TypedGatewayAdapter(
         "public",
         public_route,
-        public_transport
-        or (
-            lambda _: response(
-                "public",
-                {"claims": []},
-            )
-            | {"actual_provider": "openrouter", "actual_model": "free-worker"}
-        ),
+        lambda request: with_identity(request, public_transport(request)),
     )
     worker_adapter = TypedGatewayAdapter(
         "worker",
         worker_route,
-        worker_transport or (lambda _: response("worker", {"claims": []}, prices=(0.01, 0.03, 0.0))),
+        lambda request: with_identity(request, worker_transport(request)),
     )
     reviewer_adapter = TypedGatewayAdapter(
         "reviewer",
         reviewer_route,
-        reviewer_transport or (lambda _: response("reviewer", {"review": True}, prices=(0.1, 0.3, 0.0))),
+        lambda request: with_identity(request, reviewer_transport(request)),
     )
     config = GatewayPolicyConfig(
         contributor_terms=contributor_terms,

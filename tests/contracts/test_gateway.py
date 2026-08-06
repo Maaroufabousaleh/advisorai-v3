@@ -44,9 +44,11 @@ def test_gateway_refuses_secret_recovery_request():
 
 def test_gateway_chain_dispatches_each_adapter_on_its_pinned_fallback_route():
     primary_route = GatewayRoute(
-        provider="provider", model="model", gateway="litellm", fallback_chain=("omniroute",)
+        provider="provider", model="model", gateway="litellm", endpoint_variant="primary", fallback_chain=("omniroute",)
     )
-    fallback_route = GatewayRoute(provider="provider", model="model", gateway="omniroute")
+    fallback_route = GatewayRoute(
+        provider="provider", model="model", gateway="omniroute", endpoint_variant="fallback"
+    )
 
     class FailingTransport:
         def __call__(self, request):
@@ -57,7 +59,14 @@ def test_gateway_chain_dispatches_each_adapter_on_its_pinned_fallback_route():
             LiteLLMGatewayAdapter(primary_route, FailingTransport()),
             OmniRouteGatewayAdapter(
                 fallback_route,
-                lambda request: {"content": "fallback", "typed_payload": {"ok": True}},
+                lambda request: {
+                    "content": "fallback",
+                    "typed_payload": {"ok": True},
+                    "actual_provider": "provider",
+                    "actual_model": "model",
+                    "actual_gateway": "omniroute",
+                    "actual_endpoint_variant": "fallback",
+                },
             ),
         )
     )

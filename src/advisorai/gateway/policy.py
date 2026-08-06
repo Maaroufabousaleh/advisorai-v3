@@ -32,6 +32,7 @@ from advisorai.ports import (
     GatewayTool,
     ModelGatewayPort,
     RouteTier,
+    validate_gateway_output,
 )
 
 from .core import GatewayAttempt, GatewayFailure, GatewayRecorder
@@ -42,6 +43,7 @@ class GatewayPolicyError(PermissionError):
 
 
 _CLASS_RANK = {
+    GatewayDataClass.UNCLASSIFIED: -1,
     GatewayDataClass.PUBLIC: 0,
     GatewayDataClass.INTERNAL_SANITIZED: 1,
     GatewayDataClass.CONFIDENTIAL: 2,
@@ -114,7 +116,7 @@ _FORBIDDEN_TOOL_KEYS = {
 
 def _coerce_data_class(value: GatewayDataClass | str | None) -> GatewayDataClass:
     if value is None:
-        return GatewayDataClass.PUBLIC
+        return GatewayDataClass.UNCLASSIFIED
     if isinstance(value, GatewayDataClass):
         return value
     try:
@@ -243,8 +245,8 @@ class ProviderRoutePolicy(BaseModel):
 
     route_tier: RouteTier
     provider_only: tuple[str, ...] = ()
+    provider_order: tuple[str, ...] = ()
     model_only: tuple[str, ...] = ()
-    endpoint_variants: tuple[str, ...] = ()
     data_collection: Literal["deny", "allow"] = "deny"
     zdr: bool = False
     allow_fallbacks: bool = False
@@ -252,11 +254,12 @@ class ProviderRoutePolicy(BaseModel):
     max_prompt_price: float = Field(default=0, ge=0)
     max_completion_price: float = Field(default=0, ge=0)
     max_request_price: float = Field(default=0, ge=0)
+    require_billed_cost: bool = True
     actual_identity_mode: Literal["exact", "allowlisted", "dynamic"] = "exact"
     reproducible: bool = True
     policy_version: str = Field(default="provider-policy-v1", min_length=1)
 
-    @field_validator("provider_only", "model_only", "endpoint_variants")
+    @field_validator("provider_only", "provider_order", "model_only")
     @classmethod
     def normalize_identity_lists(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         normalized = tuple(item.strip() for item in value)
@@ -280,8 +283,6 @@ class ProviderRoutePolicy(BaseModel):
         if self.route_tier is RouteTier.CONTRIBUTOR_PUBLIC:
             if self.data_collection != "deny":
                 raise ValueError("public contributor routes must deny provider data collection")
-            if not self.allow_fallbacks:
-                raise ValueError("public contributor routes must make provider fallback policy explicit")
             if any(
                 price != 0
                 for price in (
@@ -326,8 +327,8 @@ class ProviderRoutePolicy(BaseModel):
             provider["zdr"] = True
         if self.provider_only:
             provider["only"] = list(self.provider_only)
-        if self.endpoint_variants:
-            provider["endpoint_variants"] = list(self.endpoint_variants)
+        if self.provider_order:
+            provider["order"] = list(self.provider_order)
         return {"provider": provider}
 
     @property
@@ -343,16 +344,25 @@ class ProviderRoutePolicy(BaseModel):
             return False
         if self.model_only and route.model not in self.model_only:
             return False
-        if self.endpoint_variants:
-            variant = route.endpoint_variant
-            if variant not in self.endpoint_variants:
-                return False
         if actual and self.actual_identity_mode == "dynamic":
             return True
         return True
 
     def validate_response(self, response: GatewayResponse, *, pinned_route: GatewayRoute) -> None:
         actual = response.route
+        actual_endpoint_variant = response.actual_endpoint_variant
+        if not response.actual_provider or not response.actual_model or not response.actual_gateway:
+            raise GatewayPolicyError("provider response omitted actual provider/model/gateway identity")
+        if not actual_endpoint_variant:
+            raise GatewayPolicyError("provider response omitted actual endpoint identity")
+        if (
+            actual.provider != response.actual_provider
+            or actual.model != response.actual_model
+            or actual.gateway != response.actual_gateway
+        ):
+            raise GatewayPolicyError("provider response identity fields do not match its actual route")
+        if actual.endpoint_variant and actual.endpoint_variant != actual_endpoint_variant:
+            raise GatewayPolicyError("provider response endpoint fields do not match its actual route")
         if self.actual_identity_mode == "exact":
             if (
                 actual.provider != pinned_route.provider
@@ -364,6 +374,8 @@ class ProviderRoutePolicy(BaseModel):
             raise GatewayPolicyError("provider returned an identity outside the reviewed allowlist")
         elif self.actual_identity_mode == "dynamic" and self.route_tier is not RouteTier.CONTRIBUTOR_PUBLIC:
             raise GatewayPolicyError("dynamic provider identities are public-only")
+        if pinned_route.endpoint_variant and actual_endpoint_variant != pinned_route.endpoint_variant:
+            raise GatewayPolicyError("provider returned an endpoint variant different from its pinned route")
         if not self.admits_route(actual, actual=True):
             raise GatewayPolicyError("provider returned an identity outside the route policy")
         if self.require_parameters and (
@@ -372,6 +384,8 @@ class ProviderRoutePolicy(BaseModel):
             or response.request_price_usd is None
         ):
             raise GatewayPolicyError("provider response omitted required pricing parameters")
+        if self.require_billed_cost and response.billed_cost_usd is None:
+            raise GatewayPolicyError("provider response omitted billed usage cost")
         if response.input_price_per_million is not None and (
             response.input_price_per_million > self.max_prompt_price
         ):
@@ -639,6 +653,8 @@ class PolicyGateway:
 
     def classify(self, request: GatewayRequest, *, payload: object | None = None) -> GatewayDataClass:
         declared = _coerce_data_class(request.data_class)
+        if declared is GatewayDataClass.UNCLASSIFIED:
+            return declared
         if request.privacy_class.lower() in {"secret", "credential"}:
             declared = _max_data_class(declared, GatewayDataClass.SECRET_EXECUTION)
         return classify_payload(payload, declared=declared) if payload is not None else declared
@@ -659,6 +675,17 @@ class PolicyGateway:
             impact = DecisionImpact.EXECUTION
         elif _TASK_PRIVATE.search(task) and impact is DecisionImpact.NON_CRITICAL:
             impact = DecisionImpact.PORTFOLIO_INFLUENCING
+        if data_class is GatewayDataClass.UNCLASSIFIED:
+            decision = GatewayDecision(
+                tier=GatewayTier.BLOCKED,
+                data_class=data_class,
+                reason="explicit data classification is required before model routing",
+                redacted=redacted,
+                route_tier=RouteTier.BLOCKED,
+                decision_impact=impact,
+            )
+            self.decisions.append(decision)
+            return decision
         if data_class is GatewayDataClass.SECRET_EXECUTION or impact is DecisionImpact.EXECUTION:
             decision = GatewayDecision(
                 tier=GatewayTier.BLOCKED,
@@ -767,7 +794,7 @@ class PolicyGateway:
             permitted_routes = {attempt_request.route.gateway, *attempt_request.route.fallback_chain}
             if response.route.gateway not in permitted_routes:
                 raise GatewayFailure("policy gateway received an unpinned route response")
-            self._validate_response(response, selected.tier, candidate)
+            self._validate_response(response, selected.tier, attempt_request)
             elapsed = max(0, (perf_counter_ns() - started) // 1_000_000)
             enriched = response.model_copy(
                 update={
@@ -839,13 +866,16 @@ class PolicyGateway:
     ) -> GatewayResponse:
         candidates = self._profile_candidates(decision)
         failures: list[str] = []
-        for profile in candidates:
+        for attempt_number, profile in enumerate(candidates):
             if not profile.terms.permits(decision.data_class):
                 failures.append(f"{profile.profile_id}:provider_terms_denied")
                 continue
             pinned_route = profile.route
             if pinned_route is None:
                 failures.append(f"{profile.profile_id}:missing_pinned_route")
+                continue
+            if not pinned_route.endpoint_variant:
+                failures.append(f"{profile.profile_id}:missing_pinned_endpoint_identity")
                 continue
             if not profile.provider_policy.admits_route(pinned_route):
                 failures.append(f"{profile.profile_id}:route_not_admitted")
@@ -876,7 +906,7 @@ class PolicyGateway:
                     GatewayTier.CONTRIBUTOR
                     if profile.route_tier is RouteTier.CONTRIBUTOR_PUBLIC
                     else GatewayTier.PRIVATE,
-                    request,
+                    attempt_request,
                 )
                 elapsed = max(0, (perf_counter_ns() - started) // 1_000_000)
                 enriched = response.model_copy(
@@ -917,6 +947,7 @@ class PolicyGateway:
                     response=enriched,
                     succeeded=True,
                     latency_ms=elapsed,
+                    attempt_number=attempt_number,
                 )
                 return enriched
             except Exception as exc:
@@ -932,6 +963,7 @@ class PolicyGateway:
                     succeeded=False,
                     latency_ms=elapsed,
                     error=f"{type(exc).__name__}: provider failure",
+                    attempt_number=attempt_number,
                 )
         if self.config.abstain_on_provider_failure:
             return self._abstain_response(
@@ -982,6 +1014,7 @@ class PolicyGateway:
         succeeded: bool,
         latency_ms: int,
         error: str | None = None,
+        attempt_number: int = 0,
     ) -> None:
         if self.recorder is None:
             return
@@ -992,6 +1025,8 @@ class PolicyGateway:
             succeeded=succeeded,
             latency_ms=latency_ms,
             error=error,
+            profile_id=profile.profile_id,
+            attempt_number=attempt_number,
         )
         self.recorder.record(attempt)
         self.recorder.record_call(request, attempt, response)
@@ -1021,9 +1056,6 @@ class PolicyGateway:
             redaction_policy_version=self.config.redaction_policy_version,
             redaction_policy_hash=request.redaction_policy_hash,
             route_policy_hash=request.route_policy_hash,
-            actual_provider=request.route.provider,
-            actual_model=request.route.model,
-            actual_gateway=request.route.gateway,
             prompt_hash=request.prompt_hash(),
             evidence_hash=request.evidence_hash(),
             authoritative=False,
@@ -1085,6 +1117,21 @@ class PolicyGateway:
         tier: GatewayTier,
         request: GatewayRequest,
     ) -> None:
+        actual_endpoint_variant = response.actual_endpoint_variant
+        if not response.actual_provider or not response.actual_model or not response.actual_gateway:
+            raise GatewayPolicyError("provider response omitted actual provider/model/gateway identity")
+        if not actual_endpoint_variant:
+            raise GatewayPolicyError("provider response omitted actual endpoint identity")
+        if (
+            response.route.provider != response.actual_provider
+            or response.route.model != response.actual_model
+            or response.route.gateway != response.actual_gateway
+        ):
+            raise GatewayPolicyError("provider response identity fields do not match its actual route")
+        if response.route.endpoint_variant and response.route.endpoint_variant != actual_endpoint_variant:
+            raise GatewayPolicyError("provider response endpoint fields do not match its actual route")
+        if request.route.endpoint_variant and request.route.endpoint_variant != actual_endpoint_variant:
+            raise GatewayPolicyError("provider response endpoint differs from its requested route")
         if response.authoritative:
             raise GatewayPolicyError("model output cannot be authoritative")
         if response.typed_payload is None and not response.tool_calls:
@@ -1103,20 +1150,35 @@ class PolicyGateway:
                 raise GatewayPolicyError("contributor routes cannot return tool calls")
             if name not in set(self.config.private_tool_allowlist) or not self._is_read_only_tool(name):
                 raise GatewayPolicyError(f"model returned an unapproved tool call: {name}")
+            definition = next(
+                (tool for tool in request.tools if tool.name.strip().lower() == name),
+                None,
+            )
+            if definition is None:
+                raise GatewayPolicyError(f"model returned a tool that was not requested: {name}")
             arguments = call.get("arguments")
             if isinstance(arguments, Mapping):
-                self._validate_tool_mapping(arguments)
+                parsed_arguments: Mapping[str, object] = arguments
             elif isinstance(arguments, str):
-                lowered_arguments = arguments.lower()
-                if contains_secret_material(arguments) or any(
-                    f'"{key}"' in lowered_arguments or f"'{key}'" in lowered_arguments
-                    for key in _FORBIDDEN_TOOL_KEYS
-                ):
-                    raise GatewayPolicyError(
-                        "model tool-call arguments contain credential or execution data"
-                    )
+                try:
+                    decoded_arguments = json.loads(arguments)
+                except json.JSONDecodeError as exc:
+                    raise GatewayPolicyError("model tool-call arguments are not valid JSON") from exc
+                if not isinstance(decoded_arguments, Mapping):
+                    raise GatewayPolicyError("model tool-call arguments must be a JSON object")
+                parsed_arguments = decoded_arguments
+            else:
+                raise GatewayPolicyError("model tool-call arguments are required")
+            self._validate_tool_mapping(parsed_arguments)
+            self._validate_json_schema(parsed_arguments, definition.input_schema)
         if response.typed_payload is not None:
             self._validate_output_mapping(response.typed_payload)
+            try:
+                validate_gateway_output(request.output_kind, response.typed_payload)
+            except (TypeError, ValueError) as exc:
+                raise GatewayPolicyError(
+                    f"model output does not satisfy {request.output_kind.value} schema"
+                ) from exc
 
     @classmethod
     def _validate_output_mapping(cls, value: object) -> None:
@@ -1146,6 +1208,53 @@ class PolicyGateway:
                 for item in child:
                     if isinstance(item, Mapping):
                         cls._validate_tool_mapping(item)
+
+    @classmethod
+    def _validate_json_schema(cls, value: object, schema: Mapping[str, object], path: str = "$") -> None:
+        schema_type = schema.get("type")
+        if schema_type == "object":
+            if not isinstance(value, Mapping):
+                raise GatewayPolicyError(f"tool arguments at {path} must be an object")
+            properties = schema.get("properties", {})
+            if not isinstance(properties, Mapping):
+                raise GatewayPolicyError(f"tool schema properties at {path} are invalid")
+            required = schema.get("required", ())
+            for name in required if isinstance(required, (list, tuple)) else ():
+                if name not in value:
+                    raise GatewayPolicyError(f"tool arguments missing required field: {name}")
+            additional = schema.get("additionalProperties", True)
+            if additional is False:
+                unknown = set(value) - set(properties)
+                if unknown:
+                    raise GatewayPolicyError(
+                        f"tool arguments contain unknown fields: {', '.join(sorted(map(str, unknown)))}"
+                    )
+            for name, child_schema in properties.items():
+                if name in value and isinstance(child_schema, Mapping):
+                    cls._validate_json_schema(value[name], child_schema, f"{path}.{name}")
+            return
+        if schema_type == "array":
+            if not isinstance(value, (list, tuple)):
+                raise GatewayPolicyError(f"tool arguments at {path} must be an array")
+            item_schema = schema.get("items")
+            if isinstance(item_schema, Mapping):
+                for index, item in enumerate(value):
+                    cls._validate_json_schema(item, item_schema, f"{path}[{index}]")
+            return
+        if schema_type == "string":
+            if not isinstance(value, str):
+                raise GatewayPolicyError(f"tool arguments at {path} must be a string")
+        elif schema_type == "integer":
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise GatewayPolicyError(f"tool arguments at {path} must be an integer")
+        elif schema_type == "number":
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise GatewayPolicyError(f"tool arguments at {path} must be a number")
+        elif schema_type == "boolean" and not isinstance(value, bool):
+            raise GatewayPolicyError(f"tool arguments at {path} must be boolean")
+        allowed = schema.get("enum")
+        if isinstance(allowed, (list, tuple)) and value not in allowed:
+            raise GatewayPolicyError(f"tool arguments at {path} contain a value outside the enum")
 
 
 # ``ModelGateway`` is the public name used by application wiring; the alias is

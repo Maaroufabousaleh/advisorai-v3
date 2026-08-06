@@ -13,10 +13,10 @@ from enum import StrEnum
 from hashlib import sha256
 from math import isfinite
 from pathlib import PurePosixPath
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, runtime_checkable
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
 
 from advisorai.contracts.core import is_forbidden_authority_action, normalize_authority_action
 
@@ -31,6 +31,7 @@ def _require_digest(value: str, info: object) -> str:
 class GatewayDataClass(StrEnum):
     """The maximum sensitivity a model request is allowed to carry."""
 
+    UNCLASSIFIED = "unclassified"
     PUBLIC = "public"
     INTERNAL_SANITIZED = "internal_sanitized"
     CONFIDENTIAL = "confidential"
@@ -79,6 +80,88 @@ class GatewayOutputKind(StrEnum):
     COUNTERARGUMENT = "counterargument"
 
 
+class GenericOutput(RootModel[dict[str, object]]):
+    """Schema for a deliberately generic, non-authoritative mapping."""
+
+
+class NewsExtraction(BaseModel):
+    """Typed extraction of public news or filing content."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    headline: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    entities: tuple[str, ...] = ()
+    topics: tuple[str, ...] = ()
+    source_ids: tuple[str, ...] = ()
+
+
+class Claim(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    text: str = Field(min_length=1)
+    evidence_ids: tuple[str, ...] = ()
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class ClaimList(BaseModel):
+    """Typed list of claims whose evidence remains separately verifiable."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    claims: tuple[Claim, ...] = ()
+
+
+class CodePatchProposal(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    summary: str = Field(min_length=1)
+    patch: str = Field(min_length=1)
+    files: tuple[str, ...] = ()
+    tests: tuple[str, ...] = ()
+
+
+class ResearchQuestion(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    question: str = Field(min_length=1)
+    rationale: str = Field(min_length=1)
+    evidence_ids: tuple[str, ...] = ()
+    priority: Literal["low", "medium", "high"] = "medium"
+
+
+class Counterargument(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+
+    claim: str = Field(min_length=1)
+    counterargument: str = Field(min_length=1)
+    evidence_ids: tuple[str, ...] = ()
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+GATEWAY_OUTPUT_SCHEMAS: dict[GatewayOutputKind, type[BaseModel]] = {
+    GatewayOutputKind.GENERIC: GenericOutput,
+    GatewayOutputKind.NEWS_EXTRACTION: NewsExtraction,
+    GatewayOutputKind.CLAIM_LIST: ClaimList,
+    GatewayOutputKind.CODE_PATCH_PROPOSAL: CodePatchProposal,
+    GatewayOutputKind.RESEARCH_QUESTION: ResearchQuestion,
+    GatewayOutputKind.COUNTERARGUMENT: Counterargument,
+}
+
+
+def validate_gateway_output(
+    output_kind: GatewayOutputKind, payload: Mapping[str, object]
+) -> Mapping[str, object]:
+    """Validate and normalize one concrete output schema."""
+
+    schema = GATEWAY_OUTPUT_SCHEMAS[output_kind]
+    model = schema.model_validate(payload)
+    normalized = model.model_dump(mode="json", round_trip=True)
+    if not isinstance(normalized, Mapping):  # pragma: no cover - all schemas are mappings
+        raise ValueError("gateway output schema must serialize to an object")
+    return dict(normalized)
+
+
 class GatewayMessage(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
 
@@ -92,6 +175,13 @@ class GatewayTool(BaseModel):
     name: str = Field(min_length=1)
     input_schema_version: str = Field(min_length=1)
     output_schema_version: str = Field(min_length=1)
+    input_schema: Mapping[str, object] = Field(
+        default_factory=lambda: {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        }
+    )
 
     @field_validator("name")
     @classmethod
@@ -102,6 +192,52 @@ class GatewayTool(BaseModel):
         if is_forbidden_authority_action(normalized):
             raise ValueError("model gateways cannot expose trading authority")
         return value.strip()
+
+    @field_validator("input_schema")
+    @classmethod
+    def validate_input_schema(cls, value: Mapping[str, object]) -> Mapping[str, object]:
+        if value.get("type") != "object":
+            raise ValueError("gateway tool input schemas must describe an object")
+        properties = value.get("properties", {})
+        if not isinstance(properties, Mapping):
+            raise ValueError("gateway tool input schema properties must be an object")
+        required = value.get("required", ())
+        if not isinstance(required, (list, tuple)) or any(
+            not isinstance(item, str) or not item.strip() for item in required
+        ):
+            raise ValueError("gateway tool input schema required must be a list of names")
+        if any(item not in properties for item in required):
+            raise ValueError("gateway tool input schema required names must be declared properties")
+        forbidden_tokens = ("account", "balance", "broker", "credential", "order", "position", "secret")
+
+        def visit_schema(schema: Mapping[str, object]) -> None:
+            nested_properties = schema.get("properties", {})
+            if nested_properties is not None and not isinstance(nested_properties, Mapping):
+                raise ValueError("gateway tool input schema properties must be an object")
+            if isinstance(nested_properties, Mapping):
+                nested_required = schema.get("required", ())
+                if not isinstance(nested_required, (list, tuple)) or any(
+                    not isinstance(item, str) or not item.strip() for item in nested_required
+                ):
+                    raise ValueError("gateway tool input schema required must be a list of names")
+                if any(item not in nested_properties for item in nested_required):
+                    raise ValueError("gateway tool input schema required names must be declared properties")
+                for name, child in nested_properties.items():
+                    if not isinstance(name, str) or not name.strip():
+                        raise ValueError("gateway tool input schema property names must be text")
+                    normalized = normalize_authority_action(name)
+                    if is_forbidden_authority_action(normalized) or any(
+                        token in normalized for token in forbidden_tokens
+                    ):
+                        raise ValueError("gateway tool input schema cannot expose trading authority")
+                    if isinstance(child, Mapping):
+                        visit_schema(child)
+            items = schema.get("items")
+            if isinstance(items, Mapping):
+                visit_schema(items)
+
+        visit_schema(value)
+        return dict(value)
 
 
 class GatewayRoute(BaseModel):
@@ -166,7 +302,7 @@ class GatewayRequest(BaseModel):
     prompt_version: str
     tool_version: str | None = None
     privacy_class: str = "non_secret"
-    data_class: GatewayDataClass = GatewayDataClass.PUBLIC
+    data_class: GatewayDataClass = GatewayDataClass.UNCLASSIFIED
     task_kind: str = Field(default="research", min_length=1)
     portfolio_influence: bool = False
     confidence: float | None = Field(default=None, ge=0, le=1)
@@ -235,11 +371,21 @@ class GatewayRequest(BaseModel):
             "tools",
             "api_key",
             "authorization",
+            "endpoint_variants",
         }
-        if forbidden_provider_options.intersection(
-            str(key).strip().lower() for key in self.provider_options
-        ):
-            raise ValueError("gateway provider options cannot override model content or credentials")
+        def has_forbidden_provider_option(value: object) -> bool:
+            if isinstance(value, Mapping):
+                for key, child in value.items():
+                    if str(key).strip().lower() in forbidden_provider_options:
+                        return True
+                    if has_forbidden_provider_option(child):
+                        return True
+            elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+                return any(has_forbidden_provider_option(child) for child in value)
+            return False
+
+        if has_forbidden_provider_option(self.provider_options):
+            raise ValueError("gateway provider options cannot override model content, credentials, or endpoint routing")
         def has_credential_key(value: object) -> bool:
             if isinstance(value, Mapping):
                 for key, child in value.items():
@@ -305,6 +451,7 @@ class GatewayResponse(BaseModel):
     terms_verified: bool | None = None
     terms_reference: str | None = None
     endpoint_variant: str | None = None
+    actual_endpoint_variant: str | None = None
     requested_route: GatewayRoute | None = None
     actual_provider: str | None = None
     actual_model: str | None = None
@@ -312,6 +459,9 @@ class GatewayResponse(BaseModel):
     input_price_per_million: float | None = Field(default=None, ge=0)
     output_price_per_million: float | None = Field(default=None, ge=0)
     request_price_usd: float | None = Field(default=None, ge=0)
+    billed_cost_usd: float | None = Field(default=None, ge=0)
+    cost_metadata: Mapping[str, object] = Field(default_factory=dict)
+    routing_metadata: Mapping[str, object] = Field(default_factory=dict)
     prompt_hash: str | None = None
     evidence_hash: str | None = None
     redaction_policy_hash: str | None = None
@@ -352,6 +502,7 @@ class GatewayResponse(BaseModel):
             "training_policy",
             "terms_reference",
             "endpoint_variant",
+            "actual_endpoint_variant",
             "actual_provider",
             "actual_model",
             "actual_gateway",
@@ -365,6 +516,10 @@ class GatewayResponse(BaseModel):
                 len(value) != 64 or any(char not in "0123456789abcdef" for char in value)
             ):
                 raise ValueError(f"gateway {field_name} must be a lowercase SHA-256 digest")
+        for field_name in ("billed_cost_usd",):
+            value = getattr(self, field_name)
+            if value is not None and not isfinite(value):
+                raise ValueError(f"gateway {field_name} must be finite")
         return self
 
 

@@ -102,13 +102,16 @@ def test_direct_gateway_maps_openai_shape_and_rejects_non_typed_output():
     body = json.dumps(
         {
             "id": "req-provider-1",
+            "provider": "example",
+            "model": "model-v1",
+            "provider_variant": "example-endpoint",
             "choices": [{"message": {"content": '{"decision":"abstain"}'}}],
             "usage": {"prompt_tokens": 4, "completion_tokens": 3},
         }
     ).encode()
     client, calls = client_for([(200, body, ())])
     route = GatewayRoute(
-        provider="example", model="model-v1", gateway="direct", schema_mode="typed_json"
+        provider="example", model="model-v1", gateway="direct", endpoint_variant="example-endpoint", schema_mode="typed_json"
     )
     adapter = OpenAICompatibleGatewayAdapter(route, client, api_key="secret-key")
     request = GatewayRequest(
@@ -121,7 +124,22 @@ def test_direct_gateway_maps_openai_shape_and_rejects_non_typed_output():
     assert response.input_tokens == 4
     assert calls[0][2]["Authorization"] == "Bearer secret-key"
 
-    bad_client, _ = client_for([(200, b'{"choices":[{"message":{"content":"not json"}}]}', ())])
+    bad_client, _ = client_for(
+        [
+            (
+                200,
+                json.dumps(
+                    {
+                        "provider": "example",
+                        "model": "model-v1",
+                        "provider_variant": "example-endpoint",
+                        "choices": [{"message": {"content": "not json"}}],
+                    }
+                ).encode(),
+                (),
+            )
+        ]
+    )
     bad_adapter = OpenAICompatibleGatewayAdapter(route, bad_client, api_key="secret-key")
     with pytest.raises(Exception, match="malformed typed JSON"):
         bad_adapter.complete(request)
@@ -130,6 +148,9 @@ def test_direct_gateway_maps_openai_shape_and_rejects_non_typed_output():
 def test_direct_gateway_accepts_tool_calls_with_null_content():
     body = json.dumps(
         {
+            "provider": "example",
+            "model": "model-v1",
+            "provider_variant": "example-endpoint",
             "choices": [
                 {
                     "message": {
@@ -147,14 +168,24 @@ def test_direct_gateway_accepts_tool_calls_with_null_content():
             ]
         }
     ).encode()
-    client, _ = client_for([(200, body, ())])
-    route = GatewayRoute(provider="example", model="model-v1", gateway="direct", schema_mode="text")
+    client, calls = client_for([(200, body, ())])
+    route = GatewayRoute(
+        provider="example", model="model-v1", gateway="direct", endpoint_variant="example-endpoint", schema_mode="text"
+    )
     request = GatewayRequest(
         route=route,
         messages=(GatewayMessage(role="user", content="inspect evidence"),),
         tools=(
             GatewayTool(
-                name="read_orderbook", input_schema_version="v1", output_schema_version="v1"
+                name="read_orderbook",
+                input_schema_version="v1",
+                output_schema_version="v1",
+                input_schema={
+                    "type": "object",
+                    "properties": {"instrument": {"type": "string"}},
+                    "required": ["instrument"],
+                    "additionalProperties": False,
+                },
             ),
         ),
         prompt_version="p1",
@@ -164,6 +195,13 @@ def test_direct_gateway_accepts_tool_calls_with_null_content():
 
     assert response.content == ""
     assert response.tool_calls[0]["name"] == "read_orderbook"
+    sent = json.loads(calls[0][3])
+    assert sent["tools"][0]["function"]["parameters"] == {
+        "type": "object",
+        "properties": {"instrument": {"type": "string"}},
+        "required": ["instrument"],
+        "additionalProperties": False,
+    }
 
 
 def test_direct_gateway_preserves_actual_provider_identity_and_pricing_parameters():

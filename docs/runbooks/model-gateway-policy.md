@@ -71,7 +71,10 @@ gateway = PolicyGateway(
 
 For the four route classes, construct `ProviderRoutePolicy` and
 `RouteProfile` objects. The caller supplies task/data/impact metadata, not a
-model name:
+model name. Provider routing uses OpenRouter's documented `only`, `order`,
+`allow_fallbacks`, `require_parameters`, `data_collection`, `zdr`, and
+`max_price` fields; endpoint/provider identity is validated from the returned
+router metadata rather than sent through an undocumented provider field:
 
 ```python
 from advisorai.gateway import ProviderRoutePolicy, RouteProfile
@@ -108,7 +111,8 @@ values used for admission. `build_policy_gateway` in
 
 ## Request contract
 
-Set `GatewayRequest.data_class`, `decision_impact`, `task_kind`, `output_kind`,
+Set `GatewayRequest.data_class` explicitly (the default is `UNCLASSIFIED` and
+is blocked), along with `decision_impact`, `task_kind`, and `output_kind`,
 confidence, and evidence IDs at the call site. Supply `sensitive_values` to
 `gateway.complete(...)` only while converting a raw payload into a request;
 the values are replaced before the provider call and are never recorded.
