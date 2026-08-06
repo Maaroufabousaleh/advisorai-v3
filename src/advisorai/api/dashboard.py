@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from advisorai.api.security import (
     AuthConfiguration,
+    LoginRateLimiter,
     PasswordService,
     Principal,
     SessionStore,
@@ -233,16 +234,29 @@ class DashboardCommandRequest(BaseModel):
             CommandKind.HALT_PAPER,
             CommandKind.RESUME_PAPER,
             CommandKind.SET_MODE,
+            CommandKind.PROPOSE_CONFIG,
             CommandKind.ROLLBACK_CONFIG,
         } and not self.confirmed:
             raise ValueError("sensitive dashboard commands require explicit confirmation")
         if self.command in {
+            CommandKind.HALT_PAPER,
             CommandKind.RESUME_PAPER,
             CommandKind.SET_MODE,
+            CommandKind.PROPOSE_CONFIG,
             CommandKind.ROLLBACK_CONFIG,
         } and not self.step_up_token:
             raise ValueError("this command requires a recent step-up authentication token")
         return self
+
+    @property
+    def requires_step_up(self) -> bool:
+        return self.command in {
+            CommandKind.HALT_PAPER,
+            CommandKind.RESUME_PAPER,
+            CommandKind.SET_MODE,
+            CommandKind.PROPOSE_CONFIG,
+            CommandKind.ROLLBACK_CONFIG,
+        }
 
 
 class CommandReceipt(BaseModel):
@@ -255,6 +269,8 @@ class CommandReceipt(BaseModel):
     accepted_at: datetime
     safe_state: str = Field(min_length=1)
     audit_event_id: str = Field(min_length=1)
+    requested_mode: str | None = None
+    config_patch: dict[str, str] | None = None
 
 
 def _hash_event(event_type: str, summary: str, at: datetime) -> str:
@@ -582,6 +598,7 @@ class DashboardProjection:
         if self._ledgers is None:
             return
         hydrated_audit: list[AuditEventView] = []
+        status = self._overview.status
         for event in self._ledgers.events(LedgerNamespace.INCIDENT):
             if event.event_type != "dashboard_command_recorded":
                 continue
@@ -592,6 +609,18 @@ class DashboardProjection:
                 continue
             receipt = CommandReceipt.model_validate(receipt_payload)
             self._receipts[idempotency_key] = receipt
+            status = status.model_copy(
+                update={
+                    "last_ledger_event_at": max(status.last_ledger_event_at, receipt.accepted_at)
+                }
+            )
+            if receipt.status == "accepted":
+                if receipt.command is CommandKind.HALT_PAPER:
+                    status = status.model_copy(update={"kill_switch": "engaged"})
+                elif receipt.command is CommandKind.RESUME_PAPER:
+                    status = status.model_copy(update={"kill_switch": "armed"})
+                elif receipt.command is CommandKind.SET_MODE and receipt.requested_mode:
+                    status = status.model_copy(update={"operating_mode": receipt.requested_mode})
             summary = str(payload.get("reason", receipt.message))
             hydrated_audit.append(
                 _event(
@@ -607,7 +636,10 @@ class DashboardProjection:
             )
         if hydrated_audit:
             self._overview = self._overview.model_copy(
-                update={"audit": tuple(reversed(hydrated_audit)) + self._overview.audit}
+                update={
+                    "status": status,
+                    "audit": tuple(reversed(hydrated_audit)) + self._overview.audit,
+                }
             )
 
     def overview(self) -> DashboardOverview:
@@ -666,6 +698,8 @@ class DashboardProjection:
             accepted_at=now,
             safe_state="paper_only",
             audit_event_id=event_id,
+            requested_mode=command.requested_mode,
+            config_patch=command.config_patch,
         )
         self._receipts[command.idempotency_key] = receipt
         if self._ledgers is not None:
@@ -679,6 +713,8 @@ class DashboardProjection:
                         "actor": actor,
                         "idempotency_key": command.idempotency_key,
                         "reason": command.reason,
+                        "requested_mode": command.requested_mode,
+                        "config_patch": command.config_patch,
                         "receipt": receipt.model_dump(mode="json", round_trip=True),
                     },
                 )
@@ -729,6 +765,7 @@ def create_dashboard_app(
     ledger_path = os.getenv("ADVISORAI_DASHBOARD_LEDGER_PATH")
     ledger = SqliteLedgers(Path(ledger_path)) if ledger_path else None
     store = projection or DashboardProjection(ledgers=ledger)
+    login_limiter = LoginRateLimiter()
     password_hash = configured_password_hash()
     totp_secret = configured_totp_secret()
     app = FastAPI(title="AdvisorAI V3 Dashboard API", version="1.0.0", docs_url=None)
@@ -804,17 +841,34 @@ def create_dashboard_app(
 
     auth_status.__annotations__["request"] = Request
 
+    def client_key(request: Request) -> str:
+        return request.client.host if request.client is not None else "unknown"
+
+    def enforce_login_limit(request: Request) -> str:
+        key = client_key(request)
+        if not login_limiter.allowed(key):
+            retry_after = login_limiter.retry_after(key)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="too many authentication attempts; try again later",
+                headers={"Retry-After": str(retry_after)},
+            )
+        return key
+
     @app.post("/api/v1/auth/login")
-    async def login(payload: LoginRequest, response: Response) -> dict[str, str]:
+    async def login(payload: LoginRequest, request: Request, response: Response) -> dict[str, str]:
         if not password_hash or not totp_secret:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="dashboard authentication is not configured",
             )
+        limiter_key = enforce_login_limit(request)
         if not PasswordService().verify(password_hash, payload.password) or not TotpService.verify(
             totp_secret, payload.totp_code
         ):
+            login_limiter.record_failure(limiter_key)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
+        login_limiter.reset(limiter_key)
         session_id, csrf_token = sessions.create(os.getenv("ADVISORAI_DASHBOARD_SUBJECT", "owner"))
         secure_cookie = os.getenv("ADVISORAI_DASHBOARD_COOKIE_SECURE", "1") == "1"
         response.set_cookie(
@@ -829,7 +883,38 @@ def create_dashboard_app(
         return {"csrf_token": csrf_token, "subject": os.getenv("ADVISORAI_DASHBOARD_SUBJECT", "owner")}
 
     login.__annotations__["payload"] = LoginRequest
+    login.__annotations__["request"] = Request
     login.__annotations__["response"] = Response
+
+    @app.post("/api/v1/auth/step-up")
+    async def step_up(
+        payload: LoginRequest,
+        request: Request,
+        _: Principal = Depends(require_csrf),  # noqa: B008
+    ) -> dict[str, str]:
+        if not auth_config.auth_required:
+            expires_at = datetime.now(UTC) + timedelta(seconds=auth_config.step_up_ttl_seconds)
+            return {"step_up_token": "local-development-stepup", "expires_at": expires_at.isoformat()}
+        if not password_hash or not totp_secret:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="dashboard authentication is not configured",
+            )
+        limiter_key = enforce_login_limit(request)
+        if not PasswordService().verify(password_hash, payload.password) or not TotpService.verify(
+            totp_secret, payload.totp_code
+        ):
+            login_limiter.record_failure(limiter_key)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid step-up credentials")
+        login_limiter.reset(limiter_key)
+        issued = sessions.issue_step_up(request.cookies.get("advisorai_session"))
+        if issued is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="login required")
+        token, expires_at = issued
+        return {"step_up_token": token, "expires_at": expires_at.isoformat()}
+
+    step_up.__annotations__["payload"] = LoginRequest
+    step_up.__annotations__["request"] = Request
 
     @app.post("/api/v1/auth/logout")
     async def logout(request: Request, response: Response) -> dict[str, str]:
@@ -854,9 +939,24 @@ def create_dashboard_app(
 
     @app.post("/api/v1/control/command", response_model=CommandReceipt)
     async def command(
-        payload: DashboardCommandRequest, principal: Principal = Depends(require_csrf)  # noqa: B008
+        payload: DashboardCommandRequest,
+        request: Request,
+        principal: Principal = Depends(require_csrf),  # noqa: B008
     ) -> CommandReceipt:
+        prior = store.receipt_for(payload.idempotency_key)
+        if prior is not None:
+            return prior
+        if auth_config.auth_required and payload.requires_step_up:
+            if not sessions.consume_step_up(
+                request.cookies.get("advisorai_session"), payload.step_up_token
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="a fresh step-up authentication token is required",
+                )
         return store.execute(payload, actor=principal.subject)
+
+    command.__annotations__["request"] = Request
 
     return app
 

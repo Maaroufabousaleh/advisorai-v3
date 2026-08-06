@@ -196,6 +196,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .risk-score strong { font: 500 32px var(--font-data); letter-spacing: -.08em; color: var(--green); }
 .risk-score strong small { font-size: 17px; letter-spacing: -.04em; }
 .risk-score em { color: var(--green); letter-spacing: .02em; }
+.risk-score strong.tone-warning, .risk-score em.tone-warning { color: var(--amber); }
+.risk-score strong.tone-critical, .risk-score em.tone-critical { color: var(--red); }
 .risk-summary-copy { padding-top: 2px; }
 .status-line { display: flex; align-items: center; gap: 7px; font: 10px var(--font-data); }
 .status-line.positive { color: var(--green); }
@@ -413,6 +415,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .quick-action:hover { color: var(--ink); border-color: var(--cyan-dim); }
 .quick-action.halt { color: var(--red); border-color: var(--red-dim); }
 .quick-action.halt:hover { background: rgba(255,115,120,.1); border-color: var(--red); }
+.quick-action.resume { color: var(--green); border-color: var(--green-dim); }
+.quick-action.resume:hover { background: rgba(114,211,160,.1); border-color: var(--green); }
 .spin { animation: spin 1s linear infinite; }
 .toast { position: fixed; right: 28px; bottom: 78px; max-width: 430px; display: flex; align-items: flex-start; gap: 10px; padding: 13px 14px; background: #12201d; border: 1px solid var(--green-dim); color: var(--green); z-index: 50; box-shadow: 0 12px 35px rgba(0,0,0,.35); font: 10px var(--font-data); line-height: 1.4; }
 .toast span { flex: 1; }
@@ -427,11 +431,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .command-modal h2 { margin: 23px 0 9px; font-size: 23px; letter-spacing: -.03em; }
 .command-modal > p { color: var(--muted); margin: 0 0 19px; line-height: 1.55; font-size: 12px; }
 .modal-field { display: flex; flex-direction: column; gap: 7px; color: var(--muted); font: 9px var(--font-data); letter-spacing: .08em; text-transform: uppercase; margin-top: 13px; }
-.modal-field textarea, .modal-field select { border: 1px solid var(--line-bright); background: #0b1015; color: var(--ink); padding: 10px; outline: 0; resize: vertical; font: 11px var(--font-data); text-transform: none; letter-spacing: 0; }
-.modal-field textarea:focus, .modal-field select:focus { border-color: var(--cyan); }
+.modal-field textarea, .modal-field select, .modal-field input { border: 1px solid var(--line-bright); background: #0b1015; color: var(--ink); padding: 10px; outline: 0; resize: vertical; font: 11px var(--font-data); text-transform: none; letter-spacing: 0; }
+.modal-field textarea:focus, .modal-field select:focus, .modal-field input:focus { border-color: var(--cyan); }
 .modal-check { gap: 8px; margin: 17px 0 2px; color: var(--muted); font: 10px var(--font-data); }
 .modal-check svg { color: var(--cyan); }
 .modal-actions { justify-content: flex-end; gap: 9px; margin-top: 24px; }
+.step-up-fields { border-top: 1px solid var(--line-soft); margin-top: 17px; padding-top: 4px; }
+.step-up-note { display: flex; align-items: center; gap: 7px; color: var(--dim); font: 9px var(--font-data); margin-top: 11px; }
+.step-up-note svg { color: var(--cyan); }
 
 .loading-state { min-height: 60vh; display: flex; align-items: center; justify-content: center; gap: 11px; color: var(--muted); font: 10px var(--font-data); }
 .loading-mark { color: var(--cyan); animation: pulse 1.7s ease-in-out infinite; }

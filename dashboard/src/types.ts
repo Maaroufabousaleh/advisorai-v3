@@ -152,6 +152,8 @@ export interface CommandReceipt {
   accepted_at: string
   safe_state: string
   audit_event_id: string
+  requested_mode?: string | null
+  config_patch?: Record<string, string> | null
 }
 
 export interface AuthStatus {

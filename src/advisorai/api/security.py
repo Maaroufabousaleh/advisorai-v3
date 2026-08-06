@@ -13,6 +13,7 @@ import hmac
 import os
 import secrets
 import struct
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -27,6 +28,7 @@ class AuthConfiguration(BaseModel):
     auth_required: bool = True
     session_ttl_seconds: int = Field(default=900, ge=60, le=86_400)
     idle_ttl_seconds: int = Field(default=900, ge=60, le=86_400)
+    step_up_ttl_seconds: int = Field(default=300, ge=30, le=900)
     allowed_origins: tuple[str, ...] = ()
 
     @classmethod
@@ -38,6 +40,7 @@ class AuthConfiguration(BaseModel):
             auth_required=not development,
             session_ttl_seconds=int(os.getenv("ADVISORAI_DASHBOARD_SESSION_TTL", "900")),
             idle_ttl_seconds=int(os.getenv("ADVISORAI_DASHBOARD_IDLE_TTL", "900")),
+            step_up_ttl_seconds=int(os.getenv("ADVISORAI_DASHBOARD_STEP_UP_TTL", "300")),
             allowed_origins=origins,
         )
 
@@ -116,6 +119,68 @@ class _Session:
     csrf_token: str
     expires_at: datetime
     last_seen_at: datetime
+    step_up_token: str | None = None
+    step_up_expires_at: datetime | None = None
+
+
+class LoginRateLimiter:
+    """Small in-process limiter for password/TOTP endpoints.
+
+    The dashboard is a single-owner process, so an in-memory limiter is enough
+    to prevent accidental or opportunistic brute force against the expensive
+    Argon2 verifier.  Deployments with multiple API replicas should put the
+    same policy in their edge/session service as well.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_attempts: int = 5,
+        window_seconds: int = 300,
+        block_seconds: int = 900,
+    ) -> None:
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self.block_seconds = block_seconds
+        self._failures: dict[str, list[float]] = {}
+        self._blocked_until: dict[str, float] = {}
+
+    def _prune(self, key: str, now: float) -> list[float]:
+        attempts = [
+            value
+            for value in self._failures.get(key, [])
+            if now - value < self.window_seconds
+        ]
+        if attempts:
+            self._failures[key] = attempts
+        else:
+            self._failures.pop(key, None)
+        return attempts
+
+    def allowed(self, key: str, *, now: float | None = None) -> bool:
+        current = now if now is not None else time.monotonic()
+        blocked_until = self._blocked_until.get(key, 0.0)
+        if current < blocked_until:
+            return False
+        if blocked_until:
+            self._blocked_until.pop(key, None)
+        return len(self._prune(key, current)) < self.max_attempts
+
+    def record_failure(self, key: str, *, now: float | None = None) -> None:
+        current = now if now is not None else time.monotonic()
+        attempts = self._prune(key, current)
+        attempts.append(current)
+        self._failures[key] = attempts
+        if len(attempts) >= self.max_attempts:
+            self._blocked_until[key] = current + self.block_seconds
+
+    def reset(self, key: str) -> None:
+        self._failures.pop(key, None)
+        self._blocked_until.pop(key, None)
+
+    def retry_after(self, key: str, *, now: float | None = None) -> int:
+        current = now if now is not None else time.monotonic()
+        return max(0, int(self._blocked_until.get(key, 0.0) - current + 0.999))
 
 
 class SessionStore:
@@ -160,6 +225,41 @@ class SessionStore:
     def revoke(self, session_id: str | None) -> None:
         if session_id:
             self._sessions.pop(session_id, None)
+
+    def issue_step_up(
+        self, session_id: str | None, *, now: datetime | None = None
+    ) -> tuple[str, datetime] | None:
+        """Issue a short-lived, session-bound, one-time control token."""
+
+        current = now or datetime.now(UTC)
+        session = self.get(session_id, now=current)
+        if session is None:
+            return None
+        token = secrets.token_urlsafe(32)
+        expires_at = current + timedelta(seconds=self.config.step_up_ttl_seconds)
+        session.step_up_token = token
+        session.step_up_expires_at = expires_at
+        return token, expires_at
+
+    def consume_step_up(
+        self,
+        session_id: str | None,
+        token: str | None,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        """Consume a valid token exactly once and reject stale/session-mismatched values."""
+
+        current = now or datetime.now(UTC)
+        session = self.get(session_id, now=current)
+        if session is None or not token or not session.step_up_token:
+            return False
+        expires_at = session.step_up_expires_at
+        valid = bool(expires_at and current < expires_at and hmac.compare_digest(session.step_up_token, token))
+        if valid:
+            session.step_up_token = None
+            session.step_up_expires_at = None
+        return valid
 
     def csrf_matches(self, session_id: str | None, token: str | None) -> bool:
         session = self._sessions.get(session_id or "")

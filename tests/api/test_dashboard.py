@@ -11,7 +11,7 @@ from advisorai.api.dashboard import (
     build_demo_overview,
     create_dashboard_app,
 )
-from advisorai.api.security import AuthConfiguration, SessionStore, TotpService
+from advisorai.api.security import AuthConfiguration, LoginRateLimiter, SessionStore, TotpService
 from advisorai.ledger import SqliteLedgers
 
 
@@ -50,6 +50,7 @@ def test_control_projection_is_idempotent_and_never_leaves_paper_state():
         idempotency_key="halt-command-5678",
         reason="operator safety test",
         confirmed=True,
+        step_up_token="test-step-up",
     )
 
     first = projection.execute(request, actor="owner")
@@ -68,6 +69,7 @@ def test_control_receipt_is_rehydrated_from_authoritative_ledger(tmp_path: Path)
         idempotency_key="durable-halt-1234",
         reason="durable safety test",
         confirmed=True,
+        step_up_token="test-step-up",
     )
     first = DashboardProjection(build_demo_overview(), ledgers=ledgers).execute(
         request, actor="owner"
@@ -76,6 +78,7 @@ def test_control_receipt_is_rehydrated_from_authoritative_ledger(tmp_path: Path)
 
     assert restarted.execute(request, actor="owner") == first
     assert restarted.overview().audit[0].event_type == "halt_paper"
+    assert restarted.overview().status.kill_switch == "engaged"
 
 
 def test_totp_accepts_current_window_and_rejects_wrong_code():
@@ -99,6 +102,35 @@ def test_session_store_expires_idle_sessions():
     assert store.get(session_id, now=start) is not None
     assert store.csrf_matches(session_id, csrf)
     assert store.get(session_id, now=datetime(2026, 8, 5, 15, 1, 1, tzinfo=UTC)) is None
+
+
+def test_session_store_step_up_is_session_bound_and_one_time():
+    config = AuthConfiguration(session_ttl_seconds=120, idle_ttl_seconds=60, step_up_ttl_seconds=30)
+    store = SessionStore(config)
+    start = datetime(2026, 8, 5, 15, 0, tzinfo=UTC)
+    session_id, _ = store.create("owner", now=start)
+    other_session_id, _ = store.create("owner", now=start)
+
+    token, expires_at = store.issue_step_up(session_id, now=start)
+    assert expires_at > start
+    assert not store.consume_step_up(other_session_id, token, now=start)
+    assert store.consume_step_up(session_id, token, now=start)
+    assert not store.consume_step_up(session_id, token, now=start)
+
+    token, _ = store.issue_step_up(session_id, now=start)
+    assert not store.consume_step_up(session_id, token, now=start.replace(minute=1))
+
+
+def test_login_rate_limiter_blocks_and_resets():
+    limiter = LoginRateLimiter(max_attempts=2, window_seconds=30, block_seconds=60)
+    assert limiter.allowed("127.0.0.1", now=0)
+    limiter.record_failure("127.0.0.1", now=0)
+    assert limiter.allowed("127.0.0.1", now=1)
+    limiter.record_failure("127.0.0.1", now=1)
+    assert not limiter.allowed("127.0.0.1", now=2)
+    assert limiter.retry_after("127.0.0.1", now=2) == 59
+    limiter.reset("127.0.0.1")
+    assert limiter.allowed("127.0.0.1", now=2)
 
 
 def test_fastapi_route_contract_keeps_login_json_and_request_context():

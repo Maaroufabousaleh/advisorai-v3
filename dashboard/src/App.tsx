@@ -24,6 +24,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PauseCircle,
+  PlayCircle,
   Radio,
   RefreshCw,
   Search,
@@ -83,6 +84,15 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).format(new Date(value))
 }
 
+interface StepUpCredentials {
+  password: string
+  totpCode: string
+}
+
+function requiresStepUp(command: CommandKind) {
+  return ['halt_paper', 'resume_paper', 'set_mode', 'propose_config', 'rollback_config'].includes(command)
+}
+
 function App() {
   const [section, setSection] = useState<Section>('overview')
   const [data, setData] = useState<DashboardOverview>(demoOverview)
@@ -109,7 +119,7 @@ function App() {
       }
       const overview = await dashboardApi.overview()
       setData(overview)
-      setSource('live')
+      setSource(overview.synthetic ? 'synthetic' : 'live')
     } catch (error) {
       const status = (error as Error & { status?: number }).status
       if (status === 401) setShowLogin(true)
@@ -130,24 +140,42 @@ function App() {
     return () => window.clearTimeout(timeout)
   }, [toast])
 
-  const execute = async (command: CommandKind, reason: string, requestedMode?: string) => {
-    const payload: CommandRequest = {
-      command,
-      idempotency_key: `${command}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      reason,
-      confirmed: true,
-      step_up_token: 'local-development-stepup',
-      ...(requestedMode ? { requested_mode: requestedMode } : {}),
-    }
+  const execute = async (
+    command: CommandKind,
+    reason: string,
+    requestedMode?: string,
+    configPatch?: Record<string, string>,
+    stepUpCredentials?: StepUpCredentials,
+  ) => {
     try {
+      let stepUpToken: string | undefined
+      if (requiresStepUp(command)) {
+        if (authStatus?.auth_required) {
+          if (!stepUpCredentials) throw new Error('Step-up credentials are required for this command.')
+          const stepUp = await dashboardApi.stepUp(stepUpCredentials.password, stepUpCredentials.totpCode)
+          stepUpToken = stepUp.step_up_token
+        } else {
+          stepUpToken = crypto.randomUUID()
+        }
+      }
+      const payload: CommandRequest = {
+        command,
+        idempotency_key: `${command}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        reason,
+        confirmed: true,
+        ...(stepUpToken ? { step_up_token: stepUpToken } : {}),
+        ...(requestedMode ? { requested_mode: requestedMode } : {}),
+        ...(configPatch ? { config_patch: configPatch } : {}),
+      }
       const receipt = await dashboardApi.command(payload)
       setToast(receipt.message)
+      setModal(null)
       await loadData()
-    } catch {
-      setData((current) => localCommand(current, command, requestedMode, reason))
-      setSource('synthetic')
-      setToast('Local control projection updated. Start the API to persist this command.')
-    } finally {
+    } catch (error) {
+      const status = (error as Error & { status?: number }).status
+      if (status === 401) setShowLogin(true)
+      const detail = error instanceof Error ? error.message : 'command rejected'
+      setToast(status ? `Command rejected: ${detail}` : `API unavailable; no command was applied. ${detail}`)
       setModal(null)
     }
   }
@@ -161,6 +189,10 @@ function App() {
   }
 
   const handleLogout = async () => {
+    if (authStatus?.auth_required !== true) {
+      setToast('Local development mode does not use sign-out.')
+      return
+    }
     await dashboardApi.logout().catch(() => undefined)
     sessionStorage.removeItem('advisorai_csrf')
     setShowLogin(true)
@@ -230,27 +262,12 @@ function App() {
       </div>
       <div className="quick-actions">
         <button className="quick-action refresh" onClick={() => void loadData()} disabled={refreshing} aria-label="Refresh dashboard"><RefreshCw size={16} className={refreshing ? 'spin' : ''} /></button>
-        <button className="quick-action halt" onClick={() => setModal('halt_paper')}><PauseCircle size={17} /><span>HALT PAPER</span></button>
+        {data.status.kill_switch === 'armed' ? <button className="quick-action halt" onClick={() => setModal('halt_paper')}><PauseCircle size={17} /><span>HALT PAPER</span></button> : <button className="quick-action resume" onClick={() => setModal('resume_paper')}><PlayCircle size={17} /><span>RESUME PAPER</span></button>}
       </div>
-      {modal && <CommandModal command={modal} currentMode={data.status.operating_mode} onClose={() => setModal(null)} onConfirm={execute} />}
+      {modal && <CommandModal command={modal} currentMode={data.status.operating_mode} protectedMode={authStatus?.auth_required ?? false} onClose={() => setModal(null)} onConfirm={execute} />}
       {toast && <div className="toast" role="status"><Check size={16} /><span>{toast}</span><button onClick={() => setToast(null)} aria-label="Dismiss notification"><X size={14} /></button></div>}
     </div>
   )
-}
-
-function localCommand(data: DashboardOverview, command: CommandKind, requestedMode: string | undefined, reason: string): DashboardOverview {
-  const nextStatus = { ...data.status }
-  if (command === 'halt_paper') nextStatus.kill_switch = 'engaged'
-  if (command === 'resume_paper') nextStatus.kill_switch = 'armed'
-  if (command === 'set_mode' && requestedMode) nextStatus.operating_mode = requestedMode
-  const now = new Date().toISOString()
-  const commandTone: Tone = command === 'halt_paper' ? 'critical' : 'info'
-  return {
-    ...data,
-    as_of: now,
-    status: nextStatus,
-    audit: [{ event_id: `local-${Date.now()}`, at: now, actor: 'owner', event_type: command, summary: reason, hash: 'local-projection', tone: commandTone }, ...data.audit].slice(0, 12),
-  }
 }
 
 function LoadingState() {
@@ -376,7 +393,20 @@ function EquityPanel({ data }: { data: DashboardOverview }) {
 }
 
 function RiskPanel({ data, onNavigate }: { data: DashboardOverview; onNavigate: (section: Section) => void }) {
-  return <section className="panel risk-panel"><div className="panel-heading"><div><div className="section-kicker"><Gauge size={14} /> RISK KERNEL</div><h2>Limit utilization</h2></div><button className="icon-link" onClick={() => onNavigate('risk')} aria-label="Open risk limits"><ArrowUpRight size={15} /></button></div><div className="risk-summary"><div className="risk-score"><span>HEADROOM</span><strong>57.9<small>%</small></strong><em>policy pass</em></div><div className="risk-summary-copy"><span className="status-line positive"><Check size={14} /> All hard limits within policy</span><p>AI cannot loosen limits. Current state hash is bound to the risk decision.</p></div></div><div className="risk-bars">{data.risk_limits.slice(0, 3).map((limit) => <RiskBar limit={limit} key={limit.key} />)}</div><button className="panel-footer-link" onClick={() => onNavigate('risk')}>OPEN FULL POLICY <ChevronRight size={14} /></button></section>
+  const maxUtilization = data.risk_limits.length
+    ? Math.max(...data.risk_limits.map((limit) => limit.utilization_pct))
+    : 0
+  const hasBreach = data.risk_limits.some((limit) =>
+    limit.utilization_pct >= 100 || /reject|breach|exceed|blocked/i.test(limit.state),
+  )
+  const riskTone: Tone = hasBreach ? 'critical' : maxUtilization >= 80 ? 'warning' : 'positive'
+  const summary = hasBreach
+    ? 'Risk gate blocked'
+    : maxUtilization >= 80
+      ? 'Limit requires review'
+      : 'All hard limits within policy'
+  const headroom = Math.max(0, 100 - maxUtilization)
+  return <section className="panel risk-panel"><div className="panel-heading"><div><div className="section-kicker"><Gauge size={14} /> RISK KERNEL</div><h2>Limit utilization</h2></div><button className="icon-link" onClick={() => onNavigate('risk')} aria-label="Open risk limits"><ArrowUpRight size={15} /></button></div><div className="risk-summary"><div className="risk-score"><span>HEADROOM</span><strong className={toneClass(riskTone)}>{headroom}<small>%</small></strong><em className={toneClass(riskTone)}>{hasBreach ? 'policy blocked' : maxUtilization >= 80 ? 'review required' : 'policy pass'}</em></div><div className="risk-summary-copy"><span className={`status-line ${toneClass(riskTone)}`}><span className={`signal-dot ${toneClass(riskTone)}`} /><span>{summary}</span></span><p>AI cannot loosen limits. Current state hash is bound to the risk decision.</p></div></div><div className="risk-bars">{data.risk_limits.slice(0, 3).map((limit) => <RiskBar limit={limit} key={limit.key} />)}</div><button className="panel-footer-link" onClick={() => onNavigate('risk')}>OPEN FULL POLICY <ChevronRight size={14} /></button></section>
 }
 
 function RiskBar({ limit }: { limit: DashboardOverview['risk_limits'][number] }) {
@@ -441,11 +471,29 @@ function SettingsWorkspace({ data, onCommand }: { data: DashboardOverview; onCom
   return <div className="workspace-stack"><div className="settings-warning"><ShieldAlert size={20} /><div><strong>Settings are proposals, never hidden mutations.</strong><span>Every revision is validated, diffed, approved, hashed, and applied by its owning service.</span></div></div><div className="settings-grid"><section className="panel settings-panel"><div className="panel-heading"><div><div className="section-kicker"><Settings2 size={14} /> OPERATING MODE</div><h2>Resource envelope</h2></div><StatusPill tone="info" label={data.status.operating_mode} /></div><div className="mode-list">{['trade_fast', 'standard', 'deep', 'builder', 'recovery'].map((mode) => <button className={`mode-row ${data.status.operating_mode === mode ? 'selected' : ''}`} key={mode} onClick={() => onCommand('set_mode')}><span>{mode.replace('_', ' / ').toUpperCase()}</span><small>{mode === 'trade_fast' ? 'zero remote LLM · hot path' : mode === 'standard' ? '2 remote calls · one GPU worker' : mode === 'deep' ? 'expanded council · challengers' : mode === 'builder' ? 'isolated Hermes work' : 'deterministic recovery first'}</small>{data.status.operating_mode === mode && <Check size={15} />}</button>)}</div></section><section className="panel settings-panel"><div className="panel-heading"><div><div className="section-kicker"><KeyRound size={14} /> SECURITY POSTURE</div><h2>Local / LAN boundary</h2></div><span className="locked-label">ENFORCED</span></div><div className="security-list"><PolicyRow label="Password storage" value="Argon2id" /><PolicyRow label="MFA" value="TOTP required" /><PolicyRow label="Session" value="15 min TTL" /><PolicyRow label="CSRF" value="bound" /><PolicyRow label="Live orders" value="denied" /></div><button className="secondary-button wide-button" onClick={() => onCommand('propose_config')}><SlidersHorizontal size={15} /> PROPOSE CONFIG REVISION</button></section></div><section className="panel sealed-panel"><LockKeyhole size={22} /><div><div className="section-kicker">LIVE ACTIVATION</div><h2>Sealed by design</h2><p>{data.live_readiness.approval}. The live route is not present in the V1 command contract.</p></div><div className="sealed-blockers">{data.live_readiness.blockers.map((blocker) => <span key={blocker}><AlertTriangle size={13} />{blocker}</span>)}</div></section></div>
 }
 
-function CommandModal({ command, currentMode, onClose, onConfirm }: { command: CommandKind; currentMode: string; onClose: () => void; onConfirm: (command: CommandKind, reason: string, requestedMode?: string) => Promise<void> }) {
+function CommandModal({ command, currentMode, protectedMode, onClose, onConfirm }: {
+  command: CommandKind
+  currentMode: string
+  protectedMode: boolean
+  onClose: () => void
+  onConfirm: (
+    command: CommandKind,
+    reason: string,
+    requestedMode?: string,
+    configPatch?: Record<string, string>,
+    stepUpCredentials?: StepUpCredentials,
+  ) => Promise<void>
+}) {
   const [reason, setReason] = useState(command === 'halt_paper' ? 'Operator initiated paper safety halt' : 'Operator control-room change')
   const [requestedMode, setRequestedMode] = useState(currentMode)
+  const [configPatchText, setConfigPatchText] = useState('{\n  "review": "operator proposal"\n}')
+  const [stepUpPassword, setStepUpPassword] = useState('')
+  const [stepUpCode, setStepUpCode] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
   const destructive = command === 'halt_paper'
   const isMode = command === 'set_mode'
+  const isProposal = command === 'propose_config'
+  const sensitive = requiresStepUp(command)
   const copy: Record<CommandKind, { title: string; body: string; confirm: string }> = {
     halt_paper: { title: 'Halt paper activity?', body: 'The paper control plane will enter a safe halted state. Reconciliation remains available; resume requires step-up authentication.', confirm: 'CONFIRM HALT' },
     resume_paper: { title: 'Resume paper activity?', body: 'Resume is allowed only when reconciliation is clean and a fresh step-up check is present.', confirm: 'RESUME PAPER' },
@@ -455,7 +503,38 @@ function CommandModal({ command, currentMode, onClose, onConfirm }: { command: C
     refresh_data: { title: 'Refresh authoritative state?', body: 'Source workers retain acquisition authority. This request is recorded for traceability.', confirm: 'REFRESH STATE' },
   }
   const content = copy[command]
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><div className={`command-modal ${destructive ? 'destructive' : ''}`} role="dialog" aria-modal="true" aria-labelledby="command-title"><div className="modal-top"><span className="modal-type">{destructive ? <ShieldAlert size={15} /> : <SlidersHorizontal size={15} />} GUARDED COMMAND</span><button className="icon-button" onClick={onClose} aria-label="Close dialog"><X size={17} /></button></div><h2 id="command-title">{content.title}</h2><p>{content.body}</p>{isMode && <label className="modal-field">Requested mode<select value={requestedMode} onChange={(event) => setRequestedMode(event.target.value)}>{['trade_fast', 'standard', 'deep', 'builder', 'recovery'].map((mode) => <option value={mode} key={mode}>{mode.replace('_', ' / ').toUpperCase()}</option>)}</select></label>}<label className="modal-field">Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} /></label>{(destructive || command === 'resume_paper' || isMode) && <div className="modal-check"><Check size={15} /><span>I understand this is recorded against the operator audit trail.</span></div>}<div className="modal-actions"><button className="secondary-button" onClick={onClose}>CANCEL</button><button className={destructive ? 'danger-button' : 'primary-button'} onClick={() => void onConfirm(command, reason, isMode ? requestedMode : undefined)}>{content.confirm}<ChevronRight size={15} /></button></div></div></div>
+  const confirm = () => {
+    setFormError(null)
+    if (reason.trim().length < 3) {
+      setFormError('Add a short reason so the command can be audited.')
+      return
+    }
+    let configPatch: Record<string, string> | undefined
+    if (isProposal) {
+      try {
+        const parsed: unknown = JSON.parse(configPatchText)
+        if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error()
+        const entries = Object.entries(parsed as Record<string, unknown>)
+        if (!entries.length || entries.some(([key, value]) => !key.trim() || typeof value !== 'string')) throw new Error()
+        configPatch = Object.fromEntries(entries) as Record<string, string>
+      } catch {
+        setFormError('Configuration patch must be a JSON object with string values.')
+        return
+      }
+    }
+    if (protectedMode && sensitive && (!stepUpPassword.trim() || !/^\d{6}$/.test(stepUpCode))) {
+      setFormError('Enter the owner password and current six-digit authenticator code for step-up.')
+      return
+    }
+    void onConfirm(
+      command,
+      reason,
+      isMode ? requestedMode : undefined,
+      configPatch,
+      protectedMode && sensitive ? { password: stepUpPassword, totpCode: stepUpCode } : undefined,
+    )
+  }
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}><div className={`command-modal ${destructive ? 'destructive' : ''}`} role="dialog" aria-modal="true" aria-labelledby="command-title"><div className="modal-top"><span className="modal-type">{destructive ? <ShieldAlert size={15} /> : <SlidersHorizontal size={15} />} GUARDED COMMAND</span><button className="icon-button" onClick={onClose} aria-label="Close dialog"><X size={17} /></button></div><h2 id="command-title">{content.title}</h2><p>{content.body}</p>{isMode && <label className="modal-field">Requested mode<select value={requestedMode} onChange={(event) => setRequestedMode(event.target.value)}>{['trade_fast', 'standard', 'deep', 'builder', 'recovery'].map((mode) => <option value={mode} key={mode}>{mode.replace('_', ' / ').toUpperCase()}</option>)}</select></label>}{isProposal && <label className="modal-field">Configuration patch (JSON)<textarea value={configPatchText} onChange={(event) => setConfigPatchText(event.target.value)} rows={4} spellCheck={false} /></label>}<label className="modal-field">Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} /></label>{protectedMode && sensitive && <div className="step-up-fields"><label className="modal-field">Owner password<input type="password" value={stepUpPassword} onChange={(event) => setStepUpPassword(event.target.value)} autoComplete="current-password" /></label><label className="modal-field">Authenticator code<input inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={stepUpCode} onChange={(event) => setStepUpCode(event.target.value.replace(/\D/g, ''))} autoComplete="one-time-code" /></label><span className="step-up-note"><LockKeyhole size={13} /> A fresh token is issued for this command and consumed once.</span></div>}{formError && <div className="form-error" role="alert"><ShieldAlert size={15} />{formError}</div>}{(destructive || command === 'resume_paper' || isMode || isProposal || command === 'rollback_config') && <div className="modal-check"><Check size={15} /><span>I understand this is recorded against the operator audit trail.</span></div>}<div className="modal-actions"><button className="secondary-button" onClick={onClose}>CANCEL</button><button className={destructive ? 'danger-button' : 'primary-button'} onClick={confirm}>{content.confirm}<ChevronRight size={15} /></button></div></div></div>
 }
 
 export default App

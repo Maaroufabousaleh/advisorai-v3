@@ -8,14 +8,16 @@ import type {
 const apiBase = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { headers: initHeaders, ...requestInit } = init ?? {}
+  const headers = new Headers(initHeaders)
+  headers.set('Accept', 'application/json')
+  if (requestInit.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const response = await fetch(`${apiBase}${path}`, {
+    ...requestInit,
     credentials: 'include',
-    headers: {
-      Accept: 'application/json',
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(init?.headers ?? {}),
-    },
-    ...init,
+    headers,
   })
   if (!response.ok) {
     const detail = await response.json().catch(() => ({})) as { detail?: string }
@@ -34,6 +36,14 @@ export const dashboardApi = {
       method: 'POST',
       body: JSON.stringify({ password, totp_code: totpCode }),
     }),
+  stepUp: (password: string, totpCode: string) => {
+    const csrf = sessionStorage.getItem('advisorai_csrf')
+    return request<{ step_up_token: string; expires_at: string }>('/api/v1/auth/step-up', {
+      method: 'POST',
+      headers: csrf ? { 'X-CSRF-Token': csrf } : {},
+      body: JSON.stringify({ password, totp_code: totpCode }),
+    })
+  },
   logout: () => request<{ status: string }>('/api/v1/auth/logout', { method: 'POST' }),
   command: (payload: CommandRequest) => {
     const csrf = sessionStorage.getItem('advisorai_csrf')
