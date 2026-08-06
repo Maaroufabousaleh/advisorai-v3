@@ -28,6 +28,44 @@ class GatewayFailure(RuntimeError):
     pass
 
 
+_LEDGER_FORBIDDEN_METADATA_TOKENS = (
+    "message",
+    "user",
+    "prompt",
+    "content",
+    "body",
+    "response_body",
+)
+
+
+def _ledger_safe_metadata(value: object) -> object:
+    """Drop raw provider/user content before durable model-attempt recording.
+
+    Gateway adapters already produce a narrow error summary, but the recorder
+    is the final boundary: no adapter exception or future provider field may
+    make an unredacted message or a user identifier durable by accident.
+    """
+
+    if isinstance(value, Mapping):
+        safe: dict[str, object] = {}
+        for key, child in value.items():
+            name = str(key)
+            normalized = name.lower()
+            if any(token in normalized for token in _LEDGER_FORBIDDEN_METADATA_TOKENS):
+                continue
+            safe[name] = _ledger_safe_metadata(child)
+        return safe
+    if isinstance(value, tuple):
+        return tuple(_ledger_safe_metadata(item) for item in value)
+    if isinstance(value, list):
+        return [_ledger_safe_metadata(item) for item in value]
+    # Provider error detail objects are deliberately not serialised; adapters
+    # expose only scalar classifications, codes, and routing observations.
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(type(value).__name__)
+
+
 @dataclass(frozen=True, slots=True)
 class GatewayAttempt:
     adapter: str
@@ -327,12 +365,16 @@ class GatewayRecorder:
             billed_cost_usd=response.billed_cost_usd if response is not None else None,
             expected_cost_usd=response.expected_cost_usd if response is not None else None,
             cost_difference_usd=response.cost_difference_usd if response is not None else None,
-            cost_metadata=dict(response.cost_metadata) if response is not None else {},
-            routing_metadata=dict(response.routing_metadata) if response is not None else {},
+            cost_metadata=(
+                _ledger_safe_metadata(dict(response.cost_metadata)) if response is not None else {}
+            ),
+            routing_metadata=(
+                _ledger_safe_metadata(dict(response.routing_metadata)) if response is not None else {}
+            ),
             failure_metadata=(
-                dict(response.failure_metadata)
+                _ledger_safe_metadata(dict(response.failure_metadata))
                 if response is not None
-                else dict(attempt.failure_metadata or {})
+                else _ledger_safe_metadata(dict(attempt.failure_metadata or {}))
             ),
             provider_attempt_number=attempt.provider_attempt_number,
             # The request creation time is stable across a retry/restart. It

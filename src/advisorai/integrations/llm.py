@@ -12,7 +12,7 @@ from math import ceil, isfinite
 from typing import Any
 
 from advisorai.gateway.adapters import TypedGatewayAdapter
-from advisorai.ports import GATEWAY_OUTPUT_SCHEMAS, GatewayRequest, GatewayRoute
+from advisorai.ports import GATEWAY_OUTPUT_SCHEMAS, GatewayRequest, GatewayRoute, GenerationBudget
 
 from .http import HttpTransportError, SafeHttpClient
 
@@ -38,6 +38,18 @@ class GatewayTransportError(RuntimeError):
         self.no_cross_provider_fallback = no_cross_provider_fallback
 
 
+# A request that reaches a concrete remote adapter without an explicit budget
+# must still be safe during Phase 0.  Profiled production requests normally
+# supply their own reviewed budget; this protects accidental direct use too.
+_REMOTE_SAFE_GENERATION_BUDGET = GenerationBudget(
+    max_output_tokens=256,
+    max_expected_cost_usd=0.001,
+    max_billed_cost_usd=0.001,
+    timeout_seconds=30,
+    maximum_attempts=2,
+)
+
+
 class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
     """A single admitted direct route; no fallback or trading authority is implicit."""
 
@@ -53,6 +65,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         request_price_usd: float | None = None,
         retry_sleeper: Callable[[float], None] = time.sleep,
         retry_jitter: Callable[[float], float] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         if not api_key or not api_key.strip():
             raise ValueError("direct model gateway requires an API key")
@@ -71,10 +84,16 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         object.__setattr__(self, "_request_price_usd", request_price_usd)
         object.__setattr__(self, "_retry_sleeper", retry_sleeper)
         object.__setattr__(self, "_retry_jitter", retry_jitter or (lambda maximum: random.uniform(0, maximum)))
-        super().__init__(name="direct_provider", route=route, transport=self._complete_payload)
+        object.__setattr__(self, "_clock", clock)
+        super().__init__(
+            name="direct_provider",
+            route=route,
+            transport=self._complete_payload,
+            is_remote=True,
+        )
 
     def _complete_payload(self, request: GatewayRequest) -> Mapping[str, object]:
-        budget = request.generation_budget
+        budget = self._effective_budget(request)
         estimated_input = self._estimate_input_tokens(request)
         if budget.max_input_tokens is not None and estimated_input > budget.max_input_tokens:
             raise GatewayTransportError(
@@ -88,13 +107,14 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                 no_cross_provider_fallback=True,
             )
 
+        self._authorize_pre_dispatch_cost(request, budget, estimated_input)
+
         payload: dict[str, Any] = {
             "model": request.route.model,
             "messages": [item.model_dump(mode="json") for item in request.messages],
             "temperature": 0,
             "stream": False,
             "max_tokens": budget.max_output_tokens,
-            "response_format": self._response_format(request),
         }
         # Provider routing options are accepted only as a policy-produced
         # mapping.  Generation controls are always written after the merge so
@@ -137,18 +157,6 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                     )
                 options["provider"] = governed_provider
             payload.update(options)
-        if request.tools:
-            payload["tools"] = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": f"Typed {tool.output_schema_version} evidence operation",
-                        "parameters": dict(tool.input_schema),
-                    },
-                }
-                for tool in request.tools
-            ]
         payload.update(
             {
                 "model": request.route.model,
@@ -156,9 +164,15 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                 "temperature": 0,
                 "stream": False,
                 "max_tokens": budget.max_output_tokens,
-                "response_format": self._response_format(request),
             }
         )
+        # Tool calls and strict structured output are independent endpoint
+        # capabilities.  Do not send both unless the frozen RouteProfile
+        # admission explicitly enabled the combination.
+        if not request.tools or request.response_format_with_tools_admitted:
+            payload["response_format"] = self._response_format(request)
+        else:
+            payload.pop("response_format", None)
         if request.tools:
             payload["tools"] = [
                 {
@@ -182,16 +196,44 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             headers["X-OpenRouter-Metadata"] = "enabled"
 
         max_attempts = min(budget.maximum_attempts, 3)
+        deadline = self._clock() + budget.timeout_seconds
         attempt_metadata: list[dict[str, object]] = []
         for attempt_number in range(1, max_attempts + 1):
+            remaining = deadline - self._clock()
+            if remaining <= 0:
+                failure = {
+                    "error_type": "deadline_exhausted",
+                    "attempt": attempt_number,
+                    "timeout_seconds": budget.timeout_seconds,
+                }
+                if failure not in attempt_metadata:
+                    attempt_metadata.append(failure)
+                raise GatewayTransportError(
+                    "direct model gateway total deadline exhausted",
+                    failure_metadata=failure,
+                    attempt_metadata=attempt_metadata,
+                    no_cross_provider_fallback=True,
+                )
             try:
                 response = self.client.post_json(
                     self._endpoint_url(self.endpoint_path),
                     payload,
                     headers=headers,
                     max_retries=0,
-                    timeout_seconds=budget.timeout_seconds,
+                    timeout_seconds=remaining,
                 )
+                if self._clock() > deadline:
+                    failure = {
+                        "error_type": "deadline_exhausted",
+                        "attempt": attempt_number,
+                        "timeout_seconds": budget.timeout_seconds,
+                    }
+                    attempt_metadata.append(failure)
+                    raise GatewayTransportError(
+                        "direct model gateway total deadline exhausted",
+                        failure_metadata=failure,
+                        attempt_metadata=attempt_metadata,
+                    )
                 decoded = json.loads(response.body)
                 if not isinstance(decoded, Mapping):
                     raise GatewayTransportError(
@@ -200,7 +242,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                         attempt_metadata=attempt_metadata,
                     )
                 identity = self._parse_routing_identity(decoded, request, attempt_number)
-                result = self._parse_success(decoded, request, identity)
+                result = self._parse_success(decoded, request, identity, budget)
                 result["routing_attempt"] = identity["routing_attempt"] or attempt_number
                 result["attempt_metadata"] = tuple(attempt_metadata)
                 return result
@@ -208,8 +250,29 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                 failure = self._failure_metadata(exc, request, attempt_number)
                 attempt_metadata.append(failure)
                 status = exc.status_code
+                if deadline - self._clock() <= 0:
+                    failure["deadline_exhausted"] = True
+                    raise GatewayTransportError(
+                        "direct model gateway total deadline exhausted",
+                        status_code=status,
+                        failure_metadata=failure,
+                        attempt_metadata=attempt_metadata,
+                        no_cross_provider_fallback=True,
+                    ) from exc
                 if status in {429, 503} and attempt_number < max_attempts:
-                    self._sleep_before_retry(failure, attempt_number)
+                    delay = self._retry_delay(failure, attempt_number)
+                    remaining = deadline - self._clock()
+                    if remaining <= 0 or delay >= remaining:
+                        failure["deadline_exhausted"] = True
+                        failure["retry_delay_seconds"] = delay
+                        raise GatewayTransportError(
+                            "direct model gateway total deadline exhausted before retry",
+                            status_code=status,
+                            failure_metadata=failure,
+                            attempt_metadata=attempt_metadata,
+                            no_cross_provider_fallback=True,
+                        ) from exc
+                    self._retry_sleeper(delay)
                     continue
                 raise GatewayTransportError(
                     "direct model gateway request failed",
@@ -252,6 +315,77 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         )
 
     @staticmethod
+    def _effective_budget(request: GatewayRequest) -> GenerationBudget:
+        # Pydantic retains whether the caller actually supplied the field.
+        # Defaulting a governed paid request to $1 would be an unsafe
+        # surprise.  Ungoverned local compatibility adapters retain the port
+        # default; PolicyGateway rejects a concrete remote adapter without a
+        # RouteProfile before it can be used for production traffic.
+        provider = request.provider_options.get("provider")
+        provider = provider if isinstance(provider, Mapping) else {}
+        has_admission_prices = isinstance(provider.get("max_price"), Mapping)
+        if "generation_budget" not in request.model_fields_set and (
+            provider.get("zdr") is True or has_admission_prices
+        ):
+            return _REMOTE_SAFE_GENERATION_BUDGET
+        return request.generation_budget
+
+    def _authorize_pre_dispatch_cost(
+        self,
+        request: GatewayRequest,
+        budget: GenerationBudget,
+        estimated_input_tokens: int,
+    ) -> None:
+        provider = request.provider_options.get("provider")
+        provider = provider if isinstance(provider, Mapping) else {}
+        max_price = provider.get("max_price") if isinstance(provider, Mapping) else None
+        max_price = max_price if isinstance(max_price, Mapping) else {}
+        input_price = self._optional_number(
+            max_price.get("prompt", self._input_price_per_million), "provider.max_price.prompt"
+        )
+        output_price = self._optional_number(
+            max_price.get("completion", self._output_price_per_million),
+            "provider.max_price.completion",
+        )
+        request_price = self._optional_number(
+            max_price.get("request", self._request_price_usd), "provider.max_price.request"
+        )
+        paid_private = provider.get("zdr") is True
+        # The profile boundary adds max_price from the frozen admission.  A
+        # bare direct adapter remains useful only for local deterministic
+        # tests; it is rejected by PolicyGateway when used remotely without a
+        # profile, so do not reinterpret an old test stub as a paid admission.
+        admitted_pricing = bool(max_price)
+        if paid_private and admitted_pricing and (
+            input_price is None or output_price is None or request_price is None
+        ):
+            raise GatewayTransportError(
+                "paid private route omitted admitted price limits",
+                failure_metadata={"error_type": "missing_admitted_prices"},
+                no_cross_provider_fallback=True,
+            )
+        if input_price is None or output_price is None:
+            return
+        maximum = (
+            estimated_input_tokens * input_price / 1_000_000
+            + budget.max_output_tokens * output_price / 1_000_000
+            + (request_price or 0.0)
+        )
+        if maximum > budget.max_expected_cost_usd:
+            raise GatewayTransportError(
+                "direct model gateway maximum expected cost exceeds generation budget",
+                failure_metadata={
+                    "error_type": "budget_exceeded",
+                    "budget": "max_expected_cost_usd",
+                    "estimated_input_tokens": estimated_input_tokens,
+                    "max_output_tokens": budget.max_output_tokens,
+                    "maximum_expected_cost_usd": maximum,
+                    "max_expected_cost_usd": budget.max_expected_cost_usd,
+                },
+                no_cross_provider_fallback=True,
+            )
+
+    @staticmethod
     def _response_format(request: GatewayRequest) -> dict[str, object]:
         schema = GATEWAY_OUTPUT_SCHEMAS[request.output_kind].model_json_schema()
         return {
@@ -273,6 +407,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         decoded: Mapping[str, object],
         request: GatewayRequest,
         identity: Mapping[str, object],
+        budget: GenerationBudget,
     ) -> dict[str, object]:
         choices = decoded.get("choices")
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
@@ -289,6 +424,11 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         raw_calls = message.get("tool_calls", ())
         calls: list[Mapping[str, object]] = []
         if raw_calls:
+            if not request.tools:
+                raise GatewayTransportError(
+                    "direct model gateway returned unexpected tool calls",
+                    failure_metadata={"error_type": "unexpected_tool_calls"},
+                )
             if not isinstance(raw_calls, list):
                 raise GatewayTransportError(
                     "direct model gateway tool calls must be a list",
@@ -339,17 +479,17 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         billed_cost = self._optional_number(usage.get("cost"), "usage.cost")
         input_tokens = self._usage_int(usage.get("prompt_tokens"), "prompt_tokens")
         output_tokens = self._usage_int(usage.get("completion_tokens"), "completion_tokens")
-        if output_tokens > request.generation_budget.max_output_tokens:
+        if output_tokens > budget.max_output_tokens:
             raise GatewayTransportError(
                 "direct model gateway output exceeds generation budget",
                 failure_metadata={
                     "error_type": "budget_exceeded",
                     "budget": "max_output_tokens",
                     "output_tokens": output_tokens,
-                    "max_output_tokens": request.generation_budget.max_output_tokens,
+                    "max_output_tokens": budget.max_output_tokens,
                 },
             )
-        if request.generation_budget.max_input_tokens is not None and input_tokens > request.generation_budget.max_input_tokens:
+        if budget.max_input_tokens is not None and input_tokens > budget.max_input_tokens:
             raise GatewayTransportError(
                 "direct model gateway input exceeds generation budget",
                 failure_metadata={"error_type": "budget_exceeded", "budget": "max_input_tokens"},
@@ -368,7 +508,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         expected_cost = self._expected_cost(
             input_tokens, output_tokens, input_price, output_price, request_price, billed_cost
         )
-        if expected_cost > request.generation_budget.max_expected_cost_usd:
+        if expected_cost > budget.max_expected_cost_usd:
             raise GatewayTransportError(
                 "direct model gateway expected cost exceeds generation budget",
                 failure_metadata={
@@ -384,14 +524,14 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                 "direct model gateway omitted billed usage cost",
                 failure_metadata={"error_type": "missing_billed_cost"},
             )
-        if billed_cost is not None and billed_cost > request.generation_budget.max_billed_cost_usd:
+        if billed_cost is not None and billed_cost > budget.max_billed_cost_usd:
             raise GatewayTransportError(
                 "direct model gateway billed cost exceeds generation budget",
                 failure_metadata={
                     "error_type": "budget_exceeded",
                     "budget": "max_billed_cost_usd",
                     "billed_cost_usd": billed_cost,
-                    "max_billed_cost_usd": request.generation_budget.max_billed_cost_usd,
+                    "max_billed_cost_usd": budget.max_billed_cost_usd,
                 },
             )
         cost_details = usage.get("cost_details")
@@ -645,54 +785,96 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                     decoded = candidate
             except (TypeError, json.JSONDecodeError):
                 decoded = {}
-        raw_metadata = decoded.get("openrouter_metadata")
-        raw_metadata = raw_metadata if isinstance(raw_metadata, Mapping) else {}
         error_payload = decoded.get("error")
         error_payload = error_payload if isinstance(error_payload, Mapping) else {}
+        nested_error = error_payload.get("error")
+        nested_error = nested_error if isinstance(nested_error, Mapping) else {}
+
+        # OpenRouter error payloads have appeared in all four of these forms.
+        # Read only whitelisted routing values; error messages, user IDs and
+        # opaque provider payloads must never reach a ledger record.
+        raw_metadata = next(
+            (
+                value
+                for value in (
+                    decoded.get("openrouter_metadata"),
+                    error_payload.get("openrouter_metadata"),
+                    nested_error.get("metadata"),
+                    error_payload.get("metadata"),
+                )
+                if isinstance(value, Mapping) and isinstance(value.get("endpoints"), Mapping)
+            ),
+            {},
+        )
+        metadata_sources = tuple(
+            value
+            for value in (
+                nested_error.get("metadata"),
+                error_payload.get("metadata"),
+                error_payload.get("openrouter_metadata"),
+                decoded.get("openrouter_metadata"),
+                nested_error,
+                error_payload,
+                decoded,
+            )
+            if isinstance(value, Mapping)
+        )
         endpoints = raw_metadata.get("endpoints")
         available = endpoints.get("available") if isinstance(endpoints, Mapping) else None
         attempted = cls._safe_endpoint_attempts(available) if isinstance(available, list) else ()
-        retry_after = cls._retry_after_seconds(error.response_headers)
-        provider_name = next(
-            (
+        provider_name = cls._first_text(
+            *(source.get("provider_name") for source in metadata_sources),
+            *(source.get("provider") for source in metadata_sources),
+            *(
                 item.get("provider") or item.get("provider_name")
                 for item in attempted
-                if isinstance(item.get("provider") or item.get("provider_name"), str)
             ),
-            None,
         )
-        if provider_name is None:
-            candidate_provider = decoded.get("provider") or raw_metadata.get("provider")
-            if isinstance(candidate_provider, str) and candidate_provider.strip():
-                provider_name = candidate_provider.strip()
-        resolved_model = next(
-            (
-                item.get("model") or item.get("resolved_model")
-                for item in attempted
-                if isinstance(item.get("model") or item.get("resolved_model"), str)
-            ),
-            None,
+        resolved_model = cls._first_text(
+            *(source.get("resolved_model") for source in metadata_sources),
+            *(source.get("attempted_model") for source in metadata_sources),
+            *(source.get("model") for source in metadata_sources),
+            *(item.get("model") or item.get("resolved_model") for item in attempted),
         )
-        if resolved_model is None:
-            candidate_model = decoded.get("model") or raw_metadata.get("model")
-            if isinstance(candidate_model, str) and candidate_model.strip():
-                resolved_model = candidate_model.strip()
+        route_attempt = cls._first_positive_int(
+            *(source.get("routing_attempt") for source in metadata_sources),
+            *(source.get("attempt") for source in metadata_sources),
+        )
+        provider_code = cls._first_safe_scalar(
+            nested_error.get("provider_code"),
+            nested_error.get("code"),
+            *(source.get("provider_code") for source in metadata_sources),
+            *(source.get("code") for source in metadata_sources),
+            decoded.get("code"),
+        )
+        raw_classification = cls._first_text(
+            nested_error.get("raw_provider_error_classification"),
+            nested_error.get("provider_error_classification"),
+            nested_error.get("error_type"),
+            nested_error.get("type"),
+            *(source.get("raw_provider_error_classification") for source in metadata_sources),
+            *(source.get("provider_error_classification") for source in metadata_sources),
+            *(source.get("error_type") for source in metadata_sources),
+            error_payload.get("type"),
+        )
+        limit_source = cls._first_text(
+            *(source.get("limit_source") for source in metadata_sources),
+        )
+        is_byok = cls._optional_bool(
+            *(source.get("is_byok") for source in metadata_sources),
+        )
+        retry_after = cls._retry_after_seconds(error.response_headers)
         metadata: dict[str, object] = {
             "http_status": error.status_code,
             "status_code": error.status_code,
-            "error_type": error_payload.get("type")
-            if isinstance(error_payload.get("type"), str)
-            else error.error_type or f"http_{error.status_code or 'transport'}",
-            "provider_code": error_payload.get("code")
-            if isinstance(error_payload.get("code"), (str, int))
-            else decoded.get("code"),
+            "error_type": raw_classification or error.error_type or f"http_{error.status_code or 'transport'}",
+            "raw_provider_error_classification": raw_classification,
+            "provider_code": provider_code,
             "provider_name": provider_name,
             "resolved_model": resolved_model,
-            "limit_source": decoded.get("limit_source") or raw_metadata.get("limit_source"),
-            "is_byok": cls._optional_bool(
-                decoded.get("is_byok"), raw_metadata.get("is_byok")
-            ),
-            "attempt": attempt_number,
+            "limit_source": limit_source,
+            "is_byok": is_byok,
+            "attempt": route_attempt or attempt_number,
             "retry_after": retry_after,
             "retry_after_seconds": retry_after,
             "attempted_endpoints": attempted,
@@ -700,6 +882,27 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             "requested_model": request.route.model,
         }
         return {key: value for key, value in metadata.items() if value is not None}
+
+    @staticmethod
+    def _first_text(*values: object) -> str | None:
+        for value in values:
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return None
+
+    @staticmethod
+    def _first_safe_scalar(*values: object) -> str | int | float | bool | None:
+        for value in values:
+            if isinstance(value, (str, int, float, bool)) and not isinstance(value, bytes):
+                return value
+        return None
+
+    @staticmethod
+    def _first_positive_int(*values: object) -> int | None:
+        for value in values:
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 1:
+                return value
+        return None
 
     @staticmethod
     def _retry_after_seconds(headers: Sequence[tuple[str, str]]) -> float | None:
@@ -721,14 +924,14 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         except (TypeError, ValueError, OverflowError):
             return None
 
-    def _sleep_before_retry(self, failure: Mapping[str, object], attempt_number: int) -> None:
+    def _retry_delay(self, failure: Mapping[str, object], attempt_number: int) -> float:
         retry_after = failure.get("retry_after_seconds")
         base = min(0.25 * (2 ** (attempt_number - 1)), 8.0)
         if isinstance(retry_after, (int, float)) and not isinstance(retry_after, bool):
             delay = max(0.0, min(float(retry_after), 60.0))
         else:
             delay = base + max(0.0, min(float(self._retry_jitter(base * 0.25)), base * 0.25))
-        self._retry_sleeper(delay)
+        return delay
 
     def _endpoint_url(self, path: str) -> str:
         if not isinstance(getattr(self.client, "base_url", None), str):

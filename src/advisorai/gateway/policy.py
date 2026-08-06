@@ -32,6 +32,7 @@ from advisorai.ports import (
     GatewayRoute,
     GatewayTier,
     GatewayTool,
+    GenerationBudget,
     ModelGatewayPort,
     RouteTier,
     validate_gateway_output,
@@ -114,6 +115,17 @@ _FORBIDDEN_TOOL_KEYS = {
     "secret",
     "token",
 }
+
+
+# A profiled remote route that omits a budget is still an admitted remote call,
+# so it receives Phase-0 limits rather than the general-purpose port default.
+_PHASE0_REMOTE_GENERATION_BUDGET = GenerationBudget(
+    max_output_tokens=256,
+    max_expected_cost_usd=0.001,
+    max_billed_cost_usd=0.001,
+    timeout_seconds=30,
+    maximum_attempts=2,
+)
 
 
 def _coerce_data_class(value: GatewayDataClass | str | None) -> GatewayDataClass:
@@ -280,6 +292,10 @@ class ProviderEndpointAdmission(BaseModel):
     terms_reference: str = Field(min_length=1)
     admission_version: str = Field(min_length=1)
     policy_hash: str | None = None
+    # Most OpenAI-compatible endpoints support either tool calls or strict
+    # JSON schema output.  Combining them is admitted only with explicit,
+    # frozen endpoint evidence.
+    allow_response_format_with_tools: bool = False
 
     @field_validator(
         "provider_selector_slug",
@@ -962,6 +978,12 @@ class PolicyGateway:
         self.recorder = recorder
         self.decisions: list[GatewayDecision] = []
         self.profiles = tuple(profiles or ())
+        if not self.profiles and any(
+            getattr(adapter, "is_remote", False)
+            for adapter in (contributor, private)
+            if adapter is not None
+        ):
+            raise ValueError("remote policy gateways require admitted RouteProfile objects")
         if self.profiles:
             profile_ids = {profile.profile_id for profile in self.profiles}
             for profile in self.profiles:
@@ -1149,9 +1171,11 @@ class PolicyGateway:
                     "terms_verified": selected.terms.terms_verified,
                     "terms_reference": selected.terms.terms_reference,
                     "requested_route": attempt_request.route,
-                    "actual_provider": response.route.provider,
-                    "actual_model": response.route.model,
-                    "actual_gateway": response.route.gateway,
+                    # Local legacy adapters may still supply an observed
+                    # identity.  Never rewrite it from the requested route.
+                    "actual_provider": response.actual_provider,
+                    "actual_model": response.actual_model,
+                    "actual_gateway": response.actual_gateway or response.route.gateway,
                     "prompt_hash": candidate.prompt_hash(),
                     "evidence_hash": candidate.evidence_hash(),
                     "redaction_policy_hash": candidate.redaction_policy_hash,
@@ -1476,6 +1500,12 @@ class PolicyGateway:
             updates["route"] = adapter_route
         if provider_policy is not None:
             updates["provider_options"] = provider_policy.request_options(adapter_route or request.route)
+            updates["response_format_with_tools_admitted"] = bool(
+                provider_policy.endpoint_admission
+                and provider_policy.endpoint_admission.allow_response_format_with_tools
+            )
+            if "generation_budget" not in request.model_fields_set:
+                updates["generation_budget"] = _PHASE0_REMOTE_GENERATION_BUDGET
         if not updates:
             return request
         # Tier selection is itself an explicit, policy-owned route decision;

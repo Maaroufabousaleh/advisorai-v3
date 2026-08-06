@@ -339,6 +339,11 @@ class GatewayRequest(BaseModel):
     route_policy_hash: str | None = None
     provider_options: Mapping[str, object] = Field(default_factory=dict)
     generation_budget: GenerationBudget = Field(default_factory=GenerationBudget)
+    # This flag is policy-owned: RouteProfile admission may opt a reviewed
+    # endpoint into the otherwise unsafe combined tool + structured-output
+    # protocol.  A remote adapter is never eligible for the legacy path, so a
+    # caller cannot use this field to bypass a provider admission.
+    response_format_with_tools_admitted: bool = False
     requested_provider_selector: str | None = None
     requested_model: str | None = None
     requested_gateway: str | None = None

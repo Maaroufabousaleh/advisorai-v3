@@ -16,6 +16,9 @@ class TypedGatewayAdapter:
     route: GatewayRoute
     transport: Callable[[GatewayRequest], Mapping[str, object]]
     privacy_class: str = "non_secret"
+    # Test/recovery adapters are local by default.  Concrete remote adapters
+    # must opt in so PolicyGateway can require a RouteProfile admission.
+    is_remote: bool = False
 
     def complete(self, request: GatewayRequest) -> GatewayResponse:
         if request.route != self.route:
