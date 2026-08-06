@@ -29,6 +29,11 @@ runtimes = [
   "litellm>=1.95,<2",
   "nautilus-trader>=1.231,<2",
 ]
+dashboard = [
+  "argon2-cffi>=23.1,<26",
+  "fastapi>=0.115,<1",
+  "uvicorn[standard]>=0.34,<1",
+]
 
 [build-system]
 requires = ["hatchling>=1.27,<2"]
@@ -39,6 +44,7 @@ packages = ["src/advisorai"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra --strict-markers"
 
 [tool.ruff]

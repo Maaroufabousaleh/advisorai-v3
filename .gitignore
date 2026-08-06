@@ -12,4 +12,6 @@ artifacts/*
 *.sqlite3
 *.parquet
 *.pyc
-.env*
+*.env*
+dashboard/node_modules/
+dashboard/dist/

@@ -38,3 +38,48 @@ required 24-hour Phase 0, 60-day Phase 7, or explicit human Phase 10 evidence.
 
 Implementation sequencing and non-negotiable phase gates are in
 [docs/plans](docs/plans/README.md).
+
+## Local secrets
+
+The ignored [`secrets.env`](secrets.env) file is the single blank-valued
+credential template for gateway providers, optional data sources, paper/testnet
+venue adapters, archive remotes, checkpoint registries, and orchestration
+services. Fill only the entries for components that have passed their phase gate,
+then load it in the shell that starts the process:
+
+```bash
+set -a
+source ./secrets.env
+set +a
+```
+
+The current implementation has no live provider or venue connection and does not
+read provider credentials yet; external transports are injected for tests. Keep
+live broker credentials out of this file until the explicit Phase 10 approval
+gate is satisfied. On WSL, prefer copying filled secrets to a Linux-filesystem
+path such as `~/.config/advisorai-v3/secrets.env` rather than storing values on a
+shared `/mnt/c` mount.
+
+## Dashboard status
+
+The operator console is in `dashboard/` with a typed optional API at
+`src/advisorai/api/dashboard.py`. It reads explicit projections of the existing
+deterministic services and issues only guarded paper-control commands; it does
+not own account state, risk, OMS, ledgers, credentials, or live activation.
+
+Run it locally with:
+
+```bash
+./scripts/launch_dashboard.sh
+```
+
+The launcher starts the API and Vite console together, waits for API health, and
+cleans up both processes on Ctrl-C. Use protected authentication with:
+
+```bash
+./scripts/launch_dashboard.sh --protected
+```
+
+Protected-mode setup, password/MFA bootstrap, TLS, and LAN deployment guidance
+are in [dashboard/README.md](dashboard/README.md). Until a live projection is
+connected, synthetic paper values are deliberately labelled in the interface.

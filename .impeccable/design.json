@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-05T19:40:00Z",
+  "title": "Design System: AdvisorAI V3 Control Room",
+  "extensions": {
+    "colorMeta": {
+      "telemetry-cyan": { "role": "primary", "displayName": "Telemetry Cyan", "canonical": "#6ed9e8", "tonalRamp": ["#d8fbff", "#6ed9e8", "#2b7c89", "#17363c"] },
+      "approval-green": { "role": "secondary", "displayName": "Approval Green", "canonical": "#72d3a0", "tonalRamp": ["#dff9ec", "#72d3a0", "#2c8061", "#173d31"] },
+      "warning-amber": { "role": "tertiary", "displayName": "Warning Amber", "canonical": "#f2bd67", "tonalRamp": ["#fff0d0", "#f2bd67", "#805c2e", "#3f2d18"] },
+      "critical-red": { "role": "tertiary", "displayName": "Critical Red", "canonical": "#ff7378", "tonalRamp": ["#ffe1e2", "#ff7378", "#873c43", "#421d21"] },
+      "graphite-surface": { "role": "neutral", "displayName": "Graphite Surface", "canonical": "#0e1218", "tonalRamp": ["#edf2f4", "#8a959f", "#252d36", "#080a0e"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Operator Thesis", "purpose": "Overview statement only; never use for dense data." },
+      "label": { "displayName": "Instrument Mono", "purpose": "Measurements, IDs, timestamps, statuses, and controls." }
+    },
+    "shadows": [
+      { "name": "panel-ambient", "value": "0 18px 40px rgba(0,0,0,.18)", "purpose": "Separate primary panels from the graphite field." },
+      { "name": "modal-depth", "value": "0 24px 80px rgba(0,0,0,.55)", "purpose": "Protect a command that owns focus." }
+    ],
+    "motion": [
+      { "name": "page-in", "value": "cubic-bezier(.16, 1, .3, 1)", "purpose": "One quiet workspace arrival; disabled under reduced motion." },
+      { "name": "state-pulse", "value": "2s ease-out", "purpose": "Signal lamps indicate a live state without distracting from data." }
+    ],
+    "breakpoints": [
+      { "name": "wide", "value": "1240px" },
+      { "name": "tablet", "value": "980px" },
+      { "name": "mobile", "value": "760px" },
+      { "name": "compact", "value": "470px" }
+    ]
+  },
+  "components": [
+    { "name": "Primary Button", "kind": "button", "refersTo": "button-primary", "description": "A high-confidence action within the paper control plane.", "html": "<button class=\"primary-button\">OPEN MISSION</button>", "css": ".primary-button { background:#6ed9e8; color:#071014; padding:11px 14px; font:600 10px IBM Plex Mono,monospace; letter-spacing:.08em; }" },
+    { "name": "Mission Board", "kind": "custom", "description": "Fixed-column mission rows that preserve evidence and expiry in the scan path.", "html": "<div class=\"board-row\"><span>MISSION</span><span>STATE</span><span>EXPIRY</span></div>", "css": ".board-row { display:grid; grid-template-columns:2.2fr .75fr 1.25fr; min-height:61px; border-bottom:1px solid #1b222b; }" },
+    { "name": "Status Pill", "kind": "chip", "description": "A compact state label paired with a signal lamp.", "html": "<span class=\"status-pill tone-positive\"><span></span>validated</span>", "css": ".status-pill { border:1px solid #2c8061; padding:5px 7px; color:#72d3a0; font:9px IBM Plex Mono,monospace; }" }
+  ],
+  "narrative": {
+    "northStar": "The Split-Flap Concourse",
+    "overview": "A quiet, dense operator instrument: fixed columns, visible state, explicit expiry, and a single authoritative safety spine. Graphite surfaces and precise rules make room for white measurement type; cyan telemetry, green approvals, amber review, and red intervention carry the state language.",
+    "keyCharacteristics": ["Matte graphite surfaces", "Fixed-column mission boards", "State-led color", "Evidence adjacent to action"],
+    "rules": [
+      { "name": "The State Has a Color Rule", "body": "Every saturated color indicates a state, authority, or interaction.", "section": "colors" },
+      { "name": "The Measurement Rule", "body": "Use tabular mono for values that must align or be compared.", "section": "typography" },
+      { "name": "Flat by Default", "body": "Shadows only separate a floating panel or protected focus state.", "section": "elevation" }
+    ],
+    "dos": ["Show provenance beside decisions.", "Keep live readiness visibly sealed.", "Preserve keyboard and table semantics."],
+    "donts": ["Do not add live activation authority to the client.", "Do not hide dissent or stale data.", "Do not use decorative neon or gradient text."]
+  }
+}

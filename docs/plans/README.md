@@ -28,3 +28,7 @@ promotion, or automatic capability authority.
 See [traceability.md](traceability.md) for the architecture-to-sub-plan mapping.
 See [implementation-audit.md](implementation-audit.md) for the package-to-code,
 test, and external-gate evidence matrix.
+
+The user-facing operator console and its security boundary are specified in
+[secure-operator-dashboard.md](secure-operator-dashboard.md); it is an interface
+over these phase-owned services, not a new trading authority.
