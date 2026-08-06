@@ -7,7 +7,9 @@ from urllib.parse import urlsplit
 from pydantic import SecretStr
 
 from advisorai.config.secrets import SecretSettings
-from advisorai.ports import GatewayRoute
+from advisorai.gateway import GatewayPolicyConfig, PolicyGateway, RouteProfile
+from advisorai.gateway.core import GatewayRecorder
+from advisorai.ports import GatewayRoute, ModelGatewayPort
 
 from .http import HttpClientConfig, SafeHttpClient
 from .llm import OpenAICompatibleGatewayAdapter
@@ -27,6 +29,9 @@ def build_direct_gateway(
     *,
     allowed_hosts: tuple[str, ...] | None = None,
     endpoint_path: str = "/chat/completions",
+    input_price_per_million: float | None = None,
+    output_price_per_million: float | None = None,
+    request_price_usd: float | None = None,
 ) -> OpenAICompatibleGatewayAdapter:
     if not settings.llm_base_url:
         raise ValueError("ADVISORAI_LLM_BASE_URL is required for a direct gateway")
@@ -44,7 +49,13 @@ def build_direct_gateway(
         secret_values={"ADVISORAI_LLM_API_KEY": api_key},
     )
     return OpenAICompatibleGatewayAdapter(
-        route, client, api_key=api_key, endpoint_path=endpoint_path
+        route,
+        client,
+        api_key=api_key,
+        endpoint_path=endpoint_path,
+        input_price_per_million=input_price_per_million,
+        output_price_per_million=output_price_per_million,
+        request_price_usd=request_price_usd,
     )
 
 
@@ -82,4 +93,32 @@ def build_paper_venue_transport(
     return PaperTestnetVenueTransport(client, settings, signer=signer, orders_path=orders_path)
 
 
-__all__ = ["build_direct_gateway", "build_paper_venue_transport"]
+def build_policy_gateway(
+    *,
+    contributor: ModelGatewayPort | None,
+    private: ModelGatewayPort | None,
+    config: GatewayPolicyConfig,
+    recorder: GatewayRecorder | None = None,
+    profiles: tuple[RouteProfile, ...] | None = None,
+) -> PolicyGateway:
+    """Bind admitted contributor/private adapters behind the policy router.
+
+    Credential construction stays in the provider-specific adapters.  This
+    constructor only composes already-admitted routes, making it impossible
+    for the policy layer to inspect or persist a provider secret.
+    """
+
+    return PolicyGateway(
+        contributor=contributor,
+        private=private,
+        config=config,
+        recorder=recorder,
+        profiles=profiles,
+    )
+
+
+__all__ = [
+    "build_direct_gateway",
+    "build_paper_venue_transport",
+    "build_policy_gateway",
+]

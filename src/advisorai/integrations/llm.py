@@ -26,6 +26,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         *,
         api_key: str | None,
         endpoint_path: str = "/chat/completions",
+        input_price_per_million: float | None = None,
+        output_price_per_million: float | None = None,
+        request_price_usd: float | None = None,
     ) -> None:
         if not api_key or not api_key.strip():
             raise ValueError("direct model gateway requires an API key")
@@ -39,6 +42,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         object.__setattr__(self, "client", client)
         object.__setattr__(self, "endpoint_path", endpoint_path)
         object.__setattr__(self, "_api_key", api_key.strip())
+        object.__setattr__(self, "_input_price_per_million", input_price_per_million)
+        object.__setattr__(self, "_output_price_per_million", output_price_per_million)
+        object.__setattr__(self, "_request_price_usd", request_price_usd)
         super().__init__(name="direct_provider", route=route, transport=self._complete_payload)
 
     def _complete_payload(self, request: GatewayRequest) -> Mapping[str, object]:
@@ -47,6 +53,8 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             "messages": [item.model_dump(mode="json") for item in request.messages],
             "temperature": 0,
         }
+        if request.provider_options:
+            payload.update(request.provider_options)
         if request.tools:
             payload["tools"] = [
                 {
@@ -120,6 +128,31 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             "output_tokens": int(usage.get("completion_tokens", 0) or 0),
             "estimated_cost_usd": float(decoded.get("estimated_cost_usd", 0) or 0),
             "provider_request_id": str(decoded["id"]) if decoded.get("id") is not None else None,
+            "actual_provider": str(decoded["provider"])
+            if isinstance(decoded.get("provider"), str)
+            else None,
+            "actual_model": str(decoded["model"])
+            if isinstance(decoded.get("model"), str)
+            else None,
+            "actual_gateway": request.route.gateway,
+            "actual_endpoint_variant": str(decoded["provider_variant"])
+            if isinstance(decoded.get("provider_variant"), str)
+            else request.route.endpoint_variant,
+            "input_price_per_million": (
+                decoded.get("input_price_per_million")
+                if decoded.get("input_price_per_million") is not None
+                else self._input_price_per_million
+            ),
+            "output_price_per_million": (
+                decoded.get("output_price_per_million")
+                if decoded.get("output_price_per_million") is not None
+                else self._output_price_per_million
+            ),
+            "request_price_usd": (
+                decoded.get("request_price_usd")
+                if decoded.get("request_price_usd") is not None
+                else self._request_price_usd
+            ),
         }
 
     def _endpoint_url(self, path: str) -> str:

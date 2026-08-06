@@ -3,7 +3,18 @@ from pathlib import Path
 import pytest
 from pydantic import SecretStr
 
-from advisorai.config import SecretSettings, parse_env_text, redact, redacted_headers
+from advisorai.config import (
+    CREDENTIAL_SCOPES,
+    KNOWN_ENV_NAMES,
+    CredentialAlias,
+    CredentialResolver,
+    CredentialScope,
+    CredentialScopeError,
+    SecretSettings,
+    parse_env_text,
+    redact,
+    redacted_headers,
+)
 
 
 def test_env_parser_never_executes_and_rejects_unknown_names():
@@ -59,3 +70,84 @@ def test_file_parser_does_not_require_a_real_secret_file(tmp_path: Path):
     path = tmp_path / "secrets.env"
     path.write_text("ADVISORAI_ENVIRONMENT=paper_testnet\n", encoding="utf-8")
     assert SecretSettings.from_env_file(path).environment == "paper_testnet"
+
+
+def test_credential_scopes_are_explicit_and_return_only_the_requested_subset():
+    assert all(names <= KNOWN_ENV_NAMES for names in CREDENTIAL_SCOPES.values())
+    values = {
+        "ADVISORAI_LLM_API_KEY": "direct-secret",
+        "OPENAI_API_KEY": "worker-secret",
+        "ADVISORAI_VENUE_API_SECRET": "venue-secret",
+        "NATS_PASSWORD": "event-secret",
+        "AWS_SECRET_ACCESS_KEY": "archive-secret",
+    }
+    resolver = CredentialResolver.from_mapping(values)
+
+    assert resolver.resolve(CredentialScope.DIRECT_LLM) == {
+        "ADVISORAI_LLM_API_KEY": "direct-secret"
+    }
+    assert resolver.resolve(CredentialScope.LITELLM) == {"OPENAI_API_KEY": "worker-secret"}
+    assert resolver.resolve(CredentialScope.PAPER_VENUE) == {
+        "ADVISORAI_VENUE_API_SECRET": "venue-secret"
+    }
+    assert resolver.resolve(CredentialScope.EVENT_BUS) == {"NATS_PASSWORD": "event-secret"}
+    assert resolver.resolve(CredentialScope.ARCHIVE_RCLONE) == {
+        "AWS_SECRET_ACCESS_KEY": "archive-secret"
+    }
+    assert "direct-secret" not in repr(resolver)
+
+
+def test_credential_alias_is_process_local_and_supports_direct_to_litellm_mapping():
+    values = {"ADVISORAI_LLM_API_KEY": "direct-secret", "OPENROUTER_API_KEY": ""}
+    resolver = CredentialResolver.from_mapping(values)
+    alias = CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_API_KEY")
+
+    resolved = resolver.resolve_for_process(CredentialScope.LITELLM, aliases=(alias,))
+
+    assert resolved == {"OPENROUTER_API_KEY": "direct-secret"}
+    assert values == {"ADVISORAI_LLM_API_KEY": "direct-secret", "OPENROUTER_API_KEY": ""}
+    assert resolver.available_names(CredentialScope.LITELLM) == ()
+
+
+def test_credential_resolver_rejects_unscoped_requests_and_cross_scope_leaks():
+    resolver = CredentialResolver.from_mapping({"OPENAI_API_KEY": "worker-secret"})
+    with pytest.raises(CredentialScopeError, match="single credential scope"):
+        resolver.resolve(None)
+    with pytest.raises(CredentialScopeError, match="single credential scope"):
+        resolver.resolve({})  # type: ignore[arg-type]
+    with pytest.raises(CredentialScopeError, match="unknown credential scope"):
+        resolver.resolve("all")
+    with pytest.raises(CredentialScopeError, match="not allowlisted"):
+        resolver.get(CredentialScope.PAPER_VENUE, "OPENAI_API_KEY")
+    with pytest.raises(CredentialScopeError, match="unknown environment"):
+        CredentialResolver.from_mapping({"UNSCOPED_SECRET": "do-not-return"})
+
+
+def test_credential_aliases_require_an_allowed_target_and_detect_conflicts():
+    resolver = CredentialResolver.from_mapping(
+        {
+            "ADVISORAI_LLM_API_KEY": "direct-secret",
+            "OPENROUTER_API_KEY": "different-secret",
+        }
+    )
+    with pytest.raises(CredentialScopeError, match="conflicting"):
+        resolver.resolve(
+            CredentialScope.LITELLM,
+            aliases=(
+                CredentialAlias(
+                    target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_API_KEY"
+                ),
+            ),
+        )
+    with pytest.raises(CredentialScopeError, match="outside"):
+        resolver.resolve(
+            CredentialScope.DIRECT_LLM,
+            aliases=(
+                CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_API_KEY"),
+            ),
+        )
+    with pytest.raises(CredentialScopeError, match="not allowlisted"):
+        resolver.resolve(
+            CredentialScope.LITELLM,
+            aliases=(CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_PROVIDER"),),
+        )

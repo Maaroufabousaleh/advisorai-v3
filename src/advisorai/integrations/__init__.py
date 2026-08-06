@@ -5,7 +5,7 @@ ledger, and promotion authority remains in the existing AdvisorAI services.
 """
 
 from .config import ConnectorCard, ConnectorRegistry, ConnectorState
-from .factories import build_direct_gateway, build_paper_venue_transport
+from .factories import build_direct_gateway, build_paper_venue_transport, build_policy_gateway
 from .http import HttpClientConfig, HttpTransportError, SafeHttpClient, SourceHttpTransport
 from .llm import GatewayTransportError, OpenAICompatibleGatewayAdapter
 from .sources import RawHttpSpool, SourceEndpoint, V3CoreCollectors, build_v3_core_collectors
@@ -33,5 +33,6 @@ __all__ = [
     "WebSocketTransportError",
     "build_direct_gateway",
     "build_paper_venue_transport",
+    "build_policy_gateway",
     "build_v3_core_collectors",
 ]

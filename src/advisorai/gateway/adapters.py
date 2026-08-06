@@ -40,8 +40,14 @@ class TypedGatewayAdapter:
         if isinstance(raw_tool_calls, (str, bytes)) or not isinstance(raw_tool_calls, Sequence):
             raise TypeError(f"{self.name} tool_calls must be a sequence of mappings")
         content = payload.get("content")
-        if not isinstance(content, str) or (not content.strip() and not raw_tool_calls):
-            raise ValueError(f"{self.name} transport response content must be non-blank text")
+        if content is None:
+            content = ""
+        if not isinstance(content, str) or (
+            not content.strip() and not raw_tool_calls and typed_payload is None
+        ):
+            raise ValueError(
+                f"{self.name} transport response requires text, typed payload, or tool calls"
+            )
         token_values: dict[str, int] = {}
         for field in ("input_tokens", "output_tokens"):
             value = payload.get(field, 0)
@@ -56,9 +62,43 @@ class TypedGatewayAdapter:
         provider_request_id = payload.get("provider_request_id")
         if provider_request_id is not None and not isinstance(provider_request_id, str):
             raise TypeError(f"{self.name} provider_request_id must be text")
+        actual_identity: dict[str, str] = {}
+        for field in ("actual_provider", "actual_model", "actual_gateway"):
+            value = payload.get(field)
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise TypeError(f"{self.name} {field} must be non-blank text")
+            actual_identity[field] = value.strip() if isinstance(value, str) else getattr(
+                self.route, field.removeprefix("actual_"), None
+            )
+        actual_route = self.route.model_copy(
+            update={
+                "provider": actual_identity["actual_provider"],
+                "model": actual_identity["actual_model"],
+                "gateway": actual_identity["actual_gateway"],
+                "fallback_chain": self.route.fallback_chain,
+            }
+        )
+
+        def optional_price(field: str) -> float | None:
+            value = payload.get(field)
+            if value is None:
+                return None
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(f"{self.name} {field} must be numeric")
+            if not isfinite(float(value)) or float(value) < 0:
+                raise ValueError(f"{self.name} {field} must be finite and non-negative")
+            return float(value)
+
+        actual_endpoint_variant = payload.get("actual_endpoint_variant")
+        if actual_endpoint_variant is not None and (
+            not isinstance(actual_endpoint_variant, str) or not actual_endpoint_variant.strip()
+        ):
+            raise TypeError(f"{self.name} actual_endpoint_variant must be non-blank text")
+
         return GatewayResponse(
             request_id=request.request_id,
-            route=self.route,
+            route=actual_route,
+            requested_route=self.route,
             content=content,
             typed_payload=typed_payload if isinstance(typed_payload, Mapping) else None,
             tool_calls=tuple(raw_tool_calls),
@@ -69,6 +109,16 @@ class TypedGatewayAdapter:
             provider_request_id=provider_request_id.strip()
             if provider_request_id is not None
             else None,
+            output_kind=request.output_kind,
+            actual_provider=actual_route.provider,
+            actual_model=actual_route.model,
+            actual_gateway=actual_route.gateway,
+            endpoint_variant=actual_endpoint_variant.strip()
+            if isinstance(actual_endpoint_variant, str)
+            else self.route.endpoint_variant,
+            input_price_per_million=optional_price("input_price_per_million"),
+            output_price_per_million=optional_price("output_price_per_million"),
+            request_price_usd=optional_price("request_price_usd"),
         )
 
 

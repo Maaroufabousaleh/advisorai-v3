@@ -3,8 +3,13 @@
 from .bundles import ConfigBundle, ConfigBundleStore
 from .modes import MissionMode, ModeConfig, load_mode_configs
 from .secrets import (
+    CREDENTIAL_SCOPES,
     KNOWN_ENV_NAMES,
     SECRET_ENV_NAMES,
+    CredentialAlias,
+    CredentialResolver,
+    CredentialScope,
+    CredentialScopeError,
     SecretSettings,
     load_env_file,
     parse_env_text,
@@ -56,6 +61,11 @@ __all__ = [
     "load_v3_core_config",
     "KNOWN_ENV_NAMES",
     "SECRET_ENV_NAMES",
+    "CREDENTIAL_SCOPES",
+    "CredentialAlias",
+    "CredentialResolver",
+    "CredentialScope",
+    "CredentialScopeError",
     "SecretSettings",
     "load_env_file",
     "parse_env_text",

@@ -166,6 +166,47 @@ def test_direct_gateway_accepts_tool_calls_with_null_content():
     assert response.tool_calls[0]["name"] == "read_orderbook"
 
 
+def test_direct_gateway_preserves_actual_provider_identity_and_pricing_parameters():
+    body = json.dumps(
+        {
+            "id": "req-provider-identity",
+            "model": "actual-reviewed-model",
+            "provider": "reviewed-provider",
+            "provider_variant": "reviewed/fp8",
+            "choices": [{"message": {"content": '{"ok":true}'}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+    ).encode()
+    client, _ = client_for([(200, body, ())])
+    route = GatewayRoute(
+        provider="reviewed-provider",
+        model="requested-model",
+        gateway="direct",
+        endpoint_variant="reviewed/fp8",
+    )
+    adapter = OpenAICompatibleGatewayAdapter(
+        route,
+        client,
+        api_key="secret-key",
+        input_price_per_million=0.1,
+        output_price_per_million=0.3,
+    )
+    response = adapter.complete(
+        GatewayRequest(
+            route=route,
+            messages=(GatewayMessage(role="user", content="typed"),),
+            prompt_version="p1",
+        )
+    )
+
+    assert response.requested_route == route
+    assert response.route.model == "actual-reviewed-model"
+    assert response.route.provider == "reviewed-provider"
+    assert response.actual_model == "actual-reviewed-model"
+    assert response.endpoint_variant == "reviewed/fp8"
+    assert response.input_price_per_million == 0.1
+
+
 def test_hmac_signer_and_paper_venue_transport_keep_endpoint_scope():
     settings = SecretSettings.from_mapping(
         {
