@@ -15,9 +15,11 @@ from advisorai.ports import (
     GatewayMessage,
     GatewayOutputKind,
     GatewayRequest,
+    GatewayResponse,
     GatewayRoute,
     GatewayTool,
     GenerationBudget,
+    ToolExecutionStatus,
 )
 
 
@@ -180,7 +182,11 @@ def test_tool_optional_typed_result_records_that_no_tool_was_used():
     record = recorder.record_call(request, attempt, response)
 
     assert response.tool_used is False
+    assert response.tool_called is False
+    assert response.tool_execution_status is ToolExecutionStatus.NOT_EXECUTED
     assert record.tool_used is False
+    assert record.tool_called is False
+    assert record.tool_execution_status is ToolExecutionStatus.NOT_EXECUTED
     assert record.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL
 
 
@@ -199,6 +205,78 @@ def test_invocation_mode_request_contract_rejects_invalid_tool_shapes():
         _request(tools=(_tool(),))
     with pytest.raises(ValueError, match="require at least one reviewed tool"):
         _request(mode=GatewayInvocationMode.TOOL_REQUIRED)
+
+
+def test_tool_bearing_requests_require_an_explicit_invocation_mode():
+    with pytest.raises(ValueError, match="require an explicit invocation_mode"):
+        GatewayRequest(
+            route=_route(),
+            messages=(GatewayMessage(role="user", content="read reviewed evidence"),),
+            tools=(_tool(),),
+            prompt_version="missing-tool-mode-v1",
+        )
+
+
+def test_model_copy_cannot_bypass_the_explicit_tool_mode_contract():
+    structured = GatewayRequest(
+        route=_route(),
+        messages=(GatewayMessage(role="user", content="return typed evidence"),),
+        prompt_version="model-copy-tool-mode-v1",
+    )
+
+    with pytest.raises(ValueError, match="cannot expose tools"):
+        structured.model_copy(update={"tools": (_tool(),)})
+
+
+def test_requests_without_tools_default_to_structured_output():
+    request = GatewayRequest(
+        route=_route(),
+        messages=(GatewayMessage(role="user", content="return typed evidence"),),
+        prompt_version="default-structured-v1",
+    )
+
+    assert request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT
+
+
+def test_explicit_optional_and_required_tool_modes_are_accepted():
+    optional = _request(mode=GatewayInvocationMode.TOOL_OPTIONAL, tools=(_tool(),))
+    required = _request(mode=GatewayInvocationMode.TOOL_REQUIRED, tools=(_tool(),))
+
+    assert optional.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL
+    assert required.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED
+
+
+def test_legacy_tool_payload_requires_an_explicit_migration_intent():
+    payload: dict[str, object] = {
+        "route": _route(),
+        "messages": (GatewayMessage(role="user", content="read reviewed evidence"),),
+        "tools": (_tool(),),
+        "prompt_version": "legacy-tool-mode-v1",
+    }
+
+    with pytest.raises(ValueError, match="require an explicit optional or required tool mode"):
+        GatewayRequest.from_legacy_payload(payload)
+
+    migrated = GatewayRequest.from_legacy_payload(
+        payload,
+        tool_invocation_mode=GatewayInvocationMode.TOOL_REQUIRED,
+    )
+
+    assert migrated.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED
+
+
+def test_model_response_cannot_claim_that_a_tool_executed():
+    with pytest.raises(ValueError, match="cannot claim tool execution"):
+        GatewayResponse(
+            request_id=_request().request_id,
+            route=_route(),
+            content="typed provider output",
+            latency_ms=0,
+            input_tokens=0,
+            output_tokens=0,
+            estimated_cost_usd=0,
+            tool_execution_status=ToolExecutionStatus.SUCCEEDED,
+        )
 
 
 def test_required_tool_choice_without_frozen_support_rejects_before_network_access():

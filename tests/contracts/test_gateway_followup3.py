@@ -27,6 +27,7 @@ from advisorai.integrations import (
 )
 from advisorai.ports import (
     GatewayDataClass,
+    GatewayInvocationMode,
     GatewayMessage,
     GatewayRequest,
     GatewayRoute,
@@ -376,7 +377,13 @@ def test_tool_only_and_structured_output_modes_are_never_combined_by_default():
             "additionalProperties": False,
         },
     )
-    adapter.complete(_request(data_class=GatewayDataClass.PUBLIC, tools=(tool,)))
+    adapter.complete(
+        _request(
+            data_class=GatewayDataClass.PUBLIC,
+            tools=(tool,),
+            invocation_mode=GatewayInvocationMode.TOOL_OPTIONAL,
+        )
+    )
     sent = calls[0][0]
     assert "response_format" not in sent
     assert sent["tools"][0]["function"]["parameters"] == tool.input_schema

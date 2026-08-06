@@ -117,6 +117,19 @@ confidence, and evidence IDs at the call site. Supply `sensitive_values` to
 `gateway.complete(...)` only while converting a raw payload into a request;
 the values are replaced before the provider call and are never recorded.
 
+Tool-bearing requests must also state `invocation_mode` explicitly. Omission
+is rejected rather than silently becoming an optional-tool request:
+
+| Mode | Request/response contract |
+| --- | --- |
+| `STRUCTURED_OUTPUT` | No tools; strict schema output is required. |
+| `TOOL_OPTIONAL` | Reviewed tools are available; either a valid tool call or typed result is accepted. |
+| `TOOL_REQUIRED` | Reviewed tools are available and at least one valid tool call is required. |
+
+`GatewayRequest.from_legacy_payload(...)` is the sole migration helper for
+pre-mode payloads. A legacy payload with tools must explicitly select either
+`TOOL_OPTIONAL` or `TOOL_REQUIRED` there.
+
 Contributor requests have no tools. Private requests may use only the
 configured read-only evidence allowlist. Neither tier can receive secrets,
 broker/account/order data, or execution tools. Model outputs are typed,
@@ -129,6 +142,13 @@ identities, endpoint variant, retention/training terms, route-policy and
 redaction-policy hashes, escalation reason, provider request ID, latency,
 tokens, price parameters, and cost. Prompt text and credentials are never
 stored in the gateway-call ledger.
+
+At the model boundary, `tool_called` means only that the provider returned a
+reviewed tool-call request. `tool_execution_status` is always `not_executed`
+there; a tool result may be recorded only by the separate deterministic
+execution/evidence boundary. The older `tool_used` field is retained solely as
+a compatibility alias for `tool_called` and must never be read as execution
+success.
 
 Muse Spark or any other contributor is admitted by the same policy: unless its
 current written terms are verified for the intended data class, it is

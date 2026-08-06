@@ -17,6 +17,7 @@ from advisorai.ports import (
     NewsExtraction,
     ResearchQuestion,
     RouteTier,
+    ToolExecutionStatus,
     validate_gateway_output,
 )
 
@@ -79,6 +80,7 @@ __all__ = [
     "DataClassification",
     "DecisionImpact",
     "RouteTier",
+    "ToolExecutionStatus",
     "LiteLLMGatewayAdapter",
     "OmniRouteGatewayAdapter",
     "LocalDeterministicGateway",

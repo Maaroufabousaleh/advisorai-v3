@@ -26,7 +26,13 @@ from advisorai.integrations import (
 )
 from advisorai.integrations.websocket import RawWebSocketFeed
 from advisorai.ledger import SqliteLedgers
-from advisorai.ports import GatewayMessage, GatewayRequest, GatewayRoute, GatewayTool
+from advisorai.ports import (
+    GatewayInvocationMode,
+    GatewayMessage,
+    GatewayRequest,
+    GatewayRoute,
+    GatewayTool,
+)
 
 
 def client_for(responses, *, retries=0, threshold=5):
@@ -188,6 +194,7 @@ def test_direct_gateway_accepts_tool_calls_with_null_content():
                 },
             ),
         ),
+        invocation_mode=GatewayInvocationMode.TOOL_OPTIONAL,
         prompt_version="p1",
     )
 

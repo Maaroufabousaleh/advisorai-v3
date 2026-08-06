@@ -15,6 +15,7 @@ from advisorai.gateway.core import GatewayRecorder
 from advisorai.ports import (
     DecisionImpact,
     GatewayDataClass,
+    GatewayInvocationMode,
     GatewayMessage,
     GatewayOutputKind,
     GatewayRequest,
@@ -221,6 +222,7 @@ def test_contributor_has_no_tools_and_private_accepts_only_allowlisted_read_tool
     contributor_request = _request(
         contributor_route,
         tools=(GatewayTool(name="read_evidence", input_schema_version="v1", output_schema_version="v1"),),
+        invocation_mode=GatewayInvocationMode.TOOL_OPTIONAL,
     )
     with pytest.raises(GatewayPolicyError, match="cannot receive tools"):
         gateway.complete(contributor_request)
@@ -229,6 +231,7 @@ def test_contributor_has_no_tools_and_private_accepts_only_allowlisted_read_tool
         contributor_route.model_copy(update={"fallback_chain": (private_route.gateway,)}),
         data_class=GatewayDataClass.CONFIDENTIAL,
         tools=(GatewayTool(name="read_evidence", input_schema_version="v1", output_schema_version="v1"),),
+        invocation_mode=GatewayInvocationMode.TOOL_OPTIONAL,
     )
     assert gateway.complete(private_request).tier is GatewayTier.PRIVATE
 

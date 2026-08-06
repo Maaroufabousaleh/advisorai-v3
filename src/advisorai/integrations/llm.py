@@ -19,6 +19,7 @@ from advisorai.ports import (
     GatewayRoute,
     GatewayTool,
     GenerationBudget,
+    ToolExecutionStatus,
     validate_gateway_output,
 )
 
@@ -682,6 +683,8 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             "tool_calls": tuple(calls),
             "invocation_mode": request.invocation_mode,
             "tool_used": bool(calls),
+            "tool_called": bool(calls),
+            "tool_execution_status": ToolExecutionStatus.NOT_EXECUTED,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "estimated_cost_usd": estimated_cost,

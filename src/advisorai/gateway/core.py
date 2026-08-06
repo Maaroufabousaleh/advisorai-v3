@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from time import perf_counter_ns
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
 from advisorai.ports import (
@@ -22,6 +22,7 @@ from advisorai.ports import (
     GatewayTier,
     ModelGatewayPort,
     RouteTier,
+    ToolExecutionStatus,
 )
 
 
@@ -109,7 +110,11 @@ class GatewayCallRecord(BaseModel):
     data_class: GatewayDataClass | None = None
     output_kind: GatewayOutputKind = GatewayOutputKind.GENERIC
     invocation_mode: GatewayInvocationMode = GatewayInvocationMode.STRUCTURED_OUTPUT
+    # Compatibility-only alias for ``tool_called``. It records a provider
+    # request, never successful external tool execution.
     tool_used: bool = False
+    tool_called: bool = False
+    tool_execution_status: ToolExecutionStatus = ToolExecutionStatus.NOT_EXECUTED
     policy_version: str | None = None
     redaction_policy_version: str | None = None
     escalation_reason: str | None = None
@@ -227,6 +232,14 @@ class GatewayCallRecord(BaseModel):
             raise ValueError("gateway call timestamp must include a timezone")
         return value.astimezone(UTC)
 
+    @model_validator(mode="after")
+    def validate_tool_call_audit_semantics(self) -> GatewayCallRecord:
+        if self.tool_used != self.tool_called:
+            raise ValueError("gateway tool_used compatibility field must match tool_called")
+        if self.tool_execution_status is not ToolExecutionStatus.NOT_EXECUTED:
+            raise ValueError("gateway generation records cannot claim tool execution")
+        return self
+
 
 class GatewayRecorder:
     def __init__(self, ledgers: SqliteLedgers | None = None) -> None:
@@ -254,6 +267,11 @@ class GatewayRecorder:
         requested_route = (
             response.requested_route if response is not None and response.requested_route else request.route
         )
+        tool_called = (
+            response.tool_called
+            if response is not None and response.tool_called is not None
+            else bool(response.tool_calls) if response is not None else False
+        )
         record = GatewayCallRecord(
             request_id=request.request_id,
             request_hash=request.content_hash(),
@@ -280,10 +298,12 @@ class GatewayRecorder:
                 if response is not None and response.invocation_mode is not None
                 else request.invocation_mode
             ),
-            tool_used=(
-                response.tool_used
-                if response is not None and response.tool_used is not None
-                else bool(response.tool_calls) if response is not None else False
+            tool_used=tool_called,
+            tool_called=tool_called,
+            tool_execution_status=(
+                response.tool_execution_status
+                if response is not None
+                else ToolExecutionStatus.NOT_EXECUTED
             ),
             policy_version=response.policy_version if response is not None else None,
             redaction_policy_version=(

@@ -5,6 +5,7 @@ import pytest
 
 from advisorai.ports import (
     EventEnvelope,
+    GatewayInvocationMode,
     GatewayMessage,
     GatewayRequest,
     GatewayResponse,
@@ -21,6 +22,7 @@ def test_gateway_request_hash_is_stable_without_request_identity():
         tools=(
             GatewayTool(name="typed_tool", input_schema_version="v1", output_schema_version="v1"),
         ),
+        invocation_mode=GatewayInvocationMode.TOOL_OPTIONAL,
         prompt_version="prompt-v1",
         created_at=datetime(2026, 8, 4, tzinfo=UTC),
     )

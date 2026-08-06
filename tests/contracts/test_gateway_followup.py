@@ -23,6 +23,7 @@ from advisorai.integrations import (
 from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.ports import (
     GatewayDataClass,
+    GatewayInvocationMode,
     GatewayMessage,
     GatewayOutputKind,
     GatewayRequest,
@@ -448,6 +449,7 @@ def test_tool_input_schema_is_transmitted_and_returned_arguments_are_validated()
             public_route,
             data_class=GatewayDataClass.CONFIDENTIAL,
             tools=(tool,),
+            invocation_mode=GatewayInvocationMode.TOOL_REQUIRED,
         )
     )
 

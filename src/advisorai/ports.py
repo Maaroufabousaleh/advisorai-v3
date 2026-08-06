@@ -8,12 +8,13 @@ leaking provider-specific objects into the contracts or trading boundary.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
 from math import isfinite
 from pathlib import PurePosixPath
-from typing import Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
@@ -86,6 +87,21 @@ class GatewayInvocationMode(StrEnum):
     STRUCTURED_OUTPUT = "structured_output"
     TOOL_OPTIONAL = "tool_optional"
     TOOL_REQUIRED = "tool_required"
+
+
+class ToolExecutionStatus(StrEnum):
+    """Status of the separate deterministic tool-execution stage.
+
+    A model response can only report that it *called* a reviewed tool.  It
+    cannot claim that AdvisorAI executed that tool or obtained evidence from
+    it; gateway-response and generation-ledger records therefore always use
+    ``NOT_EXECUTED``.  A future deterministic tool-execution ledger may use
+    the remaining statuses after it has actually run the tool.
+    """
+
+    NOT_EXECUTED = "not_executed"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
 
 
 class GenerationBudget(BaseModel):
@@ -409,23 +425,43 @@ class GatewayRequest(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def infer_legacy_invocation_mode(cls, value: object) -> object:
-        """Make pre-mode callers explicit without weakening the invariants.
+    def require_explicit_tool_invocation_mode(cls, value: object) -> object:
+        """Reject tool-bearing requests whose authority shape is unspecified."""
 
-        Existing typed requests that supplied tools predate invocation modes;
-        they are safely interpreted as optional-tool calls. New callers can
-        select a mode explicitly and are then held to its exact contract.
+        if isinstance(value, Mapping) and "invocation_mode" not in value and value.get("tools"):
+            raise ValueError("gateway requests with tools require an explicit invocation_mode")
+        return value
+
+    @classmethod
+    def from_legacy_payload(
+        cls,
+        payload: Mapping[str, object],
+        *,
+        tool_invocation_mode: GatewayInvocationMode | None = None,
+    ) -> GatewayRequest:
+        """Migrate a pre-invocation-mode payload through an explicit choice.
+
+        Normal ``GatewayRequest`` construction intentionally refuses an
+        omitted mode when tools are present.  A migration caller must state
+        whether its legacy tool use was optional or required; this helper is
+        the only compatibility path that can make that conversion.
         """
 
-        if isinstance(value, Mapping) and "invocation_mode" not in value:
-            values = dict(value)
-            values["invocation_mode"] = (
-                GatewayInvocationMode.TOOL_OPTIONAL
-                if values.get("tools")
-                else GatewayInvocationMode.STRUCTURED_OUTPUT
-            )
-            return values
-        return value
+        values = dict(payload)
+        if "invocation_mode" in values:
+            return cls.model_validate(values)
+        if values.get("tools"):
+            if tool_invocation_mode not in {
+                GatewayInvocationMode.TOOL_OPTIONAL,
+                GatewayInvocationMode.TOOL_REQUIRED,
+            }:
+                raise ValueError(
+                    "legacy tool-bearing payloads require an explicit optional or required tool mode"
+                )
+            values["invocation_mode"] = tool_invocation_mode
+        else:
+            values["invocation_mode"] = GatewayInvocationMode.STRUCTURED_OUTPUT
+        return cls.model_validate(values)
 
     @model_validator(mode="after")
     def require_typed_request(self) -> GatewayRequest:
@@ -518,6 +554,35 @@ class GatewayRequest(BaseModel):
         payload = "\n".join(self.evidence_ids).encode("utf-8")
         return sha256(payload).hexdigest()
 
+    def model_copy(
+        self,
+        *,
+        update: Mapping[str, Any] | None = None,
+        deep: bool = False,
+    ) -> GatewayRequest:
+        """Copy through validation so immutable Pydantic updates stay fail-closed.
+
+        ``BaseModel.model_copy`` deliberately skips validation. That is unsafe
+        for this boundary because adding a tool to a structured-output request
+        could otherwise bypass the explicit invocation-mode requirement.
+        """
+
+        values = self.model_dump(mode="python", round_trip=True)
+        if update:
+            values.update(update)
+        if deep:
+            values = deepcopy(values)
+        copied = type(self).model_validate(values)
+        # ``model_validate`` sees every dumped default as supplied. Preserve
+        # Pydantic's field-set semantics so policy can still distinguish an
+        # omitted generation budget from an explicitly supplied one.
+        object.__setattr__(
+            copied,
+            "__pydantic_fields_set__",
+            set(self.model_fields_set) | set((update or {}).keys()),
+        )
+        return copied
+
 
 class GatewayResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
@@ -528,7 +593,11 @@ class GatewayResponse(BaseModel):
     typed_payload: Mapping[str, object] | None = None
     tool_calls: tuple[Mapping[str, object], ...] = ()
     invocation_mode: GatewayInvocationMode | None = None
+    # ``tool_used`` is the deprecated compatibility spelling.  It means only
+    # that the provider returned a tool call; it never means the tool ran.
     tool_used: bool | None = None
+    tool_called: bool | None = None
+    tool_execution_status: ToolExecutionStatus = ToolExecutionStatus.NOT_EXECUTED
     latency_ms: int = Field(ge=0)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
@@ -594,8 +663,13 @@ class GatewayResponse(BaseModel):
             raise ValueError("gateway response requires text, typed payload, or tool calls")
         if self.authoritative:
             raise ValueError("model gateway responses cannot be authoritative")
-        if self.tool_used is not None and self.tool_used != bool(self.tool_calls):
+        tool_called = bool(self.tool_calls)
+        if self.tool_used is not None and self.tool_used != tool_called:
             raise ValueError("gateway tool_used must agree with returned tool calls")
+        if self.tool_called is not None and self.tool_called != tool_called:
+            raise ValueError("gateway tool_called must agree with returned tool calls")
+        if self.tool_execution_status is not ToolExecutionStatus.NOT_EXECUTED:
+            raise ValueError("model gateway responses cannot claim tool execution")
         for call in self.tool_calls:
             if not isinstance(call, Mapping):
                 raise ValueError("gateway tool calls must be mapping objects")

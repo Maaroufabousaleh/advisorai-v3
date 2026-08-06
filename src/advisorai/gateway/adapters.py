@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from math import isfinite
 from time import perf_counter_ns
 
-from advisorai.ports import GatewayRequest, GatewayResponse, GatewayRoute
+from advisorai.ports import GatewayRequest, GatewayResponse, GatewayRoute, ToolExecutionStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +169,23 @@ class TypedGatewayAdapter:
                 raise TypeError(f"{self.name} {field} must be a positive integer")
             return value
 
+        returned_tool_called = optional_bool("tool_called")
+        legacy_tool_used = optional_bool("tool_used")
+        observed_tool_call = bool(raw_tool_calls)
+        if returned_tool_called is not None and returned_tool_called != observed_tool_call:
+            raise ValueError(f"{self.name} tool_called must agree with returned tool calls")
+        if legacy_tool_used is not None and legacy_tool_used != observed_tool_call:
+            raise ValueError(f"{self.name} tool_used must agree with returned tool calls")
+        raw_execution_status = payload.get(
+            "tool_execution_status", ToolExecutionStatus.NOT_EXECUTED
+        )
+        try:
+            tool_execution_status = ToolExecutionStatus(raw_execution_status)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{self.name} returned an invalid tool execution status") from exc
+        if tool_execution_status is not ToolExecutionStatus.NOT_EXECUTED:
+            raise ValueError(f"{self.name} model response cannot claim tool execution")
+
         input_tokens = token_values["input_tokens"]
         output_tokens = token_values["output_tokens"]
         if input_tokens > (request.generation_budget.max_input_tokens or input_tokens):
@@ -199,7 +216,9 @@ class TypedGatewayAdapter:
             typed_payload=typed_payload if isinstance(typed_payload, Mapping) else None,
             tool_calls=tuple(raw_tool_calls),
             invocation_mode=request.invocation_mode,
-            tool_used=bool(raw_tool_calls),
+            tool_used=observed_tool_call,
+            tool_called=observed_tool_call,
+            tool_execution_status=tool_execution_status,
             latency_ms=elapsed,
             input_tokens=token_values["input_tokens"],
             output_tokens=token_values["output_tokens"],

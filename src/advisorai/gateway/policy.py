@@ -36,6 +36,7 @@ from advisorai.ports import (
     GenerationBudget,
     ModelGatewayPort,
     RouteTier,
+    ToolExecutionStatus,
     validate_gateway_output,
 )
 
@@ -1186,6 +1187,8 @@ class PolicyGateway:
                     "requested_route": attempt_request.route,
                     "invocation_mode": candidate.invocation_mode,
                     "tool_used": bool(response.tool_calls),
+                    "tool_called": bool(response.tool_calls),
+                    "tool_execution_status": ToolExecutionStatus.NOT_EXECUTED,
                     # Local legacy adapters may still supply an observed
                     # identity.  Never rewrite it from the requested route.
                     "actual_provider": response.actual_provider,
@@ -1328,6 +1331,8 @@ class PolicyGateway:
                         "requested_route": attempt_request.route,
                         "invocation_mode": request.invocation_mode,
                         "tool_used": bool(response.tool_calls),
+                        "tool_called": bool(response.tool_calls),
+                        "tool_execution_status": ToolExecutionStatus.NOT_EXECUTED,
                         "actual_provider": response.actual_provider,
                         "actual_model": response.actual_model,
                         "actual_gateway": response.actual_gateway or response.route.gateway,
@@ -1496,6 +1501,8 @@ class PolicyGateway:
             output_kind=request.output_kind,
             invocation_mode=request.invocation_mode,
             tool_used=False,
+            tool_called=False,
+            tool_execution_status=ToolExecutionStatus.NOT_EXECUTED,
             policy_version=self.config.policy_version,
             redaction_policy_version=self.config.redaction_policy_version,
             redaction_policy_hash=request.redaction_policy_hash,
