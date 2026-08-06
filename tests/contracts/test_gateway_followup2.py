@@ -57,6 +57,10 @@ def _admission(*, resolved: str = "inclusionai/ling-2.6-flash-20260421") -> Prov
         inventory_timestamp=datetime(2026, 8, 6, tzinfo=UTC),
         terms_reference="inventory:novita:2026-08-06",
         admission_version="v1",
+        supports_tools=True,
+        supports_tool_choice_required=True,
+        supports_structured_output=True,
+        allow_response_format_with_tools=False,
     )
 
 
@@ -116,6 +120,7 @@ def _request(route: GatewayRoute, **updates: object) -> GatewayRequest:
                 "zdr": True,
                 "data_collection": "deny",
                 "require_parameters": True,
+                "max_price": {"prompt": 0.1, "completion": 0.3, "request": 0},
             }
         },
     }
@@ -256,6 +261,7 @@ def test_generation_controls_are_injected_and_caller_overrides_do_not_win():
         provider_options={
             "stream": True,
             "max_tokens": 999999,
+            "max_completion_tokens": 999999,
             "temperature": 1,
             "response_format": {"type": "text"},
             "provider": {
@@ -264,6 +270,7 @@ def test_generation_controls_are_injected_and_caller_overrides_do_not_win():
                 "zdr": True,
                 "data_collection": "deny",
                 "require_parameters": True,
+                "max_price": {"prompt": 0.1, "completion": 0.3, "request": 0},
             },
         },
     )
@@ -272,6 +279,7 @@ def test_generation_controls_are_injected_and_caller_overrides_do_not_win():
     sent = calls[0]
     assert sent["stream"] is False
     assert sent["max_tokens"] == 37
+    assert "max_completion_tokens" not in sent
     assert sent["temperature"] == 0
     assert sent["response_format"]["json_schema"]["name"] == "generic"
     assert sent["response_format"]["json_schema"]["strict"] is True

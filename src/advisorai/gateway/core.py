@@ -14,6 +14,7 @@ from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
 from advisorai.ports import (
     DecisionImpact,
     GatewayDataClass,
+    GatewayInvocationMode,
     GatewayOutputKind,
     GatewayRequest,
     GatewayResponse,
@@ -107,6 +108,8 @@ class GatewayCallRecord(BaseModel):
     tier: GatewayTier | None = None
     data_class: GatewayDataClass | None = None
     output_kind: GatewayOutputKind = GatewayOutputKind.GENERIC
+    invocation_mode: GatewayInvocationMode = GatewayInvocationMode.STRUCTURED_OUTPUT
+    tool_used: bool = False
     policy_version: str | None = None
     redaction_policy_version: str | None = None
     escalation_reason: str | None = None
@@ -272,6 +275,16 @@ class GatewayRecorder:
             tier=response.tier if response is not None else None,
             data_class=(response.data_class if response is not None else request.data_class),
             output_kind=(response.output_kind if response is not None else request.output_kind),
+            invocation_mode=(
+                response.invocation_mode
+                if response is not None and response.invocation_mode is not None
+                else request.invocation_mode
+            ),
+            tool_used=(
+                response.tool_used
+                if response is not None and response.tool_used is not None
+                else bool(response.tool_calls) if response is not None else False
+            ),
             policy_version=response.policy_version if response is not None else None,
             redaction_policy_version=(
                 response.redaction_policy_version

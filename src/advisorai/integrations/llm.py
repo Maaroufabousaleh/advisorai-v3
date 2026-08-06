@@ -12,7 +12,15 @@ from math import ceil, isfinite
 from typing import Any
 
 from advisorai.gateway.adapters import TypedGatewayAdapter
-from advisorai.ports import GATEWAY_OUTPUT_SCHEMAS, GatewayRequest, GatewayRoute, GenerationBudget
+from advisorai.ports import (
+    GATEWAY_OUTPUT_SCHEMAS,
+    GatewayInvocationMode,
+    GatewayRequest,
+    GatewayRoute,
+    GatewayTool,
+    GenerationBudget,
+    validate_gateway_output,
+)
 
 from .http import HttpTransportError, SafeHttpClient
 
@@ -66,6 +74,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         retry_sleeper: Callable[[float], None] = time.sleep,
         retry_jitter: Callable[[float], float] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        reviewed_token_counter: Callable[[str], int] | None = None,
     ) -> None:
         if not api_key or not api_key.strip():
             raise ValueError("direct model gateway requires an API key")
@@ -85,6 +94,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         object.__setattr__(self, "_retry_sleeper", retry_sleeper)
         object.__setattr__(self, "_retry_jitter", retry_jitter or (lambda maximum: random.uniform(0, maximum)))
         object.__setattr__(self, "_clock", clock)
+        object.__setattr__(self, "_reviewed_token_counter", reviewed_token_counter)
         super().__init__(
             name="direct_provider",
             route=route,
@@ -94,7 +104,8 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
 
     def _complete_payload(self, request: GatewayRequest) -> Mapping[str, object]:
         budget = self._effective_budget(request)
-        estimated_input = self._estimate_input_tokens(request)
+        payload = self._build_payload(request, budget)
+        estimated_input = self._estimate_input_tokens(payload)
         if budget.max_input_tokens is not None and estimated_input > budget.max_input_tokens:
             raise GatewayTransportError(
                 "input exceeds generation budget",
@@ -108,83 +119,6 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             )
 
         self._authorize_pre_dispatch_cost(request, budget, estimated_input)
-
-        payload: dict[str, Any] = {
-            "model": request.route.model,
-            "messages": [item.model_dump(mode="json") for item in request.messages],
-            "temperature": 0,
-            "stream": False,
-            "max_tokens": budget.max_output_tokens,
-        }
-        # Provider routing options are accepted only as a policy-produced
-        # mapping.  Generation controls are always written after the merge so
-        # a caller cannot override the budget or prompt/tool contents.
-        if request.provider_options:
-            options = dict(request.provider_options)
-            provider_options = options.get("provider")
-            if isinstance(provider_options, Mapping):
-                governed_provider = dict(provider_options)
-                if "only" in governed_provider and governed_provider["only"] != [request.route.provider]:
-                    raise GatewayTransportError(
-                        "provider selector override is not permitted",
-                        failure_metadata={"error_type": "routing_policy_override"},
-                    )
-                if "allow_fallbacks" in governed_provider and governed_provider["allow_fallbacks"] is not False:
-                    raise GatewayTransportError(
-                        "provider fallback override is not permitted",
-                        failure_metadata={"error_type": "routing_policy_override"},
-                    )
-                if request.route.training_policy.lower() in {
-                    "no_training",
-                    "no_training_zdr",
-                    "zdr",
-                    "zero_data_retention",
-                }:
-                    if governed_provider.get("zdr") is not True:
-                        raise GatewayTransportError(
-                            "private route requires ZDR",
-                            failure_metadata={"error_type": "routing_policy_override"},
-                        )
-                    if governed_provider.get("data_collection") != "deny":
-                        raise GatewayTransportError(
-                            "private route requires data-collection denial",
-                            failure_metadata={"error_type": "routing_policy_override"},
-                        )
-                if "require_parameters" in governed_provider and governed_provider["require_parameters"] is not True:
-                    raise GatewayTransportError(
-                        "provider parameter requirement override is not permitted",
-                        failure_metadata={"error_type": "routing_policy_override"},
-                    )
-                options["provider"] = governed_provider
-            payload.update(options)
-        payload.update(
-            {
-                "model": request.route.model,
-                "messages": [item.model_dump(mode="json") for item in request.messages],
-                "temperature": 0,
-                "stream": False,
-                "max_tokens": budget.max_output_tokens,
-            }
-        )
-        # Tool calls and strict structured output are independent endpoint
-        # capabilities.  Do not send both unless the frozen RouteProfile
-        # admission explicitly enabled the combination.
-        if not request.tools or request.response_format_with_tools_admitted:
-            payload["response_format"] = self._response_format(request)
-        else:
-            payload.pop("response_format", None)
-        if request.tools:
-            payload["tools"] = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": f"Typed {tool.output_schema_version} evidence operation",
-                        "parameters": dict(tool.input_schema),
-                    },
-                }
-                for tool in request.tools
-            ]
 
         headers = {
             "Authorization": f"Bearer {self._api_key}",
@@ -242,7 +176,13 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                         attempt_metadata=attempt_metadata,
                     )
                 identity = self._parse_routing_identity(decoded, request, attempt_number)
-                result = self._parse_success(decoded, request, identity, budget)
+                result = self._parse_success(
+                    decoded,
+                    request,
+                    identity,
+                    budget,
+                    estimated_input,
+                )
                 result["routing_attempt"] = identity["routing_attempt"] or attempt_number
                 result["attempt_metadata"] = tuple(attempt_metadata)
                 return result
@@ -314,21 +254,152 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             no_cross_provider_fallback=True,
         )
 
+    def _build_payload(
+        self,
+        request: GatewayRequest,
+        budget: GenerationBudget,
+    ) -> dict[str, Any]:
+        self._validate_invocation_capabilities(request)
+        payload: dict[str, Any] = {
+            "model": request.route.model,
+            "messages": [item.model_dump(mode="json") for item in request.messages],
+            "temperature": 0,
+            "stream": False,
+            "max_tokens": budget.max_output_tokens,
+        }
+        # Provider routing options are accepted only as a policy-produced
+        # mapping.  Generation controls are always written after the merge so
+        # a caller cannot override the budget or prompt/tool contents.
+        if request.provider_options:
+            options = dict(request.provider_options)
+            # Generation controls belong solely to GenerationBudget and the
+            # invocation contract.  Preserve harmless provider routing
+            # options, but discard alternate token-cap spellings before the
+            # final, policy-owned controls are written below.
+            for controlled_key in (
+                "max_tokens",
+                "max_completion_tokens",
+                "temperature",
+                "stream",
+                "response_format",
+                "tool_choice",
+            ):
+                options.pop(controlled_key, None)
+            provider_options = options.get("provider")
+            if isinstance(provider_options, Mapping):
+                governed_provider = dict(provider_options)
+                if "only" in governed_provider and governed_provider["only"] != [request.route.provider]:
+                    raise GatewayTransportError(
+                        "provider selector override is not permitted",
+                        failure_metadata={"error_type": "routing_policy_override"},
+                    )
+                if "allow_fallbacks" in governed_provider and governed_provider["allow_fallbacks"] is not False:
+                    raise GatewayTransportError(
+                        "provider fallback override is not permitted",
+                        failure_metadata={"error_type": "routing_policy_override"},
+                    )
+                if request.route.training_policy.lower() in {
+                    "no_training",
+                    "no_training_zdr",
+                    "zdr",
+                    "zero_data_retention",
+                }:
+                    if governed_provider.get("zdr") is not True:
+                        raise GatewayTransportError(
+                            "private route requires ZDR",
+                            failure_metadata={"error_type": "routing_policy_override"},
+                        )
+                    if governed_provider.get("data_collection") != "deny":
+                        raise GatewayTransportError(
+                            "private route requires data-collection denial",
+                            failure_metadata={"error_type": "routing_policy_override"},
+                        )
+                if "require_parameters" in governed_provider and governed_provider["require_parameters"] is not True:
+                    raise GatewayTransportError(
+                        "provider parameter requirement override is not permitted",
+                        failure_metadata={"error_type": "routing_policy_override"},
+                    )
+                options["provider"] = governed_provider
+            payload.update(options)
+        payload.update(
+            {
+                "model": request.route.model,
+                "messages": [item.model_dump(mode="json") for item in request.messages],
+                "temperature": 0,
+                "stream": False,
+                "max_tokens": budget.max_output_tokens,
+            }
+        )
+        # Tool calls and strict structured output are independent endpoint
+        # capabilities.  Do not send both unless the frozen RouteProfile
+        # admission explicitly enabled the combination.
+        if request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT or (
+            request.invocation_mode is not GatewayInvocationMode.STRUCTURED_OUTPUT
+            and request.response_format_with_tools_admitted
+        ):
+            payload["response_format"] = self._response_format(request)
+        else:
+            payload.pop("response_format", None)
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": f"Typed {tool.output_schema_version} evidence operation",
+                        "parameters": dict(tool.input_schema),
+                    },
+                }
+                for tool in request.tools
+            ]
+        if request.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED:
+            payload["tool_choice"] = "required"
+        else:
+            payload.pop("tool_choice", None)
+        return payload
+
     @staticmethod
     def _effective_budget(request: GatewayRequest) -> GenerationBudget:
-        # Pydantic retains whether the caller actually supplied the field.
-        # Defaulting a governed paid request to $1 would be an unsafe
-        # surprise.  Ungoverned local compatibility adapters retain the port
-        # default; PolicyGateway rejects a concrete remote adapter without a
-        # RouteProfile before it can be used for production traffic.
-        provider = request.provider_options.get("provider")
-        provider = provider if isinstance(provider, Mapping) else {}
-        has_admission_prices = isinstance(provider.get("max_price"), Mapping)
-        if "generation_budget" not in request.model_fields_set and (
-            provider.get("zdr") is True or has_admission_prices
-        ):
+        # A concrete adapter is always remote, including its direct test/use
+        # path.  Its implicit budget must never silently become the general
+        # $1 port default merely because provider options were omitted.
+        if "generation_budget" not in request.model_fields_set:
             return _REMOTE_SAFE_GENERATION_BUDGET
         return request.generation_budget
+
+    @staticmethod
+    def _validate_invocation_capabilities(request: GatewayRequest) -> None:
+        if request.response_format_with_tools_admitted and (
+            not request.admission_capabilities_enforced
+            or request.admission_supports_tools is not True
+            or request.admission_supports_structured_output is not True
+        ):
+            raise GatewayTransportError(
+                "combined tools and structured output require frozen endpoint admission",
+                failure_metadata={"error_type": "unsupported_invocation_mode"},
+            )
+        if request.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED and (
+            not request.admission_capabilities_enforced
+            or request.admission_supports_tool_choice_required is not True
+        ):
+            raise GatewayTransportError(
+                "required tool choice requires frozen endpoint admission support",
+                failure_metadata={"error_type": "unsupported_tool_choice"},
+            )
+        if not request.admission_capabilities_enforced:
+            return
+        if request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT:
+            if request.admission_supports_structured_output is not True:
+                raise GatewayTransportError(
+                    "endpoint admission does not support structured output",
+                    failure_metadata={"error_type": "unsupported_invocation_mode"},
+                )
+            return
+        if request.admission_supports_tools is not True:
+            raise GatewayTransportError(
+                "endpoint admission does not support tools",
+                failure_metadata={"error_type": "unsupported_invocation_mode"},
+            )
 
     def _authorize_pre_dispatch_cost(
         self,
@@ -350,17 +421,16 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         request_price = self._optional_number(
             max_price.get("request", self._request_price_usd), "provider.max_price.request"
         )
-        paid_private = provider.get("zdr") is True
-        # The profile boundary adds max_price from the frozen admission.  A
-        # bare direct adapter remains useful only for local deterministic
-        # tests; it is rejected by PolicyGateway when used remotely without a
-        # profile, so do not reinterpret an old test stub as a paid admission.
-        admitted_pricing = bool(max_price)
-        if paid_private and admitted_pricing and (
+        paid_or_admitted_remote = (
+            provider.get("zdr") is True
+            or request.admission_capabilities_enforced
+            or isinstance(provider.get("max_price"), Mapping)
+        )
+        if paid_or_admitted_remote and (
             input_price is None or output_price is None or request_price is None
         ):
             raise GatewayTransportError(
-                "paid private route omitted admitted price limits",
+                "paid or admitted remote route omitted admitted price limits",
                 failure_metadata={"error_type": "missing_admitted_prices"},
                 no_cross_provider_fallback=True,
             )
@@ -397,10 +467,27 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             },
         }
 
-    @staticmethod
-    def _estimate_input_tokens(request: GatewayRequest) -> int:
-        chars = sum(len(message.role) + len(message.content) for message in request.messages)
-        return max(1, ceil(chars / 4))
+    def _estimate_input_tokens(self, payload: Mapping[str, object]) -> int:
+        """Estimate all provider-visible request bytes before network access.
+
+        A reviewed route can inject its tokenizer.  Without one, count every
+        serialized byte as a possible token and add a 25% margin.  This is
+        intentionally pessimistic for JSON-heavy tool and schema payloads;
+        an estimate must never make a budget authorization less strict.
+        """
+
+        serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        counter = self._reviewed_token_counter
+        if counter is not None:
+            counted = counter(serialized)
+            if isinstance(counted, bool) or not isinstance(counted, int) or counted < 1:
+                raise GatewayTransportError(
+                    "reviewed tokenizer returned an invalid token count",
+                    failure_metadata={"error_type": "invalid_tokenizer_result"},
+                )
+            return counted
+        serialized_bytes = len(serialized.encode("utf-8"))
+        return max(1, ceil(serialized_bytes * 1.25))
 
     def _parse_success(
         self,
@@ -408,6 +495,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         request: GatewayRequest,
         identity: Mapping[str, object],
         budget: GenerationBudget,
+        estimated_input_tokens: int,
     ) -> dict[str, object]:
         choices = decoded.get("choices")
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], Mapping):
@@ -447,6 +535,8 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                         failure_metadata={"error_type": "invalid_tool_call"},
                     )
                 calls.append({"name": function["name"], "arguments": function.get("arguments", "{}")})
+        if calls:
+            self._validate_returned_tool_calls(request, calls)
         content = message.get("content")
         if isinstance(content, list):
             content = "".join(
@@ -454,13 +544,34 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             )
         if content is None and calls:
             content = ""
+        if request.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED and not calls:
+            raise GatewayTransportError(
+                "required-tool response omitted a tool call",
+                failure_metadata={"error_type": "missing_required_tool_call"},
+            )
         if not isinstance(content, str) or (not content.strip() and not calls):
             raise GatewayTransportError(
                 "direct model gateway response content is blank",
                 failure_metadata={"error_type": "blank_content"},
             )
         typed_payload: Mapping[str, object] | None = None
-        if request.route.schema_mode == "typed_json" and content.strip():
+        # A valid tool call is sufficient in either tool mode.  Providers may
+        # include explanatory text beside one, and treating that text as a
+        # mandatory JSON payload would incorrectly reject an otherwise
+        # reviewed call.  Structured-output responses, and optional-tool
+        # responses without a call, still require typed JSON.
+        parse_typed_content = content.strip() and (
+            request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT
+            or (
+                request.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL
+                and not calls
+            )
+            or (
+                request.route.schema_mode == "typed_json"
+                and not calls
+            )
+        )
+        if parse_typed_content:
             try:
                 parsed = json.loads(content)
             except json.JSONDecodeError as exc:
@@ -473,7 +584,22 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                     "direct model gateway typed output must be an object",
                     failure_metadata={"error_type": "typed_output_not_object"},
                 )
-            typed_payload = parsed
+            try:
+                typed_payload = validate_gateway_output(request.output_kind, parsed)
+            except (TypeError, ValueError) as exc:
+                raise GatewayTransportError(
+                    "direct model gateway typed output violates the selected schema",
+                    failure_metadata={"error_type": "invalid_typed_output"},
+                ) from exc
+        if (
+            request.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL
+            and not calls
+            and typed_payload is None
+        ):
+            raise GatewayTransportError(
+                "optional-tool response omitted both a tool call and typed output",
+                failure_metadata={"error_type": "invalid_optional_tool_response"},
+            )
         usage = decoded.get("usage")
         usage = usage if isinstance(usage, Mapping) else {}
         billed_cost = self._optional_number(usage.get("cost"), "usage.cost")
@@ -541,6 +667,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             else "provider.usage",
             "usage": dict(usage),
             "usage_cost_usd": billed_cost,
+            "estimated_input_tokens": estimated_input_tokens,
             "expected_cost_usd": expected_cost,
             "cost_difference_usd": billed_cost - expected_cost if billed_cost is not None else None,
             "cost_details": dict(cost_details) if isinstance(cost_details, Mapping) else {},
@@ -553,6 +680,8 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             "content": content,
             "typed_payload": typed_payload,
             "tool_calls": tuple(calls),
+            "invocation_mode": request.invocation_mode,
+            "tool_used": bool(calls),
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "estimated_cost_usd": estimated_cost,
@@ -601,6 +730,125 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             "cost_metadata": cost_metadata,
             "routing_metadata": dict(identity["routing_metadata"]),
         }
+
+    @classmethod
+    def _validate_returned_tool_calls(
+        cls,
+        request: GatewayRequest,
+        calls: Sequence[Mapping[str, object]],
+    ) -> None:
+        reviewed_tools: dict[str, GatewayTool] = {
+            tool.name.strip().lower(): tool for tool in request.tools
+        }
+        for call in calls:
+            name = call.get("name")
+            if not isinstance(name, str) or name.strip().lower() not in reviewed_tools:
+                raise GatewayTransportError(
+                    "direct model gateway returned an unreviewed tool",
+                    failure_metadata={"error_type": "unreviewed_tool_call"},
+                )
+            arguments = call.get("arguments")
+            if isinstance(arguments, Mapping):
+                parsed_arguments: Mapping[str, object] = arguments
+            elif isinstance(arguments, str):
+                try:
+                    decoded_arguments = json.loads(arguments)
+                except json.JSONDecodeError as exc:
+                    raise GatewayTransportError(
+                        "direct model gateway tool arguments are malformed JSON",
+                        failure_metadata={"error_type": "malformed_tool_arguments"},
+                    ) from exc
+                if not isinstance(decoded_arguments, Mapping):
+                    raise GatewayTransportError(
+                        "direct model gateway tool arguments must be an object",
+                        failure_metadata={"error_type": "invalid_tool_arguments"},
+                    )
+                parsed_arguments = decoded_arguments
+            else:
+                raise GatewayTransportError(
+                    "direct model gateway tool arguments are required",
+                    failure_metadata={"error_type": "invalid_tool_arguments"},
+                )
+            cls._validate_tool_schema(
+                parsed_arguments,
+                reviewed_tools[name.strip().lower()].input_schema,
+            )
+
+    @classmethod
+    def _validate_tool_schema(
+        cls,
+        value: object,
+        schema: Mapping[str, object],
+        path: str = "$",
+    ) -> None:
+        schema_type = schema.get("type")
+        if schema_type == "object":
+            if not isinstance(value, Mapping):
+                raise GatewayTransportError(
+                    f"tool arguments at {path} must be an object",
+                    failure_metadata={"error_type": "invalid_tool_arguments"},
+                )
+            properties = schema.get("properties", {})
+            if not isinstance(properties, Mapping):
+                raise GatewayTransportError(
+                    "reviewed tool schema properties are invalid",
+                    failure_metadata={"error_type": "invalid_tool_schema"},
+                )
+            required = schema.get("required", ())
+            for name in required if isinstance(required, (list, tuple)) else ():
+                if name not in value:
+                    raise GatewayTransportError(
+                        f"tool arguments missing required field: {name}",
+                        failure_metadata={"error_type": "invalid_tool_arguments"},
+                    )
+            if schema.get("additionalProperties", True) is False:
+                unknown = set(value) - set(properties)
+                if unknown:
+                    raise GatewayTransportError(
+                        "tool arguments contain unknown fields",
+                        failure_metadata={"error_type": "invalid_tool_arguments"},
+                    )
+            for name, child_schema in properties.items():
+                if name in value and isinstance(child_schema, Mapping):
+                    cls._validate_tool_schema(value[name], child_schema, f"{path}.{name}")
+            return
+        if schema_type == "array":
+            if not isinstance(value, (list, tuple)):
+                raise GatewayTransportError(
+                    f"tool arguments at {path} must be an array",
+                    failure_metadata={"error_type": "invalid_tool_arguments"},
+                )
+            item_schema = schema.get("items")
+            if isinstance(item_schema, Mapping):
+                for index, item in enumerate(value):
+                    cls._validate_tool_schema(item, item_schema, f"{path}[{index}]")
+            return
+        if schema_type == "string" and not isinstance(value, str):
+            raise GatewayTransportError(
+                f"tool arguments at {path} must be a string",
+                failure_metadata={"error_type": "invalid_tool_arguments"},
+            )
+        if schema_type == "integer" and (isinstance(value, bool) or not isinstance(value, int)):
+            raise GatewayTransportError(
+                f"tool arguments at {path} must be an integer",
+                failure_metadata={"error_type": "invalid_tool_arguments"},
+            )
+        if schema_type == "number" and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise GatewayTransportError(
+                f"tool arguments at {path} must be a number",
+                failure_metadata={"error_type": "invalid_tool_arguments"},
+            )
+        if schema_type == "boolean" and not isinstance(value, bool):
+            raise GatewayTransportError(
+                f"tool arguments at {path} must be boolean",
+                failure_metadata={"error_type": "invalid_tool_arguments"},
+            )
+        allowed = schema.get("enum")
+        if isinstance(allowed, (list, tuple)) and value not in allowed:
+            raise GatewayTransportError(
+                f"tool arguments at {path} contain a value outside the enum",
+                failure_metadata={"error_type": "invalid_tool_arguments"},
+            )
 
     @classmethod
     def _parse_routing_identity(

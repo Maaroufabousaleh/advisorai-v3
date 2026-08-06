@@ -69,6 +69,10 @@ def _admission() -> ProviderEndpointAdmission:
         inventory_timestamp=datetime(2026, 8, 6, tzinfo=UTC),
         terms_reference="inventory:novita:2026-08-06",
         admission_version="v1",
+        supports_tools=True,
+        supports_tool_choice_required=True,
+        supports_structured_output=True,
+        allow_response_format_with_tools=False,
     )
 
 

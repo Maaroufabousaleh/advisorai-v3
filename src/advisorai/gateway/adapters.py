@@ -198,6 +198,8 @@ class TypedGatewayAdapter:
             content=content,
             typed_payload=typed_payload if isinstance(typed_payload, Mapping) else None,
             tool_calls=tuple(raw_tool_calls),
+            invocation_mode=request.invocation_mode,
+            tool_used=bool(raw_tool_calls),
             latency_ms=elapsed,
             input_tokens=token_values["input_tokens"],
             output_tokens=token_values["output_tokens"],

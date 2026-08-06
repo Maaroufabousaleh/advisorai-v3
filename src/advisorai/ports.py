@@ -80,6 +80,14 @@ class GatewayOutputKind(StrEnum):
     COUNTERARGUMENT = "counterargument"
 
 
+class GatewayInvocationMode(StrEnum):
+    """The one admitted interaction shape for a model generation."""
+
+    STRUCTURED_OUTPUT = "structured_output"
+    TOOL_OPTIONAL = "tool_optional"
+    TOOL_REQUIRED = "tool_required"
+
+
 class GenerationBudget(BaseModel):
     """Caller-visible limits for one model generation.
 
@@ -324,6 +332,7 @@ class GatewayRequest(BaseModel):
     route: GatewayRoute
     messages: tuple[GatewayMessage, ...]
     tools: tuple[GatewayTool, ...] = ()
+    invocation_mode: GatewayInvocationMode = GatewayInvocationMode.STRUCTURED_OUTPUT
     prompt_version: str
     tool_version: str | None = None
     privacy_class: str = "non_secret"
@@ -344,6 +353,12 @@ class GatewayRequest(BaseModel):
     # protocol.  A remote adapter is never eligible for the legacy path, so a
     # caller cannot use this field to bypass a provider admission.
     response_format_with_tools_admitted: bool = False
+    # These capability observations are populated only by an admitted
+    # RouteProfile.  Direct/local test adapters leave enforcement disabled.
+    admission_capabilities_enforced: bool = False
+    admission_supports_tools: bool | None = None
+    admission_supports_tool_choice_required: bool | None = None
+    admission_supports_structured_output: bool | None = None
     requested_provider_selector: str | None = None
     requested_model: str | None = None
     requested_gateway: str | None = None
@@ -392,6 +407,26 @@ class GatewayRequest(BaseModel):
             raise ValueError("gateway policy hashes must be lowercase SHA-256 digests")
         return normalized
 
+    @model_validator(mode="before")
+    @classmethod
+    def infer_legacy_invocation_mode(cls, value: object) -> object:
+        """Make pre-mode callers explicit without weakening the invariants.
+
+        Existing typed requests that supplied tools predate invocation modes;
+        they are safely interpreted as optional-tool calls. New callers can
+        select a mode explicitly and are then held to its exact contract.
+        """
+
+        if isinstance(value, Mapping) and "invocation_mode" not in value:
+            values = dict(value)
+            values["invocation_mode"] = (
+                GatewayInvocationMode.TOOL_OPTIONAL
+                if values.get("tools")
+                else GatewayInvocationMode.STRUCTURED_OUTPUT
+            )
+            return values
+        return value
+
     @model_validator(mode="after")
     def require_typed_request(self) -> GatewayRequest:
         if not self.messages:
@@ -400,6 +435,13 @@ class GatewayRequest(BaseModel):
             raise ValueError("gateway requests require a prompt version")
         if self.tool_version is not None and not self.tool_version.strip():
             raise ValueError("gateway tool version cannot be blank")
+        if self.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT and self.tools:
+            raise ValueError("structured-output gateway requests cannot expose tools")
+        if self.invocation_mode in {
+            GatewayInvocationMode.TOOL_OPTIONAL,
+            GatewayInvocationMode.TOOL_REQUIRED,
+        } and not self.tools:
+            raise ValueError("tool invocation modes require at least one reviewed tool")
         forbidden_provider_options = {
             "model",
             "messages",
@@ -407,6 +449,7 @@ class GatewayRequest(BaseModel):
             "api_key",
             "authorization",
             "endpoint_variants",
+            "tool_choice",
         }
         def has_forbidden_provider_option(value: object) -> bool:
             if isinstance(value, Mapping):
@@ -484,6 +527,8 @@ class GatewayResponse(BaseModel):
     content: str = ""
     typed_payload: Mapping[str, object] | None = None
     tool_calls: tuple[Mapping[str, object], ...] = ()
+    invocation_mode: GatewayInvocationMode | None = None
+    tool_used: bool | None = None
     latency_ms: int = Field(ge=0)
     input_tokens: int = Field(ge=0)
     output_tokens: int = Field(ge=0)
@@ -549,6 +594,8 @@ class GatewayResponse(BaseModel):
             raise ValueError("gateway response requires text, typed payload, or tool calls")
         if self.authoritative:
             raise ValueError("model gateway responses cannot be authoritative")
+        if self.tool_used is not None and self.tool_used != bool(self.tool_calls):
+            raise ValueError("gateway tool_used must agree with returned tool calls")
         for call in self.tool_calls:
             if not isinstance(call, Mapping):
                 raise ValueError("gateway tool calls must be mapping objects")

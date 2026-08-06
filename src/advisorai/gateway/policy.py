@@ -25,6 +25,7 @@ from advisorai.contracts.core import is_forbidden_authority_action, normalize_au
 from advisorai.ports import (
     DecisionImpact,
     GatewayDataClass,
+    GatewayInvocationMode,
     GatewayMessage,
     GatewayOutputKind,
     GatewayRequest,
@@ -292,10 +293,12 @@ class ProviderEndpointAdmission(BaseModel):
     terms_reference: str = Field(min_length=1)
     admission_version: str = Field(min_length=1)
     policy_hash: str | None = None
-    # Most OpenAI-compatible endpoints support either tool calls or strict
-    # JSON schema output.  Combining them is admitted only with explicit,
-    # frozen endpoint evidence.
-    allow_response_format_with_tools: bool = False
+    # Invocation capabilities are frozen with the endpoint inventory.  They
+    # are not inferred from a model name or a provider's current behaviour.
+    supports_tools: bool
+    supports_tool_choice_required: bool
+    supports_structured_output: bool
+    allow_response_format_with_tools: bool
 
     @field_validator(
         "provider_selector_slug",
@@ -351,6 +354,16 @@ class ProviderEndpointAdmission(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("provider endpoint inventory timestamp must include a timezone")
         return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def validate_invocation_capabilities(self) -> ProviderEndpointAdmission:
+        if self.supports_tool_choice_required and not self.supports_tools:
+            raise ValueError("required tool choice needs tools capability")
+        if self.allow_response_format_with_tools and (
+            not self.supports_tools or not self.supports_structured_output
+        ):
+            raise ValueError("combined response format needs tools and structured-output capabilities")
+        return self
 
     @property
     def request_price_usd(self) -> float:
@@ -1171,6 +1184,8 @@ class PolicyGateway:
                     "terms_verified": selected.terms.terms_verified,
                     "terms_reference": selected.terms.terms_reference,
                     "requested_route": attempt_request.route,
+                    "invocation_mode": candidate.invocation_mode,
+                    "tool_used": bool(response.tool_calls),
                     # Local legacy adapters may still supply an observed
                     # identity.  Never rewrite it from the requested route.
                     "actual_provider": response.actual_provider,
@@ -1311,6 +1326,8 @@ class PolicyGateway:
                         "terms_verified": profile.terms.terms_verified,
                         "terms_reference": profile.terms.terms_reference,
                         "requested_route": attempt_request.route,
+                        "invocation_mode": request.invocation_mode,
+                        "tool_used": bool(response.tool_calls),
                         "actual_provider": response.actual_provider,
                         "actual_model": response.actual_model,
                         "actual_gateway": response.actual_gateway or response.route.gateway,
@@ -1477,6 +1494,8 @@ class PolicyGateway:
             data_class=decision.data_class,
             decision_impact=decision.decision_impact,
             output_kind=request.output_kind,
+            invocation_mode=request.invocation_mode,
+            tool_used=False,
             policy_version=self.config.policy_version,
             redaction_policy_version=self.config.redaction_policy_version,
             redaction_policy_hash=request.redaction_policy_hash,
@@ -1499,10 +1518,20 @@ class PolicyGateway:
         if adapter_route is not None and adapter_route != request.route:
             updates["route"] = adapter_route
         if provider_policy is not None:
+            admission = provider_policy.endpoint_admission
+            if admission is not None:
+                PolicyGateway._validate_invocation_admission(request, admission)
             updates["provider_options"] = provider_policy.request_options(adapter_route or request.route)
             updates["response_format_with_tools_admitted"] = bool(
-                provider_policy.endpoint_admission
-                and provider_policy.endpoint_admission.allow_response_format_with_tools
+                admission and admission.allow_response_format_with_tools
+            )
+            updates["admission_capabilities_enforced"] = admission is not None
+            updates["admission_supports_tools"] = admission.supports_tools if admission else None
+            updates["admission_supports_tool_choice_required"] = (
+                admission.supports_tool_choice_required if admission else None
+            )
+            updates["admission_supports_structured_output"] = (
+                admission.supports_structured_output if admission else None
             )
             if "generation_budget" not in request.model_fields_set:
                 updates["generation_budget"] = _PHASE0_REMOTE_GENERATION_BUDGET
@@ -1512,6 +1541,23 @@ class PolicyGateway:
         # the caller need not pre-populate a contributor->private fallback.
         # Provider-specific chains still enforce their own fallback allowlist.
         return request.model_copy(update=updates)
+
+    @staticmethod
+    def _validate_invocation_admission(
+        request: GatewayRequest,
+        admission: ProviderEndpointAdmission,
+    ) -> None:
+        if request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT:
+            if not admission.supports_structured_output:
+                raise GatewayPolicyError("endpoint admission does not support structured output")
+            return
+        if not admission.supports_tools:
+            raise GatewayPolicyError("endpoint admission does not support tools")
+        if (
+            request.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED
+            and not admission.supports_tool_choice_required
+        ):
+            raise GatewayPolicyError("endpoint admission does not support required tool choice")
 
     def _validate_tools(self, tools: tuple[GatewayTool, ...], tier: GatewayTier) -> None:
         self._validate_tools_for_route(
@@ -1599,13 +1645,28 @@ class PolicyGateway:
                 raise GatewayPolicyError("provider response endpoint differs from its requested route")
         if response.authoritative:
             raise GatewayPolicyError("model output cannot be authoritative")
+        if response.invocation_mode is not None and response.invocation_mode is not request.invocation_mode:
+            raise GatewayPolicyError("provider response invocation mode differs from the request")
+        if request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT:
+            if not response.tool_calls and response.typed_payload is None:
+                raise GatewayPolicyError("structured-output responses require typed structured payloads")
+        elif request.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED:
+            if not response.tool_calls:
+                raise GatewayPolicyError("required-tool responses require at least one tool call")
+        elif request.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL:
+            if not response.tool_calls and response.typed_payload is None:
+                raise GatewayPolicyError("optional-tool responses require a tool call or typed payload")
         if response.typed_payload is None and not response.tool_calls:
             raise GatewayPolicyError(
                 "governed model outputs must be typed structured payloads or approved tool calls"
             )
         if tier is GatewayTier.CONTRIBUTOR and response.typed_payload is None:
             raise GatewayPolicyError("contributor outputs must be typed structured payloads")
-        if request.output_kind is not GatewayOutputKind.GENERIC and response.typed_payload is None:
+        if (
+            request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT
+            and request.output_kind is not GatewayOutputKind.GENERIC
+            and response.typed_payload is None
+        ):
             raise GatewayPolicyError(
                 f"{request.output_kind.value} output requires a typed payload"
             )
@@ -1644,6 +1705,11 @@ class PolicyGateway:
                 raise GatewayPolicyError(
                     f"model output does not satisfy {request.output_kind.value} schema"
                 ) from exc
+        if (
+            request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT
+            and response.tool_calls
+        ):
+            raise GatewayPolicyError("structured-output responses cannot contain tool calls")
 
     @classmethod
     def _validate_output_mapping(cls, value: object) -> None:

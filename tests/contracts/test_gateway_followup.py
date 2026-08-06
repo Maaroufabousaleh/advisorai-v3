@@ -30,6 +30,7 @@ from advisorai.ports import (
     GatewayRoute,
     GatewayTier,
     GatewayTool,
+    GenerationBudget,
     RouteTier,
 )
 
@@ -232,6 +233,10 @@ def test_openrouter_metadata_header_exact_provider_tag_and_billed_cost_are_prese
     response = adapter.complete(
         _request(
             route,
+            generation_budget=GenerationBudget(
+                max_expected_cost_usd=0.1,
+                max_billed_cost_usd=0.1,
+            ),
             provider_options={
                 "provider": {
                     "only": ["private-provider"],
