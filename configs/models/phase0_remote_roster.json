@@ -1,0 +1,124 @@
+{
+  "report_hash": "e0b9f28c3333faee9ebb9f703a5178b9cf95f4412c9475484649bedb66d527f1",
+  "report_reference": "artifacts/phase0/remote-model-bakeoff/20260807T234824.109668Z-ebfa8d5a/remote-model-bakeoff.json",
+  "roles": {
+    "blocked_execution": {
+      "authority": "deterministic_only",
+      "state": "blocked"
+    },
+    "contributor_public": {
+      "candidate": "openrouter/free",
+      "reason": "dynamic provider/model pool has no reproducible endpoint admission",
+      "state": "blocked"
+    },
+    "private_reviewer": [
+      {
+        "allow_fallbacks": false,
+        "candidate": "private-gpt-oss-coreweave",
+        "data_collection": "deny",
+        "inventory_hash": "b8c3cb8a219af9a3ec859d67aeab2baa8b1697c8a193808198a72b062299b8b5",
+        "observed_successes": [],
+        "probe_status": [
+          "failed",
+          "failed",
+          "failed"
+        ],
+        "provider_selector": "coreweave/fp4",
+        "requested_model": "openai/gpt-oss-20b",
+        "revision": [
+          "openai/gpt-oss-20b"
+        ],
+        "state": "quarantined_or_failed",
+        "zdr": true
+      }
+    ],
+    "private_worker": [
+      {
+        "allow_fallbacks": false,
+        "candidate": "private-ling-novita",
+        "data_collection": "deny",
+        "inventory_hash": "b8c3cb8a219af9a3ec859d67aeab2baa8b1697c8a193808198a72b062299b8b5",
+        "observed_successes": [
+          {
+            "billed_cost_usd": 1.47e-06,
+            "endpoint_selector_proof": "sha256:a4f3ae6e383f18f9064d3082661cc2c812551f4747cb8c78275bcf9bb1433acf",
+            "invocation": "structured_output",
+            "observed_provider_name": "Novita",
+            "resolved_endpoint_model": "inclusionai/ling-2.6-flash-20260421",
+            "tool_called": false,
+            "tool_execution_status": "not_executed"
+          },
+          {
+            "billed_cost_usd": 3.01e-06,
+            "endpoint_selector_proof": "sha256:a4f3ae6e383f18f9064d3082661cc2c812551f4747cb8c78275bcf9bb1433acf",
+            "invocation": "tool_optional",
+            "observed_provider_name": "Novita",
+            "resolved_endpoint_model": "inclusionai/ling-2.6-flash-20260421",
+            "tool_called": true,
+            "tool_execution_status": "not_executed"
+          },
+          {
+            "billed_cost_usd": 3.09e-06,
+            "endpoint_selector_proof": "sha256:a4f3ae6e383f18f9064d3082661cc2c812551f4747cb8c78275bcf9bb1433acf",
+            "invocation": "tool_required",
+            "observed_provider_name": "Novita",
+            "resolved_endpoint_model": "inclusionai/ling-2.6-flash-20260421",
+            "tool_called": true,
+            "tool_execution_status": "not_executed"
+          }
+        ],
+        "probe_status": [
+          "measured",
+          "measured",
+          "measured"
+        ],
+        "provider_selector": "novita",
+        "requested_model": "inclusionai/ling-2.6-flash",
+        "revision": [
+          "inclusionai/ling-2.6-flash-20260421"
+        ],
+        "state": "pending_quality_and_stability",
+        "zdr": true
+      },
+      {
+        "allow_fallbacks": false,
+        "candidate": "private-deepseek-digitalocean",
+        "data_collection": "deny",
+        "inventory_hash": "b8c3cb8a219af9a3ec859d67aeab2baa8b1697c8a193808198a72b062299b8b5",
+        "observed_successes": [
+          {
+            "billed_cost_usd": 1.0248e-05,
+            "endpoint_selector_proof": "sha256:d29c7c548b83660c059ed6a368a4398a215fc8878e3b16e153d4e7073feb2570",
+            "invocation": "structured_output",
+            "observed_provider_name": "DigitalOcean",
+            "resolved_endpoint_model": "deepseek/deepseek-v4-flash-20260423",
+            "tool_called": false,
+            "tool_execution_status": "not_executed"
+          },
+          {
+            "billed_cost_usd": 3.444e-05,
+            "endpoint_selector_proof": "sha256:d29c7c548b83660c059ed6a368a4398a215fc8878e3b16e153d4e7073feb2570",
+            "invocation": "tool_optional",
+            "observed_provider_name": "DigitalOcean",
+            "resolved_endpoint_model": "deepseek/deepseek-v4-flash-20260423",
+            "tool_called": true,
+            "tool_execution_status": "not_executed"
+          }
+        ],
+        "probe_status": [
+          "measured",
+          "measured",
+          "failed"
+        ],
+        "provider_selector": "digitalocean",
+        "requested_model": "deepseek/deepseek-v4-flash",
+        "revision": [
+          "deepseek/deepseek-v4-flash-20260423"
+        ],
+        "state": "pending_quality_and_stability",
+        "zdr": true
+      }
+    ]
+  },
+  "schema_version": "phase0-remote-roster-v1"
+}

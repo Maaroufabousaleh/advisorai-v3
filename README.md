@@ -44,19 +44,13 @@ Implementation sequencing and non-negotiable phase gates are in
 The ignored [`secrets.env`](secrets.env) file is the single blank-valued
 credential template for gateway providers, optional data sources, paper/testnet
 venue adapters, archive remotes, checkpoint registries, and orchestration
-services. Fill only the entries for components that have passed their phase gate,
-then load it in the shell that starts the process:
-
-```bash
-set -a
-source ./secrets.env
-set +a
-```
-
-The transition implementation parses provider credentials through a typed,
-allowlisted loader and passes them only to the owning real-data/LLM/paper
+services. Fill only the entries for components that have passed their phase
+gate. Do not source this master inventory into a shell or process environment:
+that would expose unrelated credentials to child processes and third-party
+libraries. The transition implementation parses provider credentials through a
+typed, allowlisted loader and passes them only to the owning real-data/LLM/paper
 transport. It rejects live environments, transfer/withdrawal paths, and
-production endpoints. Prefer validating the file without shell execution:
+production endpoints. Validate the file without shell execution:
 
 ```bash
 uv run python scripts/check_transition_config.py \

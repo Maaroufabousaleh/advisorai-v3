@@ -1,0 +1,100 @@
+# Phase 0 remote-model bake-off
+
+This workstream measures remote text models only through the accepted
+`PolicyGateway`. It does not replace or weaken the gateway, and it never gives
+a model access to broker, order, portfolio, risk, reconciliation, or execution
+tools.
+
+## Route roles
+
+| Role | Permitted data | Admission rule |
+| --- | --- | --- |
+| `CONTRIBUTOR_PUBLIC` | Public or synthetic text | A dynamic free router is recorded as non-reproducible unless a frozen endpoint admission exists. |
+| `PRIVATE_WORKER` | Sanitized internal research | Exact provider selector, model alias, resolved model, endpoint proof, ZDR/no-training, no fallback, and billed-cost admission. |
+| `PRIVATE_REVIEWER` | Minimal confidential synthesis | The same private controls, with a stronger reviewed endpoint and portfolio-influencing requests routed here. |
+| `BLOCKED_EXECUTION` | Secrets, orders, balances, positions, risk and broker actions | Deterministic systems only; no LLM route exists. |
+
+The caller supplies a task classification and invocation mode, not a provider
+identity. Exact route profiles are built from a live, sanitized OpenRouter
+inventory artifact. Provider display names (for example `Novita`) remain
+separate from selector slugs (for example `novita`), and a resolved endpoint
+model is never inferred from either one.
+
+## Running a bounded probe
+
+The acquisition script reads `secrets.env` without sourcing it and requests
+only the `DIRECT_LLM` credential scope. It writes no credentials or raw
+provider errors:
+
+```bash
+uv run python scripts/run_remote_model_bakeoff.py \
+  --secrets /home/maaro/.config/advisorai-v3/secrets.env
+```
+
+The spend budget is:
+
+```text
+min(USD 0.25, 25% of the read-only provider limit remaining)
+```
+
+Every dispatch also receives the Phase-0 per-call ceiling of USD 0.001,
+256 output tokens, two same-route attempts, and a 30-second total deadline.
+The script reserves that ceiling before dispatch and records actual billed
+cost from `usage.cost` separately.
+
+## Current evidence checkpoint
+
+The first live inventory was collected on 2026-08-07. It admitted these exact
+private candidates for probing:
+
+* `novita` / `inclusionai/ling-2.6-flash`, resolved
+  `inclusionai/ling-2.6-flash-20260421`;
+* `coreweave/fp4` / `openai/gpt-oss-20b`, resolved
+  `openai/gpt-oss-20b`;
+* `digitalocean` / `deepseek/deepseek-v4-flash`, resolved
+  `deepseek/deepseek-v4-flash-20260423`.
+
+`openrouter/free` is retained as a public contributor candidate but remains
+blocked from reproducible admission because its provider and model pool change
+between requests. This is an identity/reproducibility decision, not a quality
+claim.
+
+The latest bounded run measured all three invocation modes for Ling/Novita.
+Structured, tool-optional, and tool-required calls were accepted at
+approximately `$0.00000486`, `$0.00000301`, and `$0.00000309`; the required-tool
+response contained a validated `read_evidence` call and remained
+`tool_execution_status=not_executed`. DeepSeek/DigitalOcean produced one valid
+structured response in an earlier bounded run, while its latest tool and
+structured probes—and all GPT-OSS/CoreWeave probes—were recorded as gateway
+abstentions without actual identities. These are short reliability observations,
+not quality or production-selection claims.
+
+Run-scoped sanitized evidence is written below:
+
+```text
+artifacts/phase0/remote-model-bakeoff/<run-id>/inventory.json
+artifacts/phase0/remote-model-bakeoff/<run-id>/remote-model-bakeoff.json
+configs/models/phase0_remote_roster.json
+```
+
+The current sanitized report and inventory hashes are stored in that roster.
+The run reserved USD 0.009 of the USD 0.25/remaining-balance cap; no route is
+selected for production from this short evidence alone.
+
+Reports contain requested and observed identities, endpoint-selection proof,
+latency, token counts, billed cost, safe failure classes, and whether a tool
+was called. They explicitly record `tool_execution_status=not_executed`; a
+gateway probe never claims that a deterministic evidence tool ran.
+
+## Admission and selection
+
+A successful probe is not production approval. A route remains a candidate
+until it passes repeated quality, reliability, privacy, cost, and latency
+benchmarks. Endpoint drift, missing metadata, unsupported invocation modes,
+429/503 exhaustion, missing billed cost, or unknown identity causes a truthful
+failure/abstention record. There is no fallback from a private route to the
+public contributor pool.
+
+Remote results must be interpreted together with the local model roster and
+the Phase-0 stability evidence. Live-capital deployment remains explicitly
+not approved.
