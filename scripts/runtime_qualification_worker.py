@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Small, dependency-free worker protocol for isolated runtime qualification.
+"""Small, core-dependency-free worker for isolated runtime qualification.
 
 The parent AdvisorAI process launches this file with the exact interpreter
 recorded in a :class:`RuntimePin`.  It intentionally imports no AdvisorAI
 modules and emits one sanitized JSON response.  Candidate-specific workers
-can implement the same protocol in their isolated environment; these fixture
-kinds let the harness be tested without downloading model weights.
+implement the same protocol in their isolated environment. Reviewed real
+worker kinds live here too, but their third-party imports occur only after the
+runtime identity and offline network guard have been established.
 """
 
 from __future__ import annotations
@@ -207,7 +208,16 @@ def _install_network_guard() -> None:
     def blocked(*_args: object, **_kwargs: object) -> object:
         raise _NetworkAttempt("network access attempted")
 
-    socket.socket = blocked  # type: ignore[assignment]
+    original_socket = socket.socket
+
+    class OfflineSocket(original_socket):
+        def connect(self, *_args: object, **_kwargs: object) -> None:
+            raise _NetworkAttempt("network access attempted")
+
+        def connect_ex(self, *_args: object, **_kwargs: object) -> int:
+            raise _NetworkAttempt("network access attempted")
+
+    socket.socket = OfflineSocket
     socket.create_connection = blocked  # type: ignore[assignment]
     socket.getaddrinfo = blocked  # type: ignore[assignment]
 
@@ -285,6 +295,95 @@ def _fixture_output(kind: str, payload: Any, counter: list[int], labels: list[st
     if isinstance(payload, list) and payload and isinstance(payload[0], list):
         return [[1.0] for _ in payload]
     return [1.0]
+
+
+def _ttm_r3_tensor(payload: Any) -> tuple[Any, bool]:
+    """Convert one or more exact TTM-R3 contexts to ``[B, 512, 1]``."""
+
+    import torch
+
+    is_batch = isinstance(payload, list) and bool(payload) and isinstance(payload[0], list)
+    rows = payload if is_batch else [payload]
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("TTM-R3 input must contain at least one context")
+    normalized: list[list[float]] = []
+    for row in rows:
+        if not isinstance(row, list) or len(row) != 512:
+            raise ValueError("TTM-R3 requires an exact 512-value context")
+        values = [float(value) for value in row]
+        if any(not float("-inf") < value < float("inf") for value in values):
+            raise ValueError("TTM-R3 input must contain finite values")
+        normalized.append(values)
+    return torch.tensor(normalized, dtype=torch.float32).unsqueeze(-1), is_batch
+
+
+def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    if kind != "ttm-r3" or request.get("family") != "ttm-r3":
+        raise ValueError("unsupported or mismatched admitted real-model worker kind")
+    cache_root = Path(str(request.get("cache_path", ""))).expanduser().resolve(strict=True)
+    model_root = cache_root / "model" if (cache_root / "model").is_dir() else cache_root
+    if model_root.is_symlink() or not model_root.is_dir():
+        raise ValueError("TTM-R3 cache root is invalid")
+
+    import torch
+    from tsfm_public.models.tinytimemixer import TinyTimeMixerForDecomposedPrediction
+
+    model, loading_info = TinyTimeMixerForDecomposedPrediction.from_pretrained(
+        str(model_root),
+        local_files_only=True,
+        output_loading_info=True,
+    )
+    key_groups = {
+        "missing": tuple(loading_info.get("missing_keys", ())),
+        "unexpected": tuple(loading_info.get("unexpected_keys", ())),
+        "mismatched": tuple(loading_info.get("mismatched_keys", ())),
+        "errors": tuple(loading_info.get("error_msgs", ())),
+    }
+    if any(key_groups.values()):
+        raise ValueError("TTM-R3 checkpoint loading identity mismatch")
+    model.eval()
+    parameter_count = sum(parameter.numel() for parameter in model.parameters())
+    if parameter_count != 1_414_514:
+        raise ValueError("TTM-R3 parameter identity mismatch")
+    return (
+        {"model": model, "torch": torch},
+        {
+            "loaded_model_class": type(model).__name__,
+            "loaded_parameter_count": parameter_count,
+            "checkpoint_missing_key_count": 0,
+            "checkpoint_unexpected_key_count": 0,
+            "checkpoint_mismatched_key_count": 0,
+        },
+    )
+
+
+def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
+    if kind != "ttm-r3":
+        raise ValueError("unsupported admitted real-model worker kind")
+    tensor, is_batch = _ttm_r3_tensor(payload)
+    with state["torch"].inference_mode():
+        output = state["model"](past_values=tensor)
+    predictions = output.prediction_outputs
+    if tuple(predictions.shape[1:]) != (30, 1):
+        raise ValueError("TTM-R3 returned an unexpected forecast shape")
+    values = predictions[..., 0].detach().cpu().tolist()
+    if any(not float("-inf") < float(value) < float("inf") for row in values for value in row):
+        raise ValueError("TTM-R3 returned a non-finite forecast")
+    return values if is_batch else values[0]
+
+
+def _gpu_memory_mib() -> tuple[float | None, float | None]:
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return None, None
+        return (
+            float(torch.cuda.memory_allocated() / (1024**2)),
+            float(torch.cuda.max_memory_allocated() / (1024**2)),
+        )
+    except Exception:  # pragma: no cover - optional GPU runtime
+        return None, None
 
 
 def _fallback_identity(request: dict[str, Any]) -> dict[str, Any]:
@@ -420,13 +519,21 @@ def main() -> int:
         applied_seeds: list[int] = []
         repeatability_policy = str(request.get("repeatability_policy", ""))
         requested_seed = request.get("repeatability_seed")
+        # Runtime libraries needed for identity (notably Torch) are already
+        # imported. This is the correct baseline for model unload recovery;
+        # the parent monitor still captures the complete process-tree peak.
+        rss_before_load = current_rss_mib()
         cold_started = time.perf_counter()
-        # The fixture worker represents a successfully loaded cached runtime.
-        # Real candidate workers replace this section with local_files_only
-        # model loading and retain the same sanitized response contract.
-        model: object | None = object()
+        model_metadata: dict[str, Any] = {}
+        real_state: dict[str, Any] | None = None
+        if kind == "ttm-r3":
+            real_state, model_metadata = _load_real_model(kind, request)
+            model: object | None = real_state.get("model")
+        else:
+            model = object()
         cold_load_ms = (time.perf_counter() - cold_started) * 1000
         rss_after_load = current_rss_mib()
+        vram_after_load, _ = _gpu_memory_mib()
         for _index in range(repeats):
             if repeatability_policy == "seeded_reproducible":
                 if not isinstance(requested_seed, int):
@@ -434,11 +541,19 @@ def main() -> int:
                 _apply_seed(requested_seed)
                 applied_seeds.append(requested_seed)
             started = time.perf_counter()
-            output = _fixture_output(kind, sample, counter, labels)
+            output = (
+                _infer_real_model(kind, real_state, sample)
+                if real_state is not None
+                else _fixture_output(kind, sample, counter, labels)
+            )
             durations.append((time.perf_counter() - started) * 1000)
             outputs.append(output)
         batch_started = time.perf_counter()
-        batch_output = _fixture_output(kind, batch, counter, labels)
+        batch_output = (
+            _infer_real_model(kind, real_state, batch)
+            if real_state is not None
+            else _fixture_output(kind, batch, counter, labels)
+        )
         batch_ms = (time.perf_counter() - batch_started) * 1000
         # Candidate workers must release model references and collect Python
         # garbage before recording the post-unload current RSS.  This fixture
@@ -455,10 +570,14 @@ def main() -> int:
         # its loaded model/tokenizer references.  Keep the explicit reference
         # deletion in the fixture protocol so post-unload RSS has the same
         # semantics before external runtimes are admitted.
+        if real_state is not None:
+            real_state["model"] = None
+            real_state.clear()
         model = None
         gc.collect()
         _clear_cuda_cache()
         rss_after_unload = current_rss_mib()
+        vram_after_unload, vram_peak = _gpu_memory_mib()
         digests = [json.dumps(item, sort_keys=True, separators=(",", ":")) for item in outputs]
         numbers = [float(item) for output in outputs for item in output if isinstance(item, (int, float))]
         dispersion = statistics.pstdev(numbers) if len(numbers) > 1 else 0.0
@@ -471,11 +590,12 @@ def main() -> int:
             "warm_durations_ms": durations,
             "batch_inference_ms": batch_ms,
             "batch_size": len(batch) if isinstance(batch, list) else 1,
+            "rss_before_load_mib": rss_before_load,
             "rss_after_load_mib": rss_after_load,
             "rss_after_unload_mib": rss_after_unload,
-            "vram_after_load_mib": None,
-            "vram_peak_mib": None,
-            "vram_after_unload_mib": None,
+            "vram_after_load_mib": vram_after_load,
+            "vram_peak_mib": vram_peak,
+            "vram_after_unload_mib": vram_after_unload,
             "unload_succeeded": True,
             "offline_cached_inference": True,
             "stochastic_repeat_count": repeats,
@@ -485,6 +605,7 @@ def main() -> int:
             "applied_seeds": applied_seeds,
             "stochastic_dispersion": dispersion,
             "stochastic_variation_observed": len(set(digests)) > 1 and dispersion > 0,
+            **model_metadata,
         }
         if kind == "malformed_success":
             response["outputs"] = []

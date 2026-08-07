@@ -585,6 +585,8 @@ class RuntimeResourceResult(BaseModel):
     vram_after_unload_mib: float | None = Field(default=None, ge=0)
     unload_succeeded: bool
     memory_released: bool = True
+    in_process_memory_released: bool = True
+    worker_process_terminated: bool = False
     rss_residual_mib: float | None = Field(default=None, ge=0)
     vram_residual_mib: float | None = Field(default=None, ge=0)
     resource_limit_passed: bool
@@ -666,6 +668,30 @@ class CandidateSpec(BaseModel):
         return self
 
 
+class LocalCandidateAdmission(BaseModel):
+    """Machine-specific checkpoint and isolated-runtime admission bundle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "advisorai.phase0.local-candidate-admission.v1"
+    candidate_name: str
+    checkpoint: CheckpointPin
+    runtime_pin: RuntimePin
+    created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_admission(self) -> LocalCandidateAdmission:
+        if self.schema_version != "advisorai.phase0.local-candidate-admission.v1":
+            raise ValueError("unsupported local candidate admission schema")
+        if not self.candidate_name.strip():
+            raise ValueError("local candidate admission requires a candidate name")
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
+            raise ValueError("local candidate admission timestamp must include a timezone")
+        if self.runtime_pin.status != RuntimeAdmissionStatus.APPROVED:
+            raise ValueError("local candidate admission requires an approved runtime")
+        return self
+
+
 class BenchmarkDataset(BaseModel):
     """Versioned, point-in-time-safe benchmark input interface."""
 
@@ -711,6 +737,36 @@ class BenchmarkDataset(BaseModel):
             task=ModelTask.FORECAST,
             source="synthetic://advisorai/phase0/forecast-v1",
             snapshot_id="synthetic-phase0-forecast-v1",
+            training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
+            inputs=inputs,
+            targets=targets,
+            content_hash=sha256(payload.encode()).hexdigest(),
+        )
+
+    @classmethod
+    def ttm_runtime_fixture(cls) -> BenchmarkDataset:
+        """Deterministic context-length fixture for TTM runtime validation.
+
+        This is deliberately not model-selection evidence. It only exercises
+        the admitted 512-point context and 30-step output contracts.
+        """
+
+        inputs = tuple(
+            100.0 + 0.015 * index + math.sin(index / 17.0) + 0.2 * math.cos(index / 5.0)
+            for index in range(1054)
+        )
+        targets = tuple(
+            100.0 + 0.015 * (index + 1) + math.sin((index + 1) / 17.0)
+            + 0.2 * math.cos((index + 1) / 5.0)
+            for index in range(1054)
+        )
+        payload = json.dumps({"inputs": inputs, "targets": targets}, separators=(",", ":"))
+        return cls(
+            dataset_id="advisorai-phase0-ttm-runtime-fixture",
+            version="1.0.0",
+            task=ModelTask.FORECAST,
+            source="synthetic://advisorai/phase0/ttm-runtime-contract-v1",
+            snapshot_id="ttm-runtime-contract-v1",
             training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
             inputs=inputs,
             targets=targets,
@@ -786,6 +842,8 @@ class RuntimeQualificationResult(BaseModel):
     one_inference_completed: bool = False
     batch_completed: bool = False
     network_access_attempted: bool = False
+    loaded_model_class: str | None = None
+    loaded_parameter_count: int | None = Field(default=None, ge=1)
     finbert_accuracy: float | None = Field(default=None, ge=0, le=1)
     finbert_per_label_accuracy: tuple[tuple[str, float], ...] = ()
     finbert_mean_confidence: float | None = Field(default=None, ge=0, le=1)
@@ -1113,6 +1171,7 @@ class RuntimeWorkerResponse(BaseModel):
     warm_durations_ms: tuple[float, ...] = ()
     batch_inference_ms: float = Field(default=0, ge=0)
     batch_size: int = Field(default=1, ge=1)
+    rss_before_load_mib: float = Field(default=0, ge=0)
     rss_after_load_mib: float = Field(default=0, ge=0)
     rss_after_unload_mib: float = Field(default=0, ge=0)
     vram_after_load_mib: float | None = Field(default=None, ge=0)
@@ -1129,6 +1188,11 @@ class RuntimeWorkerResponse(BaseModel):
     applied_seeds: tuple[int, ...] = ()
     stochastic_dispersion: float | None = Field(default=None, ge=0)
     stochastic_variation_observed: bool = False
+    loaded_model_class: str | None = None
+    loaded_parameter_count: int | None = Field(default=None, ge=1)
+    checkpoint_missing_key_count: int = Field(default=0, ge=0)
+    checkpoint_unexpected_key_count: int = Field(default=0, ge=0)
+    checkpoint_mismatched_key_count: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_worker_response(self) -> RuntimeWorkerResponse:
@@ -1152,6 +1216,7 @@ class _ProcessTreeMonitor:
         self.rss_before_mib = 0.0
         self.rss_peak_mib = 0.0
         self.samples = 0
+        self.seen_pids: set[int] = {pid}
 
     def _processes(self) -> tuple[psutil.Process, ...]:
         try:
@@ -1163,6 +1228,7 @@ class _ProcessTreeMonitor:
     def _sample(self) -> None:
         total = 0.0
         for process in self._processes():
+            self.seen_pids.add(process.pid)
             try:
                 total += process.memory_info().rss / (1024**2)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -1191,6 +1257,11 @@ class _ProcessTreeMonitor:
             self._thread.join(timeout=1)
         self._sample()
 
+    def all_processes_terminated(self) -> bool:
+        """Prove the worker and every observed child left no resident process."""
+
+        return all(not psutil.pid_exists(pid) for pid in self.seen_pids)
+
 
 def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
     try:
@@ -1215,20 +1286,27 @@ def network_blocked() -> Iterator[None]:
 
     original_socket = socket.socket
     original_create_connection = socket.create_connection
-
-    def blocked_socket(*args: object, **kwargs: object) -> object:
-        raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+    original_getaddrinfo = socket.getaddrinfo
 
     def blocked_connection(*args: object, **kwargs: object) -> object:
         raise NetworkAccessAttemptError("network access is disabled during offline qualification")
 
-    socket.socket = cast(Any, blocked_socket)
+    class OfflineSocket(original_socket):
+        def connect(self, *args: object, **kwargs: object) -> None:
+            raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+
+        def connect_ex(self, *args: object, **kwargs: object) -> int:
+            raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+
+    socket.socket = cast(Any, OfflineSocket)
     socket.create_connection = cast(Any, blocked_connection)
+    socket.getaddrinfo = cast(Any, blocked_connection)
     try:
         yield
     finally:
         socket.socket = original_socket
         socket.create_connection = original_create_connection
+        socket.getaddrinfo = original_getaddrinfo
 
 
 def sha256_file(path: Path) -> str:
@@ -1268,6 +1346,234 @@ def installed_environment_sha256(entries: Sequence[str] | None = None) -> str:
     """Hash the complete normalized installed-distribution inventory."""
 
     return sha256(_installed_environment_bytes(entries or _installed_environment_inventory())).hexdigest()
+
+
+def _isolated_worker_environment() -> dict[str, str]:
+    """Return the minimal, credential-free environment used for ML workers."""
+
+    allowed = {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT"}
+    environment = {key: value for key, value in os.environ.items() if key in allowed}
+    environment.update(
+        {
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+            "PYTHONNOUSERSITE": "1",
+        }
+    )
+    return environment
+
+
+def freeze_runtime_pin(
+    *,
+    project: str,
+    version_or_commit: str,
+    python_constraint: str,
+    dependencies: tuple[str, ...],
+    environment_path: Path,
+    lock_artifact_path: Path,
+    worker_script: Path,
+    worker_kind: str,
+    runner_version: str,
+    admission_directory: Path,
+    repository_root: Path | None = None,
+) -> RuntimePin:
+    """Attest a real isolated environment without importing it into core.
+
+    The complete installed-distribution inventory is generated independently
+    by the pinned interpreter. The returned pin remains machine-specific and
+    is intended for ignored immutable evidence, not portable source control.
+    """
+
+    root = (repository_root or Path.cwd()).resolve(strict=False)
+    environment_path = environment_path.expanduser().resolve(strict=False)
+    lock_artifact_path = lock_artifact_path.expanduser().resolve(strict=False)
+    worker_script = worker_script.expanduser().resolve(strict=False)
+    admission_directory = admission_directory.expanduser().resolve(strict=False)
+    for path, label in (
+        (environment_path, "runtime environment"),
+        (lock_artifact_path, "runtime lock"),
+        (admission_directory, "runtime admission evidence"),
+    ):
+        try:
+            path.relative_to(root)
+        except ValueError:
+            pass
+        else:
+            raise QualificationError(f"{label} must be outside the repository")
+    if environment_path.is_symlink() or not environment_path.is_dir():
+        raise QualificationError("runtime environment must be a real external directory")
+    if lock_artifact_path.is_symlink() or not lock_artifact_path.is_file():
+        raise QualificationError("runtime lock must be an immutable regular file")
+    if worker_script.is_symlink() or not worker_script.is_file():
+        raise QualificationError("runtime worker script is missing or symlinked")
+    admission_directory.mkdir(parents=True, exist_ok=True)
+    launcher = environment_path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if not launcher.exists() or launcher.is_dir():
+        raise QualificationError("isolated runtime Python launcher is missing")
+
+    inventory_process = subprocess.run(
+        [str(launcher), "-I", str(worker_script), "--inventory"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=_isolated_worker_environment(),
+        cwd=str(worker_script.parent),
+    )
+    if inventory_process.returncode != 0:
+        raise QualificationError("isolated runtime inventory command failed")
+    try:
+        inventory_decoded = json.loads(inventory_process.stdout)
+    except json.JSONDecodeError as exc:
+        raise QualificationError("isolated runtime inventory was not valid JSON") from exc
+    if not isinstance(inventory_decoded, list) or any(
+        not isinstance(item, str) or "==" not in item for item in inventory_decoded
+    ):
+        raise QualificationError("isolated runtime inventory was malformed")
+    inventory = tuple(inventory_decoded)
+    if inventory != tuple(sorted(set(inventory), key=str.casefold)):
+        raise QualificationError("isolated runtime inventory is not canonical")
+    manifest_bytes_value = _installed_environment_bytes(inventory)
+    manifest_path = admission_directory / "installed-environment.json"
+    if manifest_path.exists() and manifest_path.read_bytes() != manifest_bytes_value:
+        raise QualificationError("immutable installed-environment evidence differs")
+    manifest_path.write_bytes(manifest_bytes_value)
+    manifest_hash = sha256(manifest_bytes_value).hexdigest()
+
+    dependency_names = [dependency.split("==", 1)[0].split("@", 1)[0].strip() for dependency in dependencies]
+    identity_code = """
+import importlib.metadata, json, platform, socket, sys
+def blocked(*args, **kwargs):
+    raise RuntimeError('network disabled during runtime attestation')
+original_socket = socket.socket
+class OfflineSocket(original_socket):
+    def connect(self, *args, **kwargs):
+        raise RuntimeError('network disabled during runtime attestation')
+    def connect_ex(self, *args, **kwargs):
+        raise RuntimeError('network disabled during runtime attestation')
+socket.socket = OfflineSocket
+socket.create_connection = blocked
+socket.getaddrinfo = blocked
+names = json.loads(sys.argv[1])
+versions = {}
+for name in names:
+    try:
+        versions[name] = importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        versions[name] = None
+cuda = None
+try:
+    import torch
+    cuda = torch.version.cuda
+except ImportError:
+    pass
+print(json.dumps({
+    'python_version': platform.python_version(),
+    'sys_executable': sys.executable,
+    'sys_prefix': sys.prefix,
+    'sys_base_prefix': sys.base_prefix,
+    'package_versions': versions,
+    'cuda_version': cuda,
+}, sort_keys=True, separators=(',', ':')))
+"""
+    identity_process = subprocess.run(
+        [str(launcher), "-I", "-c", identity_code, json.dumps(dependency_names)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=_isolated_worker_environment(),
+    )
+    if identity_process.returncode != 0:
+        raise QualificationError("isolated runtime identity command failed")
+    try:
+        identity = json.loads(identity_process.stdout)
+    except json.JSONDecodeError as exc:
+        raise QualificationError("isolated runtime identity was not valid JSON") from exc
+    package_versions = identity.get("package_versions")
+    if not isinstance(package_versions, dict):
+        raise QualificationError("isolated runtime package identity was malformed")
+    observed = {str(name).lower().replace("_", "-"): value for name, value in package_versions.items()}
+    for dependency in dependencies:
+        name, separator, expected = dependency.partition("==")
+        if not separator:
+            name = dependency.split("@", 1)[0]
+            expected = ""
+        actual = observed.get(name.strip().lower().replace("_", "-"))
+        if actual is None or (expected and actual != expected.strip()):
+            raise QualificationError(f"isolated runtime package identity mismatch for {name.strip()}")
+    if not _python_constraint_satisfied(python_constraint, str(identity["python_version"])):
+        raise QualificationError("isolated runtime Python version violates its constraint")
+
+    lock_hash = sha256_file(lock_artifact_path)
+    binary = launcher.resolve(strict=True)
+    cfg_path = environment_path / "pyvenv.cfg"
+    if not cfg_path.is_file() or cfg_path.is_symlink():
+        raise QualificationError("isolated runtime pyvenv.cfg is missing or unsafe")
+    runner_hash = _worker_runner_hash(worker_script, runner_version)
+    fingerprint = _environment_fingerprint(
+        sys_executable=str(launcher),
+        python_version=str(identity["python_version"]),
+        package_versions={str(name): value for name, value in package_versions.items()},
+        torch_version=observed.get("torch"),
+        cuda_version=identity.get("cuda_version"),
+        runtime_lock_hash=lock_hash,
+        installed_environment_sha256=manifest_hash,
+        sys_prefix=str(Path(str(identity["sys_prefix"])).resolve(strict=False)),
+        sys_base_prefix=str(Path(str(identity["sys_base_prefix"])).resolve(strict=False)),
+    )
+    return RuntimePin(
+        project=project,
+        version_or_commit=version_or_commit,
+        python_constraint=python_constraint,
+        dependencies=dependencies,
+        lock_hash=lock_hash,
+        lock_artifact_path=str(lock_artifact_path),
+        installed_environment_manifest_path=str(manifest_path),
+        installed_environment_sha256=manifest_hash,
+        environment_fingerprint=fingerprint,
+        python_executable=str(launcher),
+        python_executable_hash=sha256_file(binary),
+        python_launcher=str(launcher),
+        python_launcher_hash=_launcher_identity_hash(launcher),
+        python_launcher_target=str(binary) if launcher.is_symlink() else None,
+        resolved_python_binary_hash=sha256_file(binary),
+        pyvenv_cfg_path=str(cfg_path),
+        pyvenv_cfg_hash=sha256_file(cfg_path),
+        environment_path=str(environment_path),
+        worker_script=str(worker_script),
+        worker_kind=worker_kind,
+        runner_version=runner_version,
+        runner_hash=runner_hash,
+        status=RuntimeAdmissionStatus.APPROVED,
+        evidence_reference=str(admission_directory),
+    )
+
+
+def apply_local_candidate_admission(
+    candidate: CandidateSpec,
+    admission: LocalCandidateAdmission,
+) -> CandidateSpec:
+    """Apply machine evidence only after portable identity comparison."""
+
+    if admission.candidate_name != candidate.name or candidate.external_checkpoint is None:
+        raise QualificationError("local admission candidate identity mismatch")
+    expected = candidate.external_checkpoint
+    observed = admission.checkpoint
+    if (
+        observed.model_family != candidate.family.value
+        or observed.repository.repository_id != expected.repository.repository_id
+        or observed.repository.revision != expected.repository.revision
+    ):
+        raise QualificationError("local admission checkpoint is not the registered candidate")
+    return CandidateSpec.model_validate(
+        {
+            **candidate.model_dump(),
+            "external_checkpoint": observed.model_dump(),
+            "runtime_pin": admission.runtime_pin.model_dump(),
+        }
+    )
 
 
 def _python_constraint_satisfied(constraint: str, version: str) -> bool:
@@ -1909,6 +2215,15 @@ def _validate_worker_success_envelope(
         raise QualificationError("worker batch size does not match the request")
     if response.batch_output is None:
         raise QualificationError("worker success response is missing batch output")
+    if any(
+        value != 0
+        for value in (
+            response.checkpoint_missing_key_count,
+            response.checkpoint_unexpected_key_count,
+            response.checkpoint_mismatched_key_count,
+        )
+    ):
+        raise QualificationError("worker checkpoint load reported incompatible parameter keys")
 
 
 def _worker_request(
@@ -2021,19 +2336,7 @@ def _run_isolated_runtime_qualification(
     # Never inherit the process's secret inventory or arbitrary connector
     # configuration into a third-party model runtime.  The worker receives a
     # deliberately tiny environment and only the offline controls below.
-    worker_environment = {
-        key: value
-        for key, value in os.environ.items()
-        if key in {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT"}
-    }
-    worker_environment.update(
-        {
-            "HF_HUB_OFFLINE": "1",
-            "TRANSFORMERS_OFFLINE": "1",
-            "TOKENIZERS_PARALLELISM": "false",
-            "PYTHONNOUSERSITE": "1",
-        }
-    )
+    worker_environment = _isolated_worker_environment()
     monitor: _ProcessTreeMonitor | None = None
     process: subprocess.Popen[str] | None = None
     decoded: Mapping[str, object] | None = None
@@ -2094,6 +2397,12 @@ def _run_isolated_runtime_qualification(
         monitor=monitor,
         ceiling=ceiling,
         batch_size=_batch_size(batch_input),
+        worker_process_terminated=(
+            process is not None
+            and process.returncode is not None
+            and monitor is not None
+            and monitor.all_processes_terminated()
+        ),
     )
     # Treat the worker's explicit privacy signal before any identity or output
     # validation.  A network attempt is a fail-closed result even if a
@@ -2170,6 +2479,8 @@ def _run_isolated_runtime_qualification(
             "one_inference_completed": True,
             "batch_completed": True,
             "applied_seeds": response.applied_seeds,
+            "loaded_model_class": response.loaded_model_class,
+            "loaded_parameter_count": response.loaded_parameter_count,
             "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
             "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
             "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
@@ -2637,8 +2948,11 @@ def _isolated_worker_resource(
     monitor: _ProcessTreeMonitor | None,
     ceiling: ResourceCeiling,
     batch_size: int,
+    worker_process_terminated: bool,
 ) -> RuntimeResourceResult:
-    rss_before = monitor.rss_before_mib if monitor is not None else 0.0
+    rss_before = response.rss_before_load_mib or (
+        monitor.rss_before_mib if monitor is not None else 0.0
+    )
     rss_peak = max(
         rss_before,
         response.rss_after_load_mib,
@@ -2646,8 +2960,21 @@ def _isolated_worker_resource(
     )
     rss_after_unload = response.rss_after_unload_mib
     rss_residual = max(0.0, rss_after_unload - rss_before)
-    resource_limit_passed = rss_peak <= ceiling.max_rss_mib
-    memory_released = response.unload_succeeded and rss_residual <= ceiling.max_residual_rss_mib
+    vram_peak = response.vram_peak_mib or response.vram_after_load_mib
+    vram_residual = response.vram_after_unload_mib
+    resource_limit_passed = rss_peak <= ceiling.max_rss_mib and (
+        vram_peak is None or vram_peak <= ceiling.max_vram_mib
+    )
+    in_process_memory_released = (
+        response.unload_succeeded and rss_residual <= ceiling.max_residual_rss_mib
+    )
+    if vram_residual is not None:
+        in_process_memory_released = (
+            in_process_memory_released and vram_residual <= ceiling.max_residual_vram_mib
+        )
+    memory_released = in_process_memory_released or (
+        response.unload_succeeded and worker_process_terminated
+    )
     durations = response.warm_durations_ms or (0.0,)
     return RuntimeResourceResult(
         cold_load_ms=response.cold_load_ms,
@@ -2662,12 +2989,14 @@ def _isolated_worker_resource(
         rss_after_unload_mib=rss_after_unload,
         vram_before_mib=0 if response.vram_after_load_mib is not None else None,
         vram_after_load_mib=response.vram_after_load_mib,
-        vram_peak_mib=response.vram_peak_mib or response.vram_after_load_mib,
+        vram_peak_mib=vram_peak,
         vram_after_unload_mib=response.vram_after_unload_mib,
         unload_succeeded=response.unload_succeeded,
         memory_released=memory_released,
+        in_process_memory_released=in_process_memory_released,
+        worker_process_terminated=worker_process_terminated,
         rss_residual_mib=rss_residual,
-        vram_residual_mib=response.vram_after_unload_mib,
+        vram_residual_mib=vram_residual,
         resource_limit_passed=resource_limit_passed,
     )
 
@@ -2998,16 +3327,19 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             family=ModelFamily.TTM_R3,
             task=ModelTask.FORECAST,
             requires_transformers=True,
-            output_schema="forecast[1]",
+            output_schema="forecast[30]",
             notes="primary lightweight forecasting candidate; Lite is not separately pinnable",
             runtime_pin=_runtime_pin(
                 candidate="ttm-r3",
-                project="transformers",
-                version_or_commit="5.5.4",
+                project="granite-tsfm",
+                version_or_commit="0.3.8@d473fc3d800c400230a3d8f5192fbdc6255a02f5",
                 dependencies=(
+                    "granite-tsfm==0.3.8",
                     "transformers==5.5.4",
                     "huggingface-hub==1.26.1",
-                    "torch==2.9.1",
+                    "torch==2.10.0+cpu",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
                 ),
             ),
             external_checkpoint=CheckpointPin(
