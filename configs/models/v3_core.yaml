@@ -5,11 +5,13 @@ baselines:
   - linear
   - lightgbm
 cpu_candidates:
+  - ttm-r3
   - ttm-r2
   - tspulse
 gpu_candidates:
   - chronos-2-small
-  - kronos-mini-small
+  - kronos-mini
+  - kronos-small
   - tabpfn-ts
 gpu_residency: one_family_at_a_time
 promotion_metric: calibrated_past_only_net_utility_or_risk_information

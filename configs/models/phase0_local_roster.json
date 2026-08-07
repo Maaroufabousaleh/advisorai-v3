@@ -1,0 +1,673 @@
+{
+  "benchmark_evidence_hash": "73c8e69e8a6993c11bff64387e55ad20220be67eae007bd6f31957186a253f84",
+  "benchmark_evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json",
+  "feature_regime_model": {
+    "candidate": "tspulse",
+    "declared_license": "apache-2.0",
+    "device": "cpu",
+    "evidence_hash": "ab5c56a9b8cde21ddd085fdc55003632c24ec88fd9056d59f3a65866fca24ae5",
+    "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/tspulse.json",
+    "metrics": [
+      {
+        "name": "feature_dimension",
+        "unit": "features",
+        "value": 6.0
+      },
+      {
+        "name": "latency_p50",
+        "unit": "ms_per_batch",
+        "value": 11.120078997919336
+      },
+      {
+        "name": "peak_rss",
+        "unit": "MiB",
+        "value": 511.46484375
+      }
+    ],
+    "notes": [
+      "price forecasting is prohibited"
+    ],
+    "qualification_status": "measured",
+    "repository_id": "ibm-granite/granite-timeseries-tspulse-r1",
+    "revision": "2e64fcdc2a06d3565dfadaf0065c0ab5055f80f2",
+    "role": "anomaly_integrity_representation_regime_features",
+    "runtime_class": "granite-tsfm/0.3.8",
+    "stability": "not_started",
+    "state": "qualified"
+  },
+  "finance_sentiment_challengers": [
+    {
+      "candidate": "modern-finbert",
+      "declared_license": "apache-2.0",
+      "device": "cpu",
+      "evidence_hash": "4d66004e63b0c973e2e7afac388bba361975278a1e514972bb9e2d4f7e3978f4",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/modern-finbert.json",
+      "metrics": [
+        {
+          "name": "accuracy",
+          "unit": "ratio",
+          "value": 0.7666666666666667
+        },
+        {
+          "name": "macro_f1",
+          "unit": "ratio",
+          "value": 0.7644558571777941
+        },
+        {
+          "name": "expected_calibration_error",
+          "unit": "ratio",
+          "value": 0.1340062553683916
+        },
+        {
+          "name": "throughput",
+          "unit": "items_per_second",
+          "value": 20.62076933083285
+        },
+        {
+          "name": "peak_rss",
+          "unit": "MiB",
+          "value": 1366.1796875
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": "tabularisai/ModernFinBERT",
+      "revision": "6c6de8332ea7f6824c0f8917358dce1e669c1710",
+      "role": "finance_sentiment_challenger",
+      "runtime_class": "transformers/5.5.4",
+      "stability": "not_started",
+      "state": "qualified"
+    }
+  ],
+  "finance_sentiment_fast": {
+    "candidate": "finbert-minilm",
+    "declared_license": "mit",
+    "device": "cpu",
+    "evidence_hash": "3a6906ef12d52f28c8a6321638db4807a7ec5add37e09448d18f263c475ba851",
+    "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/finbert-minilm.json",
+    "metrics": [
+      {
+        "name": "accuracy",
+        "unit": "ratio",
+        "value": 0.9722222222222222
+      },
+      {
+        "name": "macro_f1",
+        "unit": "ratio",
+        "value": 0.9722011771347634
+      },
+      {
+        "name": "expected_calibration_error",
+        "unit": "ratio",
+        "value": 0.004772785637113891
+      },
+      {
+        "name": "throughput",
+        "unit": "items_per_second",
+        "value": 120.15382637538201
+      },
+      {
+        "name": "peak_rss",
+        "unit": "MiB",
+        "value": 814.21875
+      }
+    ],
+    "notes": [],
+    "qualification_status": "measured",
+    "repository_id": "9mark9/finbert-minilm-sentiment",
+    "revision": "fdbfec0cd09610bd5af26da8998507fe7838e838",
+    "role": "finance_sentiment_fast",
+    "runtime_class": "transformers/5.5.4",
+    "stability": "not_started",
+    "state": "pending_stability"
+  },
+  "finance_sentiment_primary": {
+    "candidate": "finsentiment-deberta-v3",
+    "declared_license": "apache-2.0",
+    "device": "cpu",
+    "evidence_hash": "1804e69b91162f15da574696cea3de1faec8652640822e4445ee22730c6716cd",
+    "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/finsentiment-deberta-v3.json",
+    "metrics": [
+      {
+        "name": "accuracy",
+        "unit": "ratio",
+        "value": 0.9888888888888889
+      },
+      {
+        "name": "macro_f1",
+        "unit": "ratio",
+        "value": 0.9888885030596261
+      },
+      {
+        "name": "expected_calibration_error",
+        "unit": "ratio",
+        "value": 0.0422745681471295
+      },
+      {
+        "name": "throughput",
+        "unit": "items_per_second",
+        "value": 22.267109754783707
+      },
+      {
+        "name": "peak_rss",
+        "unit": "MiB",
+        "value": 2386.7734375
+      }
+    ],
+    "notes": [],
+    "qualification_status": "measured",
+    "repository_id": "anabdd/finsentiment-deberta-v3-base",
+    "revision": "f2312de96d6cfe6251da37afb0e99b8e29885bdd",
+    "role": "finance_sentiment_primary",
+    "runtime_class": "transformers/5.5.4",
+    "stability": "not_started",
+    "state": "pending_stability"
+  },
+  "forecast_challengers": [
+    {
+      "candidate": "ttm-r3",
+      "declared_license": "apache-2.0",
+      "device": "cpu",
+      "evidence_hash": "94561a898c3622cf8e33bb5417c366b5bd76cf50da1b419ecbd866597b0a2cce",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/ttm-r3.json",
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 651.8250193312962
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 1906.6544929685233
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 6.180213933705356
+        },
+        {
+          "name": "directional_accuracy",
+          "unit": "ratio",
+          "value": 0.5263888888888889
+        },
+        {
+          "name": "latency_p50",
+          "unit": "ms_per_batch",
+          "value": 2651.0180330005824
+        },
+        {
+          "name": "peak_rss",
+          "unit": "MiB",
+          "value": 514.8203125
+        },
+        {
+          "name": "peak_vram",
+          "unit": "MiB",
+          "value": 0.0
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": "ibm-granite/granite-timeseries-ttm-r3",
+      "revision": "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa",
+      "role": "forecast_challenger",
+      "runtime_class": "granite-tsfm/0.3.8",
+      "stability": "not_started",
+      "state": "qualified"
+    },
+    {
+      "candidate": "kronos-mini",
+      "declared_license": "mit",
+      "device": "cuda",
+      "evidence_hash": "e9dd78635c67399162cbd7fde566c4bb3ce2739b27b8b3ed78427b5bd9885e29",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/kronos-mini.json",
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 1137.271645459917
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 3423.635119834777
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 10.778089678281953
+        },
+        {
+          "name": "directional_accuracy",
+          "unit": "ratio",
+          "value": 0.5208333333333334
+        },
+        {
+          "name": "latency_p50",
+          "unit": "ms_per_batch",
+          "value": 168.4125869978743
+        },
+        {
+          "name": "peak_rss",
+          "unit": "MiB",
+          "value": 1460.890625
+        },
+        {
+          "name": "peak_vram",
+          "unit": "MiB",
+          "value": 284.333984375
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": "NeoQuasar/Kronos-mini",
+      "revision": "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+      "role": "forecast_challenger",
+      "runtime_class": "advisorai-kronos-runtime/67b630e",
+      "stability": "not_started",
+      "state": "qualified"
+    },
+    {
+      "candidate": "kronos-small",
+      "declared_license": "mit",
+      "device": "cuda",
+      "evidence_hash": "866b9f251cfac98a880987c9a91db4d949f4f5607300339003c6704b6eefed32",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/kronos-small.json",
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 3251.6305164153414
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 10631.422358315851
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 17.031944230966864
+        },
+        {
+          "name": "directional_accuracy",
+          "unit": "ratio",
+          "value": 0.5111111111111111
+        },
+        {
+          "name": "latency_p50",
+          "unit": "ms_per_batch",
+          "value": 252.5265069998568
+        },
+        {
+          "name": "peak_rss",
+          "unit": "MiB",
+          "value": 1447.4140625
+        },
+        {
+          "name": "peak_vram",
+          "unit": "MiB",
+          "value": 508.04541015625
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": "NeoQuasar/Kronos-small",
+      "revision": "901c26c1332695a2a8f243eb2f37243a37bea320",
+      "role": "forecast_challenger",
+      "runtime_class": "advisorai-kronos-runtime/67b630e",
+      "stability": "not_started",
+      "state": "qualified"
+    }
+  ],
+  "forecast_dataset_hash": "0f84a34fb0537ecb0305cd8e5fd07e5d2dfa14500dbb61961168ee5351f55546",
+  "forecast_fast": {
+    "candidate": "ttm-r2",
+    "declared_license": "apache-2.0",
+    "device": "cpu",
+    "evidence_hash": "af821050a85c116f74bd1675a2142dd27c5a8306f857eeb89ceb57dc658c0380",
+    "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/ttm-r2.json",
+    "metrics": [
+      {
+        "name": "mae",
+        "unit": "price_units",
+        "value": 656.1759978438482
+      },
+      {
+        "name": "rmse",
+        "unit": "price_units",
+        "value": 1960.3498052808313
+      },
+      {
+        "name": "mase",
+        "unit": "ratio",
+        "value": 5.704494179011497
+      },
+      {
+        "name": "directional_accuracy",
+        "unit": "ratio",
+        "value": 0.5277777777777778
+      },
+      {
+        "name": "latency_p50",
+        "unit": "ms_per_batch",
+        "value": 212.45819799878518
+      },
+      {
+        "name": "peak_rss",
+        "unit": "MiB",
+        "value": 501.99609375
+      },
+      {
+        "name": "peak_vram",
+        "unit": "MiB",
+        "value": 0.0
+      }
+    ],
+    "notes": [],
+    "qualification_status": "measured",
+    "repository_id": "ibm-granite/granite-timeseries-ttm-r2",
+    "revision": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
+    "role": "forecast_fast",
+    "runtime_class": "granite-tsfm/0.3.8",
+    "stability": "not_started",
+    "state": "pending_stability"
+  },
+  "forecast_primary": {
+    "candidate": "ttm-r2",
+    "declared_license": "apache-2.0",
+    "device": "cpu",
+    "evidence_hash": "af821050a85c116f74bd1675a2142dd27c5a8306f857eeb89ceb57dc658c0380",
+    "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/ttm-r2.json",
+    "metrics": [
+      {
+        "name": "mae",
+        "unit": "price_units",
+        "value": 656.1759978438482
+      },
+      {
+        "name": "rmse",
+        "unit": "price_units",
+        "value": 1960.3498052808313
+      },
+      {
+        "name": "mase",
+        "unit": "ratio",
+        "value": 5.704494179011497
+      },
+      {
+        "name": "directional_accuracy",
+        "unit": "ratio",
+        "value": 0.5277777777777778
+      },
+      {
+        "name": "latency_p50",
+        "unit": "ms_per_batch",
+        "value": 212.45819799878518
+      },
+      {
+        "name": "peak_rss",
+        "unit": "MiB",
+        "value": 501.99609375
+      },
+      {
+        "name": "peak_vram",
+        "unit": "MiB",
+        "value": 0.0
+      }
+    ],
+    "notes": [],
+    "qualification_status": "measured",
+    "repository_id": "ibm-granite/granite-timeseries-ttm-r2",
+    "revision": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
+    "role": "forecast_primary",
+    "runtime_class": "granite-tsfm/0.3.8",
+    "stability": "not_started",
+    "state": "pending_stability"
+  },
+  "generated_at": "2026-08-07T22:37:38.571045Z",
+  "inactive_or_waiting": [
+    {
+      "candidate": "tabpfn-ts",
+      "declared_license": "apache-2.0",
+      "device": "cuda",
+      "evidence_hash": "1a6257a9d59ff3848001d4db1f126301cadc58c4bb223e7e88f8b2ee1dcc2436",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/acquisition-20260807T222217.331347Z/tabpfn-ts/acquisition-failure.json",
+      "metrics": [],
+      "notes": [
+        "upstream access is gated and requires personal terms acceptance"
+      ],
+      "qualification_status": "waiting_for_user_acceptance",
+      "repository_id": "PriorLabs/tabpfn-time-series",
+      "revision": "a756ae3fb3af82c903c39e1cd71864ff5252bc4d",
+      "role": "later_forecast_challenger",
+      "runtime_class": "tabpfn-time-series/1.2.0",
+      "stability": "waiting_for_user_acceptance",
+      "state": "quarantined"
+    }
+  ],
+  "live_capital_approved": false,
+  "mandatory_baselines": [
+    {
+      "candidate": "naive",
+      "declared_license": "project-code",
+      "device": "cpu",
+      "evidence_hash": null,
+      "evidence_reference": null,
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 730.5843750000006
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 2278.429707999717
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 6.352827338103722
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": null,
+      "revision": null,
+      "role": "mandatory_forecast_baseline",
+      "runtime_class": "advisorai-deterministic",
+      "stability": "not_started",
+      "state": "qualified"
+    },
+    {
+      "candidate": "drift",
+      "declared_license": "project-code",
+      "device": "cpu",
+      "evidence_hash": null,
+      "evidence_reference": null,
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 876.8794241981952
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 2869.421124156151
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 6.817045885392621
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": null,
+      "revision": null,
+      "role": "mandatory_forecast_baseline",
+      "runtime_class": "advisorai-deterministic",
+      "stability": "not_started",
+      "state": "qualified"
+    },
+    {
+      "candidate": "seasonal-7",
+      "declared_license": "project-code",
+      "device": "cpu",
+      "evidence_hash": null,
+      "evidence_reference": null,
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 646.8237736111113
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 2114.141057454828
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 5.899642541953071
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": null,
+      "revision": null,
+      "role": "mandatory_forecast_baseline",
+      "runtime_class": "advisorai-deterministic",
+      "stability": "not_started",
+      "state": "qualified"
+    },
+    {
+      "candidate": "linear",
+      "declared_license": "project-code",
+      "device": "cpu",
+      "evidence_hash": null,
+      "evidence_reference": null,
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 2736.5100584877873
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 7783.347310766986
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 13.347339993243738
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": null,
+      "revision": null,
+      "role": "mandatory_forecast_baseline",
+      "runtime_class": "advisorai-deterministic",
+      "stability": "not_started",
+      "state": "qualified"
+    },
+    {
+      "candidate": "lightgbm",
+      "declared_license": "project-code",
+      "device": "cpu",
+      "evidence_hash": null,
+      "evidence_reference": null,
+      "metrics": [
+        {
+          "name": "mae",
+          "unit": "price_units",
+          "value": 1450.0833434192657
+        },
+        {
+          "name": "rmse",
+          "unit": "price_units",
+          "value": 4397.86690767248
+        },
+        {
+          "name": "mase",
+          "unit": "ratio",
+          "value": 10.615357030942011
+        }
+      ],
+      "notes": [],
+      "qualification_status": "measured",
+      "repository_id": null,
+      "revision": null,
+      "role": "mandatory_forecast_baseline",
+      "runtime_class": "advisorai-deterministic",
+      "stability": "not_started",
+      "state": "qualified"
+    }
+  ],
+  "probabilistic_forecast": {
+    "candidate": "chronos-2-small",
+    "declared_license": "apache-2.0",
+    "device": "cuda",
+    "evidence_hash": "3846701e4f8cbd8eeadc96107375cba93dc6878053b0ec17a9f3c0949eaddcbb",
+    "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/chronos-2-small.json",
+    "metrics": [
+      {
+        "name": "mae",
+        "unit": "price_units",
+        "value": 848.1633194444444
+      },
+      {
+        "name": "rmse",
+        "unit": "price_units",
+        "value": 2581.4875844186968
+      },
+      {
+        "name": "mase",
+        "unit": "ratio",
+        "value": 6.232113113685623
+      },
+      {
+        "name": "directional_accuracy",
+        "unit": "ratio",
+        "value": 0.5194444444444445
+      },
+      {
+        "name": "latency_p50",
+        "unit": "ms_per_batch",
+        "value": 16.715174999262672
+      },
+      {
+        "name": "peak_rss",
+        "unit": "MiB",
+        "value": 1631.72265625
+      },
+      {
+        "name": "peak_vram",
+        "unit": "MiB",
+        "value": 80.49951171875
+      },
+      {
+        "name": "interval_coverage",
+        "unit": "ratio",
+        "value": 0.7763888888888889
+      }
+    ],
+    "notes": [],
+    "qualification_status": "measured",
+    "repository_id": "autogluon/chronos-2-small",
+    "revision": "ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a",
+    "role": "probabilistic_forecast",
+    "runtime_class": "chronos-forecasting/2.3.1",
+    "stability": "not_started",
+    "state": "qualified"
+  },
+  "roster_version": "2026-08-07.1",
+  "schema_version": "advisorai.phase0.local-model-roster.v1",
+  "sentiment_dataset_hash": "4a48c245f5260c960cff4e7adf5022b10475908aec7c5b6b897757e20858c88c"
+}

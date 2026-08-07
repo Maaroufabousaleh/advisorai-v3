@@ -118,8 +118,14 @@ providers, checkpoints, or live venues), use:
 uv sync --group dev --extra runtimes --extra dashboard --extra transition --extra models
 ```
 
-The model extra installs CPU LightGBM/Transformers dependencies. Chronos,
-Kronos, TabPFN, and FinBERT checkpoints remain quarantined until pinned
-versions, weights, resource measurements, and past-only bake-offs are recorded.
+The model extra installs only the core CPU LightGBM/Transformers dependencies.
+External model families run in separately attested environments; the Phase-0
+roster and measured role state are recorded in
+[`configs/models/phase0_local_roster.json`](configs/models/phase0_local_roster.json).
+TTM-R2, TTM-R3, TSPulse, Chronos-2-small, Kronos-mini/small,
+ModernFinBERT, FinBERT-MiniLM, and the finance DeBERTa challenger have passed
+short offline qualification on the target laptop. The role winners remain
+pending 24-hour stability, TabPFN-TS is waiting for user acceptance of gated
+upstream access, and no model has trading authority.
 The dependency-free hashing embedder is available as a non-authoritative
 semantic-recall candidate; FTS5 remains the default memory retrieval path.

@@ -200,9 +200,14 @@ class ModelConfig(BaseModel):
             raise ValueError("model roster entries must be unique and non-blank")
         if not {"naive", "drift", "seasonal", "linear", "lightgbm"}.issubset(self.baselines):
             raise ValueError("mandatory deterministic baselines are missing")
-        if not {"ttm-r2", "tspulse"}.issubset(self.cpu_candidates):
+        if not {"ttm-r3", "ttm-r2", "tspulse"}.issubset(self.cpu_candidates):
             raise ValueError("V3-Core CPU candidates are incomplete")
-        if not {"chronos-2-small", "kronos-mini-small"}.issubset(self.gpu_candidates):
+        if not {
+            "chronos-2-small",
+            "kronos-mini",
+            "kronos-small",
+            "tabpfn-ts",
+        }.issubset(self.gpu_candidates):
             raise ValueError("V3-Core GPU candidates are incomplete")
         if self.gpu_residency != "one_family_at_a_time":
             raise ValueError("GPU residency must remain one family at a time")

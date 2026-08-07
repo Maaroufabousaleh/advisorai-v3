@@ -19,8 +19,11 @@ from advisorai.phase0.runtime_qualification import (
     BenchmarkDataset,
     CandidateSpec,
     FunctionalRunner,
+    LocalCandidateAdmission,
+    ModelFamily,
     ModelTask,
     RuntimeQualificationResult,
+    apply_local_candidate_admission,
     default_runtime_candidates,
     forecast_baseline_models,
     project_bakeoff_gate,
@@ -66,7 +69,15 @@ def _dataset_for(candidate: CandidateSpec) -> BenchmarkDataset:
     if candidate.task == ModelTask.FINANCE_SENTIMENT:
         return BenchmarkDataset.finbert_fixture()
     if candidate.task == ModelTask.TSPULSE_FEATURES:
-        return BenchmarkDataset.synthetic_features()
+        return BenchmarkDataset.tspulse_runtime_fixture()
+    if candidate.family in {
+        ModelFamily.CHRONOS_2_SMALL,
+        ModelFamily.KRONOS_MINI,
+        ModelFamily.KRONOS_SMALL,
+        ModelFamily.TTM_R2,
+        ModelFamily.TTM_R3,
+    }:
+        return BenchmarkDataset.ttm_runtime_fixture()
     return BenchmarkDataset.synthetic_forecast()
 
 
@@ -75,11 +86,18 @@ def _payloads(dataset: BenchmarkDataset) -> tuple[object, object]:
         texts = tuple(text for text, _label in dataset.public_text_fixture)
         return texts[0], texts
     if dataset.task == ModelTask.TSPULSE_FEATURES:
-        return dataset.inputs[:16], (dataset.inputs[:16], dataset.inputs[16:])
+        return dataset.inputs[:512], (dataset.inputs[:512], dataset.inputs[512:1024])
+    if dataset.dataset_id == "advisorai-phase0-ttm-runtime-fixture":
+        return dataset.inputs[:512], (dataset.inputs[:512], dataset.inputs[30:542])
     return dataset.inputs[:16], (dataset.inputs[:16], dataset.inputs[16:])
 
 
-def qualify(output_dir: Path) -> tuple[RuntimeQualificationResult, ...]:
+def qualify(
+    output_dir: Path,
+    *,
+    admission_paths: tuple[Path, ...] = (),
+    selected_candidates: frozenset[str] | None = None,
+) -> tuple[RuntimeQualificationResult, ...]:
     output_dir.mkdir(parents=True, exist_ok=True)
     run_id_base = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
     run_id = run_id_base
@@ -92,7 +110,20 @@ def qualify(output_dir: Path) -> tuple[RuntimeQualificationResult, ...]:
     forecast_dataset = BenchmarkDataset.synthetic_forecast()
     forecast_evaluations = run_forecast_baseline_benchmark(forecast_dataset)
     evaluations_by_name = {item.model_name: item for item in forecast_evaluations}
-    for candidate in default_runtime_candidates():
+    admissions = {
+        admission.candidate_name: admission
+        for path in admission_paths
+        for admission in (LocalCandidateAdmission.model_validate_json(path.read_text(encoding="utf-8")),)
+    }
+    roster = default_runtime_candidates()
+    if selected_candidates is not None:
+        unknown = selected_candidates - {candidate.name for candidate in roster}
+        if unknown:
+            raise ValueError(f"unknown selected candidates: {sorted(unknown)}")
+        roster = tuple(candidate for candidate in roster if candidate.name in selected_candidates)
+    for candidate in roster:
+        if candidate.name in admissions:
+            candidate = apply_local_candidate_admission(candidate, admissions[candidate.name])
         dataset = _dataset_for(candidate)
         sample, batch = _payloads(dataset)
         runner = _baseline_runner(candidate) if candidate.external_checkpoint is None else None
@@ -182,8 +213,25 @@ def main() -> int:
         type=Path,
         default=Path("artifacts/phase0/model-runtime-qualification"),
     )
+    parser.add_argument(
+        "--admission",
+        action="append",
+        type=Path,
+        default=[],
+        help="machine-specific local candidate admission JSON (repeatable)",
+    )
+    parser.add_argument(
+        "--candidate",
+        action="append",
+        default=[],
+        help="qualify only this candidate (repeatable)",
+    )
     args = parser.parse_args()
-    results = qualify(args.output)
+    results = qualify(
+        args.output,
+        admission_paths=tuple(args.admission),
+        selected_candidates=frozenset(args.candidate) if args.candidate else None,
+    )
     latest = json.loads((args.output / "latest.json").read_text(encoding="utf-8"))
     print(
         json.dumps(

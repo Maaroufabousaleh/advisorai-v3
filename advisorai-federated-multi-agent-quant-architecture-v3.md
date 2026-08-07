@@ -232,13 +232,16 @@ The gateway records the concrete provider/model, fallback chain, schema mode, la
 |---|---|---|
 | naive/drift/seasonal, AR/linear and volatility baselines | mandatory falsification and fallback | always included |
 | LightGBM | strong tabular baseline and feature interactions | core |
-| TTM-R2 | ultra-light CPU probabilistic forecasting candidate | core candidate |
+| Granite TTM-R3 | primary lightweight CPU forecasting candidate | core candidate |
+| TTM-R2 | previous-generation forecasting control | reference candidate |
 | TSPulse | anomaly, imputation, similarity and regime/integrity features | core candidate; not treated as a price forecaster |
 | Chronos-2-small | general probabilistic/covariate GPU forecast | choose in Phase 0 |
 | Kronos-mini/small | finance/OHLCV-specific forecast and representation | compete with Chronos; not automatically co-resident |
 | TabPFN-TS | independent tabular formulation | Deep-mode challenger |
 | TiRex/TTM-R3/newer models | benchmark quarantine | no baseline dependency |
-| FinBERT-family classifier | high-volume news triage on CPU | core candidate |
+| ModernFinBERT | general-purpose financial sentiment on CPU | primary candidate |
+| FinBERT-MiniLM | high-throughput financial sentiment filter | fast-path candidate |
+| Finance DeBERTa-v3 | higher-capacity short-form financial sentiment | challenger |
 | small CPU embedder | retrieval candidate after lexical baseline | optional; FTS5 remains available |
 
 One GPU worker loads one family at a time and micro-batches across assets. A different checkpoint name is not independent evidence if it shares the same dataset, preprocessing, or architecture ancestor.
@@ -552,7 +555,9 @@ Expansion is gate-driven, not calendar-driven.
 
 - write architecture decision records and core Pydantic contracts;
 - benchmark direct API, LiteLLM and OmniRoute on identical typed/tool calls, route identity, privacy, idle/active RSS, 24-hour stability and failure handling;
-- benchmark TTM-R2, TSPulse, Chronos-2-small, Kronos-mini/small and TabPFN-TS against baselines for latency/RAM/VRAM/utility;
+- benchmark TTM-R3 with TTM-R2 as its control, then Chronos-2-small,
+  Kronos-mini/small and TabPFN-TS against baselines for
+  latency/RAM/VRAM/utility; qualify TSPulse only for regime/integrity features;
 - benchmark Nautilus adapters/replay, Prefect and Hamilton overhead;
 - benchmark plain Parquet manifests versus DuckLake;
 - benchmark one Hermes coordinator/one subagent in an isolated environment;
@@ -593,7 +598,7 @@ Expansion is gate-driven, not calendar-driven.
 ### Phase 4 — quantitative baseline council
 
 - naive/statistical and LightGBM baselines;
-- TTM-R2 and TSPulse CPU wave;
+- TTM-R3, TTM-R2 control, and TSPulse CPU wave;
 - choose **one** initial GPU family: Chronos-2-small or Kronos-mini;
 - common forecast contract, rolling calibration and abstention;
 - fast screen plus Nautilus replay with realistic fees, spread, impact and delay.
@@ -671,7 +676,7 @@ V3-Core is intentionally much smaller than the target system.
 | Primary data | native venue REST/WebSocket |
 | Context | Deribit plus GDELT/official RSS; LSE optional corroboration |
 | Deterministic models | naive/statistical + LightGBM |
-| Tiny local models | TTM-R2 + TSPulse |
+| Tiny local models | TTM-R3 + TTM-R2 control + TSPulse features |
 | GPU model | one winner: Chronos-2-small or Kronos-mini |
 | Agent roles | Data Verifier, Technical/Flow, Derivatives/Regime, News/Event, Skeptic/Base-Rate, Risk/Opportunity and Synthesizer |
 | Research engines | direct Polars/NumPy or VectorBT screen + Nautilus replay |
@@ -756,6 +761,7 @@ Profitability is not an architectural acceptance claim. It must be earned throug
 - [rclone crypt](https://rclone.org/crypt/)
 - [OmniCloud](https://github.com/dimartarmizi/OmniCloud)
 - [Amazon Chronos forecasting](https://github.com/amazon-science/chronos-forecasting)
+- [IBM Granite TTM-R3](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3)
 - [IBM Granite TTM-R2](https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2)
 - [IBM TSPulse](https://huggingface.co/ibm-granite/granite-timeseries-tspulse-r1)
 - [Kronos](https://github.com/shiyu-coder/Kronos)

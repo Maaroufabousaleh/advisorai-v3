@@ -1,0 +1,9 @@
+# AdvisorAI Phase-0 TTM-R3 CPU runtime (WSL/Linux x86_64, CPython 3.12).
+# IBM granite-tsfm commit d473fc3d800c400230a3d8f5192fbdc6255a02f5
+# is built into a hashed local wheel and added to the machine-specific lock.
+# The PyTorch wheel URL and digest are from the official PyTorch CPU index.
+torch @ https://download-r2.pytorch.org/whl/cpu/torch-2.10.0%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=ee40b8a4b4b2cf0670c6fd4f35a7ef23871af956fecb238fbf5da15a72650b1d
+transformers==5.5.4
+huggingface-hub==1.26.1
+safetensors==0.8.0
+numpy==2.5.1

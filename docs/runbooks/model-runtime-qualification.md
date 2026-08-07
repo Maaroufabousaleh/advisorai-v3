@@ -18,7 +18,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python \
 The command runs the five mandatory baselines, writes one sanitized manifest
 per candidate, writes a forecast-baseline comparison, and projects the results
 into the existing pending `BakeoffGate`. It never downloads a checkpoint. A
-missing runner, missing cache, missing artifact hash, unapproved license or
+missing runner, missing cache, missing artifact hash, prohibited/gated terms or
 runtime, incompatible dependency, or invalid output is recorded as
 `quarantined`/`failed`; it is never replaced by another model family.
 
@@ -43,8 +43,11 @@ external cache path, and explicit task role:
 
 | Candidate | Repository | Revision | Role |
 | --- | --- | --- | --- |
-| FinBERT-family | `ProsusAI/finbert` | `4556d13015211d73dccd3fdd39d39232506f3e43` | CPU finance sentiment |
-| IBM TTM-R2 | `ibm-granite/granite-timeseries-ttm-r2` | `d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f` | CPU/lightweight forecast |
+| ModernFinBERT | `tabularisai/ModernFinBERT` | `6c6de8332ea7f6824c0f8917358dce1e669c1710` | primary general finance sentiment candidate |
+| FinBERT-MiniLM | `9mark9/finbert-minilm-sentiment` | `fdbfec0cd09610bd5af26da8998507fe7838e838` | fast CPU sentiment candidate |
+| Finance DeBERTa-v3 | `anabdd/finsentiment-deberta-v3-base` | `f2312de96d6cfe6251da37afb0e99b8e29885bdd` | higher-capacity sentiment challenger |
+| IBM TTM-R3 | `ibm-granite/granite-timeseries-ttm-r3` | `ea17cfd2e3edcaea21eb8dcecd18bf88971482fa` | primary lightweight forecast candidate |
+| IBM TTM-R2 | `ibm-granite/granite-timeseries-ttm-r2` | `d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f` | previous-generation forecast control |
 | TSPulse | `ibm-granite/granite-timeseries-tspulse-r1` | `2e64fcdc2a06d3565dfadaf0065c0ab5055f80f2` | anomaly/integrity/regime features only |
 | Chronos-2-small | `autogluon/chronos-2-small` | `ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a` | GPU forecast challenger |
 | Kronos-mini | `NeoQuasar/Kronos-mini` | `f4e68697d9d5aed55cef5c96aabc3376bcad9f81` | GPU forecast challenger |
@@ -53,8 +56,9 @@ external cache path, and explicit task role:
 | TabPFN-TS (later) | `PriorLabs/tabpfn-time-series` | `a756ae3fb3af82c903c39e1cd71864ff5252bc4d` | later GPU challenger |
 
 External caches default to `~/.cache/advisorai-v3/models/<candidate>` and must
-remain outside the repository. Before a model can be measured, its approved
-license, isolated execution `RuntimePin`, immutable lock-artifact SHA-256,
+remain outside the repository. Before a model can be measured, any known
+private-use terms must be non-blocking, and its isolated execution `RuntimePin`,
+immutable lock-artifact SHA-256,
 exact worker interpreter/executable hash, worker hash, and every declared
 artifact SHA-256 must pass. External candidates are never imported into the
 AdvisorAI core interpreter: the parent sends a sanitized JSON request to the
@@ -67,11 +71,44 @@ separate; unexpected loadable files (including `.py`, `.so`, `.dll`, `.sh`,
 and unreviewed Pickle-style model files) are rejected. `cached_artifact_inventory()`
 hashes every regular cached file for the sanitized manifest.
 
-`ProsusAI/finbert` currently has no declared Hub license metadata, so its
-license admission is explicitly `pending` and it cannot become `MEASURED`.
-The other listed public cards have reviewed Apache-2.0 or MIT admissions, but
-their executable runtimes remain pending until isolated, exact environments
-and lock hashes are supplied.
+## Exact-revision acquisition
+
+Acquire one active candidate at a time. The acquisition process reads only the
+`MODEL_REGISTRY` credential scope, uses anonymous access when possible, and
+never passes a Hub token to the offline runtime worker:
+
+```bash
+uv run python scripts/acquire_model_artifacts.py ttm-r3
+```
+
+The command downloads the reviewed file list at the frozen 40-character
+revision into a temporary directory under
+`~/.cache/advisorai-v3/staging/`, hashes every file, and atomically promotes an
+exact clean closure to
+`~/.cache/advisorai-v3/models/<candidate>/<revision>/`. It does not qualify
+from a raw Hugging Face cache. Existing immutable cache content is reused only
+when every file hash is identical; conflicting content is never overwritten.
+Cross-host redirects do not receive the registry authorization header.
+
+Sanitized acquisition and checkpoint-pin evidence is written beneath a new
+run directory under `artifacts/phase0/model-runtime-qualification/`. Model
+weights and machine caches remain outside Git and outside the repository.
+
+AdvisorAI is currently a private, personal installation. License declarations
+are retained as provenance and do not affect technical scores or selection.
+Only authoritative terms that explicitly prohibit this private use, or gated
+terms that require the user to accept them, block a candidate. Missing or
+ambiguous metadata is recorded as `unknown` and qualification continues.
+ProsusAI/finbert is no longer an active runtime candidate; ModernFinBERT
+replaces it. Existing compatibility identifiers may remain for historical
+evidence, but smoke and acquisition workflows do not schedule its weights.
+
+Granite TTM-R3 Lite is described upstream as a variant within the single R3
+family artifact. The current repository exposes one config/weight closure and
+no separately immutable Lite checkpoint or configuration identity, so
+AdvisorAI does not fabricate a separate `TTM-R3 Lite` candidate. It will be
+added only if an independently reproducible upstream identity becomes
+available.
 
 ## Qualification boundary
 
@@ -96,3 +133,77 @@ model promotion remain pending until separately reviewed evidence exists. A
 single synthetic forecast series cannot establish superiority. Stochastic
 forecast candidates are characterized under their declared repeatability
 policy rather than being incorrectly required to produce byte-identical paths.
+
+## Real public-data bake-off (2026-08-07)
+
+The current machine-readable result is
+`configs/models/phase0_local_roster.json`. It binds the immutable report at
+`artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json`
+with report hash
+`73c8e69e8a6993c11bff64387e55ad20220be67eae007bd6f31957186a253f84`.
+The forecast snapshot contains 2022–2025 daily AAPL, MSFT, NVDA, BTCUSDT,
+ETHUSDT, and SOLUSDT observations. Evaluation uses 24 chronological
+walk-forward cases, 512 observations of context, a 30-observation horizon, and
+no future-fitted preprocessing. The sentiment snapshot is the exact
+`gtfintechlab/financial_phrasebank_sentences_allagree` revision
+`e0ecd7f315af02460bbb107d7588c5a6fa5df573`; the fixed evaluation subset is
+balanced across 180 public phrases.
+
+The measured role decisions are evidence-led rather than name-led:
+
+| Role | Current candidate | Evidence state | Key result |
+| --- | --- | --- | --- |
+| forecast primary/fast | TTM-R2 | pending 24h stability | MASE 5.7045; lowest measured MASE |
+| lightweight challenger | TTM-R3 | qualified | MASE 6.1802 |
+| probabilistic forecast | Chronos-2-small | qualified | MASE 6.2321; 10–90% coverage 0.7764 |
+| forecast challengers | Kronos-mini / Kronos-small | qualified | MASE 10.7781 / 17.0319 |
+| feature/regime | TSPulse | qualified | six finite features over 24 cases; no price forecast |
+| financial sentiment primary | finance DeBERTa-v3 | pending 24h stability | macro-F1 0.9889 |
+| financial sentiment fast | FinBERT-MiniLM | pending 24h stability | macro-F1 0.9722; 120.15 items/s |
+| financial sentiment challenger | ModernFinBERT | qualified | macro-F1 0.7645 |
+| later forecast challenger | TabPFN-TS | waiting for user acceptance | gated upstream acquisition returned 401 |
+
+The seasonal-7 baseline achieved MASE 5.8996, so TTM-R2 is the only external
+candidate that beat the best mandatory baseline on the primary scale-normalized
+metric in this snapshot. This is a model-role decision, not a profitability or
+live-capital claim. ModernFinBERT remains the active ModernBERT-family
+challenger, but measured AdvisorAI evidence selected DeBERTa for quality and
+MiniLM for the CPU fast path. ProsusAI/finbert is inactive and was not
+downloaded.
+
+Reproduce a full short bake-off from already-acquired caches and admissions:
+
+```bash
+uv run python scripts/run_local_model_bakeoff.py \
+  --forecast-snapshot ~/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
+  --sentiment-snapshot ~/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
+  --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-final-20260808T020000Z
+```
+
+## Stability runner
+
+`scripts/run_model_stability.py` repeatedly qualifies only the pending role
+candidates through their pinned isolated interpreters. It stores an fsync'd,
+hash-chained JSONL log, verifies the immutable benchmark hashes, supports a
+fixed run directory for safe restart, and uses the existing `StabilityWindow`
+contract. A short smoke remains explicitly distinct from the 24-hour gate.
+
+```bash
+nohup uv run python scripts/run_model_stability.py \
+  --forecast-snapshot ~/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
+  --sentiment-snapshot ~/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
+  --report artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json \
+  --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-final-20260808T020000Z \
+  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h \
+  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h.nohup.log 2>&1 &
+```
+
+The 24-hour result must exist and pass before changing roster entries from
+`pending_stability` to `selected`. It does not approve paper execution or live
+capital.
+
+The pre-merge two-cycle smoke completed with all three candidates passing. Its
+append-only log is
+`artifacts/phase0/model-runtime-qualification/stability/20260807T225158.694501Z/cycles.jsonl`
+(SHA-256 `30a387c9ee2a824c45babe9047691fc23126aef67fa39fd84227bffe9f61cf23`).
+Its status is correctly `short_smoke_complete`, never a 24-hour pass.

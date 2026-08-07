@@ -244,11 +244,26 @@ def _runner(family: str = ModelFamily.NAIVE.value, *, network: bool = False) -> 
 
 def test_default_registry_pins_exact_candidate_revisions_and_roles():
     by_name = {candidate.name: candidate for candidate in default_runtime_candidates()}
-    assert by_name["finbert-family"].external_checkpoint.repository_id == "ProsusAI/finbert"
-    assert by_name["finbert-family"].external_checkpoint.revision == "4556d13015211d73dccd3fdd39d39232506f3e43"
+    assert "finbert-family" not in by_name
+    assert by_name["modern-finbert"].external_checkpoint.repository_id == "tabularisai/ModernFinBERT"
+    assert by_name["modern-finbert"].external_checkpoint.revision == "6c6de8332ea7f6824c0f8917358dce1e669c1710"
+    assert by_name["finbert-minilm"].external_checkpoint.repository_id == "9mark9/finbert-minilm-sentiment"
+    assert by_name["finbert-minilm"].external_checkpoint.revision == "fdbfec0cd09610bd5af26da8998507fe7838e838"
+    assert by_name["finsentiment-deberta-v3"].external_checkpoint.revision == "f2312de96d6cfe6251da37afb0e99b8e29885bdd"
+    assert by_name["ttm-r3"].external_checkpoint.repository_id == "ibm-granite/granite-timeseries-ttm-r3"
+    assert by_name["ttm-r3"].external_checkpoint.revision == "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa"
     assert by_name["ttm-r2"].external_checkpoint.repository_id == "ibm-granite/granite-timeseries-ttm-r2"
     assert by_name["chronos-2-small"].external_checkpoint.repository_id == "autogluon/chronos-2-small"
+    assert by_name["chronos-2-small"].output_schema == "forecast[30]"
+    assert "chronos-forecasting==2.3.1" in by_name["chronos-2-small"].runtime_pin.dependencies
     assert by_name["kronos-mini"].external_checkpoint.tokenizer.repository_id == "NeoQuasar/Kronos-Tokenizer-2k"
+    assert by_name["kronos-mini"].output_schema == "forecast[30]"
+    assert by_name["kronos-small"].output_schema == "forecast[30]"
+    for kronos_name in ("kronos-mini", "kronos-small"):
+        assert "advisorai-kronos-runtime==0.0.0+67b630e" in by_name[
+            kronos_name
+        ].runtime_pin.dependencies
+        assert by_name[kronos_name].repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
     assert by_name["tabpfn-ts"].external_checkpoint.repository_id == "PriorLabs/tabpfn-time-series"
     assert by_name["tspulse"].task == ModelTask.TSPULSE_FEATURES
     with pytest.raises(ValueError, match="never a price forecaster"):
@@ -258,11 +273,11 @@ def test_default_registry_pins_exact_candidate_revisions_and_roles():
             task=ModelTask.FORECAST,
             output_schema="forecast[1]",
         )
-    assert by_name["finbert-family"].external_checkpoint.license_admission.status == LicenseAdmissionStatus.PENDING
-    assert by_name["finbert-family"].runtime_pin.status.value == "pending"
-    assert "flax_model.msgpack" not in {
+    assert by_name["modern-finbert"].external_checkpoint.license_admission.status == LicenseAdmissionStatus.APPROVED
+    assert by_name["modern-finbert"].runtime_pin.status.value == "pending"
+    assert "pytorch_model.bin" not in {
         item.relative_path
-        for item in by_name["finbert-family"].external_checkpoint.repository.all_artifacts
+        for item in by_name["modern-finbert"].external_checkpoint.repository.all_artifacts
     }
     assert "training_args.bin" not in {
         item.relative_path
@@ -464,10 +479,22 @@ def test_missing_runner_is_quarantined_without_fallback():
     assert "runner/checkpoint" in result.failure_reason
 
 
-def test_unapproved_license_cannot_become_measured():
-    result = run_finbert_qualification(runner=_runner(ModelFamily.FINBERT.value))
+def test_unknown_license_does_not_block_private_qualification():
+    candidate = _forecast_candidate(
+        checkpoint=_checkpoint(Path("/tmp"), family=ModelFamily.NAIVE.value)
+    )
+    checkpoint = candidate.external_checkpoint.model_copy(
+        update={"license_admission": LicenseAdmission(status=LicenseAdmissionStatus.UNKNOWN)}
+    )
+    result = run_runtime_qualification(
+        candidate.model_copy(update={"external_checkpoint": checkpoint}),
+        runner=None,
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0,),
+        batch_input=((1.0,),),
+    )
     assert result.status == QualificationStatus.QUARANTINED
-    assert "license admission" in result.failure_reason
+    assert "license" not in result.failure_reason
     assert result.to_bakeoff_result().privacy_passed is None
 
 
@@ -811,7 +838,7 @@ def test_external_in_process_runner_is_rejected(tmp_path):
     assert "in-process" in result.failure_reason
 
 
-def test_tokenizer_license_pending_or_rejected_quarantines_before_worker(tmp_path):
+def test_only_blocking_tokenizer_terms_quarantine_before_worker(tmp_path):
     candidate = _isolated_candidate(tmp_path)
     tokenizer = RepositoryPin(
         repository_id="fixture/tokenizer",
@@ -819,9 +846,17 @@ def test_tokenizer_license_pending_or_rejected_quarantines_before_worker(tmp_pat
         license="not-declared",
         artifacts=(ArtifactPin(relative_path="tokenizer.json", sha256="c" * 64),),
     )
-    for status in (LicenseAdmissionStatus.PENDING, LicenseAdmissionStatus.REJECTED):
+    for status in (
+        LicenseAdmissionStatus.REJECTED,
+        LicenseAdmissionStatus.WAITING_FOR_USER_ACCEPTANCE,
+    ):
+        admission = LicenseAdmission(
+            status=status,
+            reviewed_at=datetime(2026, 8, 7, tzinfo=UTC),
+            evidence_reference="fixture://blocking-terms",
+        )
         checkpoint = candidate.external_checkpoint.model_copy(
-            update={"tokenizer": tokenizer, "tokenizer_license_admission": LicenseAdmission(status=status)}
+            update={"tokenizer": tokenizer, "tokenizer_license_admission": admission}
         )
         candidate_with_tokenizer = candidate.model_copy(update={"external_checkpoint": checkpoint})
         result = run_runtime_qualification(
@@ -833,7 +868,7 @@ def test_tokenizer_license_pending_or_rejected_quarantines_before_worker(tmp_pat
             repository_root=tmp_path / "repository",
         )
         assert result.status == QualificationStatus.QUARANTINED
-        assert "tokenizer license" in result.failure_reason
+        assert "tokenizer terms" in result.failure_reason
 
 
 @pytest.mark.parametrize("suffix", [".py", ".so", ".dll", ".sh"])
@@ -968,6 +1003,48 @@ def test_short_result_projects_into_existing_pending_bakeoff_gate():
 def test_tspulse_projects_as_feature_compute_not_forecast():
     result = run_tspulse_qualification(runner=None)
     assert result.to_bakeoff_result().kind == ComponentKind.FEATURE_COMPUTE
+
+
+def test_tspulse_measured_result_preserves_typed_batch_features():
+    candidate = CandidateSpec(
+        name="fixture-tspulse",
+        family=ModelFamily.TSPULSE,
+        task=ModelTask.TSPULSE_FEATURES,
+        output_schema="features[3]",
+    )
+    def infer(_model, values):
+        def features(row):
+            return (float(len(row)), float(row[-1]), float(max(row) - min(row)))
+
+        if values and isinstance(values[0], (tuple, list)):
+            return tuple(features(row) for row in values)
+        return features(values)
+
+    runner = FunctionalRunner(model_family=ModelFamily.TSPULSE.value, infer_fn=infer)
+    dataset = BenchmarkDataset(
+        dataset_id="fixture-tspulse",
+        version="v1",
+        task=ModelTask.TSPULSE_FEATURES,
+        source="fixture://tspulse",
+        snapshot_id="fixture-tspulse-v1",
+        training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
+        inputs=(1.0, 2.0, 3.0),
+        content_hash="a" * 64,
+    )
+    result = run_runtime_qualification(
+        candidate,
+        runner=runner,
+        dataset=dataset,
+        sample_input=(1.0, 2.0, 3.0),
+        batch_input=((1.0, 2.0, 3.0), (3.0, 4.0, 8.0)),
+    )
+
+    assert result.status == QualificationStatus.MEASURED
+    assert result.feature_batch_predictions == ((3.0, 3.0, 2.0), (3.0, 8.0, 5.0))
+    with pytest.raises(ValueError, match="feature batch predictions require"):
+        type(result).model_validate(
+            {**result.model_dump(), "candidate": _forecast_candidate().model_dump()}
+        )
 
 
 def test_measured_result_requires_complete_evidence():

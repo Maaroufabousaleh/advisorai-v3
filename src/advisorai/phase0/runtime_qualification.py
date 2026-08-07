@@ -63,9 +63,11 @@ class QualificationStatus(StrEnum):
 
 
 class LicenseAdmissionStatus(StrEnum):
+    UNKNOWN = "unknown"
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    WAITING_FOR_USER_ACCEPTANCE = "waiting_for_user_acceptance"
 
 
 class RuntimeAdmissionStatus(StrEnum):
@@ -92,7 +94,13 @@ class ModelFamily(StrEnum):
     SEASONAL = "seasonal"
     LINEAR = "linear"
     LIGHTGBM = "lightgbm"
+    # Retained for compatibility with historical evidence. ProsusAI/finbert is
+    # not part of the active qualification roster.
     FINBERT = "finbert-family"
+    MODERN_FINBERT = "modern-finbert"
+    FINBERT_MINILM = "finbert-minilm"
+    FINSENTIMENT_DEBERTA = "finsentiment-deberta-v3"
+    TTM_R3 = "ttm-r3"
     TTM_R2 = "ttm-r2"
     TSPULSE = "tspulse"
     CHRONOS_2_SMALL = "chronos-2-small"
@@ -164,11 +172,16 @@ class ArtifactPin(BaseModel):
 
 
 class LicenseAdmission(BaseModel):
-    """Explicit operator decision for a model's license provenance."""
+    """License/terms provenance for a private, personal installation.
+
+    License ambiguity is metadata, not a technical admission gate. Only an
+    evidenced prohibition or gated terms that require the user to accept them
+    block qualification.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    status: LicenseAdmissionStatus = LicenseAdmissionStatus.PENDING
+    status: LicenseAdmissionStatus = LicenseAdmissionStatus.UNKNOWN
     license_identifier: str | None = None
     reviewed_at: datetime | None = None
     evidence_reference: str | None = None
@@ -182,7 +195,21 @@ class LicenseAdmission(BaseModel):
         if self.status == LicenseAdmissionStatus.APPROVED:
             if not self.license_identifier or not self.evidence_reference or self.reviewed_at is None:
                 raise ValueError("approved license admission requires identity, date, and evidence")
+        if self.status in {
+            LicenseAdmissionStatus.REJECTED,
+            LicenseAdmissionStatus.WAITING_FOR_USER_ACCEPTANCE,
+        } and (not self.evidence_reference or self.reviewed_at is None):
+            raise ValueError("blocking license/terms status requires dated evidence")
         return self
+
+
+def license_blocks_private_use(admission: LicenseAdmission | None) -> bool:
+    """Return whether evidenced terms block this private technical bake-off."""
+
+    return admission is not None and admission.status in {
+        LicenseAdmissionStatus.REJECTED,
+        LicenseAdmissionStatus.WAITING_FOR_USER_ACCEPTANCE,
+    }
 
 
 class RuntimePin(BaseModel):
@@ -372,8 +399,14 @@ class RepositoryPin(BaseModel):
         paths = [artifact.relative_path for artifact in self.all_artifacts]
         if len(paths) != len(set(paths)):
             raise ValueError("repository artifact paths must be unique")
-        if not self.cache_subdir.strip() or Path(self.cache_subdir).is_absolute():
-            raise ValueError("repository cache subdirectory must be relative")
+        cache_subdir = Path(self.cache_subdir)
+        if (
+            not self.cache_subdir.strip()
+            or cache_subdir.is_absolute()
+            or ".." in cache_subdir.parts
+            or str(cache_subdir) in {".", ""}
+        ):
+            raise ValueError("repository cache subdirectory must be relative and traversal-free")
         return self
 
     @property
@@ -404,8 +437,6 @@ class CheckpointPin(BaseModel):
             raise ValueError("checkpoint model family is required")
         if not self.quantization.strip():
             raise ValueError("checkpoint quantization must be explicit")
-        if self.tokenizer is not None and self.tokenizer_license_admission is None:
-            raise ValueError("tokenizer repositories require a separate license admission")
         return self
 
     @property
@@ -554,6 +585,8 @@ class RuntimeResourceResult(BaseModel):
     vram_after_unload_mib: float | None = Field(default=None, ge=0)
     unload_succeeded: bool
     memory_released: bool = True
+    in_process_memory_released: bool = True
+    worker_process_terminated: bool = False
     rss_residual_mib: float | None = Field(default=None, ge=0)
     vram_residual_mib: float | None = Field(default=None, ge=0)
     resource_limit_passed: bool
@@ -635,6 +668,30 @@ class CandidateSpec(BaseModel):
         return self
 
 
+class LocalCandidateAdmission(BaseModel):
+    """Machine-specific checkpoint and isolated-runtime admission bundle."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: str = "advisorai.phase0.local-candidate-admission.v1"
+    candidate_name: str
+    checkpoint: CheckpointPin
+    runtime_pin: RuntimePin
+    created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_admission(self) -> LocalCandidateAdmission:
+        if self.schema_version != "advisorai.phase0.local-candidate-admission.v1":
+            raise ValueError("unsupported local candidate admission schema")
+        if not self.candidate_name.strip():
+            raise ValueError("local candidate admission requires a candidate name")
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
+            raise ValueError("local candidate admission timestamp must include a timezone")
+        if self.runtime_pin.status != RuntimeAdmissionStatus.APPROVED:
+            raise ValueError("local candidate admission requires an approved runtime")
+        return self
+
+
 class BenchmarkDataset(BaseModel):
     """Versioned, point-in-time-safe benchmark input interface."""
 
@@ -687,6 +744,36 @@ class BenchmarkDataset(BaseModel):
         )
 
     @classmethod
+    def ttm_runtime_fixture(cls) -> BenchmarkDataset:
+        """Deterministic context-length fixture for TTM runtime validation.
+
+        This is deliberately not model-selection evidence. It only exercises
+        the admitted 512-point context and 30-step output contracts.
+        """
+
+        inputs = tuple(
+            100.0 + 0.015 * index + math.sin(index / 17.0) + 0.2 * math.cos(index / 5.0)
+            for index in range(1054)
+        )
+        targets = tuple(
+            100.0 + 0.015 * (index + 1) + math.sin((index + 1) / 17.0)
+            + 0.2 * math.cos((index + 1) / 5.0)
+            for index in range(1054)
+        )
+        payload = json.dumps({"inputs": inputs, "targets": targets}, separators=(",", ":"))
+        return cls(
+            dataset_id="advisorai-phase0-ttm-runtime-fixture",
+            version="1.0.0",
+            task=ModelTask.FORECAST,
+            source="synthetic://advisorai/phase0/ttm-runtime-contract-v1",
+            snapshot_id="ttm-runtime-contract-v1",
+            training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
+            inputs=inputs,
+            targets=targets,
+            content_hash=sha256(payload.encode()).hexdigest(),
+        )
+
+    @classmethod
     def finbert_fixture(cls) -> BenchmarkDataset:
         fixture = (
             ("The company beat quarterly earnings expectations and raised guidance.", "positive"),
@@ -717,6 +804,26 @@ class BenchmarkDataset(BaseModel):
             task=ModelTask.TSPULSE_FEATURES,
             source="synthetic://advisorai/phase0/integrity-features-v1",
             snapshot_id="synthetic-phase0-integrity-v1",
+            training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
+            inputs=inputs,
+            content_hash=sha256(payload.encode()).hexdigest(),
+        )
+
+    @classmethod
+    def tspulse_runtime_fixture(cls) -> BenchmarkDataset:
+        """Synthetic contract fixture for feature extraction, never forecasting."""
+
+        inputs = tuple(
+            20.0 + 0.003 * index + math.sin(index / 11.0) + (2.5 if index in {301, 812} else 0)
+            for index in range(1024)
+        )
+        payload = json.dumps(inputs, separators=(",", ":"))
+        return cls(
+            dataset_id="advisorai-phase0-tspulse-runtime-fixture",
+            version="1.0.0",
+            task=ModelTask.TSPULSE_FEATURES,
+            source="synthetic://advisorai/phase0/tspulse-contract-v1",
+            snapshot_id="tspulse-runtime-contract-v1",
             training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
             inputs=inputs,
             content_hash=sha256(payload.encode()).hexdigest(),
@@ -755,9 +862,16 @@ class RuntimeQualificationResult(BaseModel):
     one_inference_completed: bool = False
     batch_completed: bool = False
     network_access_attempted: bool = False
+    loaded_model_class: str | None = None
+    loaded_parameter_count: int | None = Field(default=None, ge=1)
     finbert_accuracy: float | None = Field(default=None, ge=0, le=1)
     finbert_per_label_accuracy: tuple[tuple[str, float], ...] = ()
     finbert_mean_confidence: float | None = Field(default=None, ge=0, le=1)
+    forecast_batch_predictions: tuple[tuple[float, ...], ...] = ()
+    sentiment_batch_predictions: tuple[tuple[str, float], ...] = ()
+    forecast_batch_lower: tuple[tuple[float, ...], ...] = ()
+    forecast_batch_upper: tuple[tuple[float, ...], ...] = ()
+    feature_batch_predictions: tuple[tuple[float, ...], ...] = ()
     missing_checkpoint_quarantined: bool = False
     corrupt_checkpoint_quarantined: bool = False
     failure_reason: str | None = None
@@ -814,6 +928,52 @@ class RuntimeQualificationResult(BaseModel):
             for label, accuracy in self.finbert_per_label_accuracy
         ):
             raise ValueError("FinBERT per-label accuracy must contain valid labels and values")
+        if self.forecast_batch_predictions and self.candidate.task != ModelTask.FORECAST:
+            raise ValueError("forecast batch predictions require a forecast candidate")
+        if self.sentiment_batch_predictions and self.candidate.task != ModelTask.FINANCE_SENTIMENT:
+            raise ValueError("sentiment batch predictions require a sentiment candidate")
+        if any(
+            not math.isfinite(value)
+            for forecast in self.forecast_batch_predictions
+            for value in forecast
+        ):
+            raise ValueError("forecast batch predictions must be finite")
+        if any(
+            not label.strip() or not 0 <= confidence <= 1
+            for label, confidence in self.sentiment_batch_predictions
+        ):
+            raise ValueError("sentiment batch predictions must be valid")
+        if bool(self.forecast_batch_lower) != bool(self.forecast_batch_upper):
+            raise ValueError("forecast interval bounds must be supplied together")
+        if self.forecast_batch_lower:
+            if self.candidate.task != ModelTask.FORECAST:
+                raise ValueError("forecast intervals require a forecast candidate")
+            if len(self.forecast_batch_lower) != len(self.forecast_batch_predictions):
+                raise ValueError("forecast interval batch cardinality must match predictions")
+            for lower, upper, point in zip(
+                self.forecast_batch_lower,
+                self.forecast_batch_upper,
+                self.forecast_batch_predictions,
+                strict=True,
+            ):
+                if len(lower) != len(point) or len(upper) != len(point):
+                    raise ValueError("forecast interval horizon must match predictions")
+                if any(
+                    not math.isfinite(left)
+                    or not math.isfinite(right)
+                    or left > right
+                    for left, right in zip(lower, upper, strict=True)
+                ):
+                    raise ValueError("forecast intervals must be finite and ordered")
+        if self.feature_batch_predictions:
+            if self.candidate.task != ModelTask.TSPULSE_FEATURES:
+                raise ValueError("feature batch predictions require a feature candidate")
+            if any(
+                not math.isfinite(value)
+                for features in self.feature_batch_predictions
+                for value in features
+            ):
+                raise ValueError("feature batch predictions must be finite")
         if self.manifest_hash is not None and (
             len(self.manifest_hash) != 64
             or any(character not in HEX64 for character in self.manifest_hash)
@@ -1078,10 +1238,13 @@ class RuntimeWorkerResponse(BaseModel):
     identity: RuntimeWorkerIdentity
     outputs: tuple[object, ...] = ()
     batch_output: object | None = None
+    forecast_batch_lower: tuple[tuple[float, ...], ...] = ()
+    forecast_batch_upper: tuple[tuple[float, ...], ...] = ()
     cold_load_ms: float = Field(default=0, ge=0)
     warm_durations_ms: tuple[float, ...] = ()
     batch_inference_ms: float = Field(default=0, ge=0)
     batch_size: int = Field(default=1, ge=1)
+    rss_before_load_mib: float = Field(default=0, ge=0)
     rss_after_load_mib: float = Field(default=0, ge=0)
     rss_after_unload_mib: float = Field(default=0, ge=0)
     vram_after_load_mib: float | None = Field(default=None, ge=0)
@@ -1098,6 +1261,11 @@ class RuntimeWorkerResponse(BaseModel):
     applied_seeds: tuple[int, ...] = ()
     stochastic_dispersion: float | None = Field(default=None, ge=0)
     stochastic_variation_observed: bool = False
+    loaded_model_class: str | None = None
+    loaded_parameter_count: int | None = Field(default=None, ge=1)
+    checkpoint_missing_key_count: int = Field(default=0, ge=0)
+    checkpoint_unexpected_key_count: int = Field(default=0, ge=0)
+    checkpoint_mismatched_key_count: int = Field(default=0, ge=0)
 
     @model_validator(mode="after")
     def validate_worker_response(self) -> RuntimeWorkerResponse:
@@ -1121,6 +1289,7 @@ class _ProcessTreeMonitor:
         self.rss_before_mib = 0.0
         self.rss_peak_mib = 0.0
         self.samples = 0
+        self.seen_pids: set[int] = {pid}
 
     def _processes(self) -> tuple[psutil.Process, ...]:
         try:
@@ -1132,6 +1301,7 @@ class _ProcessTreeMonitor:
     def _sample(self) -> None:
         total = 0.0
         for process in self._processes():
+            self.seen_pids.add(process.pid)
             try:
                 total += process.memory_info().rss / (1024**2)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
@@ -1160,6 +1330,11 @@ class _ProcessTreeMonitor:
             self._thread.join(timeout=1)
         self._sample()
 
+    def all_processes_terminated(self) -> bool:
+        """Prove the worker and every observed child left no resident process."""
+
+        return all(not psutil.pid_exists(pid) for pid in self.seen_pids)
+
 
 def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
     try:
@@ -1184,20 +1359,27 @@ def network_blocked() -> Iterator[None]:
 
     original_socket = socket.socket
     original_create_connection = socket.create_connection
-
-    def blocked_socket(*args: object, **kwargs: object) -> object:
-        raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+    original_getaddrinfo = socket.getaddrinfo
 
     def blocked_connection(*args: object, **kwargs: object) -> object:
         raise NetworkAccessAttemptError("network access is disabled during offline qualification")
 
-    socket.socket = cast(Any, blocked_socket)
+    class OfflineSocket(original_socket):
+        def connect(self, *args: object, **kwargs: object) -> None:
+            raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+
+        def connect_ex(self, *args: object, **kwargs: object) -> int:
+            raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+
+    socket.socket = cast(Any, OfflineSocket)
     socket.create_connection = cast(Any, blocked_connection)
+    socket.getaddrinfo = cast(Any, blocked_connection)
     try:
         yield
     finally:
         socket.socket = original_socket
         socket.create_connection = original_create_connection
+        socket.getaddrinfo = original_getaddrinfo
 
 
 def sha256_file(path: Path) -> str:
@@ -1237,6 +1419,234 @@ def installed_environment_sha256(entries: Sequence[str] | None = None) -> str:
     """Hash the complete normalized installed-distribution inventory."""
 
     return sha256(_installed_environment_bytes(entries or _installed_environment_inventory())).hexdigest()
+
+
+def _isolated_worker_environment() -> dict[str, str]:
+    """Return the minimal, credential-free environment used for ML workers."""
+
+    allowed = {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT"}
+    environment = {key: value for key, value in os.environ.items() if key in allowed}
+    environment.update(
+        {
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+            "PYTHONNOUSERSITE": "1",
+        }
+    )
+    return environment
+
+
+def freeze_runtime_pin(
+    *,
+    project: str,
+    version_or_commit: str,
+    python_constraint: str,
+    dependencies: tuple[str, ...],
+    environment_path: Path,
+    lock_artifact_path: Path,
+    worker_script: Path,
+    worker_kind: str,
+    runner_version: str,
+    admission_directory: Path,
+    repository_root: Path | None = None,
+) -> RuntimePin:
+    """Attest a real isolated environment without importing it into core.
+
+    The complete installed-distribution inventory is generated independently
+    by the pinned interpreter. The returned pin remains machine-specific and
+    is intended for ignored immutable evidence, not portable source control.
+    """
+
+    root = (repository_root or Path.cwd()).resolve(strict=False)
+    environment_path = environment_path.expanduser().resolve(strict=False)
+    lock_artifact_path = lock_artifact_path.expanduser().resolve(strict=False)
+    worker_script = worker_script.expanduser().resolve(strict=False)
+    admission_directory = admission_directory.expanduser().resolve(strict=False)
+    for path, label in (
+        (environment_path, "runtime environment"),
+        (lock_artifact_path, "runtime lock"),
+        (admission_directory, "runtime admission evidence"),
+    ):
+        try:
+            path.relative_to(root)
+        except ValueError:
+            pass
+        else:
+            raise QualificationError(f"{label} must be outside the repository")
+    if environment_path.is_symlink() or not environment_path.is_dir():
+        raise QualificationError("runtime environment must be a real external directory")
+    if lock_artifact_path.is_symlink() or not lock_artifact_path.is_file():
+        raise QualificationError("runtime lock must be an immutable regular file")
+    if worker_script.is_symlink() or not worker_script.is_file():
+        raise QualificationError("runtime worker script is missing or symlinked")
+    admission_directory.mkdir(parents=True, exist_ok=True)
+    launcher = environment_path / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if not launcher.exists() or launcher.is_dir():
+        raise QualificationError("isolated runtime Python launcher is missing")
+
+    inventory_process = subprocess.run(
+        [str(launcher), "-I", str(worker_script), "--inventory"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=_isolated_worker_environment(),
+        cwd=str(worker_script.parent),
+    )
+    if inventory_process.returncode != 0:
+        raise QualificationError("isolated runtime inventory command failed")
+    try:
+        inventory_decoded = json.loads(inventory_process.stdout)
+    except json.JSONDecodeError as exc:
+        raise QualificationError("isolated runtime inventory was not valid JSON") from exc
+    if not isinstance(inventory_decoded, list) or any(
+        not isinstance(item, str) or "==" not in item for item in inventory_decoded
+    ):
+        raise QualificationError("isolated runtime inventory was malformed")
+    inventory = tuple(inventory_decoded)
+    if inventory != tuple(sorted(set(inventory), key=str.casefold)):
+        raise QualificationError("isolated runtime inventory is not canonical")
+    manifest_bytes_value = _installed_environment_bytes(inventory)
+    manifest_path = admission_directory / "installed-environment.json"
+    if manifest_path.exists() and manifest_path.read_bytes() != manifest_bytes_value:
+        raise QualificationError("immutable installed-environment evidence differs")
+    manifest_path.write_bytes(manifest_bytes_value)
+    manifest_hash = sha256(manifest_bytes_value).hexdigest()
+
+    dependency_names = [dependency.split("==", 1)[0].split("@", 1)[0].strip() for dependency in dependencies]
+    identity_code = """
+import importlib.metadata, json, platform, socket, sys
+def blocked(*args, **kwargs):
+    raise RuntimeError('network disabled during runtime attestation')
+original_socket = socket.socket
+class OfflineSocket(original_socket):
+    def connect(self, *args, **kwargs):
+        raise RuntimeError('network disabled during runtime attestation')
+    def connect_ex(self, *args, **kwargs):
+        raise RuntimeError('network disabled during runtime attestation')
+socket.socket = OfflineSocket
+socket.create_connection = blocked
+socket.getaddrinfo = blocked
+names = json.loads(sys.argv[1])
+versions = {}
+for name in names:
+    try:
+        versions[name] = importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        versions[name] = None
+cuda = None
+try:
+    import torch
+    cuda = torch.version.cuda
+except ImportError:
+    pass
+print(json.dumps({
+    'python_version': platform.python_version(),
+    'sys_executable': sys.executable,
+    'sys_prefix': sys.prefix,
+    'sys_base_prefix': sys.base_prefix,
+    'package_versions': versions,
+    'cuda_version': cuda,
+}, sort_keys=True, separators=(',', ':')))
+"""
+    identity_process = subprocess.run(
+        [str(launcher), "-I", "-c", identity_code, json.dumps(dependency_names)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=_isolated_worker_environment(),
+    )
+    if identity_process.returncode != 0:
+        raise QualificationError("isolated runtime identity command failed")
+    try:
+        identity = json.loads(identity_process.stdout)
+    except json.JSONDecodeError as exc:
+        raise QualificationError("isolated runtime identity was not valid JSON") from exc
+    package_versions = identity.get("package_versions")
+    if not isinstance(package_versions, dict):
+        raise QualificationError("isolated runtime package identity was malformed")
+    observed = {str(name).lower().replace("_", "-"): value for name, value in package_versions.items()}
+    for dependency in dependencies:
+        name, separator, expected = dependency.partition("==")
+        if not separator:
+            name = dependency.split("@", 1)[0]
+            expected = ""
+        actual = observed.get(name.strip().lower().replace("_", "-"))
+        if actual is None or (expected and actual != expected.strip()):
+            raise QualificationError(f"isolated runtime package identity mismatch for {name.strip()}")
+    if not _python_constraint_satisfied(python_constraint, str(identity["python_version"])):
+        raise QualificationError("isolated runtime Python version violates its constraint")
+
+    lock_hash = sha256_file(lock_artifact_path)
+    binary = launcher.resolve(strict=True)
+    cfg_path = environment_path / "pyvenv.cfg"
+    if not cfg_path.is_file() or cfg_path.is_symlink():
+        raise QualificationError("isolated runtime pyvenv.cfg is missing or unsafe")
+    runner_hash = _worker_runner_hash(worker_script, runner_version)
+    fingerprint = _environment_fingerprint(
+        sys_executable=str(launcher),
+        python_version=str(identity["python_version"]),
+        package_versions={str(name): value for name, value in package_versions.items()},
+        torch_version=observed.get("torch"),
+        cuda_version=identity.get("cuda_version"),
+        runtime_lock_hash=lock_hash,
+        installed_environment_sha256=manifest_hash,
+        sys_prefix=str(Path(str(identity["sys_prefix"])).resolve(strict=False)),
+        sys_base_prefix=str(Path(str(identity["sys_base_prefix"])).resolve(strict=False)),
+    )
+    return RuntimePin(
+        project=project,
+        version_or_commit=version_or_commit,
+        python_constraint=python_constraint,
+        dependencies=dependencies,
+        lock_hash=lock_hash,
+        lock_artifact_path=str(lock_artifact_path),
+        installed_environment_manifest_path=str(manifest_path),
+        installed_environment_sha256=manifest_hash,
+        environment_fingerprint=fingerprint,
+        python_executable=str(launcher),
+        python_executable_hash=sha256_file(binary),
+        python_launcher=str(launcher),
+        python_launcher_hash=_launcher_identity_hash(launcher),
+        python_launcher_target=str(binary) if launcher.is_symlink() else None,
+        resolved_python_binary_hash=sha256_file(binary),
+        pyvenv_cfg_path=str(cfg_path),
+        pyvenv_cfg_hash=sha256_file(cfg_path),
+        environment_path=str(environment_path),
+        worker_script=str(worker_script),
+        worker_kind=worker_kind,
+        runner_version=runner_version,
+        runner_hash=runner_hash,
+        status=RuntimeAdmissionStatus.APPROVED,
+        evidence_reference=str(admission_directory),
+    )
+
+
+def apply_local_candidate_admission(
+    candidate: CandidateSpec,
+    admission: LocalCandidateAdmission,
+) -> CandidateSpec:
+    """Apply machine evidence only after portable identity comparison."""
+
+    if admission.candidate_name != candidate.name or candidate.external_checkpoint is None:
+        raise QualificationError("local admission candidate identity mismatch")
+    expected = candidate.external_checkpoint
+    observed = admission.checkpoint
+    if (
+        observed.model_family != candidate.family.value
+        or observed.repository.repository_id != expected.repository.repository_id
+        or observed.repository.revision != expected.repository.revision
+    ):
+        raise QualificationError("local admission checkpoint is not the registered candidate")
+    return CandidateSpec.model_validate(
+        {
+            **candidate.model_dump(),
+            "external_checkpoint": observed.model_dump(),
+            "runtime_pin": admission.runtime_pin.model_dump(),
+        }
+    )
 
 
 def _python_constraint_satisfied(constraint: str, version: str) -> bool:
@@ -1293,11 +1703,6 @@ def verify_checkpoint_artifacts(
 
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
-    if checkpoint.tokenizer is not None and (
-        checkpoint.tokenizer_license_admission is None
-        or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
-    ):
-        raise CheckpointPinError("tokenizer license admission is not approved")
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
     repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
     observed: list[ArtifactPin] = []
@@ -1339,11 +1744,6 @@ def cached_artifact_inventory(
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
-    if checkpoint.tokenizer is not None and (
-        checkpoint.tokenizer_license_admission is None
-        or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
-    ):
-        raise CheckpointPinError("tokenizer license admission is not approved")
     repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
     inventory: list[ArtifactPin] = []
     for repository in repositories:
@@ -1670,6 +2070,8 @@ def validate_candidate_output(candidate: CandidateSpec, output: object) -> str:
         raise InvalidModelOutputError("output does not match the candidate schema")
     if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith("features["):
         raise InvalidModelOutputError("TSPulse candidate schema must be features[n]")
+    if candidate.task == ModelTask.TSPULSE_FEATURES and shape != candidate.output_schema:
+        raise InvalidModelOutputError("TSPulse output does not match the candidate schema")
     if candidate.task == ModelTask.FORECAST and shape != candidate.output_schema:
         raise InvalidModelOutputError("forecast output does not match the candidate schema")
     return shape
@@ -1695,6 +2097,10 @@ def validate_candidate_batch_output(
         raise InvalidModelOutputError("FinBERT batch output does not match the candidate schema")
     if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith("features["):
         raise InvalidModelOutputError("TSPulse candidate schema must be features[n]")
+    if candidate.task == ModelTask.TSPULSE_FEATURES and not shape.endswith(
+        f"<{candidate.output_schema}>"
+    ):
+        raise InvalidModelOutputError("TSPulse batch output does not match the candidate schema")
     if candidate.task == ModelTask.FORECAST:
         expected = _forecast_horizon_from_schema(candidate.output_schema)
         if expected is None or not shape.endswith(f"<forecast[{expected}]>"):
@@ -1888,6 +2294,15 @@ def _validate_worker_success_envelope(
         raise QualificationError("worker batch size does not match the request")
     if response.batch_output is None:
         raise QualificationError("worker success response is missing batch output")
+    if any(
+        value != 0
+        for value in (
+            response.checkpoint_missing_key_count,
+            response.checkpoint_unexpected_key_count,
+            response.checkpoint_mismatched_key_count,
+        )
+    ):
+        raise QualificationError("worker checkpoint load reported incompatible parameter keys")
 
 
 def _worker_request(
@@ -2000,19 +2415,7 @@ def _run_isolated_runtime_qualification(
     # Never inherit the process's secret inventory or arbitrary connector
     # configuration into a third-party model runtime.  The worker receives a
     # deliberately tiny environment and only the offline controls below.
-    worker_environment = {
-        key: value
-        for key, value in os.environ.items()
-        if key in {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT"}
-    }
-    worker_environment.update(
-        {
-            "HF_HUB_OFFLINE": "1",
-            "TRANSFORMERS_OFFLINE": "1",
-            "TOKENIZERS_PARALLELISM": "false",
-            "PYTHONNOUSERSITE": "1",
-        }
-    )
+    worker_environment = _isolated_worker_environment()
     monitor: _ProcessTreeMonitor | None = None
     process: subprocess.Popen[str] | None = None
     decoded: Mapping[str, object] | None = None
@@ -2073,6 +2476,12 @@ def _run_isolated_runtime_qualification(
         monitor=monitor,
         ceiling=ceiling,
         batch_size=_batch_size(batch_input),
+        worker_process_terminated=(
+            process is not None
+            and process.returncode is not None
+            and monitor is not None
+            and monitor.all_processes_terminated()
+        ),
     )
     # Treat the worker's explicit privacy signal before any identity or output
     # validation.  A network attempt is a fail-closed result even if a
@@ -2111,6 +2520,32 @@ def _run_isolated_runtime_qualification(
         batch_size = _batch_size(batch_input)
         validate_candidate_batch_output(candidate, response.batch_output, expected_batch_size=batch_size)
         finbert_metrics = _finbert_metrics(dataset, response.batch_output) if candidate.task == ModelTask.FINANCE_SENTIMENT else None
+        forecast_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in response.batch_output)
+            if candidate.task == ModelTask.FORECAST
+            else ()
+        )
+        sentiment_batch_predictions = (
+            tuple(
+                (
+                    str(item["label"]),
+                    float(item.get("confidence", item.get("score"))),
+                )
+                for item in response.batch_output
+            )
+            if candidate.task == ModelTask.FINANCE_SENTIMENT
+            else ()
+        )
+        feature_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in response.batch_output)
+            if candidate.task == ModelTask.TSPULSE_FEATURES
+            else ()
+        )
+        if bool(response.forecast_batch_lower) != bool(response.forecast_batch_upper):
+            raise QualificationError("worker forecast interval bounds are incomplete")
+        if response.forecast_batch_lower:
+            if len(response.forecast_batch_lower) != len(forecast_batch_predictions):
+                raise QualificationError("worker forecast interval batch cardinality is invalid")
         repeat_digests = [output_digest(output) for output in response.outputs]
         equal = len(set(repeat_digests)) == 1
         stochastic_evidence = (
@@ -2149,9 +2584,16 @@ def _run_isolated_runtime_qualification(
             "one_inference_completed": True,
             "batch_completed": True,
             "applied_seeds": response.applied_seeds,
+            "loaded_model_class": response.loaded_model_class,
+            "loaded_parameter_count": response.loaded_parameter_count,
             "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
             "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
             "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
+            "forecast_batch_predictions": forecast_batch_predictions,
+            "sentiment_batch_predictions": sentiment_batch_predictions,
+            "forecast_batch_lower": response.forecast_batch_lower,
+            "forecast_batch_upper": response.forecast_batch_upper,
+            "feature_batch_predictions": feature_batch_predictions,
         }
         if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
             common["stochastic_seeds"] = response.applied_seeds
@@ -2222,22 +2664,22 @@ def run_runtime_qualification(
                 candidate.runtime_pin.assert_environment_outside_repository(repository_root or Path.cwd())
         except (CheckpointPinError, QualificationError) as exc:
             return _quarantined_result(candidate, dataset=dataset, environment=environment, reason=str(exc))
-        if checkpoint.license_admission.status != LicenseAdmissionStatus.APPROVED:
+        if license_blocks_private_use(checkpoint.license_admission):
             return _quarantined_result(
                 candidate,
                 dataset=dataset,
                 environment=environment,
-                reason="license admission is not approved",
+                reason=f"model terms block private qualification: {checkpoint.license_admission.status.value}",
             )
-        if checkpoint.tokenizer is not None and (
-            checkpoint.tokenizer_license_admission is None
-            or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
-        ):
+        if license_blocks_private_use(checkpoint.tokenizer_license_admission):
             return _quarantined_result(
                 candidate,
                 dataset=dataset,
                 environment=environment,
-                reason="tokenizer license admission is not approved",
+                reason=(
+                    "tokenizer terms block private qualification: "
+                    f"{checkpoint.tokenizer_license_admission.status.value}"
+                ),
             )
         if candidate.runtime_pin is None:
             return _quarantined_result(
@@ -2505,6 +2947,27 @@ def _run_loaded_qualification(
             }
         )
         stochastic_characterized = bool(stochastic_evidence["stochastic_variation_observed"])
+        forecast_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in batch_output)
+            if candidate.task == ModelTask.FORECAST
+            else ()
+        )
+        sentiment_batch_predictions = (
+            tuple(
+                (
+                    str(item["label"]),
+                    float(item.get("confidence", item.get("score"))),
+                )
+                for item in batch_output
+            )
+            if candidate.task == ModelTask.FINANCE_SENTIMENT
+            else ()
+        )
+        feature_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in batch_output)
+            if candidate.task == ModelTask.TSPULSE_FEATURES
+            else ()
+        )
         common = {
             "candidate": candidate,
             "environment": environment,
@@ -2529,6 +2992,9 @@ def _run_loaded_qualification(
             "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
             "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
             "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
+            "forecast_batch_predictions": forecast_batch_predictions,
+            "sentiment_batch_predictions": sentiment_batch_predictions,
+            "feature_batch_predictions": feature_batch_predictions,
         }
         repeatability_failure = (
             candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED and not equal
@@ -2616,8 +3082,11 @@ def _isolated_worker_resource(
     monitor: _ProcessTreeMonitor | None,
     ceiling: ResourceCeiling,
     batch_size: int,
+    worker_process_terminated: bool,
 ) -> RuntimeResourceResult:
-    rss_before = monitor.rss_before_mib if monitor is not None else 0.0
+    rss_before = response.rss_before_load_mib or (
+        monitor.rss_before_mib if monitor is not None else 0.0
+    )
     rss_peak = max(
         rss_before,
         response.rss_after_load_mib,
@@ -2625,8 +3094,21 @@ def _isolated_worker_resource(
     )
     rss_after_unload = response.rss_after_unload_mib
     rss_residual = max(0.0, rss_after_unload - rss_before)
-    resource_limit_passed = rss_peak <= ceiling.max_rss_mib
-    memory_released = response.unload_succeeded and rss_residual <= ceiling.max_residual_rss_mib
+    vram_peak = response.vram_peak_mib or response.vram_after_load_mib
+    vram_residual = response.vram_after_unload_mib
+    resource_limit_passed = rss_peak <= ceiling.max_rss_mib and (
+        vram_peak is None or vram_peak <= ceiling.max_vram_mib
+    )
+    in_process_memory_released = (
+        response.unload_succeeded and rss_residual <= ceiling.max_residual_rss_mib
+    )
+    if vram_residual is not None:
+        in_process_memory_released = (
+            in_process_memory_released and vram_residual <= ceiling.max_residual_vram_mib
+        )
+    memory_released = in_process_memory_released or (
+        response.unload_succeeded and worker_process_terminated
+    )
     durations = response.warm_durations_ms or (0.0,)
     return RuntimeResourceResult(
         cold_load_ms=response.cold_load_ms,
@@ -2641,12 +3123,14 @@ def _isolated_worker_resource(
         rss_after_unload_mib=rss_after_unload,
         vram_before_mib=0 if response.vram_after_load_mib is not None else None,
         vram_after_load_mib=response.vram_after_load_mib,
-        vram_peak_mib=response.vram_peak_mib or response.vram_after_load_mib,
+        vram_peak_mib=vram_peak,
         vram_after_unload_mib=response.vram_after_unload_mib,
         unload_succeeded=response.unload_succeeded,
         memory_released=memory_released,
+        in_process_memory_released=in_process_memory_released,
+        worker_process_terminated=worker_process_terminated,
         rss_residual_mib=rss_residual,
-        vram_residual_mib=response.vram_after_unload_mib,
+        vram_residual_mib=vram_residual,
         resource_limit_passed=resource_limit_passed,
     )
 
@@ -2658,14 +3142,21 @@ def _candidate_by_family(family: ModelFamily) -> CandidateSpec:
 def run_finbert_qualification(
     *,
     runner: RuntimeRunner | None,
+    family: ModelFamily = ModelFamily.MODERN_FINBERT,
     environment: RuntimeEnvironment | None = None,
     ceiling: ResourceCeiling | None = None,
     repository_root: Path | None = None,
 ) -> RuntimeQualificationResult:
-    """Qualify FinBERT against the fixed public finance-text fixture."""
+    """Qualify an active finance-sentiment candidate on the smoke fixture.
+
+    The compatibility name is retained for callers, but the active default is
+    ModernFinBERT. ProsusAI/finbert is not present in the default roster.
+    """
 
     dataset = BenchmarkDataset.finbert_fixture()
-    candidate = _candidate_by_family(ModelFamily.FINBERT)
+    candidate = _candidate_by_family(family)
+    if candidate.task != ModelTask.FINANCE_SENTIMENT:
+        raise ValueError("finance-sentiment qualification requires an NLP candidate")
     texts = tuple(text for text, _label in dataset.public_text_fixture)
     return run_runtime_qualification(
         candidate,
@@ -2688,14 +3179,14 @@ def run_tspulse_qualification(
 ) -> RuntimeQualificationResult:
     """Qualify TSPulse only for integrity/anomaly/regime features."""
 
-    dataset = BenchmarkDataset.synthetic_features()
+    dataset = BenchmarkDataset.tspulse_runtime_fixture()
     candidate = _candidate_by_family(ModelFamily.TSPULSE)
     return run_runtime_qualification(
         candidate,
         runner=runner,
         dataset=dataset,
-        sample_input=dataset.inputs[:16],
-        batch_input=(dataset.inputs[:16], dataset.inputs[16:]),
+        sample_input=dataset.inputs[:512],
+        batch_input=(dataset.inputs[:512], dataset.inputs[512:1024]),
         environment=environment,
         ceiling=ceiling,
         repository_root=repository_root,
@@ -2826,6 +3317,7 @@ def _repo(
         "README.md",
         "LICENSE",
         "LICENSE.md",
+        "model.sig",
         "pyproject.toml",
     }
     runtime_paths = tuple(
@@ -2852,32 +3344,162 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
         CandidateSpec(name="linear", family=ModelFamily.LINEAR, task=ModelTask.FORECAST, output_schema="forecast[1]"),
         CandidateSpec(name="lightgbm", family=ModelFamily.LIGHTGBM, task=ModelTask.FORECAST, output_schema="forecast[1]"),
         CandidateSpec(
-            name="finbert-family",
-            family=ModelFamily.FINBERT,
+            name="modern-finbert",
+            family=ModelFamily.MODERN_FINBERT,
             task=ModelTask.FINANCE_SENTIMENT,
             requires_transformers=True,
             output_schema="sentiment(label,confidence)",
             runtime_pin=_runtime_pin(
-                candidate="finbert-family",
+                candidate="modern-finbert",
                 project="transformers",
                 version_or_commit="5.5.4",
-                dependencies=("huggingface-hub==1.26.1", "torch=operator-selected"),
+                dependencies=(
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "tokenizers==0.22.2",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
             ),
             external_checkpoint=CheckpointPin(
-                model_family=ModelFamily.FINBERT.value,
+                model_family=ModelFamily.MODERN_FINBERT.value,
                 repository=_repo(
-                    "ProsusAI/finbert",
-                    "4556d13015211d73dccd3fdd39d39232506f3e43",
-                    "not-declared",
-                    ".gitattributes",
+                    "tabularisai/ModernFinBERT",
+                    "6c6de8332ea7f6824c0f8917358dce1e669c1710",
+                    "apache-2.0",
                     "README.md",
                     "config.json",
-                    "pytorch_model.bin",
+                    "model.safetensors",
                     "special_tokens_map.json",
+                    "tokenizer.json",
                     "tokenizer_config.json",
-                    "vocab.txt",
                 ),
-                cache_path=_cache_path("finbert-family"),
+                cache_path=_cache_path("modern-finbert"),
+                license_admission=_approved_license(
+                    "Apache-2.0",
+                    "https://huggingface.co/tabularisai/ModernFinBERT/tree/6c6de8332ea7f6824c0f8917358dce1e669c1710",
+                ),
+            ),
+        ),
+        CandidateSpec(
+            name="finbert-minilm",
+            family=ModelFamily.FINBERT_MINILM,
+            task=ModelTask.FINANCE_SENTIMENT,
+            requires_transformers=True,
+            output_schema="sentiment(label,confidence)",
+            notes="fast CPU sentiment filter candidate",
+            runtime_pin=_runtime_pin(
+                candidate="finbert-minilm",
+                project="transformers",
+                version_or_commit="5.5.4",
+                dependencies=(
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "tokenizers==0.22.2",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
+            ),
+            external_checkpoint=CheckpointPin(
+                model_family=ModelFamily.FINBERT_MINILM.value,
+                repository=_repo(
+                    "9mark9/finbert-minilm-sentiment",
+                    "fdbfec0cd09610bd5af26da8998507fe7838e838",
+                    "mit",
+                    "LICENSE",
+                    "README.md",
+                    "config.json",
+                    "model.safetensors",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                ),
+                cache_path=_cache_path("finbert-minilm"),
+                license_admission=_approved_license(
+                    "MIT",
+                    "https://huggingface.co/9mark9/finbert-minilm-sentiment/tree/fdbfec0cd09610bd5af26da8998507fe7838e838",
+                ),
+            ),
+        ),
+        CandidateSpec(
+            name="finsentiment-deberta-v3",
+            family=ModelFamily.FINSENTIMENT_DEBERTA,
+            task=ModelTask.FINANCE_SENTIMENT,
+            requires_transformers=True,
+            output_schema="sentiment(label,confidence)",
+            notes="higher-capacity short-form sentiment challenger",
+            runtime_pin=_runtime_pin(
+                candidate="finsentiment-deberta-v3",
+                project="transformers",
+                version_or_commit="5.5.4",
+                dependencies=(
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "tokenizers==0.22.2",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
+            ),
+            external_checkpoint=CheckpointPin(
+                model_family=ModelFamily.FINSENTIMENT_DEBERTA.value,
+                repository=_repo(
+                    "anabdd/finsentiment-deberta-v3-base",
+                    "f2312de96d6cfe6251da37afb0e99b8e29885bdd",
+                    "apache-2.0",
+                    "README.md",
+                    "added_tokens.json",
+                    "config.json",
+                    "model.safetensors",
+                    "special_tokens_map.json",
+                    "spm.model",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                ),
+                cache_path=_cache_path("finsentiment-deberta-v3"),
+                license_admission=_approved_license(
+                    "Apache-2.0",
+                    "https://huggingface.co/anabdd/finsentiment-deberta-v3-base/tree/f2312de96d6cfe6251da37afb0e99b8e29885bdd",
+                ),
+            ),
+        ),
+        CandidateSpec(
+            name="ttm-r3",
+            family=ModelFamily.TTM_R3,
+            task=ModelTask.FORECAST,
+            requires_transformers=True,
+            output_schema="forecast[30]",
+            notes="primary lightweight forecasting candidate; Lite is not separately pinnable",
+            runtime_pin=_runtime_pin(
+                candidate="ttm-r3",
+                project="granite-tsfm",
+                version_or_commit="0.3.8@d473fc3d800c400230a3d8f5192fbdc6255a02f5",
+                dependencies=(
+                    "granite-tsfm==0.3.8",
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
+            ),
+            external_checkpoint=CheckpointPin(
+                model_family=ModelFamily.TTM_R3.value,
+                repository=_repo(
+                    "ibm-granite/granite-timeseries-ttm-r3",
+                    "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa",
+                    "apache-2.0",
+                    "README.md",
+                    "config.json",
+                    "model.safetensors",
+                    "model.sig",
+                ),
+                cache_path=_cache_path("ttm-r3"),
+                license_admission=_approved_license(
+                    "Apache-2.0",
+                    "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3/tree/ea17cfd2e3edcaea21eb8dcecd18bf88971482fa",
+                ),
             ),
         ),
         CandidateSpec(
@@ -2885,12 +3507,19 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             family=ModelFamily.TTM_R2,
             task=ModelTask.FORECAST,
             requires_transformers=True,
-            output_schema="forecast[1]",
+            output_schema="forecast[96]",
             runtime_pin=_runtime_pin(
                 candidate="ttm-r2",
                 project="granite-tsfm",
-                version_or_commit="0.3.6",
-                dependencies=("transformers==5.5.4", "huggingface-hub==1.26.1"),
+                version_or_commit="0.3.8@d473fc3d800c400230a3d8f5192fbdc6255a02f5",
+                dependencies=(
+                    "granite-tsfm==0.3.8",
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
             ),
             external_checkpoint=CheckpointPin(
                 model_family=ModelFamily.TTM_R2.value,
@@ -2918,13 +3547,22 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             family=ModelFamily.TSPULSE,
             task=ModelTask.TSPULSE_FEATURES,
             requires_transformers=True,
-            output_schema="features[n]",
+            output_schema="features[6]",
+            repeatability_policy=RepeatabilityPolicy.SEEDED_REPRODUCIBLE,
+            repeatability_seed=0,
             notes="anomaly/integrity/regime features only; never a price forecaster",
             runtime_pin=_runtime_pin(
                 candidate="tspulse",
                 project="granite-tsfm",
-                version_or_commit="0.3.6",
-                dependencies=("transformers==5.5.4", "huggingface-hub==1.26.1"),
+                version_or_commit="0.3.8@d473fc3d800c400230a3d8f5192fbdc6255a02f5",
+                dependencies=(
+                    "granite-tsfm==0.3.8",
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
             ),
             external_checkpoint=CheckpointPin(
                 model_family=ModelFamily.TSPULSE.value,
@@ -2951,12 +3589,22 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             task=ModelTask.FORECAST,
             requires_transformers=True,
             gpu=True,
-            output_schema="forecast[1]",
+            output_schema="forecast[30]",
             runtime_pin=_runtime_pin(
                 candidate="chronos-2-small",
                 project="chronos-forecasting",
                 version_or_commit="2.3.1@7dc4435706a4454feb79df44ca9f33631f3027bf",
-                dependencies=("transformers==5.5.4", "huggingface-hub==1.26.1"),
+                dependencies=(
+                    "chronos-forecasting==2.3.1",
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cu128",
+                    "safetensors==0.8.0",
+                    "numpy==2.5.1",
+                    "pandas==3.0.1",
+                    "einops==0.8.2",
+                    "accelerate==1.14.0",
+                ),
             ),
             external_checkpoint=CheckpointPin(
                 model_family=ModelFamily.CHRONOS_2_SMALL.value,
@@ -2981,17 +3629,20 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             family=ModelFamily.KRONOS_MINI,
             task=ModelTask.FORECAST,
             gpu=True,
-            output_schema="forecast[1]",
+            output_schema="forecast[30]",
             repeatability_policy=RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED,
             runtime_pin=_runtime_pin(
                 candidate="kronos-mini",
                 project="NeoQuasar/Kronos",
                 version_or_commit="67b630e67f6a18c9e9be918d9b4337c960db1e9a",
                 dependencies=(
-                    "torch>=2.0.0",
+                    "advisorai-kronos-runtime==0.0.0+67b630e",
+                    "torch==2.10.0+cu128",
+                    "numpy==2.5.1",
                     "einops==0.8.1",
                     "huggingface-hub==0.33.1",
                     "pandas==2.2.2",
+                    "tqdm==4.67.1",
                     "safetensors==0.6.2",
                 ),
             ),
@@ -3032,17 +3683,20 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             family=ModelFamily.KRONOS_SMALL,
             task=ModelTask.FORECAST,
             gpu=True,
-            output_schema="forecast[1]",
+            output_schema="forecast[30]",
             repeatability_policy=RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED,
             runtime_pin=_runtime_pin(
                 candidate="kronos-small",
                 project="NeoQuasar/Kronos",
                 version_or_commit="67b630e67f6a18c9e9be918d9b4337c960db1e9a",
                 dependencies=(
-                    "torch>=2.0.0",
+                    "advisorai-kronos-runtime==0.0.0+67b630e",
+                    "torch==2.10.0+cu128",
+                    "numpy==2.5.1",
                     "einops==0.8.1",
                     "huggingface-hub==0.33.1",
                     "pandas==2.2.2",
+                    "tqdm==4.67.1",
                     "safetensors==0.6.2",
                 ),
             ),
