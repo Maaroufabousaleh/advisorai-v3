@@ -809,6 +809,26 @@ class BenchmarkDataset(BaseModel):
             content_hash=sha256(payload.encode()).hexdigest(),
         )
 
+    @classmethod
+    def tspulse_runtime_fixture(cls) -> BenchmarkDataset:
+        """Synthetic contract fixture for feature extraction, never forecasting."""
+
+        inputs = tuple(
+            20.0 + 0.003 * index + math.sin(index / 11.0) + (2.5 if index in {301, 812} else 0)
+            for index in range(1024)
+        )
+        payload = json.dumps(inputs, separators=(",", ":"))
+        return cls(
+            dataset_id="advisorai-phase0-tspulse-runtime-fixture",
+            version="1.0.0",
+            task=ModelTask.TSPULSE_FEATURES,
+            source="synthetic://advisorai/phase0/tspulse-contract-v1",
+            snapshot_id="tspulse-runtime-contract-v1",
+            training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
+            inputs=inputs,
+            content_hash=sha256(payload.encode()).hexdigest(),
+        )
+
 
 class RuntimeQualificationResult(BaseModel):
     """Sanitized qualification evidence and its Phase-0 bake-off projection."""
@@ -1997,6 +2017,8 @@ def validate_candidate_output(candidate: CandidateSpec, output: object) -> str:
         raise InvalidModelOutputError("output does not match the candidate schema")
     if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith("features["):
         raise InvalidModelOutputError("TSPulse candidate schema must be features[n]")
+    if candidate.task == ModelTask.TSPULSE_FEATURES and shape != candidate.output_schema:
+        raise InvalidModelOutputError("TSPulse output does not match the candidate schema")
     if candidate.task == ModelTask.FORECAST and shape != candidate.output_schema:
         raise InvalidModelOutputError("forecast output does not match the candidate schema")
     return shape
@@ -2022,6 +2044,10 @@ def validate_candidate_batch_output(
         raise InvalidModelOutputError("FinBERT batch output does not match the candidate schema")
     if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith("features["):
         raise InvalidModelOutputError("TSPulse candidate schema must be features[n]")
+    if candidate.task == ModelTask.TSPULSE_FEATURES and not shape.endswith(
+        f"<{candidate.output_schema}>"
+    ):
+        raise InvalidModelOutputError("TSPulse batch output does not match the candidate schema")
     if candidate.task == ModelTask.FORECAST:
         expected = _forecast_horizon_from_schema(candidate.output_schema)
         if expected is None or not shape.endswith(f"<forecast[{expected}]>"):
@@ -3045,14 +3071,14 @@ def run_tspulse_qualification(
 ) -> RuntimeQualificationResult:
     """Qualify TSPulse only for integrity/anomaly/regime features."""
 
-    dataset = BenchmarkDataset.synthetic_features()
+    dataset = BenchmarkDataset.tspulse_runtime_fixture()
     candidate = _candidate_by_family(ModelFamily.TSPULSE)
     return run_runtime_qualification(
         candidate,
         runner=runner,
         dataset=dataset,
-        sample_input=dataset.inputs[:16],
-        batch_input=(dataset.inputs[:16], dataset.inputs[16:]),
+        sample_input=dataset.inputs[:512],
+        batch_input=(dataset.inputs[:512], dataset.inputs[512:1024]),
         environment=environment,
         ceiling=ceiling,
         repository_root=repository_root,
@@ -3222,7 +3248,10 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
                 dependencies=(
                     "transformers==5.5.4",
                     "huggingface-hub==1.26.1",
-                    "torch==2.9.1",
+                    "torch==2.10.0+cpu",
+                    "tokenizers==0.22.2",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
                 ),
             ),
             external_checkpoint=CheckpointPin(
@@ -3259,7 +3288,10 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
                 dependencies=(
                     "transformers==5.5.4",
                     "huggingface-hub==1.26.1",
-                    "torch==2.9.1",
+                    "torch==2.10.0+cpu",
+                    "tokenizers==0.22.2",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
                 ),
             ),
             external_checkpoint=CheckpointPin(
@@ -3296,8 +3328,10 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
                 dependencies=(
                     "transformers==5.5.4",
                     "huggingface-hub==1.26.1",
-                    "sentencepiece==0.2.1",
-                    "torch==2.9.1",
+                    "torch==2.10.0+cpu",
+                    "tokenizers==0.22.2",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
                 ),
             ),
             external_checkpoint=CheckpointPin(
@@ -3365,12 +3399,19 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             family=ModelFamily.TTM_R2,
             task=ModelTask.FORECAST,
             requires_transformers=True,
-            output_schema="forecast[1]",
+            output_schema="forecast[96]",
             runtime_pin=_runtime_pin(
                 candidate="ttm-r2",
                 project="granite-tsfm",
-                version_or_commit="0.3.6",
-                dependencies=("transformers==5.5.4", "huggingface-hub==1.26.1"),
+                version_or_commit="0.3.8@d473fc3d800c400230a3d8f5192fbdc6255a02f5",
+                dependencies=(
+                    "granite-tsfm==0.3.8",
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
             ),
             external_checkpoint=CheckpointPin(
                 model_family=ModelFamily.TTM_R2.value,
@@ -3398,13 +3439,22 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
             family=ModelFamily.TSPULSE,
             task=ModelTask.TSPULSE_FEATURES,
             requires_transformers=True,
-            output_schema="features[n]",
+            output_schema="features[6]",
+            repeatability_policy=RepeatabilityPolicy.SEEDED_REPRODUCIBLE,
+            repeatability_seed=0,
             notes="anomaly/integrity/regime features only; never a price forecaster",
             runtime_pin=_runtime_pin(
                 candidate="tspulse",
                 project="granite-tsfm",
-                version_or_commit="0.3.6",
-                dependencies=("transformers==5.5.4", "huggingface-hub==1.26.1"),
+                version_or_commit="0.3.8@d473fc3d800c400230a3d8f5192fbdc6255a02f5",
+                dependencies=(
+                    "granite-tsfm==0.3.8",
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.10.0+cpu",
+                    "numpy==2.5.1",
+                    "safetensors==0.8.0",
+                ),
             ),
             external_checkpoint=CheckpointPin(
                 model_family=ModelFamily.TSPULSE.value,

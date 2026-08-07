@@ -12,6 +12,7 @@ from advisorai.phase0.runtime_qualification import (
     ArtifactPin,
     CandidateSpec,
     CheckpointPin,
+    InvalidModelOutputError,
     LocalCandidateAdmission,
     ModelFamily,
     ModelTask,
@@ -24,6 +25,7 @@ from advisorai.phase0.runtime_qualification import (
     freeze_runtime_pin,
     network_blocked,
     sha256_file,
+    validate_candidate_output,
     verify_runtime_pin,
 )
 
@@ -128,3 +130,26 @@ def test_ttm_r3_portable_contract_uses_native_horizon_and_runtime_commit():
     assert candidate.runtime_pin.project == "granite-tsfm"
     assert "d473fc3d800c400230a3d8f5192fbdc6255a02f5" in candidate.runtime_pin.version_or_commit
     assert "granite-tsfm==0.3.8" in candidate.runtime_pin.dependencies
+
+
+def test_external_cpu_roster_has_exact_native_contracts_and_current_runtime_packages():
+    roster = {candidate.name: candidate for candidate in default_runtime_candidates()}
+
+    assert roster["ttm-r2"].output_schema == "forecast[96]"
+    assert roster["tspulse"].output_schema == "features[6]"
+    assert roster["tspulse"].repeatability_seed == 0
+    for name in ("ttm-r2", "ttm-r3", "tspulse"):
+        assert "granite-tsfm==0.3.8" in roster[name].runtime_pin.dependencies
+    for name in ("modern-finbert", "finbert-minilm", "finsentiment-deberta-v3"):
+        dependencies = roster[name].runtime_pin.dependencies
+        assert "transformers==5.5.4" in dependencies
+        assert "torch==2.10.0+cpu" in dependencies
+        assert "tokenizers==0.22.2" in dependencies
+
+
+def test_tspulse_schema_rejects_feature_dimension_drift():
+    candidate = next(item for item in default_runtime_candidates() if item.name == "tspulse")
+
+    assert validate_candidate_output(candidate, [0.0] * 6) == "features[6]"
+    with pytest.raises(InvalidModelOutputError, match="does not match"):
+        validate_candidate_output(candidate, [0.0] * 5)

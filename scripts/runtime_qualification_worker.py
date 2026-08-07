@@ -297,41 +297,74 @@ def _fixture_output(kind: str, payload: Any, counter: list[int], labels: list[st
     return [1.0]
 
 
-def _ttm_r3_tensor(payload: Any) -> tuple[Any, bool]:
-    """Convert one or more exact TTM-R3 contexts to ``[B, 512, 1]``."""
+def _ttm_tensor(payload: Any) -> tuple[Any, bool]:
+    """Convert one or more exact admitted TTM contexts to ``[B, 512, 1]``."""
 
     import torch
 
     is_batch = isinstance(payload, list) and bool(payload) and isinstance(payload[0], list)
     rows = payload if is_batch else [payload]
     if not isinstance(rows, list) or not rows:
-        raise ValueError("TTM-R3 input must contain at least one context")
+        raise ValueError("TTM input must contain at least one context")
     normalized: list[list[float]] = []
     for row in rows:
         if not isinstance(row, list) or len(row) != 512:
-            raise ValueError("TTM-R3 requires an exact 512-value context")
+            raise ValueError("TTM requires an exact 512-value context")
         values = [float(value) for value in row]
         if any(not float("-inf") < value < float("inf") for value in values):
-            raise ValueError("TTM-R3 input must contain finite values")
+            raise ValueError("TTM input must contain finite values")
         normalized.append(values)
     return torch.tensor(normalized, dtype=torch.float32).unsqueeze(-1), is_batch
 
 
 def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    if kind != "ttm-r3" or request.get("family") != "ttm-r3":
+    admitted_kinds = {
+        "finbert-minilm",
+        "finsentiment-deberta-v3",
+        "modern-finbert",
+        "tspulse",
+        "ttm-r2",
+        "ttm-r3",
+    }
+    if kind not in admitted_kinds or request.get("family") != kind:
         raise ValueError("unsupported or mismatched admitted real-model worker kind")
     cache_root = Path(str(request.get("cache_path", ""))).expanduser().resolve(strict=True)
     model_root = cache_root / "model" if (cache_root / "model").is_dir() else cache_root
     if model_root.is_symlink() or not model_root.is_dir():
-        raise ValueError("TTM-R3 cache root is invalid")
+        raise ValueError("model cache root is invalid")
 
     import torch
-    from tsfm_public.models.tinytimemixer import TinyTimeMixerForDecomposedPrediction
+    load_kwargs: dict[str, Any] = {}
+    if kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
+        from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-    model, loading_info = TinyTimeMixerForDecomposedPrediction.from_pretrained(
+        tokenizer = AutoTokenizer.from_pretrained(
+            str(model_root), local_files_only=True, trust_remote_code=False
+        )
+        model_class = AutoModelForSequenceClassification
+        load_kwargs = {"trust_remote_code": False}
+        if kind == "modern-finbert":
+            load_kwargs["attn_implementation"] = "eager"
+    elif kind == "tspulse":
+        from tsfm_public.models.tspulse import TSPulseForReconstruction
+
+        model_class = TSPulseForReconstruction
+    else:
+        from tsfm_public.models.tinytimemixer import (
+            TinyTimeMixerForDecomposedPrediction,
+            TinyTimeMixerForPrediction,
+        )
+
+        model_class = (
+            TinyTimeMixerForDecomposedPrediction
+            if kind == "ttm-r3"
+            else TinyTimeMixerForPrediction
+        )
+    model, loading_info = model_class.from_pretrained(
         str(model_root),
         local_files_only=True,
         output_loading_info=True,
+        **load_kwargs,
     )
     key_groups = {
         "missing": tuple(loading_info.get("missing_keys", ())),
@@ -340,13 +373,25 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
         "errors": tuple(loading_info.get("error_msgs", ())),
     }
     if any(key_groups.values()):
-        raise ValueError("TTM-R3 checkpoint loading identity mismatch")
+        raise ValueError("TTM checkpoint loading identity mismatch")
     model.eval()
     parameter_count = sum(parameter.numel() for parameter in model.parameters())
-    if parameter_count != 1_414_514:
-        raise ValueError("TTM-R3 parameter identity mismatch")
+    expected_parameters = {
+        "modern-finbert": 149_607_171,
+        "finbert-minilm": 33_361_155,
+        "finsentiment-deberta-v3": 184_424_451,
+        "tspulse": 1_084_330,
+        "ttm-r2": 805_280,
+        "ttm-r3": 1_414_514,
+    }[kind]
+    if parameter_count != expected_parameters:
+        raise ValueError("TTM parameter identity mismatch")
+    state = {"model": model, "torch": torch}
+    if kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
+        state["tokenizer"] = tokenizer
+        state["id2label"] = {int(key): str(value) for key, value in model.config.id2label.items()}
     return (
-        {"model": model, "torch": torch},
+        state,
         {
             "loaded_model_class": type(model).__name__,
             "loaded_parameter_count": parameter_count,
@@ -358,17 +403,74 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
 
 
 def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
-    if kind != "ttm-r3":
+    if kind not in {
+        "finbert-minilm",
+        "finsentiment-deberta-v3",
+        "modern-finbert",
+        "tspulse",
+        "ttm-r2",
+        "ttm-r3",
+    }:
         raise ValueError("unsupported admitted real-model worker kind")
-    tensor, is_batch = _ttm_r3_tensor(payload)
+    if kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
+        is_batch = isinstance(payload, list)
+        texts = payload if is_batch else [payload]
+        if not isinstance(texts, list) or not texts or any(not isinstance(text, str) for text in texts):
+            raise ValueError("sentiment input must be non-empty text")
+        encoded = state["tokenizer"](
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors="pt",
+        )
+        with state["torch"].inference_mode():
+            logits = state["model"](**encoded).logits
+            probabilities = state["torch"].softmax(logits, dim=-1)
+        indices = probabilities.argmax(dim=-1).tolist()
+        scores = probabilities.max(dim=-1).values.tolist()
+        labels = state["id2label"]
+        normalized = {
+            "bullish": "positive",
+            "bearish": "negative",
+            "positive": "positive",
+            "negative": "negative",
+            "neutral": "neutral",
+        }
+        results = [
+            {"label": normalized[labels[int(index)].lower()], "confidence": float(score)}
+            for index, score in zip(indices, scores, strict=True)
+        ]
+        return results if is_batch else results[0]
+    tensor, is_batch = _ttm_tensor(payload)
     with state["torch"].inference_mode():
         output = state["model"](past_values=tensor)
+    if kind == "tspulse":
+        reconstruction = output.reconstruction_outputs
+        hidden = output.backbone_hidden_state
+        fft_reconstruction = output.reconstructed_ts_from_fft
+        error = reconstruction - tensor
+        features = state["torch"].stack(
+            (
+                error.abs().mean(dim=(1, 2)),
+                error.square().mean(dim=(1, 2)).sqrt(),
+                error.abs().amax(dim=(1, 2)),
+                hidden.mean(dim=(1, 2)),
+                hidden.std(dim=(1, 2), unbiased=False),
+                (fft_reconstruction - tensor).abs().mean(dim=(1, 2)),
+            ),
+            dim=1,
+        ).detach().cpu().tolist()
+        if any(not float("-inf") < float(value) < float("inf") for row in features for value in row):
+            raise ValueError("TSPulse returned non-finite features")
+        return features if is_batch else features[0]
     predictions = output.prediction_outputs
-    if tuple(predictions.shape[1:]) != (30, 1):
-        raise ValueError("TTM-R3 returned an unexpected forecast shape")
+    horizon = 30 if kind == "ttm-r3" else 96
+    if tuple(predictions.shape[1:]) != (horizon, 1):
+        raise ValueError("TTM returned an unexpected forecast shape")
     values = predictions[..., 0].detach().cpu().tolist()
     if any(not float("-inf") < float(value) < float("inf") for row in values for value in row):
-        raise ValueError("TTM-R3 returned a non-finite forecast")
+        raise ValueError("TTM returned a non-finite forecast")
     return values if is_batch else values[0]
 
 
@@ -526,7 +628,14 @@ def main() -> int:
         cold_started = time.perf_counter()
         model_metadata: dict[str, Any] = {}
         real_state: dict[str, Any] | None = None
-        if kind == "ttm-r3":
+        if kind in {
+            "finbert-minilm",
+            "finsentiment-deberta-v3",
+            "modern-finbert",
+            "tspulse",
+            "ttm-r2",
+            "ttm-r3",
+        }:
             real_state, model_metadata = _load_real_model(kind, request)
             model: object | None = real_state.get("model")
         else:
@@ -572,6 +681,7 @@ def main() -> int:
         # semantics before external runtimes are admitted.
         if real_state is not None:
             real_state["model"] = None
+            real_state["tokenizer"] = None
             real_state.clear()
         model = None
         gc.collect()

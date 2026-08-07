@@ -69,8 +69,8 @@ def _dataset_for(candidate: CandidateSpec) -> BenchmarkDataset:
     if candidate.task == ModelTask.FINANCE_SENTIMENT:
         return BenchmarkDataset.finbert_fixture()
     if candidate.task == ModelTask.TSPULSE_FEATURES:
-        return BenchmarkDataset.synthetic_features()
-    if candidate.family == ModelFamily.TTM_R3:
+        return BenchmarkDataset.tspulse_runtime_fixture()
+    if candidate.family in {ModelFamily.TTM_R2, ModelFamily.TTM_R3}:
         return BenchmarkDataset.ttm_runtime_fixture()
     return BenchmarkDataset.synthetic_forecast()
 
@@ -80,7 +80,7 @@ def _payloads(dataset: BenchmarkDataset) -> tuple[object, object]:
         texts = tuple(text for text, _label in dataset.public_text_fixture)
         return texts[0], texts
     if dataset.task == ModelTask.TSPULSE_FEATURES:
-        return dataset.inputs[:16], (dataset.inputs[:16], dataset.inputs[16:])
+        return dataset.inputs[:512], (dataset.inputs[:512], dataset.inputs[512:1024])
     if dataset.dataset_id == "advisorai-phase0-ttm-runtime-fixture":
         return dataset.inputs[:512], (dataset.inputs[:512], dataset.inputs[30:542])
     return dataset.inputs[:16], (dataset.inputs[:16], dataset.inputs[16:])
