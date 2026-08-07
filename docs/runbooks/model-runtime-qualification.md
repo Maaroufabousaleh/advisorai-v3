@@ -18,20 +18,22 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python \
 The command runs the five mandatory baselines, writes one sanitized manifest
 per candidate, writes a forecast-baseline comparison, and projects the results
 into the existing pending `BakeoffGate`. It never downloads a checkpoint. A
-missing runner, missing cache, missing artifact hash, incompatible dependency,
-or invalid output is recorded as `quarantined`/`failed`; it is never replaced
-by another model family.
+missing runner, missing cache, missing artifact hash, unapproved license or
+runtime, incompatible dependency, or invalid output is recorded as
+`quarantined`/`failed`; it is never replaced by another model family.
 
 Evidence is ignored local evidence under:
 
 ```text
-artifacts/phase0/model-runtime-qualification/
+artifacts/phase0/model-runtime-qualification/<run-id>/
 ```
 
-The bundle includes `index.json`, candidate manifests, `bakeoff-gate.json`,
-and `forecast-baseline-benchmark.json`. The index explicitly records that a
-24-hour stability run has not been performed. Treat the files as immutable:
-the writer refuses to overwrite a changed manifest.
+Each run directory includes `index.json`, candidate manifests,
+`bakeoff-gate.json`, and `forecast-baseline-benchmark.json`. The parent
+directory contains only mutable `latest.json`/`index.json` pointers; prior run
+directories are never overwritten. The run index explicitly records that a
+24-hour stability run has not been performed. Treat run files as immutable:
+the writer refuses to overwrite changed evidence.
 
 ## Initial pinned roster
 
@@ -51,22 +53,27 @@ external cache path, and explicit task role:
 | TabPFN-TS (later) | `PriorLabs/tabpfn-time-series` | `a756ae3fb3af82c903c39e1cd71864ff5252bc4d` | later GPU challenger |
 
 External caches default to `~/.cache/advisorai-v3/models/<candidate>` and must
-remain outside the repository. Before a model can be measured, every declared
-artifact needs a recorded SHA-256 and `verify_checkpoint_artifacts()` must
-pass. `cached_artifact_inventory()` hashes every regular cached file for the
-sanitized manifest.
+remain outside the repository. Before a model can be measured, its approved
+license, isolated execution `RuntimePin`, runtime lock hash, and every declared
+artifact SHA-256 must pass. Runtime artifacts and provenance artifacts are
+separate; unexpected loadable files (including unreviewed Pickle-style model
+files) are rejected. `cached_artifact_inventory()` hashes every regular cached
+file for the sanitized manifest.
 
-`ProsusAI/finbert` currently has no declared Hub license metadata, so it stays
-quarantined until an operator records an acceptable license decision. The
-other listed public cards record Apache-2.0 or MIT as captured in the pin.
+`ProsusAI/finbert` currently has no declared Hub license metadata, so its
+license admission is explicitly `pending` and it cannot become `MEASURED`.
+The other listed public cards have reviewed Apache-2.0 or MIT admissions, but
+their executable runtimes remain pending until isolated, exact environments
+and lock hashes are supplied.
 
 ## Qualification boundary
 
-`run_runtime_qualification()` measures load, one inference, repeated inference,
-small-batch inference, cold/warm latency, RSS, optional CUDA VRAM, output
-schema, NaN/Inf rejection, deterministic repeatability, unload, offline-only
-execution, and resource ceilings. GPU candidates use the existing
-`GpuModelLease`, so at most one GPU family is resident at once.
+`run_runtime_qualification()` measures clean load, one inference, repeated
+inference, task-typed small-batch inference, cold/warm latency, background RSS,
+optional CUDA VRAM, output schema, NaN/Inf rejection, repeatability policy,
+unload and post-unload recovery, offline-only execution, and resource ceilings.
+GPU candidates use the existing `GpuModelLease`, so at most one GPU family is
+resident at once.
 
 `run_finbert_qualification()` uses a fixed public finance-text fixture and
 requires labels from `{positive, negative, neutral}` plus confidence in
@@ -78,5 +85,7 @@ promotion claims; point-in-time AdvisorAI datasets can implement the same
 versioned `BenchmarkDataset` interface later.
 
 The short run is not a stability admission. Phase-0/Phase-7 time gates and any
-model promotion remain pending until separately reviewed evidence exists.
-
+model promotion remain pending until separately reviewed evidence exists. A
+single synthetic forecast series cannot establish superiority. Stochastic
+forecast candidates are characterized under their declared repeatability
+policy rather than being incorrectly required to produce byte-identical paths.

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import UTC, datetime
 from decimal import Decimal
+from hashlib import sha256
 from pathlib import Path
 
 from advisorai.phase0.runtime_qualification import (
@@ -40,6 +42,15 @@ def _baseline_runner(candidate: CandidateSpec) -> FunctionalRunner:
     model = forecast_baseline_models()[candidate.family.value]
 
     def infer(loaded: object, payload: object) -> tuple[Decimal, ...]:
+        if (
+            isinstance(payload, (tuple, list))
+            and payload
+            and isinstance(payload[0], (tuple, list))
+        ):
+            return tuple(
+                tuple(loaded.predict(_forecast_payload(history), 1))  # type: ignore[attr-defined]
+                for history in payload
+            )
         history = _forecast_payload(payload)
         return tuple(loaded.predict(history, 1))  # type: ignore[attr-defined]
 
@@ -69,6 +80,14 @@ def _payloads(dataset: BenchmarkDataset) -> tuple[object, object]:
 
 
 def qualify(output_dir: Path) -> tuple[RuntimeQualificationResult, ...]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run_id_base = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
+    run_id = run_id_base
+    suffix = 1
+    while (output_dir / run_id).exists():
+        suffix += 1
+        run_id = f"{run_id_base}-{suffix}"
+    run_dir = output_dir / run_id
     results: list[RuntimeQualificationResult] = []
     forecast_dataset = BenchmarkDataset.synthetic_forecast()
     forecast_evaluations = run_forecast_baseline_benchmark(forecast_dataset)
@@ -105,7 +124,7 @@ def qualify(output_dir: Path) -> tuple[RuntimeQualificationResult, ...]:
                     }
                 )
         results.append(result)
-    paths = write_qualification_bundle(results, output_dir)
+    paths = write_qualification_bundle(results, run_dir)
     manifest_hashes = {
         path.stem: json.loads(path.read_text(encoding="utf-8"))["manifest_hash"]
         for path in paths
@@ -122,7 +141,7 @@ def qualify(output_dir: Path) -> tuple[RuntimeQualificationResult, ...]:
         for result in results
         for evaluation in result.forecast_evaluations
     ]
-    benchmark_path = output_dir / "forecast-baseline-benchmark.json"
+    benchmark_path = run_dir / "forecast-baseline-benchmark.json"
     benchmark_payload = (
         json.dumps(
             {
@@ -139,11 +158,20 @@ def qualify(output_dir: Path) -> tuple[RuntimeQualificationResult, ...]:
     if benchmark_path.exists() and benchmark_path.read_bytes() != benchmark_payload:
         raise FileExistsError(f"immutable evidence already exists with different content: {benchmark_path}")
     benchmark_path.write_bytes(benchmark_payload)
-    gate_path = output_dir / "bakeoff-gate.json"
+    gate_path = run_dir / "bakeoff-gate.json"
     gate_payload = (json.dumps(project_bakeoff_gate(results).model_dump(mode="json"), sort_keys=True, indent=2) + "\n").encode()
     if gate_path.exists() and gate_path.read_bytes() != gate_payload:
         raise FileExistsError(f"immutable evidence already exists with different content: {gate_path}")
     gate_path.write_bytes(gate_payload)
+    pointer = {
+        "schema": "advisorai.phase0.model-runtime-qualification.latest.v1",
+        "run_id": run_id,
+        "run_path": run_id,
+        "index_sha256": sha256((run_dir / "index.json").read_bytes()).hexdigest(),
+    }
+    pointer_payload = (json.dumps(pointer, sort_keys=True, indent=2) + "\n").encode()
+    for pointer_name in ("latest.json", "index.json"):
+        (output_dir / pointer_name).write_bytes(pointer_payload)
     return tuple(results)
 
 
@@ -156,10 +184,12 @@ def main() -> int:
     )
     args = parser.parse_args()
     results = qualify(args.output)
+    latest = json.loads((args.output / "latest.json").read_text(encoding="utf-8"))
     print(
         json.dumps(
             {
                 "output": str(args.output),
+                "run_id": latest["run_id"],
                 "candidates": {
                     result.candidate.name: {
                         "status": result.status.value,

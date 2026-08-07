@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
 import socket
+import subprocess
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -16,12 +20,15 @@ from advisorai.phase0.runtime_qualification import (
     CheckpointPinError,
     ComponentKind,
     FunctionalRunner,
+    LicenseAdmission,
+    LicenseAdmissionStatus,
     ModelFamily,
     ModelTask,
     QualificationStatus,
     RepositoryPin,
     ResourceCeiling,
     RuntimeEnvironment,
+    RuntimePin,
     RuntimeResourceResult,
     cached_artifact_inventory,
     default_runtime_candidates,
@@ -34,6 +41,8 @@ from advisorai.phase0.runtime_qualification import (
     run_tspulse_qualification,
     runtime_environment,
     sha256_file,
+    validate_candidate_batch_output,
+    validate_model_batch_output,
     validate_model_output,
     verify_checkpoint_artifacts,
     write_qualification_manifest,
@@ -55,6 +64,12 @@ def _checkpoint(
             artifacts=(ArtifactPin(relative_path="weights.bin", sha256=digest),),
         ),
         cache_path=str(tmp_path / "cache"),
+        license_admission=LicenseAdmission(
+            status=LicenseAdmissionStatus.APPROVED,
+            license_identifier="Apache-2.0",
+            reviewed_at=datetime(2026, 8, 7, tzinfo=UTC),
+            evidence_reference="fixture://license",
+        ),
     )
 
 
@@ -66,6 +81,20 @@ def _forecast_candidate(*, checkpoint: CheckpointPin | None = None) -> Candidate
         external_checkpoint=checkpoint,
         requires_transformers=checkpoint is not None,
         output_schema="forecast[1]",
+        runtime_pin=(
+            RuntimePin(
+                project="fixture-runner",
+                version_or_commit="fixture-v1",
+                python_constraint=">=3.12,<3.13",
+                dependencies=("fixture==1.0",),
+                lock_hash="c" * 64,
+                environment_path="/tmp/advisorai-fixture-runtime",
+                status="approved",
+                evidence_reference="fixture://runtime",
+            )
+            if checkpoint is not None
+            else None
+        ),
     )
 
 
@@ -77,6 +106,12 @@ def _runner(family: str = ModelFamily.NAIVE.value, *, network: bool = False) -> 
     def infer(_model, _payload):
         if network:
             socket.create_connection(("example.invalid", 443))
+        if (
+            isinstance(_payload, (tuple, list))
+            and _payload
+            and isinstance(_payload[0], (tuple, list))
+        ):
+            return ((1.0,),) * len(_payload)
         return (1.0,)
 
     return FunctionalRunner(model_family=family, load_fn=load, infer_fn=infer)
@@ -98,6 +133,16 @@ def test_default_registry_pins_exact_candidate_revisions_and_roles():
             task=ModelTask.FORECAST,
             output_schema="forecast[1]",
         )
+    assert by_name["finbert-family"].external_checkpoint.license_admission.status == LicenseAdmissionStatus.PENDING
+    assert by_name["finbert-family"].runtime_pin.status.value == "pending"
+    assert "flax_model.msgpack" not in {
+        item.relative_path
+        for item in by_name["finbert-family"].external_checkpoint.repository.all_artifacts
+    }
+    assert "training_args.bin" not in {
+        item.relative_path
+        for item in by_name["ttm-r2"].external_checkpoint.repository.all_artifacts
+    }
 
 
 def test_revision_and_artifact_hashes_are_fail_closed(tmp_path):
@@ -125,10 +170,36 @@ def test_revision_and_artifact_hashes_are_fail_closed(tmp_path):
         )
 
 
+def test_unexpected_loadable_artifact_is_rejected(tmp_path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    artifact = cache / "weights.bin"
+    artifact.write_bytes(b"model-fixture")
+    (cache / "unexpected.h5").write_bytes(b"unreviewed")
+    pin = _checkpoint(tmp_path, digest=sha256_file(artifact))
+    with pytest.raises(CheckpointIntegrityError, match="unexpected loadable"):
+        verify_checkpoint_artifacts(pin, cache_root=cache)
+
+
 def test_cache_cannot_be_inside_repository(tmp_path):
     pin = _checkpoint(tmp_path / "repo")
     with pytest.raises(CheckpointPinError, match="inside"):
         pin.assert_cache_outside_repository(tmp_path / "repo")
+
+
+def test_execution_runtime_environment_cannot_be_inside_repository(tmp_path):
+    pin = RuntimePin(
+        project="fixture",
+        version_or_commit="1.0.0",
+        python_constraint=">=3.12,<3.13",
+        dependencies=("fixture==1.0",),
+        lock_hash="a" * 64,
+        environment_path=str(tmp_path / "repo" / "venv"),
+        status="approved",
+        evidence_reference="fixture://runtime",
+    )
+    with pytest.raises(Exception, match="outside"):
+        pin.assert_environment_outside_repository(tmp_path / "repo")
 
 
 def test_transformers_5_5_4_compatibility_boundary():
@@ -167,6 +238,40 @@ def test_invalid_output_and_nonfinite_values_are_rejected():
     ) == "sentiment(label,confidence)"
 
 
+def test_singleton_and_batch_output_contracts_are_separate():
+    assert validate_model_batch_output(
+        ModelTask.FINANCE_SENTIMENT,
+        (
+            {"label": "positive", "confidence": 0.9},
+            {"label": "negative", "confidence": 0.8},
+        ),
+        expected_batch_size=2,
+    ) == "batch[2]<sentiment(label,confidence)>"
+    assert validate_model_batch_output(
+        ModelTask.TSPULSE_FEATURES,
+        ((0.1, 0.2), (0.3, 0.4)),
+        expected_batch_size=2,
+    ) == "batch[2]<features[2]>"
+    with pytest.raises(Exception, match="cardinality"):
+        validate_model_batch_output(
+            ModelTask.FINANCE_SENTIMENT,
+            ({"label": "positive", "confidence": 0.9},),
+            expected_batch_size=2,
+        )
+
+
+def test_candidate_schema_is_enforced_for_batches():
+    candidate = CandidateSpec(
+        name="schema-fixture",
+        family=ModelFamily.NAIVE,
+        task=ModelTask.FORECAST,
+        output_schema="forecast[1]",
+    )
+    assert validate_candidate_batch_output(candidate, ((1.0,),), expected_batch_size=1)
+    with pytest.raises(Exception, match="horizon"):
+        validate_candidate_batch_output(candidate, ((1.0, 2.0),), expected_batch_size=1)
+
+
 def test_missing_runner_is_quarantined_without_fallback():
     dataset = BenchmarkDataset.synthetic_forecast()
     result = run_runtime_qualification(
@@ -178,6 +283,73 @@ def test_missing_runner_is_quarantined_without_fallback():
     )
     assert result.status == QualificationStatus.QUARANTINED
     assert "runner/checkpoint" in result.failure_reason
+
+
+def test_unapproved_license_cannot_become_measured():
+    result = run_finbert_qualification(runner=_runner(ModelFamily.FINBERT.value))
+    assert result.status == QualificationStatus.QUARANTINED
+    assert "license admission" in result.failure_reason
+
+
+def test_finbert_fixture_scores_labels_and_batch_throughput():
+    dataset = BenchmarkDataset.finbert_fixture()
+    candidate = CandidateSpec(
+        name="finbert-fixture",
+        family=ModelFamily.FINBERT,
+        task=ModelTask.FINANCE_SENTIMENT,
+        output_schema="sentiment(label,confidence)",
+    )
+    expected = tuple(label for _text, label in dataset.public_text_fixture)
+    runner = FunctionalRunner(
+        model_family=ModelFamily.FINBERT.value,
+        infer_fn=lambda _model, payload: (
+            [
+                {"label": label, "confidence": 0.8}
+                for label in expected
+            ]
+            if isinstance(payload, tuple)
+            else {"label": expected[0], "confidence": 0.8}
+        ),
+    )
+    result = run_runtime_qualification(
+        candidate,
+        runner=runner,
+        dataset=dataset,
+        sample_input=dataset.public_text_fixture[0][0],
+        batch_input=tuple(text for text, _label in dataset.public_text_fixture),
+    )
+    assert result.status == QualificationStatus.MEASURED
+    assert result.finbert_accuracy == 1
+    assert result.finbert_mean_confidence == 0.8
+    assert result.resource.batch_throughput_per_second > 0
+
+
+def test_stochastic_repeatability_policy_does_not_require_equal_bytes():
+    candidate = CandidateSpec(
+        name="stochastic-fixture",
+        family=ModelFamily.KRONOS_MINI,
+        task=ModelTask.FORECAST,
+        output_schema="forecast[1]",
+        repeatability_policy="stochastic_characterized",
+    )
+    counter = {"value": 0}
+
+    def infer(_model, payload):
+        if isinstance(payload, tuple) and payload and isinstance(payload[0], tuple):
+            return tuple((float(index),) for index, _item in enumerate(payload))
+        counter["value"] += 1
+        return (float(counter["value"]),)
+
+    result = run_runtime_qualification(
+        candidate,
+        runner=FunctionalRunner(model_family=ModelFamily.KRONOS_MINI.value, infer_fn=infer),
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0, 2.0),
+        batch_input=((1.0, 2.0), (3.0, 4.0)),
+    )
+    assert result.status == QualificationStatus.MEASURED
+    assert result.repeated_outputs_equal is False
+    assert result.stochastic_characterized is True
 
 
 def test_no_silent_fallback_between_model_families():
@@ -203,7 +375,11 @@ def test_offline_cached_inference_requires_offline_runner_and_is_repeatable(tmp_
     dataset = BenchmarkDataset.synthetic_forecast()
     environment = RuntimeEnvironment.model_validate(
         {
-            **runtime_environment(cache_path=str(cache), runner_version="fixture").model_dump(),
+            **runtime_environment(
+                cache_path=str(cache),
+                runner_version="fixture",
+                runtime_lock_hash="c" * 64,
+            ).model_dump(),
             "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
             "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
         }
@@ -235,7 +411,11 @@ def test_network_attempt_after_cache_fails_closed(tmp_path):
     dataset = BenchmarkDataset.synthetic_forecast()
     environment = RuntimeEnvironment.model_validate(
         {
-            **runtime_environment(cache_path=str(cache), runner_version="fixture").model_dump(),
+            **runtime_environment(
+                cache_path=str(cache),
+                runner_version="fixture",
+                runtime_lock_hash="c" * 64,
+            ).model_dump(),
             "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
             "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
         }
@@ -250,7 +430,32 @@ def test_network_attempt_after_cache_fails_closed(tmp_path):
         repository_root=tmp_path / "repository",
     )
     assert result.status == QualificationStatus.FAILED
-    assert result.failure_reason == "runner failure: OSError"
+    assert result.network_access_attempted is True
+    assert result.to_bakeoff_result().privacy_passed is False
+
+
+def test_runtime_lock_hash_mismatch_is_quarantined_before_inference(tmp_path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    weights = cache / "weights.bin"
+    weights.write_bytes(b"cached")
+    pin = _checkpoint(tmp_path, digest=sha256_file(weights), family=ModelFamily.NAIVE.value)
+    candidate = _forecast_candidate(checkpoint=pin)
+    result = run_runtime_qualification(
+        candidate,
+        runner=_runner(),
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0,),
+        batch_input=((1.0,),),
+        environment=runtime_environment(
+            cache_path=str(cache),
+            runner_version="fixture",
+            runtime_lock_hash="d" * 64,
+        ),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.QUARANTINED
+    assert "lock hash" in result.failure_reason
 
 
 def test_missing_or_corrupt_checkpoint_is_quarantined_with_reason(tmp_path):
@@ -259,7 +464,11 @@ def test_missing_or_corrupt_checkpoint_is_quarantined_with_reason(tmp_path):
     candidate = _forecast_candidate(checkpoint=missing_pin)
     environment = RuntimeEnvironment.model_validate(
         {
-            **runtime_environment(cache_path=str(tmp_path / "missing"), runner_version="fixture").model_dump(),
+            **runtime_environment(
+                cache_path=str(tmp_path / "missing"),
+                runner_version="fixture",
+                runtime_lock_hash="c" * 64,
+            ).model_dump(),
             "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
             "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
         }
@@ -283,7 +492,11 @@ def test_missing_or_corrupt_checkpoint_is_quarantined_with_reason(tmp_path):
     corrupt_candidate = _forecast_candidate(checkpoint=corrupt_pin)
     corrupt_environment = RuntimeEnvironment.model_validate(
         {
-            **runtime_environment(cache_path=str(cache), runner_version="fixture").model_dump(),
+            **runtime_environment(
+                cache_path=str(cache),
+                runner_version="fixture",
+                runtime_lock_hash="c" * 64,
+            ).model_dump(),
             "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
             "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
         }
@@ -317,6 +530,20 @@ def test_resource_contract_rejects_invalid_latency_and_peak():
             unload_succeeded=True,
             resource_limit_passed=True,
         )
+
+
+def test_resource_ceiling_failure_preserves_measurements():
+    result = run_runtime_qualification(
+        _forecast_candidate(),
+        runner=_runner(),
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0,),
+        batch_input=((1.0,),),
+        ceiling=ResourceCeiling(max_rss_mib=1),
+    )
+    assert result.status == QualificationStatus.FAILED
+    assert result.resource is not None
+    assert result.resource.resource_limit_passed is False
 
 
 def test_gpu_resource_ceiling_and_single_lease_are_explicit():
@@ -398,6 +625,27 @@ def test_manifest_is_canonical_and_immutable(tmp_path):
     changed = result.model_copy(update={"warnings": ("changed",)})
     with pytest.raises(FileExistsError, match="immutable"):
         write_qualification_manifest(changed, tmp_path)
+
+
+def test_smoke_script_scopes_evidence_to_an_immutable_run(tmp_path):
+    output = tmp_path / "evidence"
+    subprocess.run(
+        [
+            sys.executable,
+            "scripts/qualify_model_runtimes.py",
+            "--output",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    latest = json.loads((output / "latest.json").read_text(encoding="utf-8"))
+    run_dir = output / latest["run_id"]
+    assert run_dir.is_dir()
+    assert (run_dir / "index.json").exists()
+    assert (run_dir / "bakeoff-gate.json").exists()
+    assert json.loads((output / "index.json").read_text(encoding="utf-8"))["run_id"] == latest["run_id"]
 
 
 def test_finbert_fixture_is_fixed_and_labeled():
