@@ -430,7 +430,7 @@ def default_candidates() -> tuple[ComponentCandidate, ...]:
             required_for_core=True,
         ),
         ComponentCandidate(
-            name="kronos-mini-small",
+            name="kronos-mini",
             kind=ComponentKind.FORECAST_MODEL,
             import_name="kronos",
             privacy_boundary="local_gpu_worker",
@@ -438,11 +438,18 @@ def default_candidates() -> tuple[ComponentCandidate, ...]:
             independent_of=("chronos-2-small",),
         ),
         ComponentCandidate(
+            name="kronos-small",
+            kind=ComponentKind.FORECAST_MODEL,
+            import_name="kronos",
+            privacy_boundary="local_gpu_worker",
+            independent_of=("chronos-2-small", "kronos-mini"),
+        ),
+        ComponentCandidate(
             name="tabpfn-ts",
             kind=ComponentKind.FORECAST_MODEL,
             import_name="tabpfn_time_series",
             privacy_boundary="local_gpu_worker",
-            independent_of=("chronos-2-small", "kronos-mini-small"),
+            independent_of=("chronos-2-small", "kronos-mini", "kronos-small"),
         ),
         ComponentCandidate(
             name="nautilus-trader",

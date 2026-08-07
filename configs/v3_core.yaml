@@ -24,7 +24,8 @@ cpu_models:
 gpu_model_selection:
   choose_one:
     - chronos-2-small
-    - kronos-mini-small
+    - kronos-mini
+    - kronos-small
 agent_roles:
   - data_verifier
   - technical_flow

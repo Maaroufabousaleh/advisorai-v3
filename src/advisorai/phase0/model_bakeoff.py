@@ -16,7 +16,7 @@ from decimal import Decimal
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -51,6 +51,146 @@ class RosterState(StrEnum):
     QUARANTINED = "quarantined"
     PENDING_STABILITY = "pending_stability"
     INACTIVE = "inactive"
+
+
+class StabilityState(StrEnum):
+    NOT_STARTED = "not_started"
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    WAITING_FOR_USER_ACCEPTANCE = "waiting_for_user_acceptance"
+
+
+class RosterMetric(BaseModel):
+    """One measured, unit-bearing roster value."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str
+    value: float
+    unit: str
+
+    @model_validator(mode="after")
+    def validate_metric(self) -> RosterMetric:
+        if not self.name.strip() or not self.unit.strip() or not math.isfinite(self.value):
+            raise ValueError("roster metrics require a name, finite value, and unit")
+        return self
+
+
+class LocalModelRosterEntry(BaseModel):
+    """Portable role admission; host-specific runtime identities stay in evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    role: str
+    candidate: str
+    repository_id: str | None = None
+    revision: str | None = None
+    declared_license: str
+    runtime_class: str
+    device: str
+    state: RosterState
+    stability: StabilityState = StabilityState.NOT_STARTED
+    qualification_status: str
+    evidence_reference: str | None = None
+    evidence_hash: str | None = None
+    metrics: tuple[RosterMetric, ...] = ()
+    notes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_entry(self) -> LocalModelRosterEntry:
+        text = (
+            self.role,
+            self.candidate,
+            self.declared_license,
+            self.runtime_class,
+            self.device,
+            self.qualification_status,
+        )
+        if any(not value.strip() for value in text):
+            raise ValueError("roster entry identity fields cannot be blank")
+        if self.repository_id is not None:
+            if not self.repository_id.strip() or self.revision is None:
+                raise ValueError("external roster entries require repository and revision")
+            if len(self.revision) != 40 or any(character not in HEX for character in self.revision):
+                raise ValueError("external roster revision must be an immutable commit")
+        elif self.revision is not None:
+            raise ValueError("builtin roster entries cannot claim an external revision")
+        if bool(self.evidence_reference) != bool(self.evidence_hash):
+            raise ValueError("roster evidence reference and hash must be supplied together")
+        if self.evidence_hash is not None and (
+            len(self.evidence_hash) != 64
+            or any(character not in HEX for character in self.evidence_hash)
+        ):
+            raise ValueError("roster evidence hash must be SHA-256")
+        if self.state == RosterState.PENDING_STABILITY and self.stability not in {
+            StabilityState.NOT_STARTED,
+            StabilityState.RUNNING,
+        }:
+            raise ValueError("pending-stability entries cannot claim a terminal stability state")
+        if self.state == RosterState.SELECTED and self.stability != StabilityState.PASSED:
+            raise ValueError("selected models require passed stability evidence")
+        if (
+            self.stability == StabilityState.WAITING_FOR_USER_ACCEPTANCE
+            and self.state != RosterState.QUARANTINED
+        ):
+            raise ValueError("user-acceptance waits must remain quarantined")
+        return self
+
+
+class Phase0LocalModelRoster(BaseModel):
+    """Versioned role-oriented result of the real local-model bake-off."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["advisorai.phase0.local-model-roster.v1"] = (
+        "advisorai.phase0.local-model-roster.v1"
+    )
+    roster_version: str
+    generated_at: datetime
+    benchmark_evidence_reference: str
+    benchmark_evidence_hash: str
+    forecast_dataset_hash: str
+    sentiment_dataset_hash: str
+    forecast_primary: LocalModelRosterEntry
+    forecast_fast: LocalModelRosterEntry
+    forecast_challengers: tuple[LocalModelRosterEntry, ...]
+    probabilistic_forecast: LocalModelRosterEntry
+    feature_regime_model: LocalModelRosterEntry
+    finance_sentiment_primary: LocalModelRosterEntry
+    finance_sentiment_fast: LocalModelRosterEntry
+    finance_sentiment_challengers: tuple[LocalModelRosterEntry, ...]
+    mandatory_baselines: tuple[LocalModelRosterEntry, ...]
+    inactive_or_waiting: tuple[LocalModelRosterEntry, ...] = ()
+    live_capital_approved: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_roster(self) -> Phase0LocalModelRoster:
+        if self.generated_at.tzinfo is None or self.generated_at.utcoffset() is None:
+            raise ValueError("roster generation time must include a timezone")
+        for digest in (
+            self.benchmark_evidence_hash,
+            self.forecast_dataset_hash,
+            self.sentiment_dataset_hash,
+        ):
+            if len(digest) != 64 or any(character not in HEX for character in digest):
+                raise ValueError("roster hashes must be SHA-256")
+        if not self.roster_version.strip() or not self.benchmark_evidence_reference.strip():
+            raise ValueError("roster version and benchmark evidence are required")
+        baselines = {entry.candidate for entry in self.mandatory_baselines}
+        if baselines != {"naive", "drift", "seasonal-7", "linear", "lightgbm"}:
+            raise ValueError("roster must retain all mandatory forecasting baselines")
+        if self.feature_regime_model.candidate != "tspulse":
+            raise ValueError("TSPulse must remain the feature/regime model")
+        if "forecast" in self.feature_regime_model.role:
+            raise ValueError("TSPulse cannot be admitted as a price forecaster")
+        return self
+
+
+def load_local_model_roster(path: Path) -> Phase0LocalModelRoster:
+    """Load the strict machine-readable roster without fallback or coercion."""
+
+    return Phase0LocalModelRoster.model_validate_json(path.read_text(encoding="utf-8"))
 
 
 class MarketBar(BaseModel):

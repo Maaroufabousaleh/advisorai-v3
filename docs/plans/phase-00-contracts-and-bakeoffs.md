@@ -19,8 +19,8 @@ adopted. This phase has no trading authority and no resident agent fleet.
    quarantined until it passes all tests.
 4. Compare TTM-R3 against the TTM-R2 control, Chronos-2-small,
    Kronos-mini/small, and later TabPFN-TS. Qualify TSPulse separately for
-   anomaly/integrity/regime features; it is never a price forecaster.
-   against naive/statistical/LightGBM baselines for utility, calibration,
+   anomaly/integrity/regime features; it is never a price forecaster. Compare
+   forecasting candidates against naive/statistical/LightGBM baselines for utility, calibration,
    latency, RAM, and VRAM. Do not treat co-trained variants as independent.
 5. Measure Nautilus adapters/replay, Prefect, Hamilton, Parquet manifests versus
    DuckLake, one isolated Hermes coordinator/subagent, and rclone-crypt upload,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -10,9 +11,13 @@ from advisorai.phase0 import (
     AssetClass,
     ForecastBenchmarkSnapshot,
     ForecastSeriesSnapshot,
+    LocalModelRosterEntry,
     MarketBar,
+    RosterState,
+    StabilityState,
     build_walk_forward_cases,
     forecast_metrics,
+    load_local_model_roster,
     mandatory_baseline_metrics,
     parse_binance_klines,
     parse_financial_phrasebank_pages,
@@ -197,3 +202,36 @@ def test_financial_phrasebank_pages_freeze_label_mapping_and_revision():
     )
     with pytest.raises(ValidationError, match="content hash"):
         type(snapshot).model_validate({**snapshot.model_dump(), "content_hash": "0" * 64})
+
+
+def test_committed_local_model_roster_is_role_oriented_and_keeps_live_closed():
+    roster = load_local_model_roster(Path("configs/models/phase0_local_roster.json"))
+
+    assert roster.forecast_primary.candidate == "ttm-r2"
+    assert roster.forecast_primary.state == RosterState.PENDING_STABILITY
+    assert roster.finance_sentiment_primary.candidate == "finsentiment-deberta-v3"
+    assert roster.finance_sentiment_fast.candidate == "finbert-minilm"
+    assert roster.feature_regime_model.candidate == "tspulse"
+    assert "forecast" not in roster.feature_regime_model.role
+    assert roster.live_capital_approved is False
+    assert {entry.candidate for entry in roster.mandatory_baselines} == {
+        "naive",
+        "drift",
+        "seasonal-7",
+        "linear",
+        "lightgbm",
+    }
+
+
+def test_roster_cannot_select_model_without_passed_stability():
+    with pytest.raises(ValidationError, match="selected models require passed stability"):
+        LocalModelRosterEntry(
+            role="forecast_primary",
+            candidate="fixture",
+            declared_license="unknown",
+            runtime_class="fixture",
+            device="cpu",
+            state=RosterState.SELECTED,
+            stability=StabilityState.NOT_STARTED,
+            qualification_status="measured",
+        )

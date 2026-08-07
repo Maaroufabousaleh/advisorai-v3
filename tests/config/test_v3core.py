@@ -23,7 +23,8 @@ def test_v3_core_configuration_enforces_the_authoritative_scope():
     assert config.storage.active == "local_parquet_duckdb_sqlite"
     assert config.gpu_model_selection.choose_one == (
         "chronos-2-small",
-        "kronos-mini-small",
+        "kronos-mini",
+        "kronos-small",
     )
 
 
@@ -75,8 +76,8 @@ def test_typed_config_rejects_whitespace_collisions_and_normalizes_execution_val
     model_path.write_text(
         """
 baselines: [naive, ' naive ']
-cpu_candidates: [ttm-r2, tspulse]
-gpu_candidates: [chronos-2-small, kronos-mini-small]
+cpu_candidates: [ttm-r3, ttm-r2, tspulse]
+gpu_candidates: [chronos-2-small, kronos-mini, kronos-small, tabpfn-ts]
 gpu_residency: one_family_at_a_time
 promotion_metric: calibrated_past_only_net_utility_or_risk_information
 """,
