@@ -1256,44 +1256,25 @@ def _repository_root(cache_root: Path, repository: RepositoryPin) -> Path:
     return preferred if preferred.is_dir() else cache_root
 
 
-_LOADABLE_SUFFIXES = {
-    ".bin",
-    ".ckpt",
-    ".h5",
-    ".joblib",
-    ".msgpack",
-    ".onnx",
-    ".pickle",
-    ".pkl",
-    ".pt",
-    ".pth",
-    ".safetensors",
-    # Model-side executable code is loadable even when it is not a weight
-    # format.  It must be explicitly reviewed, never accepted implicitly.
-    ".py",
-    ".pyc",
-    ".so",
-    ".pyd",
-    ".dll",
-    ".dylib",
-    ".sh",
-}
-
-
 def _assert_runtime_cache_closure(repo_root: Path, repository: RepositoryPin) -> None:
-    expected = {
-        artifact.relative_path
-        for artifact in (repository.runtime_artifacts or repository.artifacts)
-    }
+    """Require every cached regular file to be part of the reviewed closure.
+
+    The previous suffix-based check protected executable/loadable formats but
+    allowed an unpinned ``config.json`` or tokenizer/processor file to alter
+    model behavior.  Configuration and provenance are part of the immutable
+    closure too, so the comparison is deliberately extension-agnostic.
+    """
+
+    expected = {artifact.relative_path for artifact in repository.all_artifacts}
     for path in repo_root.rglob("*"):
         if path.is_symlink():
             raise CheckpointIntegrityError(f"symlink in model cache is not allowed: {path.name}")
-        if not path.is_file() or path.suffix.lower() not in _LOADABLE_SUFFIXES:
+        if not path.is_file():
             continue
         relative = str(path.relative_to(repo_root))
         if relative not in expected:
             raise CheckpointIntegrityError(
-                f"unexpected loadable artifact is outside the reviewed runtime closure: {relative}"
+                f"unexpected cached artifact is outside the reviewed runtime closure: {relative}"
             )
 
 

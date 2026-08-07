@@ -295,15 +295,56 @@ def test_revision_and_artifact_hashes_are_fail_closed(tmp_path):
         )
 
 
-def test_unexpected_loadable_artifact_is_rejected(tmp_path):
+def test_unexpected_cached_artifact_is_rejected(tmp_path):
     cache = tmp_path / "cache"
     cache.mkdir()
     artifact = cache / "weights.bin"
     artifact.write_bytes(b"model-fixture")
     (cache / "unexpected.h5").write_bytes(b"unreviewed")
     pin = _checkpoint(tmp_path, digest=sha256_file(artifact))
-    with pytest.raises(CheckpointIntegrityError, match="unexpected loadable"):
+    with pytest.raises(CheckpointIntegrityError, match="unexpected cached"):
         verify_checkpoint_artifacts(pin, cache_root=cache)
+
+
+@pytest.mark.parametrize("filename", ["config.json", "tokenizer.json", "generation_config.json", "processor_config.json"])
+def test_unexpected_behavior_artifacts_are_rejected(tmp_path, filename):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    weights = cache / "weights.bin"
+    weights.write_bytes(b"model-fixture")
+    (cache / filename).write_text("{}", encoding="utf-8")
+    pin = _checkpoint(tmp_path, digest=sha256_file(weights))
+    with pytest.raises(CheckpointIntegrityError, match="unexpected cached"):
+        verify_checkpoint_artifacts(pin, cache_root=cache)
+
+
+def test_declared_runtime_and_provenance_artifacts_are_accepted(tmp_path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    weights = cache / "weights.bin"
+    readme = cache / "README.md"
+    weights.write_bytes(b"model-fixture")
+    readme.write_text("fixture provenance\n", encoding="utf-8")
+    repository = RepositoryPin(
+        repository_id="fixture/model",
+        revision="a" * 40,
+        license="apache-2.0",
+        runtime_artifacts=(ArtifactPin(relative_path="weights.bin", sha256=sha256_file(weights)),),
+        provenance_artifacts=(ArtifactPin(relative_path="README.md", sha256=sha256_file(readme)),),
+    )
+    pin = CheckpointPin(
+        model_family=ModelFamily.NAIVE.value,
+        repository=repository,
+        cache_path=str(cache),
+        license_admission=LicenseAdmission(
+            status=LicenseAdmissionStatus.APPROVED,
+            license_identifier="Apache-2.0",
+            reviewed_at=datetime(2026, 8, 7, tzinfo=UTC),
+            evidence_reference="fixture://license",
+        ),
+    )
+    observed = verify_checkpoint_artifacts(pin, cache_root=cache)
+    assert {item.relative_path for item in observed} == {"weights.bin", "README.md"}
 
 
 def test_cache_cannot_be_inside_repository(tmp_path):
@@ -552,6 +593,25 @@ def test_offline_cached_inference_requires_isolated_runtime_and_is_repeatable(tm
     assert result.environment.sys_executable == candidate.runtime_pin.python_executable
 
 
+def test_isolated_worker_separates_current_rss_from_transient_peak(tmp_path):
+    candidate = _isolated_candidate(tmp_path, worker_kind="fixture_peak_rss")
+    dataset = BenchmarkDataset.synthetic_forecast()
+    result = run_runtime_qualification(
+        candidate,
+        runner=None,
+        dataset=dataset,
+        sample_input=dataset.inputs[:4],
+        batch_input=(dataset.inputs[:4],),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.MEASURED
+    assert result.resource is not None
+    assert result.resource.rss_peak_mib > result.resource.rss_after_unload_mib
+    assert result.resource.memory_released is True
+    assert result.resource.rss_residual_mib is not None
+    assert result.resource.rss_residual_mib <= ResourceCeiling().max_residual_rss_mib
+
+
 def test_network_attempt_after_cache_fails_closed(tmp_path):
     candidate = _isolated_candidate(tmp_path, worker_kind="network_attempt")
     dataset = BenchmarkDataset.synthetic_forecast()
@@ -784,7 +844,7 @@ def test_executable_model_cache_artifacts_are_rejected(tmp_path, suffix):
     weights.write_bytes(b"model-fixture")
     (cache / f"unreviewed{suffix}").write_bytes(b"code")
     pin = _checkpoint(tmp_path, digest=sha256_file(weights), family=ModelFamily.NAIVE.value)
-    with pytest.raises(CheckpointIntegrityError, match="unexpected loadable"):
+    with pytest.raises(CheckpointIntegrityError, match="unexpected cached"):
         verify_checkpoint_artifacts(pin, cache_root=cache)
 
 

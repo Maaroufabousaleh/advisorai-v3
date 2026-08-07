@@ -10,6 +10,7 @@ kinds let the harness be tested without downloading model weights.
 
 from __future__ import annotations
 
+import gc
 import importlib.metadata
 import json
 import os
@@ -211,16 +212,62 @@ def _install_network_guard() -> None:
     socket.getaddrinfo = blocked  # type: ignore[assignment]
 
 
-def _rss_mib() -> float:
+def current_rss_mib() -> float:
+    """Return current resident memory, never ``ru_maxrss``.
+
+    Linux/WSL exposes the current resident page count through ``statm``.  The
+    status-file fallback is useful on restricted proc mounts; psutil is only
+    consulted when it is already available in a candidate runtime.  Returning
+    zero on an unsupported platform is preferable to silently reporting a
+    historical peak as the current post-unload measurement.
+    """
+
+    page_size = None
+    try:
+        page_size = int(os.sysconf("SC_PAGE_SIZE"))
+    except (AttributeError, OSError, ValueError):
+        pass
+    if page_size and sys.platform.startswith("linux"):
+        try:
+            fields = Path("/proc/self/statm").read_text(encoding="ascii").split()
+            if len(fields) >= 2:
+                return int(fields[1]) * page_size / (1024**2)
+        except (OSError, ValueError):
+            pass
+        try:
+            for line in Path("/proc/self/status").read_text(encoding="ascii").splitlines():
+                if line.startswith("VmRSS:"):
+                    return float(line.split()[1]) / 1024
+        except (OSError, ValueError, IndexError):
+            pass
+    try:
+        import psutil
+
+        return float(psutil.Process(os.getpid()).memory_info().rss) / (1024**2)
+    except Exception:  # pragma: no cover - optional/platform fallback
+        return 0.0
+
+
+def peak_rss_mib() -> float:
+    """Return the process historical peak for diagnostic worker evidence."""
+
     try:
         import resource
 
-        # Linux reports KiB; macOS reports bytes.  WSL/Linux is the supported
-        # qualification host, but handling both keeps the fixture portable.
         value = float(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         return value / 1024 if sys.platform != "darwin" else value / (1024**2)
     except Exception:  # pragma: no cover - platform fallback
         return 0.0
+
+
+def _clear_cuda_cache() -> None:
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:  # pragma: no cover - optional candidate dependency
+        pass
 
 
 def _fixture_output(kind: str, payload: Any, counter: list[int], labels: list[str]) -> Any:
@@ -377,8 +424,9 @@ def main() -> int:
         # The fixture worker represents a successfully loaded cached runtime.
         # Real candidate workers replace this section with local_files_only
         # model loading and retain the same sanitized response contract.
-        _ = object()
+        model: object | None = object()
         cold_load_ms = (time.perf_counter() - cold_started) * 1000
+        rss_after_load = current_rss_mib()
         for _index in range(repeats):
             if repeatability_policy == "seeded_reproducible":
                 if not isinstance(requested_seed, int):
@@ -392,6 +440,25 @@ def main() -> int:
         batch_started = time.perf_counter()
         batch_output = _fixture_output(kind, batch, counter, labels)
         batch_ms = (time.perf_counter() - batch_started) * 1000
+        # Candidate workers must release model references and collect Python
+        # garbage before recording the post-unload current RSS.  This fixture
+        # path deliberately creates a transient high-water allocation so the
+        # parent process-tree sampler can distinguish peak from current RSS.
+        if kind == "fixture_peak_rss":
+            temporary = bytearray(64 * 1024 * 1024)
+            for offset in range(0, len(temporary), 4096):
+                temporary[offset] = 1
+            time.sleep(0.05)
+            _ = peak_rss_mib()
+            del temporary
+        # A real candidate worker uses this same release point after deleting
+        # its loaded model/tokenizer references.  Keep the explicit reference
+        # deletion in the fixture protocol so post-unload RSS has the same
+        # semantics before external runtimes are admitted.
+        model = None
+        gc.collect()
+        _clear_cuda_cache()
+        rss_after_unload = current_rss_mib()
         digests = [json.dumps(item, sort_keys=True, separators=(",", ":")) for item in outputs]
         numbers = [float(item) for output in outputs for item in output if isinstance(item, (int, float))]
         dispersion = statistics.pstdev(numbers) if len(numbers) > 1 else 0.0
@@ -404,8 +471,8 @@ def main() -> int:
             "warm_durations_ms": durations,
             "batch_inference_ms": batch_ms,
             "batch_size": len(batch) if isinstance(batch, list) else 1,
-            "rss_after_load_mib": _rss_mib(),
-            "rss_after_unload_mib": _rss_mib(),
+            "rss_after_load_mib": rss_after_load,
+            "rss_after_unload_mib": rss_after_unload,
             "vram_after_load_mib": None,
             "vram_peak_mib": None,
             "vram_after_unload_mib": None,
