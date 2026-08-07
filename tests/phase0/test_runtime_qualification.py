@@ -1012,14 +1012,15 @@ def test_tspulse_measured_result_preserves_typed_batch_features():
         task=ModelTask.TSPULSE_FEATURES,
         output_schema="features[3]",
     )
-    runner = FunctionalRunner(
-        model_family=ModelFamily.TSPULSE.value,
-        infer_fn=lambda _model, values: [
-            float(len(values)),
-            float(values[-1]),
-            float(max(values) - min(values)),
-        ],
-    )
+    def infer(_model, values):
+        def features(row):
+            return (float(len(row)), float(row[-1]), float(max(row) - min(row)))
+
+        if values and isinstance(values[0], (tuple, list)):
+            return tuple(features(row) for row in values)
+        return features(values)
+
+    runner = FunctionalRunner(model_family=ModelFamily.TSPULSE.value, infer_fn=infer)
     dataset = BenchmarkDataset(
         dataset_id="fixture-tspulse",
         version="v1",
