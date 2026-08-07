@@ -399,8 +399,14 @@ class RepositoryPin(BaseModel):
         paths = [artifact.relative_path for artifact in self.all_artifacts]
         if len(paths) != len(set(paths)):
             raise ValueError("repository artifact paths must be unique")
-        if not self.cache_subdir.strip() or Path(self.cache_subdir).is_absolute():
-            raise ValueError("repository cache subdirectory must be relative")
+        cache_subdir = Path(self.cache_subdir)
+        if (
+            not self.cache_subdir.strip()
+            or cache_subdir.is_absolute()
+            or ".." in cache_subdir.parts
+            or str(cache_subdir) in {".", ""}
+        ):
+            raise ValueError("repository cache subdirectory must be relative and traversal-free")
         return self
 
     @property

@@ -56,8 +56,9 @@ external cache path, and explicit task role:
 | TabPFN-TS (later) | `PriorLabs/tabpfn-time-series` | `a756ae3fb3af82c903c39e1cd71864ff5252bc4d` | later GPU challenger |
 
 External caches default to `~/.cache/advisorai-v3/models/<candidate>` and must
-remain outside the repository. Before a model can be measured, its approved
-license, isolated execution `RuntimePin`, immutable lock-artifact SHA-256,
+remain outside the repository. Before a model can be measured, any known
+private-use terms must be non-blocking, and its isolated execution `RuntimePin`,
+immutable lock-artifact SHA-256,
 exact worker interpreter/executable hash, worker hash, and every declared
 artifact SHA-256 must pass. External candidates are never imported into the
 AdvisorAI core interpreter: the parent sends a sanitized JSON request to the
@@ -69,6 +70,29 @@ failed privacy result. Runtime artifacts and provenance artifacts are
 separate; unexpected loadable files (including `.py`, `.so`, `.dll`, `.sh`,
 and unreviewed Pickle-style model files) are rejected. `cached_artifact_inventory()`
 hashes every regular cached file for the sanitized manifest.
+
+## Exact-revision acquisition
+
+Acquire one active candidate at a time. The acquisition process reads only the
+`MODEL_REGISTRY` credential scope, uses anonymous access when possible, and
+never passes a Hub token to the offline runtime worker:
+
+```bash
+uv run python scripts/acquire_model_artifacts.py ttm-r3
+```
+
+The command downloads the reviewed file list at the frozen 40-character
+revision into a temporary directory under
+`~/.cache/advisorai-v3/staging/`, hashes every file, and atomically promotes an
+exact clean closure to
+`~/.cache/advisorai-v3/models/<candidate>/<revision>/`. It does not qualify
+from a raw Hugging Face cache. Existing immutable cache content is reused only
+when every file hash is identical; conflicting content is never overwritten.
+Cross-host redirects do not receive the registry authorization header.
+
+Sanitized acquisition and checkpoint-pin evidence is written beneath a new
+run directory under `artifacts/phase0/model-runtime-qualification/`. Model
+weights and machine caches remain outside Git and outside the repository.
 
 AdvisorAI is currently a private, personal installation. License declarations
 are retained as provenance and do not affect technical scores or selection.

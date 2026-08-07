@@ -14,6 +14,15 @@ from .bakeoffs import (
     recorded_bakeoff_gates,
     run_availability_inventory,
 )
+from .model_acquisition import (
+    AcquiredRepository,
+    GatedTermsAcceptanceRequired,
+    ModelAcquisitionError,
+    ModelAcquisitionResult,
+    acquire_candidate_artifacts,
+    checkpoint_pin_payload,
+    write_acquisition_manifest,
+)
 from .runtime_qualification import (
     REQUIRED_HUGGINGFACE_HUB_VERSION,
     REQUIRED_TRANSFORMERS_VERSION,
@@ -85,6 +94,13 @@ __all__ = [
     "record_bakeoff_gate",
     "recorded_bakeoff_gates",
     "run_availability_inventory",
+    "AcquiredRepository",
+    "GatedTermsAcceptanceRequired",
+    "ModelAcquisitionError",
+    "ModelAcquisitionResult",
+    "acquire_candidate_artifacts",
+    "checkpoint_pin_payload",
+    "write_acquisition_manifest",
     "REQUIRED_HUGGINGFACE_HUB_VERSION",
     "REQUIRED_TRANSFORMERS_VERSION",
     "ArtifactPin",
