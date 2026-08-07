@@ -10,6 +10,7 @@ from pathlib import Path
 
 from advisorai.config import CredentialResolver, CredentialScope
 from advisorai.phase0 import (
+    GatedTermsAcceptanceRequired,
     acquire_candidate_artifacts,
     checkpoint_pin_payload,
     default_runtime_candidates,
@@ -57,15 +58,47 @@ def main() -> int:
     if candidate is None or candidate.external_checkpoint is None:
         raise SystemExit("candidate is not an active external-model registry entry")
     token, credential_names = _model_registry_token(args.secrets_file)
-    pin, result = acquire_candidate_artifacts(
-        candidate,
-        staging_root=args.staging_root,
-        cache_root=args.cache_root,
-        repository_root=Path.cwd(),
-        token=token,
-    )
     run_id = datetime.now(UTC).strftime("acquisition-%Y%m%dT%H%M%S.%fZ")
     run_directory = args.evidence_root / run_id / candidate.name
+    try:
+        pin, result = acquire_candidate_artifacts(
+            candidate,
+            staging_root=args.staging_root,
+            cache_root=args.cache_root,
+            repository_root=Path.cwd(),
+            token=token,
+        )
+    except GatedTermsAcceptanceRequired:
+        failure_path = run_directory / "acquisition-failure.json"
+        failure_payload = (
+            json.dumps(
+                {
+                    "schema": "advisorai.phase0.model-acquisition-failure.v1",
+                    "candidate": candidate.name,
+                    "repository_id": candidate.external_checkpoint.repository_id,
+                    "revision": candidate.external_checkpoint.revision,
+                    "status": "waiting_for_user_acceptance",
+                    "error_class": "GatedTermsAcceptanceRequired",
+                    "credential_names_available": credential_names,
+                },
+                sort_keys=True,
+                indent=2,
+            )
+            + "\n"
+        ).encode()
+        failure_path.parent.mkdir(parents=True, exist_ok=True)
+        failure_path.write_bytes(failure_payload)
+        print(
+            json.dumps(
+                {
+                    "candidate": candidate.name,
+                    "status": "waiting_for_user_acceptance",
+                    "failure_path": str(failure_path),
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
     manifest_path = write_acquisition_manifest(result, run_directory / "acquisition.json")
     pin_path = run_directory / "checkpoint-pin.json"
     pin_payload = (

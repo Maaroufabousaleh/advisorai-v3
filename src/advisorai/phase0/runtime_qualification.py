@@ -867,6 +867,10 @@ class RuntimeQualificationResult(BaseModel):
     finbert_accuracy: float | None = Field(default=None, ge=0, le=1)
     finbert_per_label_accuracy: tuple[tuple[str, float], ...] = ()
     finbert_mean_confidence: float | None = Field(default=None, ge=0, le=1)
+    forecast_batch_predictions: tuple[tuple[float, ...], ...] = ()
+    sentiment_batch_predictions: tuple[tuple[str, float], ...] = ()
+    forecast_batch_lower: tuple[tuple[float, ...], ...] = ()
+    forecast_batch_upper: tuple[tuple[float, ...], ...] = ()
     missing_checkpoint_quarantined: bool = False
     corrupt_checkpoint_quarantined: bool = False
     failure_reason: str | None = None
@@ -923,6 +927,43 @@ class RuntimeQualificationResult(BaseModel):
             for label, accuracy in self.finbert_per_label_accuracy
         ):
             raise ValueError("FinBERT per-label accuracy must contain valid labels and values")
+        if self.forecast_batch_predictions and self.candidate.task != ModelTask.FORECAST:
+            raise ValueError("forecast batch predictions require a forecast candidate")
+        if self.sentiment_batch_predictions and self.candidate.task != ModelTask.FINANCE_SENTIMENT:
+            raise ValueError("sentiment batch predictions require a sentiment candidate")
+        if any(
+            not math.isfinite(value)
+            for forecast in self.forecast_batch_predictions
+            for value in forecast
+        ):
+            raise ValueError("forecast batch predictions must be finite")
+        if any(
+            not label.strip() or not 0 <= confidence <= 1
+            for label, confidence in self.sentiment_batch_predictions
+        ):
+            raise ValueError("sentiment batch predictions must be valid")
+        if bool(self.forecast_batch_lower) != bool(self.forecast_batch_upper):
+            raise ValueError("forecast interval bounds must be supplied together")
+        if self.forecast_batch_lower:
+            if self.candidate.task != ModelTask.FORECAST:
+                raise ValueError("forecast intervals require a forecast candidate")
+            if len(self.forecast_batch_lower) != len(self.forecast_batch_predictions):
+                raise ValueError("forecast interval batch cardinality must match predictions")
+            for lower, upper, point in zip(
+                self.forecast_batch_lower,
+                self.forecast_batch_upper,
+                self.forecast_batch_predictions,
+                strict=True,
+            ):
+                if len(lower) != len(point) or len(upper) != len(point):
+                    raise ValueError("forecast interval horizon must match predictions")
+                if any(
+                    not math.isfinite(left)
+                    or not math.isfinite(right)
+                    or left > right
+                    for left, right in zip(lower, upper, strict=True)
+                ):
+                    raise ValueError("forecast intervals must be finite and ordered")
         if self.manifest_hash is not None and (
             len(self.manifest_hash) != 64
             or any(character not in HEX64 for character in self.manifest_hash)
@@ -1187,6 +1228,8 @@ class RuntimeWorkerResponse(BaseModel):
     identity: RuntimeWorkerIdentity
     outputs: tuple[object, ...] = ()
     batch_output: object | None = None
+    forecast_batch_lower: tuple[tuple[float, ...], ...] = ()
+    forecast_batch_upper: tuple[tuple[float, ...], ...] = ()
     cold_load_ms: float = Field(default=0, ge=0)
     warm_durations_ms: tuple[float, ...] = ()
     batch_inference_ms: float = Field(default=0, ge=0)
@@ -2467,6 +2510,27 @@ def _run_isolated_runtime_qualification(
         batch_size = _batch_size(batch_input)
         validate_candidate_batch_output(candidate, response.batch_output, expected_batch_size=batch_size)
         finbert_metrics = _finbert_metrics(dataset, response.batch_output) if candidate.task == ModelTask.FINANCE_SENTIMENT else None
+        forecast_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in response.batch_output)
+            if candidate.task == ModelTask.FORECAST
+            else ()
+        )
+        sentiment_batch_predictions = (
+            tuple(
+                (
+                    str(item["label"]),
+                    float(item.get("confidence", item.get("score"))),
+                )
+                for item in response.batch_output
+            )
+            if candidate.task == ModelTask.FINANCE_SENTIMENT
+            else ()
+        )
+        if bool(response.forecast_batch_lower) != bool(response.forecast_batch_upper):
+            raise QualificationError("worker forecast interval bounds are incomplete")
+        if response.forecast_batch_lower:
+            if len(response.forecast_batch_lower) != len(forecast_batch_predictions):
+                raise QualificationError("worker forecast interval batch cardinality is invalid")
         repeat_digests = [output_digest(output) for output in response.outputs]
         equal = len(set(repeat_digests)) == 1
         stochastic_evidence = (
@@ -2510,6 +2574,10 @@ def _run_isolated_runtime_qualification(
             "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
             "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
             "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
+            "forecast_batch_predictions": forecast_batch_predictions,
+            "sentiment_batch_predictions": sentiment_batch_predictions,
+            "forecast_batch_lower": response.forecast_batch_lower,
+            "forecast_batch_upper": response.forecast_batch_upper,
         }
         if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
             common["stochastic_seeds"] = response.applied_seeds

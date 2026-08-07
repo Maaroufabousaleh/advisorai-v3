@@ -484,13 +484,19 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
             if any(not float("-inf") < value < float("inf") for value in values):
                 raise ValueError("Chronos input must contain finite values")
             contexts.append(state["torch"].tensor(values, dtype=state["torch"].float32))
-        _quantiles, means = state["pipeline"].predict_quantiles(
+        quantiles, means = state["pipeline"].predict_quantiles(
             contexts,
             prediction_length=30,
             quantile_levels=[0.1, 0.5, 0.9],
             batch_size=min(32, len(contexts)),
         )
         forecasts = [mean.squeeze(0).detach().cpu().tolist() for mean in means]
+        state["last_interval_lower"] = [
+            values.squeeze(0)[..., 0].detach().cpu().tolist() for values in quantiles
+        ]
+        state["last_interval_upper"] = [
+            values.squeeze(0)[..., -1].detach().cpu().tolist() for values in quantiles
+        ]
         if any(len(row) != 30 for row in forecasts):
             raise ValueError("Chronos returned an unexpected forecast shape")
         if any(not float("-inf") < float(value) < float("inf") for row in forecasts for value in row):
@@ -499,20 +505,42 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
     if kind in {"kronos-mini", "kronos-small"}:
         import pandas as pd
 
-        is_batch = isinstance(payload, list) and bool(payload) and isinstance(payload[0], list)
+        is_batch = (
+            isinstance(payload, list)
+            and bool(payload)
+            and isinstance(payload[0], (list, dict))
+        )
         rows = payload if is_batch else [payload]
         frames = []
         history_times = []
         future_times = []
         for row in rows:
-            if not isinstance(row, list) or len(row) != 512:
-                raise ValueError("Kronos requires an exact 512-value context")
-            close = [float(value) for value in row]
-            if any(not float("-inf") < value < float("inf") for value in close):
-                raise ValueError("Kronos input must contain finite values")
-            opened = [close[0], *close[:-1]]
-            frames.append(
-                pd.DataFrame(
+            if isinstance(row, dict):
+                ohlcv = row.get("ohlcv")
+                timestamps = row.get("timestamps")
+                future_values = row.get("future_timestamps")
+                if (
+                    not isinstance(ohlcv, list)
+                    or len(ohlcv) != 512
+                    or not isinstance(timestamps, list)
+                    or len(timestamps) != 512
+                    or not isinstance(future_values, list)
+                    or len(future_values) != 30
+                ):
+                    raise ValueError("Kronos OHLCV request has an invalid shape")
+                values = [[float(value) for value in item] for item in ohlcv]
+                if any(len(item) != 5 for item in values):
+                    raise ValueError("Kronos OHLCV rows require five values")
+                frame = pd.DataFrame(values, columns=["open", "high", "low", "close", "volume"])
+                frame["amount"] = frame["volume"] * frame[["open", "high", "low", "close"]].mean(axis=1)
+                history = pd.Series(pd.to_datetime(timestamps, utc=True))
+                future = pd.Series(pd.to_datetime(future_values, utc=True))
+            else:
+                if not isinstance(row, list) or len(row) != 512:
+                    raise ValueError("Kronos requires an exact 512-value context")
+                close = [float(value) for value in row]
+                opened = [close[0], *close[:-1]]
+                frame = pd.DataFrame(
                     {
                         "open": opened,
                         "high": [max(left, right) for left, right in zip(opened, close, strict=True)],
@@ -522,9 +550,13 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
                         "amount": close,
                     }
                 )
-            )
-            history = pd.Series(pd.date_range("2020-01-01", periods=len(close), freq="D"))
-            future = pd.Series(pd.date_range(history.iloc[-1] + pd.Timedelta(days=1), periods=30, freq="D"))
+                history = pd.Series(pd.date_range("2020-01-01", periods=len(close), freq="D"))
+                future = pd.Series(
+                    pd.date_range(history.iloc[-1] + pd.Timedelta(days=1), periods=30, freq="D")
+                )
+            if any(not float("-inf") < float(value) < float("inf") for value in frame.to_numpy().flat):
+                raise ValueError("Kronos input must contain finite values")
+            frames.append(frame)
             history_times.append(history)
             future_times.append(future)
         forecasts = state["predictor"].predict_batch(
@@ -798,6 +830,16 @@ def main() -> int:
             else _fixture_output(kind, batch, counter, labels)
         )
         batch_ms = (time.perf_counter() - batch_started) * 1000
+        forecast_batch_lower = (
+            tuple(tuple(float(value) for value in row) for row in real_state.get("last_interval_lower", ()))
+            if real_state is not None
+            else ()
+        )
+        forecast_batch_upper = (
+            tuple(tuple(float(value) for value in row) for row in real_state.get("last_interval_upper", ()))
+            if real_state is not None
+            else ()
+        )
         # Candidate workers must release model references and collect Python
         # garbage before recording the post-unload current RSS.  This fixture
         # path deliberately creates a transient high-water allocation so the
@@ -832,6 +874,8 @@ def main() -> int:
             "identity": identity,
             "outputs": outputs,
             "batch_output": batch_output,
+            "forecast_batch_lower": forecast_batch_lower,
+            "forecast_batch_upper": forecast_batch_upper,
             "cold_load_ms": cold_load_ms,
             "warm_durations_ms": durations,
             "batch_inference_ms": batch_ms,
