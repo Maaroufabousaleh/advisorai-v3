@@ -871,6 +871,7 @@ class RuntimeQualificationResult(BaseModel):
     sentiment_batch_predictions: tuple[tuple[str, float], ...] = ()
     forecast_batch_lower: tuple[tuple[float, ...], ...] = ()
     forecast_batch_upper: tuple[tuple[float, ...], ...] = ()
+    feature_batch_predictions: tuple[tuple[float, ...], ...] = ()
     missing_checkpoint_quarantined: bool = False
     corrupt_checkpoint_quarantined: bool = False
     failure_reason: str | None = None
@@ -964,6 +965,15 @@ class RuntimeQualificationResult(BaseModel):
                     for left, right in zip(lower, upper, strict=True)
                 ):
                     raise ValueError("forecast intervals must be finite and ordered")
+        if self.feature_batch_predictions:
+            if self.candidate.task != ModelTask.TSPULSE_FEATURES:
+                raise ValueError("feature batch predictions require a feature candidate")
+            if any(
+                not math.isfinite(value)
+                for features in self.feature_batch_predictions
+                for value in features
+            ):
+                raise ValueError("feature batch predictions must be finite")
         if self.manifest_hash is not None and (
             len(self.manifest_hash) != 64
             or any(character not in HEX64 for character in self.manifest_hash)
@@ -2526,6 +2536,11 @@ def _run_isolated_runtime_qualification(
             if candidate.task == ModelTask.FINANCE_SENTIMENT
             else ()
         )
+        feature_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in response.batch_output)
+            if candidate.task == ModelTask.TSPULSE_FEATURES
+            else ()
+        )
         if bool(response.forecast_batch_lower) != bool(response.forecast_batch_upper):
             raise QualificationError("worker forecast interval bounds are incomplete")
         if response.forecast_batch_lower:
@@ -2578,6 +2593,7 @@ def _run_isolated_runtime_qualification(
             "sentiment_batch_predictions": sentiment_batch_predictions,
             "forecast_batch_lower": response.forecast_batch_lower,
             "forecast_batch_upper": response.forecast_batch_upper,
+            "feature_batch_predictions": feature_batch_predictions,
         }
         if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
             common["stochastic_seeds"] = response.applied_seeds

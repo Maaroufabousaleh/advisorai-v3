@@ -108,7 +108,7 @@ def main() -> int:
         name: LocalCandidateAdmission.model_validate_json(
             (args.admission_root / name / "local-admission.json").read_text(encoding="utf-8")
         )
-        for name in (*FORECAST_CANDIDATES, *SENTIMENT_CANDIDATES)
+        for name in (*FORECAST_CANDIDATES, *SENTIMENT_CANDIDATES, "tspulse")
     }
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
     run_directory = args.output_root / run_id
@@ -184,6 +184,48 @@ def main() -> int:
                     peak_rss_mib=result.resource.rss_peak_mib,
                 )
             )
+    tspulse_candidate = apply_local_candidate_admission(
+        candidates["tspulse"], admissions["tspulse"]
+    )
+    tspulse_dataset = BenchmarkDataset(
+        dataset_id=f"{forecast_snapshot.dataset_id}-tspulse",
+        version=forecast_snapshot.version,
+        task="tspulse_features",
+        source="snapshot://advisorai/phase0/public-daily-markets",
+        snapshot_id=f"public-daily-{forecast_snapshot.content_hash[:16]}",
+        training_cutoff=max(case.cutoff for case in cases),
+        inputs=tuple(case.context[-1] for case in cases),
+        content_hash=forecast_snapshot.content_hash,
+    )
+    tspulse_result = run_runtime_qualification(
+        tspulse_candidate,
+        runner=None,
+        dataset=tspulse_dataset,
+        sample_input=cases[0].context,
+        batch_input=tuple(case.context for case in cases),
+        repeats=3,
+        repository_root=Path.cwd(),
+    )
+    qualification_results.append(tspulse_result)
+    tspulse_characterization = None
+    if (
+        tspulse_result.status == QualificationStatus.MEASURED
+        and tspulse_result.feature_batch_predictions
+        and tspulse_result.resource is not None
+    ):
+        dimensions = tuple(zip(*tspulse_result.feature_batch_predictions, strict=True))
+        tspulse_characterization = {
+            "role": "anomaly_integrity_representation_regime_features_only",
+            "price_forecast_prohibited": True,
+            "cases": len(tspulse_result.feature_batch_predictions),
+            "feature_dimension": len(dimensions),
+            "feature_means": [sum(values) / len(values) for values in dimensions],
+            "feature_minima": [min(values) for values in dimensions],
+            "feature_maxima": [max(values) for values in dimensions],
+            "latency_p50_ms": tspulse_result.resource.warm_inference_p50_ms,
+            "latency_p95_ms": tspulse_result.resource.warm_inference_p95_ms,
+            "peak_rss_mib": tspulse_result.resource.rss_peak_mib,
+        }
     qualification_paths = write_qualification_bundle(
         tuple(qualification_results), run_directory / "qualification"
     )
@@ -235,6 +277,7 @@ def main() -> int:
         },
         "forecast_metrics": [item.model_dump(mode="json") for item in forecast_results],
         "sentiment_metrics": [item.model_dump(mode="json") for item in sentiment_results],
+        "tspulse_characterization": tspulse_characterization,
         "decisions": {
             "forecast_primary_pending_stability": forecast_winner,
             "forecast_no_winner_reason": (

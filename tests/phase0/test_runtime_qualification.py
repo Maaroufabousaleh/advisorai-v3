@@ -1005,6 +1005,47 @@ def test_tspulse_projects_as_feature_compute_not_forecast():
     assert result.to_bakeoff_result().kind == ComponentKind.FEATURE_COMPUTE
 
 
+def test_tspulse_measured_result_preserves_typed_batch_features():
+    candidate = CandidateSpec(
+        name="fixture-tspulse",
+        family=ModelFamily.TSPULSE,
+        task=ModelTask.TSPULSE_FEATURES,
+        output_schema="features[3]",
+    )
+    runner = FunctionalRunner(
+        model_family=ModelFamily.TSPULSE.value,
+        infer_fn=lambda _model, values: [
+            float(len(values)),
+            float(values[-1]),
+            float(max(values) - min(values)),
+        ],
+    )
+    dataset = BenchmarkDataset(
+        dataset_id="fixture-tspulse",
+        version="v1",
+        task=ModelTask.TSPULSE_FEATURES,
+        source="fixture://tspulse",
+        snapshot_id="fixture-tspulse-v1",
+        training_cutoff=datetime(2026, 1, 1, tzinfo=UTC),
+        inputs=(1.0, 2.0, 3.0),
+        content_hash="a" * 64,
+    )
+    result = run_runtime_qualification(
+        candidate,
+        runner=runner,
+        dataset=dataset,
+        sample_input=(1.0, 2.0, 3.0),
+        batch_input=((1.0, 2.0, 3.0), (3.0, 4.0, 8.0)),
+    )
+
+    assert result.status == QualificationStatus.MEASURED
+    assert result.feature_batch_predictions == ((3.0, 3.0, 2.0), (3.0, 8.0, 5.0))
+    with pytest.raises(ValueError, match="feature batch predictions require"):
+        type(result).model_validate(
+            {**result.model_dump(), "candidate": _forecast_candidate().model_dump()}
+        )
+
+
 def test_measured_result_requires_complete_evidence():
     candidate = _forecast_candidate()
     dataset = BenchmarkDataset.synthetic_forecast()
