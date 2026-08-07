@@ -14,7 +14,7 @@ inventory command:
 
 - PydanticAI/Graph, LiteLLM, NautilusTrader, Prefect, Hamilton (`sf-hamilton`),
   and the direct API recovery port: runtime/import or command available;
-- OmniRoute, LightGBM, TTM-R2, TSPulse, Chronos-2-small, Kronos-mini/small, TabPFN-TS,
+- OmniRoute, LightGBM, TTM-R3 (with TTM-R2 control), TSPulse, Chronos-2-small, Kronos-mini/small, TabPFN-TS,
   DuckLake, Hermes, and rclone: quarantined until their declared runtime probes
   are available and measured.
 

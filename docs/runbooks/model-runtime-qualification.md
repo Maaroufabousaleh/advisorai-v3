@@ -43,8 +43,11 @@ external cache path, and explicit task role:
 
 | Candidate | Repository | Revision | Role |
 | --- | --- | --- | --- |
-| FinBERT-family | `ProsusAI/finbert` | `4556d13015211d73dccd3fdd39d39232506f3e43` | CPU finance sentiment |
-| IBM TTM-R2 | `ibm-granite/granite-timeseries-ttm-r2` | `d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f` | CPU/lightweight forecast |
+| ModernFinBERT | `tabularisai/ModernFinBERT` | `6c6de8332ea7f6824c0f8917358dce1e669c1710` | primary general finance sentiment candidate |
+| FinBERT-MiniLM | `9mark9/finbert-minilm-sentiment` | `fdbfec0cd09610bd5af26da8998507fe7838e838` | fast CPU sentiment candidate |
+| Finance DeBERTa-v3 | `anabdd/finsentiment-deberta-v3-base` | `f2312de96d6cfe6251da37afb0e99b8e29885bdd` | higher-capacity sentiment challenger |
+| IBM TTM-R3 | `ibm-granite/granite-timeseries-ttm-r3` | `ea17cfd2e3edcaea21eb8dcecd18bf88971482fa` | primary lightweight forecast candidate |
+| IBM TTM-R2 | `ibm-granite/granite-timeseries-ttm-r2` | `d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f` | previous-generation forecast control |
 | TSPulse | `ibm-granite/granite-timeseries-tspulse-r1` | `2e64fcdc2a06d3565dfadaf0065c0ab5055f80f2` | anomaly/integrity/regime features only |
 | Chronos-2-small | `autogluon/chronos-2-small` | `ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a` | GPU forecast challenger |
 | Kronos-mini | `NeoQuasar/Kronos-mini` | `f4e68697d9d5aed55cef5c96aabc3376bcad9f81` | GPU forecast challenger |
@@ -67,11 +70,21 @@ separate; unexpected loadable files (including `.py`, `.so`, `.dll`, `.sh`,
 and unreviewed Pickle-style model files) are rejected. `cached_artifact_inventory()`
 hashes every regular cached file for the sanitized manifest.
 
-`ProsusAI/finbert` currently has no declared Hub license metadata, so its
-license admission is explicitly `pending` and it cannot become `MEASURED`.
-The other listed public cards have reviewed Apache-2.0 or MIT admissions, but
-their executable runtimes remain pending until isolated, exact environments
-and lock hashes are supplied.
+AdvisorAI is currently a private, personal installation. License declarations
+are retained as provenance and do not affect technical scores or selection.
+Only authoritative terms that explicitly prohibit this private use, or gated
+terms that require the user to accept them, block a candidate. Missing or
+ambiguous metadata is recorded as `unknown` and qualification continues.
+ProsusAI/finbert is no longer an active runtime candidate; ModernFinBERT
+replaces it. Existing compatibility identifiers may remain for historical
+evidence, but smoke and acquisition workflows do not schedule its weights.
+
+Granite TTM-R3 Lite is described upstream as a variant within the single R3
+family artifact. The current repository exposes one config/weight closure and
+no separately immutable Lite checkpoint or configuration identity, so
+AdvisorAI does not fabricate a separate `TTM-R3 Lite` candidate. It will be
+added only if an independently reproducible upstream identity becomes
+available.
 
 ## Qualification boundary
 

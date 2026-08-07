@@ -17,7 +17,9 @@ adopted. This phase has no trading authority and no resident agent fleet.
    Measure route identity, privacy, idle/active RSS, failure handling, and
    24-hour stability. LiteLLM is only a provisional baseline; OmniRoute remains
    quarantined until it passes all tests.
-4. Compare TTM-R2, TSPulse, Chronos-2-small, Kronos-mini/small, and TabPFN-TS
+4. Compare TTM-R3 against the TTM-R2 control, Chronos-2-small,
+   Kronos-mini/small, and later TabPFN-TS. Qualify TSPulse separately for
+   anomaly/integrity/regime features; it is never a price forecaster.
    against naive/statistical/LightGBM baselines for utility, calibration,
    latency, RAM, and VRAM. Do not treat co-trained variants as independent.
 5. Measure Nautilus adapters/replay, Prefect, Hamilton, Parquet manifests versus

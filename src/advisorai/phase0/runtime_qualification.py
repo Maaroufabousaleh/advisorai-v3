@@ -63,9 +63,11 @@ class QualificationStatus(StrEnum):
 
 
 class LicenseAdmissionStatus(StrEnum):
+    UNKNOWN = "unknown"
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+    WAITING_FOR_USER_ACCEPTANCE = "waiting_for_user_acceptance"
 
 
 class RuntimeAdmissionStatus(StrEnum):
@@ -92,7 +94,13 @@ class ModelFamily(StrEnum):
     SEASONAL = "seasonal"
     LINEAR = "linear"
     LIGHTGBM = "lightgbm"
+    # Retained for compatibility with historical evidence. ProsusAI/finbert is
+    # not part of the active qualification roster.
     FINBERT = "finbert-family"
+    MODERN_FINBERT = "modern-finbert"
+    FINBERT_MINILM = "finbert-minilm"
+    FINSENTIMENT_DEBERTA = "finsentiment-deberta-v3"
+    TTM_R3 = "ttm-r3"
     TTM_R2 = "ttm-r2"
     TSPULSE = "tspulse"
     CHRONOS_2_SMALL = "chronos-2-small"
@@ -164,11 +172,16 @@ class ArtifactPin(BaseModel):
 
 
 class LicenseAdmission(BaseModel):
-    """Explicit operator decision for a model's license provenance."""
+    """License/terms provenance for a private, personal installation.
+
+    License ambiguity is metadata, not a technical admission gate. Only an
+    evidenced prohibition or gated terms that require the user to accept them
+    block qualification.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    status: LicenseAdmissionStatus = LicenseAdmissionStatus.PENDING
+    status: LicenseAdmissionStatus = LicenseAdmissionStatus.UNKNOWN
     license_identifier: str | None = None
     reviewed_at: datetime | None = None
     evidence_reference: str | None = None
@@ -182,7 +195,21 @@ class LicenseAdmission(BaseModel):
         if self.status == LicenseAdmissionStatus.APPROVED:
             if not self.license_identifier or not self.evidence_reference or self.reviewed_at is None:
                 raise ValueError("approved license admission requires identity, date, and evidence")
+        if self.status in {
+            LicenseAdmissionStatus.REJECTED,
+            LicenseAdmissionStatus.WAITING_FOR_USER_ACCEPTANCE,
+        } and (not self.evidence_reference or self.reviewed_at is None):
+            raise ValueError("blocking license/terms status requires dated evidence")
         return self
+
+
+def license_blocks_private_use(admission: LicenseAdmission | None) -> bool:
+    """Return whether evidenced terms block this private technical bake-off."""
+
+    return admission is not None and admission.status in {
+        LicenseAdmissionStatus.REJECTED,
+        LicenseAdmissionStatus.WAITING_FOR_USER_ACCEPTANCE,
+    }
 
 
 class RuntimePin(BaseModel):
@@ -404,8 +431,6 @@ class CheckpointPin(BaseModel):
             raise ValueError("checkpoint model family is required")
         if not self.quantization.strip():
             raise ValueError("checkpoint quantization must be explicit")
-        if self.tokenizer is not None and self.tokenizer_license_admission is None:
-            raise ValueError("tokenizer repositories require a separate license admission")
         return self
 
     @property
@@ -1293,11 +1318,6 @@ def verify_checkpoint_artifacts(
 
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
-    if checkpoint.tokenizer is not None and (
-        checkpoint.tokenizer_license_admission is None
-        or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
-    ):
-        raise CheckpointPinError("tokenizer license admission is not approved")
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
     repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
     observed: list[ArtifactPin] = []
@@ -1339,11 +1359,6 @@ def cached_artifact_inventory(
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
-    if checkpoint.tokenizer is not None and (
-        checkpoint.tokenizer_license_admission is None
-        or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
-    ):
-        raise CheckpointPinError("tokenizer license admission is not approved")
     repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
     inventory: list[ArtifactPin] = []
     for repository in repositories:
@@ -2222,22 +2237,22 @@ def run_runtime_qualification(
                 candidate.runtime_pin.assert_environment_outside_repository(repository_root or Path.cwd())
         except (CheckpointPinError, QualificationError) as exc:
             return _quarantined_result(candidate, dataset=dataset, environment=environment, reason=str(exc))
-        if checkpoint.license_admission.status != LicenseAdmissionStatus.APPROVED:
+        if license_blocks_private_use(checkpoint.license_admission):
             return _quarantined_result(
                 candidate,
                 dataset=dataset,
                 environment=environment,
-                reason="license admission is not approved",
+                reason=f"model terms block private qualification: {checkpoint.license_admission.status.value}",
             )
-        if checkpoint.tokenizer is not None and (
-            checkpoint.tokenizer_license_admission is None
-            or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
-        ):
+        if license_blocks_private_use(checkpoint.tokenizer_license_admission):
             return _quarantined_result(
                 candidate,
                 dataset=dataset,
                 environment=environment,
-                reason="tokenizer license admission is not approved",
+                reason=(
+                    "tokenizer terms block private qualification: "
+                    f"{checkpoint.tokenizer_license_admission.status.value}"
+                ),
             )
         if candidate.runtime_pin is None:
             return _quarantined_result(
@@ -2658,14 +2673,21 @@ def _candidate_by_family(family: ModelFamily) -> CandidateSpec:
 def run_finbert_qualification(
     *,
     runner: RuntimeRunner | None,
+    family: ModelFamily = ModelFamily.MODERN_FINBERT,
     environment: RuntimeEnvironment | None = None,
     ceiling: ResourceCeiling | None = None,
     repository_root: Path | None = None,
 ) -> RuntimeQualificationResult:
-    """Qualify FinBERT against the fixed public finance-text fixture."""
+    """Qualify an active finance-sentiment candidate on the smoke fixture.
+
+    The compatibility name is retained for callers, but the active default is
+    ModernFinBERT. ProsusAI/finbert is not present in the default roster.
+    """
 
     dataset = BenchmarkDataset.finbert_fixture()
-    candidate = _candidate_by_family(ModelFamily.FINBERT)
+    candidate = _candidate_by_family(family)
+    if candidate.task != ModelTask.FINANCE_SENTIMENT:
+        raise ValueError("finance-sentiment qualification requires an NLP candidate")
     texts = tuple(text for text, _label in dataset.public_text_fixture)
     return run_runtime_qualification(
         candidate,
@@ -2826,6 +2848,7 @@ def _repo(
         "README.md",
         "LICENSE",
         "LICENSE.md",
+        "model.sig",
         "pyproject.toml",
     }
     runtime_paths = tuple(
@@ -2852,32 +2875,151 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
         CandidateSpec(name="linear", family=ModelFamily.LINEAR, task=ModelTask.FORECAST, output_schema="forecast[1]"),
         CandidateSpec(name="lightgbm", family=ModelFamily.LIGHTGBM, task=ModelTask.FORECAST, output_schema="forecast[1]"),
         CandidateSpec(
-            name="finbert-family",
-            family=ModelFamily.FINBERT,
+            name="modern-finbert",
+            family=ModelFamily.MODERN_FINBERT,
             task=ModelTask.FINANCE_SENTIMENT,
             requires_transformers=True,
             output_schema="sentiment(label,confidence)",
             runtime_pin=_runtime_pin(
-                candidate="finbert-family",
+                candidate="modern-finbert",
                 project="transformers",
                 version_or_commit="5.5.4",
-                dependencies=("huggingface-hub==1.26.1", "torch=operator-selected"),
+                dependencies=(
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.9.1",
+                ),
             ),
             external_checkpoint=CheckpointPin(
-                model_family=ModelFamily.FINBERT.value,
+                model_family=ModelFamily.MODERN_FINBERT.value,
                 repository=_repo(
-                    "ProsusAI/finbert",
-                    "4556d13015211d73dccd3fdd39d39232506f3e43",
-                    "not-declared",
-                    ".gitattributes",
+                    "tabularisai/ModernFinBERT",
+                    "6c6de8332ea7f6824c0f8917358dce1e669c1710",
+                    "apache-2.0",
                     "README.md",
                     "config.json",
-                    "pytorch_model.bin",
+                    "model.safetensors",
                     "special_tokens_map.json",
+                    "tokenizer.json",
                     "tokenizer_config.json",
-                    "vocab.txt",
                 ),
-                cache_path=_cache_path("finbert-family"),
+                cache_path=_cache_path("modern-finbert"),
+                license_admission=_approved_license(
+                    "Apache-2.0",
+                    "https://huggingface.co/tabularisai/ModernFinBERT/tree/6c6de8332ea7f6824c0f8917358dce1e669c1710",
+                ),
+            ),
+        ),
+        CandidateSpec(
+            name="finbert-minilm",
+            family=ModelFamily.FINBERT_MINILM,
+            task=ModelTask.FINANCE_SENTIMENT,
+            requires_transformers=True,
+            output_schema="sentiment(label,confidence)",
+            notes="fast CPU sentiment filter candidate",
+            runtime_pin=_runtime_pin(
+                candidate="finbert-minilm",
+                project="transformers",
+                version_or_commit="5.5.4",
+                dependencies=(
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.9.1",
+                ),
+            ),
+            external_checkpoint=CheckpointPin(
+                model_family=ModelFamily.FINBERT_MINILM.value,
+                repository=_repo(
+                    "9mark9/finbert-minilm-sentiment",
+                    "fdbfec0cd09610bd5af26da8998507fe7838e838",
+                    "mit",
+                    "LICENSE",
+                    "README.md",
+                    "config.json",
+                    "model.safetensors",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                ),
+                cache_path=_cache_path("finbert-minilm"),
+                license_admission=_approved_license(
+                    "MIT",
+                    "https://huggingface.co/9mark9/finbert-minilm-sentiment/tree/fdbfec0cd09610bd5af26da8998507fe7838e838",
+                ),
+            ),
+        ),
+        CandidateSpec(
+            name="finsentiment-deberta-v3",
+            family=ModelFamily.FINSENTIMENT_DEBERTA,
+            task=ModelTask.FINANCE_SENTIMENT,
+            requires_transformers=True,
+            output_schema="sentiment(label,confidence)",
+            notes="higher-capacity short-form sentiment challenger",
+            runtime_pin=_runtime_pin(
+                candidate="finsentiment-deberta-v3",
+                project="transformers",
+                version_or_commit="5.5.4",
+                dependencies=(
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "sentencepiece==0.2.1",
+                    "torch==2.9.1",
+                ),
+            ),
+            external_checkpoint=CheckpointPin(
+                model_family=ModelFamily.FINSENTIMENT_DEBERTA.value,
+                repository=_repo(
+                    "anabdd/finsentiment-deberta-v3-base",
+                    "f2312de96d6cfe6251da37afb0e99b8e29885bdd",
+                    "apache-2.0",
+                    "README.md",
+                    "added_tokens.json",
+                    "config.json",
+                    "model.safetensors",
+                    "special_tokens_map.json",
+                    "spm.model",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                ),
+                cache_path=_cache_path("finsentiment-deberta-v3"),
+                license_admission=_approved_license(
+                    "Apache-2.0",
+                    "https://huggingface.co/anabdd/finsentiment-deberta-v3-base/tree/f2312de96d6cfe6251da37afb0e99b8e29885bdd",
+                ),
+            ),
+        ),
+        CandidateSpec(
+            name="ttm-r3",
+            family=ModelFamily.TTM_R3,
+            task=ModelTask.FORECAST,
+            requires_transformers=True,
+            output_schema="forecast[1]",
+            notes="primary lightweight forecasting candidate; Lite is not separately pinnable",
+            runtime_pin=_runtime_pin(
+                candidate="ttm-r3",
+                project="transformers",
+                version_or_commit="5.5.4",
+                dependencies=(
+                    "transformers==5.5.4",
+                    "huggingface-hub==1.26.1",
+                    "torch==2.9.1",
+                ),
+            ),
+            external_checkpoint=CheckpointPin(
+                model_family=ModelFamily.TTM_R3.value,
+                repository=_repo(
+                    "ibm-granite/granite-timeseries-ttm-r3",
+                    "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa",
+                    "apache-2.0",
+                    "README.md",
+                    "config.json",
+                    "model.safetensors",
+                    "model.sig",
+                ),
+                cache_path=_cache_path("ttm-r3"),
+                license_admission=_approved_license(
+                    "Apache-2.0",
+                    "https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3/tree/ea17cfd2e3edcaea21eb8dcecd18bf88971482fa",
+                ),
             ),
         ),
         CandidateSpec(

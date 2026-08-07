@@ -9,7 +9,7 @@ decision utility for V3-Core.
 
 1. Build naive/statistical and LightGBM baselines plus their data/feature/label
 provenance.
-2. Run TTM-R2 and TSPulse in a CPU wave. TSPulse contributes integrity/regime
+2. Run TTM-R3 with TTM-R2 as its control, then TSPulse in a CPU wave. TSPulse contributes integrity/regime
    features rather than being assumed to forecast price.
 3. Select exactly one initial GPU family—Chronos-2-small or Kronos-mini—through
    Phase 0/4 evaluation. Load one family at a time and micro-batch assets.
