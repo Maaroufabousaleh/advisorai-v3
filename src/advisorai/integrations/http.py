@@ -22,11 +22,21 @@ class HttpTransportError(RuntimeError):
     """A safe, redacted external transport failure."""
 
     def __init__(
-        self, message: str, *, status_code: int | None = None, retriable: bool = False
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        retriable: bool = False,
+        response_body: bytes | None = None,
+        response_headers: Sequence[tuple[str, str]] = (),
+        error_type: str | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.retriable = retriable
+        self.response_body = response_body
+        self.response_headers = tuple((str(key), str(value)) for key, value in response_headers)
+        self.error_type = error_type
 
 
 class HttpClientConfig(BaseModel):
@@ -154,22 +164,32 @@ class SafeHttpClient:
         headers: Mapping[str, str] | None = None,
         body: bytes | None = None,
         acceptable_statuses: frozenset[int] = frozenset({200}),
+        max_retries: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> HttpResponse:
         self._validate_url(url)
         request_headers = {"User-Agent": self.config.user_agent, **dict(headers or {})}
+        retries = self.config.max_retries if max_retries is None else max_retries
+        if retries < 0 or retries > 5:
+            raise ValueError("per-request max_retries must be between 0 and 5")
+        timeout = self.config.timeout_seconds if timeout_seconds is None else timeout_seconds
+        if timeout <= 0 or timeout > 120:
+            raise ValueError("per-request timeout must be between 0 and 120 seconds")
         last_error: Exception | None = None
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(retries + 1):
             self._before_request()
             try:
                 status, response_body, response_headers = self._requester(
-                    method.upper(), url, request_headers, body, self.config.timeout_seconds
+                    method.upper(), url, request_headers, body, timeout
                 )
             except (OSError, URLError, TimeoutError) as exc:
                 self._failure()
                 last_error = exc
-                if attempt >= self.config.max_retries:
+                if attempt >= retries:
                     raise HttpTransportError(
-                        "external connector request failed", retriable=True
+                        "external connector request failed",
+                        retriable=True,
+                        error_type="timeout" if isinstance(exc, TimeoutError) else "network",
                     ) from exc
                 self._sleeper(self.config.retry_backoff_seconds * (2**attempt))
                 continue
@@ -194,7 +214,7 @@ class SafeHttpClient:
                     ) from exc
             retriable = status == 429 or status >= 500
             self._failure() if retriable else None
-            if retriable and attempt < self.config.max_retries:
+            if retriable and attempt < retries:
                 self._sleeper(self.config.retry_backoff_seconds * (2**attempt))
                 continue
             safe_headers = redacted_headers(dict(response.headers), secrets=self._secret_values)
@@ -205,16 +225,37 @@ class SafeHttpClient:
                 f"external connector returned HTTP {status}; headers={safe_headers}; body={detail!r}",
                 status_code=status,
                 retriable=retriable,
+                response_body=response.body,
+                response_headers=response.headers,
             )
         raise HttpTransportError(
             "external connector request failed", retriable=True
         ) from last_error
 
-    def get(self, url: str, *, headers: Mapping[str, str] | None = None) -> HttpResponse:
-        return self.request("GET", url, headers=headers)
+    def get(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        max_retries: int | None = None,
+        timeout_seconds: float | None = None,
+    ) -> HttpResponse:
+        return self.request(
+            "GET",
+            url,
+            headers=headers,
+            max_retries=max_retries,
+            timeout_seconds=timeout_seconds,
+        )
 
     def post_json(
-        self, url: str, payload: Mapping[str, object], *, headers: Mapping[str, str] | None = None
+        self,
+        url: str,
+        payload: Mapping[str, object],
+        *,
+        headers: Mapping[str, str] | None = None,
+        max_retries: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> HttpResponse:
         encoded = json.dumps(
             payload, sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -230,6 +271,8 @@ class SafeHttpClient:
             headers=merged,
             body=encoded,
             acceptable_statuses=frozenset({200, 201, 202, 204}),
+            max_retries=max_retries,
+            timeout_seconds=timeout_seconds,
         )
 
 

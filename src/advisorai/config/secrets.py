@@ -12,7 +12,10 @@ import os
 import re
 import shlex
 from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -134,9 +137,396 @@ SECRET_ENV_NAMES = frozenset(
     for name in KNOWN_ENV_NAMES
     if any(
         token in name
-        for token in ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASSPHRASE", "AUTH", "NKEY")
+        for token in (
+            "KEY",
+            "TOKEN",
+            "SECRET",
+            "PASSWORD",
+            "PASSPHRASE",
+            "AUTH",
+            "NKEY",
+            "CREDENTIAL",
+            "PRIVATE",
+            "CREDS",
+        )
     )
+    or name in {"RCLONE_CONFIG", "GOOGLE_APPLICATION_CREDENTIALS"}
 )
+
+
+class CredentialScope(StrEnum):
+    """The only credential bundles a connector may request.
+
+    A scope is deliberately narrower than the operator's master inventory.  A
+    caller must choose one scope before values can be returned; there is no
+    "all secrets" operation.
+    """
+
+    DIRECT_LLM = "direct_llm"
+    LITELLM = "litellm"
+    OMNIROUTE = "omniroute"
+    PUBLIC_DATA = "public_data"
+    MODEL_REGISTRY = "model_registry"
+    PAPER_VENUE = "paper_venue"
+    PAPER_VENUE_CCXT = "paper_venue_ccxt"
+    PAPER_VENUE_KALSHI = "paper_venue_kalshi"
+    PAPER_VENUE_POLYMARKET = "paper_venue_polymarket"
+    PAPER_VENUE_DERIBIT = "paper_venue_deribit"
+    DERIBIT_PUBLIC = "deribit_public"
+    ARCHIVE_RCLONE = "archive_rclone"
+    ARCHIVE_AWS = "archive_aws"
+    ARCHIVE_AZURE = "archive_azure"
+    ARCHIVE_GOOGLE = "archive_google"
+    ARCHIVE_OMNICLOUD = "archive_omnicloud"
+    EVENT_BUS = "event_bus"
+    INTERNAL_APP = "internal_app"
+
+
+class CredentialScopeError(ValueError):
+    """Raised when a process requests an invalid or over-broad credential scope."""
+
+
+@dataclass(frozen=True, slots=True)
+class CredentialAlias:
+    """A process-local alias from one allowlisted name to another.
+
+    Aliases are resolved into a returned subset only.  They never mutate the
+    source mapping, ``os.environ``, or the operator's ``secrets.env`` file.
+    """
+
+    target: str
+    source: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target, str) or not _NAME.fullmatch(self.target):
+            raise ValueError("credential alias target must be an uppercase environment name")
+        if not isinstance(self.source, str) or not _NAME.fullmatch(self.source):
+            raise ValueError("credential alias source must be an uppercase environment name")
+        if self.target == self.source:
+            raise ValueError("credential alias target and source must differ")
+
+
+# Explicit process boundaries for the master operator inventory.  Keep this
+# mapping reviewable: adding a name here grants a connector permission to
+# receive its value.
+CREDENTIAL_SCOPES: Mapping[CredentialScope, frozenset[str]] = MappingProxyType(
+    {
+        CredentialScope.DIRECT_LLM: frozenset(
+            {
+                "ADVISORAI_LLM_API_KEY",
+            }
+        ),
+        CredentialScope.LITELLM: frozenset(
+            {
+                "LITELLM_BASE_URL",
+                "LITELLM_MASTER_KEY",
+                "LITELLM_SALT_KEY",
+                "OPENROUTER_API_KEY",
+                "OPENAI_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "GOOGLE_API_KEY",
+                "GEMINI_API_KEY",
+                "MISTRAL_API_KEY",
+                "GROQ_API_KEY",
+                "TOGETHER_API_KEY",
+                "COHERE_API_KEY",
+                "AZURE_OPENAI_API_KEY",
+                "AZURE_OPENAI_API_VERSION",
+                "AZURE_OPENAI_DEPLOYMENT",
+                "AZURE_OPENAI_ENDPOINT",
+            }
+        ),
+        CredentialScope.OMNIROUTE: frozenset(
+            {
+                "OMNIROUTE_API_KEY",
+                "OMNIROUTE_BASE_URL",
+            }
+        ),
+        CredentialScope.PUBLIC_DATA: frozenset(
+            {
+                "SEC_USER_AGENT",
+                "FRED_API_KEY",
+                "ALFRED_API_KEY",
+                "BLS_API_KEY",
+                "BEA_API_KEY",
+                "TREASURY_API_KEY",
+                "CENTRAL_BANK_API_KEY",
+                "DATA_VENDOR_API_KEY",
+                "DATA_VENDOR_API_SECRET",
+                "LSE_API_KEY",
+                "LSE_API_SECRET",
+            }
+        ),
+        CredentialScope.MODEL_REGISTRY: frozenset(
+            {
+                "HF_TOKEN",
+                "HUGGINGFACE_HUB_TOKEN",
+                "WANDB_API_KEY",
+                "MLFLOW_TRACKING_TOKEN",
+                "PREFECT_API_KEY",
+                "PREFECT_API_URL",
+            }
+        ),
+        CredentialScope.PAPER_VENUE: frozenset(
+            {
+                "ADVISORAI_VENUE_NAME",
+                "ADVISORAI_VENUE_ENVIRONMENT",
+                "ADVISORAI_VENUE_BASE_URL",
+                "ADVISORAI_VENUE_WS_URL",
+                "ADVISORAI_VENUE_ACCOUNT_ID",
+                "ADVISORAI_VENUE_SUBACCOUNT",
+                "ADVISORAI_VENUE_API_KEY",
+                "ADVISORAI_VENUE_API_SECRET",
+                "ADVISORAI_VENUE_PASSPHRASE",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_CCXT: frozenset(
+            {
+                "CCXT_EXCHANGE_ID",
+                "CCXT_API_KEY",
+                "CCXT_API_SECRET",
+                "CCXT_PASSWORD",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_KALSHI: frozenset(
+            {
+                "KALSHI_API_KEY_ID",
+                "KALSHI_PRIVATE_KEY_PATH",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_POLYMARKET: frozenset(
+            {
+                "POLYMARKET_API_KEY",
+                "POLYMARKET_API_SECRET",
+                "POLYMARKET_API_PASSPHRASE",
+            }
+        ),
+        CredentialScope.PAPER_VENUE_DERIBIT: frozenset(
+            {
+                "DERIBIT_API_KEY",
+                "DERIBIT_API_SECRET",
+                "DERIBIT_CLIENT_ID",
+                "DERIBIT_CLIENT_SECRET",
+            }
+        ),
+        CredentialScope.DERIBIT_PUBLIC: frozenset(
+            {
+                "DERIBIT_TESTNET",
+            }
+        ),
+        CredentialScope.ARCHIVE_RCLONE: frozenset(
+            {
+                "RCLONE_CONFIG",
+                "RCLONE_CONFIG_PASS",
+                "RCLONE_CRYPT_REMOTE",
+                "RCLONE_REMOTE",
+                "RCLONE_S3_ACCESS_KEY_ID",
+                "RCLONE_S3_ENDPOINT",
+                "RCLONE_S3_REGION",
+                "RCLONE_S3_SECRET_ACCESS_KEY",
+                "RCLONE_S3_SESSION_TOKEN",
+            }
+        ),
+        CredentialScope.ARCHIVE_AWS: frozenset(
+            {
+                "AWS_ACCESS_KEY_ID",
+                "AWS_PROFILE",
+                "AWS_REGION",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
+            }
+        ),
+        CredentialScope.ARCHIVE_AZURE: frozenset(
+            {
+                "AZURE_STORAGE_ACCOUNT",
+                "AZURE_STORAGE_KEY",
+                "AZURE_STORAGE_SAS_TOKEN",
+            }
+        ),
+        CredentialScope.ARCHIVE_GOOGLE: frozenset(
+            {
+                "GOOGLE_APPLICATION_CREDENTIALS",
+            }
+        ),
+        CredentialScope.ARCHIVE_OMNICLOUD: frozenset(
+            {
+                "OMNICLOUD_API_KEY",
+                "OMNICLOUD_API_SECRET",
+                "OMNICLOUD_BASE_URL",
+            }
+        ),
+        CredentialScope.EVENT_BUS: frozenset(
+            {
+                "NATS_URL",
+                "NATS_USER",
+                "NATS_PASSWORD",
+                "NATS_NKEY",
+                "NATS_CREDS_FILE",
+            }
+        ),
+        CredentialScope.INTERNAL_APP: frozenset(
+            {
+                "ADVISORAI_API_AUTH_TOKEN",
+                "ADVISORAI_ARTIFACT_ENCRYPTION_KEY",
+                "ADVISORAI_ARTIFACT_SIGNING_KEY",
+                "ADVISORAI_CONFIG_DIR",
+                "ADVISORAI_CONFIG_SIGNING_KEY",
+                "ADVISORAI_ENVIRONMENT",
+                "ADVISORAI_LEDGER_ENCRYPTION_KEY",
+                "ADVISORAI_SESSION_SECRET",
+                "ADVISORAI_WEBHOOK_SIGNING_SECRET",
+                "ADVISORAI_DASHBOARD_PASSWORD_HASH",
+                "ADVISORAI_DASHBOARD_TOTP_SECRET",
+                "ADVISORAI_DASHBOARD_SUBJECT",
+                "ADVISORAI_DASHBOARD_COOKIE_SECURE",
+            }
+        ),
+    }
+)
+
+_SCOPED_ENV_NAMES = frozenset(
+    name for names in CREDENTIAL_SCOPES.values() for name in names
+)
+_UNKNOWN_SCOPED_NAMES = _SCOPED_ENV_NAMES - KNOWN_ENV_NAMES
+if _UNKNOWN_SCOPED_NAMES:  # pragma: no cover - protects future edits at import time
+    raise RuntimeError("credential scope contains unknown environment names")
+
+
+class CredentialResolver:
+    """Resolve one allowlisted credential subset without changing process state.
+
+    The resolver accepts the parsed master inventory, but exposes only the
+    requested scope.  It intentionally has no method that returns the complete
+    mapping and never calls ``os.environ.update`` or executes a shell file.
+    """
+
+    __slots__ = ("_values",)
+
+    def __init__(self, values: Mapping[str, str]) -> None:
+        if not isinstance(values, Mapping):
+            raise TypeError("credential values must be a mapping")
+        normalized: dict[str, str] = {}
+        unknown: list[str] = []
+        for name, value in values.items():
+            if not isinstance(name, str) or not _NAME.fullmatch(name):
+                raise CredentialScopeError("credential mapping contains an invalid name")
+            if name not in KNOWN_ENV_NAMES:
+                unknown.append(name)
+                continue
+            if not isinstance(value, str):
+                raise CredentialScopeError(f"credential value for {name} must be text")
+            normalized[name] = value
+        if unknown:
+            raise CredentialScopeError(
+                "credential mapping contains unknown environment names: "
+                + ", ".join(sorted(unknown))
+            )
+        self._values = MappingProxyType(normalized)
+
+    @classmethod
+    def from_env_file(cls, path: Path) -> CredentialResolver:
+        """Load a safe parsed file; the file is never sourced or executed."""
+
+        return cls(load_env_file(path, strict=True))
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, str]) -> CredentialResolver:
+        return cls(values)
+
+    @staticmethod
+    def _scope(scope: CredentialScope | str | None) -> CredentialScope:
+        if scope is None or isinstance(scope, (Mapping, list, tuple, set, frozenset)):
+            raise CredentialScopeError(
+                "a single credential scope is required; requesting all credentials is forbidden"
+            )
+        try:
+            return scope if isinstance(scope, CredentialScope) else CredentialScope(scope)
+        except (TypeError, ValueError) as exc:
+            raise CredentialScopeError(f"unknown credential scope: {scope}") from exc
+
+    def resolve(
+        self,
+        scope: CredentialScope | str | None,
+        *,
+        aliases: tuple[CredentialAlias, ...] | list[CredentialAlias] = (),
+    ) -> dict[str, str]:
+        """Return populated values for exactly one scope.
+
+        Alias values are copied into the target name for this returned process
+        subset only.  The resolver's source values and the environment remain
+        unchanged.
+        """
+
+        selected_scope = self._scope(scope)
+        allowed = CREDENTIAL_SCOPES[selected_scope]
+        result = {
+            name: value
+            for name, value in self._values.items()
+            if name in allowed and value.strip()
+        }
+        seen_targets: set[str] = set()
+        for alias in aliases:
+            if not isinstance(alias, CredentialAlias):
+                raise CredentialScopeError("credential aliases must be CredentialAlias instances")
+            if alias.target in seen_targets:
+                raise CredentialScopeError(f"duplicate credential alias target: {alias.target}")
+            seen_targets.add(alias.target)
+            if alias.target not in allowed:
+                raise CredentialScopeError(
+                    f"credential alias target is outside the {selected_scope.value} scope"
+                )
+            if alias.source not in _SCOPED_ENV_NAMES:
+                raise CredentialScopeError("credential alias source is not allowlisted")
+            source_value = self._values.get(alias.source, "")
+            target_value = self._values.get(alias.target, "")
+            if target_value.strip() and source_value.strip() and target_value != source_value:
+                raise CredentialScopeError(
+                    f"credential alias has conflicting values for {alias.target}"
+                )
+            if source_value.strip() and not target_value.strip():
+                result[alias.target] = source_value
+        return dict(result)
+
+    def resolve_for_process(
+        self,
+        scope: CredentialScope | str | None,
+        *,
+        aliases: tuple[CredentialAlias, ...] | list[CredentialAlias] = (),
+    ) -> dict[str, str]:
+        """Named convenience method emphasizing that the result is process-local."""
+
+        return self.resolve(scope, aliases=aliases)
+
+    def get(self, scope: CredentialScope | str | None, name: str) -> str | None:
+        """Read one name only after proving it belongs to the requested scope."""
+
+        selected_scope = self._scope(scope)
+        if name not in CREDENTIAL_SCOPES[selected_scope]:
+            raise CredentialScopeError(
+                f"{name} is not allowlisted for the {selected_scope.value} scope"
+            )
+        value = self._values.get(name, "")
+        return value if value.strip() else None
+
+    def available_names(self, scope: CredentialScope | str | None) -> tuple[str, ...]:
+        """Return names only, suitable for diagnostics without exposing values."""
+
+        selected_scope = self._scope(scope)
+        return tuple(
+            sorted(
+                name
+                for name in CREDENTIAL_SCOPES[selected_scope]
+                if self._values.get(name, "").strip()
+            )
+        )
+
+    def __repr__(self) -> str:
+        scopes = {
+            scope.value: self.available_names(scope)
+            for scope in CredentialScope
+            if self.available_names(scope)
+        }
+        return f"CredentialResolver(populated_names={scopes!r})"
 
 
 def _unquote(value: str, *, line_number: int) -> str:
@@ -394,6 +784,11 @@ def redacted_headers(
 
 
 __all__ = [
+    "CREDENTIAL_SCOPES",
+    "CredentialAlias",
+    "CredentialResolver",
+    "CredentialScope",
+    "CredentialScopeError",
     "KNOWN_ENV_NAMES",
     "SECRET_ENV_NAMES",
     "SecretSettings",

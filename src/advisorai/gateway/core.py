@@ -2,20 +2,70 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from time import perf_counter_ns
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
-from advisorai.ports import GatewayRequest, GatewayResponse, GatewayRoute, ModelGatewayPort
+from advisorai.ports import (
+    DecisionImpact,
+    GatewayDataClass,
+    GatewayInvocationMode,
+    GatewayOutputKind,
+    GatewayRequest,
+    GatewayResponse,
+    GatewayRoute,
+    GatewayTier,
+    ModelGatewayPort,
+    RouteTier,
+    ToolExecutionStatus,
+)
 
 
 class GatewayFailure(RuntimeError):
     pass
+
+
+_LEDGER_FORBIDDEN_METADATA_TOKENS = (
+    "message",
+    "user",
+    "prompt",
+    "content",
+    "body",
+    "response_body",
+)
+
+
+def _ledger_safe_metadata(value: object) -> object:
+    """Drop raw provider/user content before durable model-attempt recording.
+
+    Gateway adapters already produce a narrow error summary, but the recorder
+    is the final boundary: no adapter exception or future provider field may
+    make an unredacted message or a user identifier durable by accident.
+    """
+
+    if isinstance(value, Mapping):
+        safe: dict[str, object] = {}
+        for key, child in value.items():
+            name = str(key)
+            normalized = name.lower()
+            if any(token in normalized for token in _LEDGER_FORBIDDEN_METADATA_TOKENS):
+                continue
+            safe[name] = _ledger_safe_metadata(child)
+        return safe
+    if isinstance(value, tuple):
+        return tuple(_ledger_safe_metadata(item) for item in value)
+    if isinstance(value, list):
+        return [_ledger_safe_metadata(item) for item in value]
+    # Provider error detail objects are deliberately not serialised; adapters
+    # expose only scalar classifications, codes, and routing observations.
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(type(value).__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +75,10 @@ class GatewayAttempt:
     succeeded: bool
     latency_ms: int
     error: str | None = None
+    profile_id: str | None = None
+    attempt_number: int = 0
+    provider_attempt_number: int = 1
+    failure_metadata: Mapping[str, object] = field(default_factory=dict)
 
 
 class GatewayCallRecord(BaseModel):
@@ -45,9 +99,63 @@ class GatewayCallRecord(BaseModel):
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
     estimated_cost_usd: float = Field(default=0, ge=0)
+    expected_cost_usd: float | None = Field(default=None, ge=0)
+    cost_difference_usd: float | None = None
     provider_request_id: str | None = None
     error_class: str | None = None
     recorded_at: datetime
+    prompt_hash: str | None = None
+    evidence_hash: str | None = None
+    tier: GatewayTier | None = None
+    data_class: GatewayDataClass | None = None
+    output_kind: GatewayOutputKind = GatewayOutputKind.GENERIC
+    invocation_mode: GatewayInvocationMode = GatewayInvocationMode.STRUCTURED_OUTPUT
+    # Compatibility-only alias for ``tool_called``. It records a provider
+    # request, never successful external tool execution.
+    tool_used: bool = False
+    tool_called: bool = False
+    tool_execution_status: ToolExecutionStatus = ToolExecutionStatus.NOT_EXECUTED
+    policy_version: str | None = None
+    redaction_policy_version: str | None = None
+    escalation_reason: str | None = None
+    retention_policy: str | None = None
+    training_policy: str | None = None
+    terms_verified: bool | None = None
+    terms_reference: str | None = None
+    requested_provider: str | None = None
+    requested_model: str | None = None
+    requested_gateway: str | None = None
+    requested_endpoint_variant: str | None = None
+    requested_provider_selector: str | None = None
+    requested_gateway_selector: str | None = None
+    requested_endpoint_selector: str | None = None
+    observed_provider_name: str | None = None
+    top_level_response_model: str | None = None
+    resolved_model: str | None = None
+    resolved_endpoint_model: str | None = None
+    endpoint_selector_proof: str | None = None
+    endpoint_selected: bool | None = None
+    routing_strategy: str | None = None
+    routing_attempt: int | None = None
+    is_byok: bool | None = None
+    actual_provider: str | None = None
+    actual_model: str | None = None
+    actual_gateway: str | None = None
+    actual_endpoint_variant: str | None = None
+    profile_id: str | None = None
+    attempt_number: int = Field(default=0, ge=0)
+    route_tier: RouteTier | None = None
+    decision_impact: DecisionImpact | None = None
+    redaction_policy_hash: str | None = None
+    route_policy_hash: str | None = None
+    input_price_per_million: float | None = Field(default=None, ge=0)
+    output_price_per_million: float | None = Field(default=None, ge=0)
+    request_price_usd: float | None = Field(default=None, ge=0)
+    billed_cost_usd: float | None = Field(default=None, ge=0)
+    cost_metadata: dict[str, object] = Field(default_factory=dict)
+    routing_metadata: dict[str, object] = Field(default_factory=dict)
+    failure_metadata: dict[str, object] = Field(default_factory=dict)
+    provider_attempt_number: int = Field(default=1, ge=1)
 
     @field_validator("request_hash")
     @classmethod
@@ -57,6 +165,16 @@ class GatewayCallRecord(BaseModel):
             raise ValueError("gateway request_hash must be a lowercase SHA-256 digest")
         return normalized
 
+    @field_validator("prompt_hash", "evidence_hash")
+    @classmethod
+    def require_optional_digest(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.lower().strip()
+        if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+            raise ValueError("gateway optional hashes must be lowercase SHA-256 digests")
+        return normalized
+
     @field_validator("adapter", "provider", "model", "gateway", "prompt_version")
     @classmethod
     def require_nonblank(cls, value: str) -> str:
@@ -64,16 +182,45 @@ class GatewayCallRecord(BaseModel):
             raise ValueError("gateway call identity fields cannot be blank")
         return value.strip()
 
-    @field_validator("tool_version", "provider_request_id", "error_class")
+    @field_validator(
+        "tool_version",
+        "provider_request_id",
+        "error_class",
+        "requested_provider",
+        "requested_model",
+        "requested_gateway",
+        "requested_endpoint_variant",
+        "requested_provider_selector",
+        "requested_gateway_selector",
+        "requested_endpoint_selector",
+        "observed_provider_name",
+        "top_level_response_model",
+        "resolved_model",
+        "resolved_endpoint_model",
+        "endpoint_selector_proof",
+        "routing_strategy",
+        "actual_provider",
+        "actual_model",
+        "actual_gateway",
+        "actual_endpoint_variant",
+        "policy_version",
+        "redaction_policy_version",
+        "escalation_reason",
+        "retention_policy",
+        "training_policy",
+        "terms_reference",
+    )
     @classmethod
     def normalize_optional_text(cls, value: str | None) -> str | None:
         if value is not None and not value.strip():
             raise ValueError("gateway optional metadata cannot be blank")
         return value.strip() if value is not None else None
 
-    @field_validator("estimated_cost_usd")
+    @field_validator("estimated_cost_usd", "expected_cost_usd", "billed_cost_usd", "cost_difference_usd")
     @classmethod
-    def require_finite_cost(cls, value: float) -> float:
+    def require_finite_cost(cls, value: float | None) -> float | None:
+        if value is None:
+            return None
         if value != value or value in {float("inf"), float("-inf")}:
             raise ValueError("gateway call cost must be finite")
         return value
@@ -84,6 +231,14 @@ class GatewayCallRecord(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("gateway call timestamp must include a timezone")
         return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def validate_tool_call_audit_semantics(self) -> GatewayCallRecord:
+        if self.tool_used != self.tool_called:
+            raise ValueError("gateway tool_used compatibility field must match tool_called")
+        if self.tool_execution_status is not ToolExecutionStatus.NOT_EXECUTED:
+            raise ValueError("gateway generation records cannot claim tool execution")
+        return self
 
 
 class GatewayRecorder:
@@ -100,10 +255,23 @@ class GatewayRecorder:
         request: GatewayRequest,
         attempt: GatewayAttempt,
         response: GatewayResponse | None = None,
+        *,
+        route_tier: RouteTier | None = None,
+        decision_impact: DecisionImpact | None = None,
+        redaction_policy_hash: str | None = None,
+        route_policy_hash: str | None = None,
     ) -> GatewayCallRecord:
         """Record route/cost/latency metadata without prompt or credential text."""
 
         route = response.route if response is not None else attempt.route
+        requested_route = (
+            response.requested_route if response is not None and response.requested_route else request.route
+        )
+        tool_called = (
+            response.tool_called
+            if response is not None and response.tool_called is not None
+            else bool(response.tool_calls) if response is not None else False
+        )
         record = GatewayCallRecord(
             request_id=request.request_id,
             request_hash=request.content_hash(),
@@ -120,6 +288,128 @@ class GatewayRecorder:
             estimated_cost_usd=response.estimated_cost_usd if response is not None else 0,
             provider_request_id=response.provider_request_id if response is not None else None,
             error_class=(attempt.error.split(":", 1)[0] if attempt.error else None),
+            prompt_hash=request.prompt_hash(),
+            evidence_hash=request.evidence_hash(),
+            tier=response.tier if response is not None else None,
+            data_class=(response.data_class if response is not None else request.data_class),
+            output_kind=(response.output_kind if response is not None else request.output_kind),
+            invocation_mode=(
+                response.invocation_mode
+                if response is not None and response.invocation_mode is not None
+                else request.invocation_mode
+            ),
+            tool_used=tool_called,
+            tool_called=tool_called,
+            tool_execution_status=(
+                response.tool_execution_status
+                if response is not None
+                else ToolExecutionStatus.NOT_EXECUTED
+            ),
+            policy_version=response.policy_version if response is not None else None,
+            redaction_policy_version=(
+                response.redaction_policy_version
+                if response is not None
+                else request.redaction_policy_version
+            ),
+            escalation_reason=response.escalation_reason if response is not None else None,
+            retention_policy=(
+                response.retention_policy if response is not None else route.retention_policy
+            ),
+            training_policy=(
+                response.training_policy if response is not None else route.training_policy
+            ),
+            terms_verified=(
+                response.terms_verified if response is not None else route.terms_verified
+            ),
+            terms_reference=(
+                response.terms_reference if response is not None else route.terms_reference
+            ),
+            requested_provider=requested_route.provider,
+            requested_model=requested_route.model,
+            requested_gateway=requested_route.gateway,
+            requested_endpoint_variant=requested_route.endpoint_variant,
+            requested_provider_selector=(
+                response.requested_provider_selector
+                if response is not None
+                else requested_route.provider
+            ),
+            requested_gateway_selector=(
+                response.requested_gateway
+                if response is not None
+                else requested_route.gateway
+            ),
+            requested_endpoint_selector=(
+                response.requested_endpoint_selector
+                if response is not None
+                else requested_route.endpoint_variant
+            ),
+            observed_provider_name=response.observed_provider_name if response is not None else None,
+            top_level_response_model=response.top_level_response_model if response is not None else None,
+            resolved_model=response.resolved_model if response is not None else None,
+            resolved_endpoint_model=response.resolved_endpoint_model if response is not None else None,
+            endpoint_selector_proof=response.endpoint_selector_proof if response is not None else None,
+            endpoint_selected=response.endpoint_selected if response is not None else None,
+            routing_strategy=response.routing_strategy if response is not None else None,
+            routing_attempt=response.routing_attempt if response is not None else None,
+            is_byok=response.is_byok if response is not None else None,
+            actual_provider=(
+                response.actual_provider
+                if response is not None
+                else None
+            ),
+            actual_model=(
+                response.actual_model if response is not None else None
+            ),
+            actual_gateway=(
+                response.actual_gateway
+                if response is not None
+                else None
+            ),
+            actual_endpoint_variant=(
+                response.actual_endpoint_variant
+                if response is not None
+                else None
+            ),
+            profile_id=attempt.profile_id,
+            attempt_number=attempt.attempt_number,
+            route_tier=response.route_tier if response is not None else route_tier,
+            decision_impact=(
+                response.decision_impact
+                if response is not None
+                else decision_impact or request.decision_impact
+            ),
+            redaction_policy_hash=(
+                response.redaction_policy_hash
+                if response is not None and response.redaction_policy_hash
+                else redaction_policy_hash or request.redaction_policy_hash
+            ),
+            route_policy_hash=(
+                response.route_policy_hash
+                if response is not None and response.route_policy_hash
+                else route_policy_hash or request.route_policy_hash
+            ),
+            input_price_per_million=(
+                response.input_price_per_million if response is not None else None
+            ),
+            output_price_per_million=(
+                response.output_price_per_million if response is not None else None
+            ),
+            request_price_usd=response.request_price_usd if response is not None else None,
+            billed_cost_usd=response.billed_cost_usd if response is not None else None,
+            expected_cost_usd=response.expected_cost_usd if response is not None else None,
+            cost_difference_usd=response.cost_difference_usd if response is not None else None,
+            cost_metadata=(
+                _ledger_safe_metadata(dict(response.cost_metadata)) if response is not None else {}
+            ),
+            routing_metadata=(
+                _ledger_safe_metadata(dict(response.routing_metadata)) if response is not None else {}
+            ),
+            failure_metadata=(
+                _ledger_safe_metadata(dict(response.failure_metadata))
+                if response is not None
+                else _ledger_safe_metadata(dict(attempt.failure_metadata or {}))
+            ),
+            provider_attempt_number=attempt.provider_attempt_number,
             # The request creation time is stable across a retry/restart. It
             # keeps the ledger idempotent while latency still captures the
             # actual attempt duration.
@@ -132,8 +422,9 @@ class GatewayRecorder:
                     namespace=LedgerNamespace.MODEL,
                     event_type="gateway_call_recorded",
                     idempotency_key=(
-                        f"gateway-call:{request.request_id}:{attempt.adapter}:"
-                        f"{route.gateway}:{attempt.succeeded}"
+                        f"gateway-call:{request.request_id}:"
+                        f"{attempt.profile_id or attempt.adapter}:{attempt.attempt_number}:"
+                        f"{attempt.provider_attempt_number}:{route.gateway}:{attempt.succeeded}"
                     ),
                     occurred_at=request.created_at,
                     payload={"call": record.model_dump(mode="json", round_trip=True)},
@@ -162,6 +453,7 @@ class LocalDeterministicGateway:
         return GatewayResponse(
             request_id=request.request_id,
             route=request.route,
+            requested_route=request.route,
             content="typed local recovery response",
             typed_payload=payload,
             latency_ms=max(0, (perf_counter_ns() - started) // 1_000_000),
@@ -169,6 +461,10 @@ class LocalDeterministicGateway:
             output_tokens=0,
             estimated_cost_usd=0,
             provider_request_id=f"local-{request.request_id}",
+            actual_provider=request.route.provider,
+            actual_model=request.route.model,
+            actual_gateway=request.route.gateway,
+            output_kind=request.output_kind,
         )
 
 
@@ -186,7 +482,7 @@ class GatewayChain:
     def complete(self, request: GatewayRequest) -> GatewayResponse:
         failures: list[str] = []
         permitted_gateways = {request.route.gateway, *request.route.fallback_chain}
-        for adapter in self.adapters:
+        for attempt_number, adapter in enumerate(self.adapters):
             started = perf_counter_ns()
             attempt_request = request
             adapter_route = getattr(adapter, "route", None)
@@ -200,6 +496,8 @@ class GatewayChain:
                         succeeded=False,
                         latency_ms=0,
                         error="RouteNotPermitted: route not in fallback chain",
+                        profile_id=adapter.name,
+                        attempt_number=attempt_number,
                     )
                     self.recorder.record(attempt)
                     self.recorder.record_call(request, attempt)
@@ -229,6 +527,8 @@ class GatewayChain:
                     route=response.route,
                     succeeded=True,
                     latency_ms=elapsed,
+                    profile_id=adapter.name,
+                    attempt_number=attempt_number,
                 )
                 self.recorder.record(attempt)
                 self.recorder.record_call(attempt_request, attempt, response)
@@ -242,6 +542,8 @@ class GatewayChain:
                     succeeded=False,
                     latency_ms=elapsed,
                     error=f"{type(exc).__name__}: provider failure",
+                    profile_id=adapter.name,
+                    attempt_number=attempt_number,
                 )
                 self.recorder.record(attempt)
                 self.recorder.record_call(attempt_request, attempt)
