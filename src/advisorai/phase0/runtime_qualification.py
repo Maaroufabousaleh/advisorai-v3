@@ -2947,6 +2947,27 @@ def _run_loaded_qualification(
             }
         )
         stochastic_characterized = bool(stochastic_evidence["stochastic_variation_observed"])
+        forecast_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in batch_output)
+            if candidate.task == ModelTask.FORECAST
+            else ()
+        )
+        sentiment_batch_predictions = (
+            tuple(
+                (
+                    str(item["label"]),
+                    float(item.get("confidence", item.get("score"))),
+                )
+                for item in batch_output
+            )
+            if candidate.task == ModelTask.FINANCE_SENTIMENT
+            else ()
+        )
+        feature_batch_predictions = (
+            tuple(tuple(float(value) for value in row) for row in batch_output)
+            if candidate.task == ModelTask.TSPULSE_FEATURES
+            else ()
+        )
         common = {
             "candidate": candidate,
             "environment": environment,
@@ -2971,6 +2992,9 @@ def _run_loaded_qualification(
             "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
             "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
             "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
+            "forecast_batch_predictions": forecast_batch_predictions,
+            "sentiment_batch_predictions": sentiment_batch_predictions,
+            "feature_batch_predictions": feature_batch_predictions,
         }
         repeatability_failure = (
             candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED and not equal
