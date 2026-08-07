@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+"""Run short, offline Phase-0 model-runtime smoke qualification.
+
+This command never downloads checkpoints.  It qualifies built-in baselines
+when their local dependencies are available and writes explicit quarantine
+manifests for external candidates whose pinned cache/runner is not present.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from decimal import Decimal
+from pathlib import Path
+
+from advisorai.phase0.runtime_qualification import (
+    BenchmarkDataset,
+    CandidateSpec,
+    FunctionalRunner,
+    ModelTask,
+    RuntimeQualificationResult,
+    default_runtime_candidates,
+    forecast_baseline_models,
+    project_bakeoff_gate,
+    run_forecast_baseline_benchmark,
+    run_runtime_qualification,
+    write_qualification_bundle,
+)
+
+
+def _forecast_payload(payload: object) -> tuple[Decimal, ...]:
+    if isinstance(payload, (tuple, list)) and payload and isinstance(payload[0], (tuple, list)):
+        payload = payload[0]
+    if not isinstance(payload, (tuple, list)):
+        raise TypeError("forecast smoke payload must be a sequence")
+    return tuple(Decimal(str(value)) for value in payload)
+
+
+def _baseline_runner(candidate: CandidateSpec) -> FunctionalRunner:
+    model = forecast_baseline_models()[candidate.family.value]
+
+    def infer(loaded: object, payload: object) -> tuple[Decimal, ...]:
+        history = _forecast_payload(payload)
+        return tuple(loaded.predict(history, 1))  # type: ignore[attr-defined]
+
+    return FunctionalRunner(
+        model_family=candidate.family.value,
+        load_fn=lambda checkpoint, offline: model,
+        infer_fn=infer,
+        version=f"builtin-{candidate.family.value}-v1",
+    )
+
+
+def _dataset_for(candidate: CandidateSpec) -> BenchmarkDataset:
+    if candidate.task == ModelTask.FINANCE_SENTIMENT:
+        return BenchmarkDataset.finbert_fixture()
+    if candidate.task == ModelTask.TSPULSE_FEATURES:
+        return BenchmarkDataset.synthetic_features()
+    return BenchmarkDataset.synthetic_forecast()
+
+
+def _payloads(dataset: BenchmarkDataset) -> tuple[object, object]:
+    if dataset.task == ModelTask.FINANCE_SENTIMENT:
+        texts = tuple(text for text, _label in dataset.public_text_fixture)
+        return texts[0], texts
+    if dataset.task == ModelTask.TSPULSE_FEATURES:
+        return dataset.inputs[:16], (dataset.inputs[:16], dataset.inputs[16:])
+    return dataset.inputs[:16], (dataset.inputs[:16], dataset.inputs[16:])
+
+
+def qualify(output_dir: Path) -> tuple[RuntimeQualificationResult, ...]:
+    results: list[RuntimeQualificationResult] = []
+    forecast_dataset = BenchmarkDataset.synthetic_forecast()
+    forecast_evaluations = run_forecast_baseline_benchmark(forecast_dataset)
+    evaluations_by_name = {item.model_name: item for item in forecast_evaluations}
+    for candidate in default_runtime_candidates():
+        dataset = _dataset_for(candidate)
+        sample, batch = _payloads(dataset)
+        runner = _baseline_runner(candidate) if candidate.external_checkpoint is None else None
+        result = run_runtime_qualification(
+                candidate,
+                runner=runner,
+                dataset=dataset,
+                sample_input=sample,
+                batch_input=batch,
+                repeats=3,
+                repository_root=Path.cwd(),
+            )
+        if result.status.value == "measured" and result.resource is not None:
+            evaluation = evaluations_by_name.get(candidate.family.value)
+            if evaluation is not None:
+                evaluation = evaluation.model_copy(
+                    update={
+                        "latency_ms": max(1, round(result.resource.warm_inference_p50_ms)),
+                        "peak_ram_mib": round(result.resource.rss_peak_mib),
+                        "peak_vram_mib": round(result.resource.vram_peak_mib or 0),
+                        "resource_limit_passed": result.resource.resource_limit_passed,
+                    }
+                )
+                evaluation = type(evaluation).model_validate(evaluation.model_dump())
+                result = RuntimeQualificationResult.model_validate(
+                    {
+                        **result.model_dump(),
+                        "forecast_evaluations": (evaluation,),
+                    }
+                )
+        results.append(result)
+    paths = write_qualification_bundle(results, output_dir)
+    manifest_hashes = {
+        path.stem: json.loads(path.read_text(encoding="utf-8"))["manifest_hash"]
+        for path in paths
+        if path.name != "index.json"
+    }
+    results = tuple(
+        RuntimeQualificationResult.model_validate(
+            {**result.model_dump(), "manifest_hash": manifest_hashes.get(result.candidate.name)}
+        )
+        for result in results
+    )
+    benchmark_evaluations = [
+        evaluation
+        for result in results
+        for evaluation in result.forecast_evaluations
+    ]
+    benchmark_path = output_dir / "forecast-baseline-benchmark.json"
+    benchmark_payload = (
+        json.dumps(
+            {
+                "schema": "advisorai.phase0.forecast-baseline-benchmark.v1",
+                "dataset": forecast_dataset.model_dump(mode="json"),
+                "do_not_claim_superiority_from_one_series": True,
+                "evaluations": [item.model_dump(mode="json") for item in benchmark_evaluations],
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n"
+    ).encode()
+    if benchmark_path.exists() and benchmark_path.read_bytes() != benchmark_payload:
+        raise FileExistsError(f"immutable evidence already exists with different content: {benchmark_path}")
+    benchmark_path.write_bytes(benchmark_payload)
+    gate_path = output_dir / "bakeoff-gate.json"
+    gate_payload = (json.dumps(project_bakeoff_gate(results).model_dump(mode="json"), sort_keys=True, indent=2) + "\n").encode()
+    if gate_path.exists() and gate_path.read_bytes() != gate_payload:
+        raise FileExistsError(f"immutable evidence already exists with different content: {gate_path}")
+    gate_path.write_bytes(gate_payload)
+    return tuple(results)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("artifacts/phase0/model-runtime-qualification"),
+    )
+    args = parser.parse_args()
+    results = qualify(args.output)
+    print(
+        json.dumps(
+            {
+                "output": str(args.output),
+                "candidates": {
+                    result.candidate.name: {
+                        "status": result.status.value,
+                        "reason": result.failure_reason,
+                        "manifest_hash": result.manifest_hash,
+                    }
+                    for result in results
+                },
+            },
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
