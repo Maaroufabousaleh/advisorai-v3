@@ -199,9 +199,20 @@ class RuntimePin(BaseModel):
     # artifact; hashing the desired dependency strings is not sufficient.
     lock_hash: str | None = None
     lock_artifact_path: str | None = None
+    installed_environment_manifest_path: str | None = None
+    installed_environment_sha256: str | None = None
     environment_fingerprint: str | None = None
+    # ``python_executable``/``python_executable_hash`` remain accepted as a
+    # compatibility spelling for the launcher/resolved-binary pair. New
+    # admissions should use the explicit launcher fields below.
     python_executable: str | None = None
     python_executable_hash: str | None = None
+    python_launcher: str | None = None
+    python_launcher_hash: str | None = None
+    python_launcher_target: str | None = None
+    resolved_python_binary_hash: str | None = None
+    pyvenv_cfg_path: str | None = None
+    pyvenv_cfg_hash: str | None = None
     environment_path: str
     worker_script: str | None = None
     worker_kind: str = "qualification"
@@ -218,8 +229,12 @@ class RuntimePin(BaseModel):
             raise ValueError("runtime Python constraint is required")
         for field_name in (
             "lock_hash",
+            "installed_environment_sha256",
             "environment_fingerprint",
             "python_executable_hash",
+            "python_launcher_hash",
+            "resolved_python_binary_hash",
+            "pyvenv_cfg_hash",
             "runner_hash",
         ):
             value = getattr(self, field_name)
@@ -241,9 +256,13 @@ class RuntimePin(BaseModel):
             required = {
                 "lock_hash": self.lock_hash,
                 "lock_artifact_path": self.lock_artifact_path,
+                "installed_environment_manifest_path": self.installed_environment_manifest_path,
+                "installed_environment_sha256": self.installed_environment_sha256,
                 "environment_fingerprint": self.environment_fingerprint,
-                "python_executable": self.python_executable,
-                "python_executable_hash": self.python_executable_hash,
+                "python_launcher": self.python_launcher or self.python_executable,
+                "python_launcher_hash": self.python_launcher_hash or self.python_executable_hash,
+                "resolved_python_binary_hash": self.resolved_python_binary_hash
+                or self.python_executable_hash,
                 "worker_script": self.worker_script,
                 "runner_version": self.runner_version,
                 "runner_hash": self.runner_hash,
@@ -254,9 +273,16 @@ class RuntimePin(BaseModel):
                     "approved runtime admission requires immutable worker identity: "
                     + ", ".join(missing)
                 )
-            for name in ("lock_artifact_path", "python_executable", "worker_script"):
-                if not Path(str(getattr(self, name))).expanduser().is_absolute():
+            for name, value in (
+                ("lock_artifact_path", self.lock_artifact_path),
+                ("installed_environment_manifest_path", self.installed_environment_manifest_path),
+                ("python_launcher", self.python_launcher or self.python_executable),
+                ("worker_script", self.worker_script),
+            ):
+                if not Path(str(value)).expanduser().is_absolute():
                     raise ValueError(f"approved runtime {name} must be an absolute path")
+            if self.installed_environment_sha256 is None:
+                raise ValueError("approved runtime requires installed environment attestation")
         return self
 
     def assert_environment_outside_repository(self, repository_root: Path) -> None:
@@ -271,28 +297,51 @@ class RuntimePin(BaseModel):
             return
         raise QualificationError("execution runtime environment must be outside the repository")
 
-    def resolve_python_executable(self) -> Path:
-        """Resolve the only interpreter an external candidate may execute."""
+    def resolve_python_launcher(self) -> Path:
+        """Resolve the launcher inside the pinned environment.
+
+        POSIX virtualenvs commonly make this path a symlink to the base
+        interpreter. The launcher itself is therefore allowed to be a
+        symlink; its target and resolved binary hash are attested separately.
+        """
 
         environment_raw = Path(self.environment_path).expanduser()
         if environment_raw.is_symlink():
             raise QualificationError("execution runtime environment must not be a symlink")
         environment = environment_raw.resolve(strict=False)
+        if self.python_launcher and self.python_executable:
+            if Path(self.python_launcher).expanduser() != Path(self.python_executable).expanduser():
+                raise QualificationError("conflicting pinned Python launcher paths")
         configured = (
-            Path(self.python_executable).expanduser()
-            if self.python_executable
+            Path(self.python_launcher or self.python_executable).expanduser()
+            if (self.python_launcher or self.python_executable)
             else environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
         )
-        if configured.is_symlink():
-            raise QualificationError("pinned runtime Python executable must not be a symlink")
-        executable = configured.resolve(strict=False)
         try:
-            executable.relative_to(environment)
+            configured.relative_to(environment)
         except ValueError as exc:
-            raise QualificationError("runtime Python executable must be inside its pinned environment") from exc
-        if executable.is_symlink() or not executable.is_file():
-            raise QualificationError("pinned runtime Python executable is missing or not a regular file")
-        return executable
+            raise QualificationError("runtime Python launcher must be inside its pinned environment") from exc
+        if configured.is_dir() or not configured.exists():
+            raise QualificationError("pinned runtime Python launcher is missing")
+        return configured
+
+    def resolve_python_executable(self) -> Path:
+        """Compatibility API returning the resolved interpreter binary."""
+
+        return self.resolve_python_binary()
+
+    def resolve_python_binary(self) -> Path:
+        launcher = self.resolve_python_launcher()
+        binary = launcher.resolve(strict=False)
+        if not binary.is_file():
+            raise QualificationError("resolved runtime Python binary is missing")
+        return binary
+
+    @property
+    def installed_environment_hash(self) -> str | None:
+        """Compatibility/readability alias for the installed manifest digest."""
+
+        return self.installed_environment_sha256
 
 
 class RepositoryPin(BaseModel):
@@ -407,8 +456,15 @@ class RuntimeEnvironment(BaseModel):
     runner_hash: str
     runtime_lock_hash: str | None = None
     lock_artifact_path: str | None = None
+    installed_environment_sha256: str | None = None
     environment_fingerprint: str | None = None
     sys_executable: str | None = None
+    sys_prefix: str | None = None
+    sys_base_prefix: str | None = None
+    python_launcher_hash: str | None = None
+    python_launcher_target: str | None = None
+    resolved_python_binary_hash: str | None = None
+    pyvenv_cfg_hash: str | None = None
     python_executable_hash: str | None = None
 
     @model_validator(mode="after")
@@ -424,7 +480,14 @@ class RuntimeEnvironment(BaseModel):
             or any(character not in HEX64 for character in self.runtime_lock_hash)
         ):
             raise ValueError("runtime lock hash must be a lowercase SHA-256 digest")
-        for field_name in ("environment_fingerprint", "python_executable_hash"):
+        for field_name in (
+            "installed_environment_sha256",
+            "environment_fingerprint",
+            "python_launcher_hash",
+            "resolved_python_binary_hash",
+            "pyvenv_cfg_hash",
+            "python_executable_hash",
+        ):
             value = getattr(self, field_name)
             if value is not None and (
                 len(value) != 64 or any(character not in HEX64 for character in value)
@@ -437,6 +500,10 @@ class RuntimeEnvironment(BaseModel):
             raise ValueError("runtime lock artifact path must be absolute")
         if self.sys_executable is not None and not Path(self.sys_executable).expanduser().is_absolute():
             raise ValueError("runtime sys.executable must be absolute")
+        for field_name in ("sys_prefix", "sys_base_prefix"):
+            value = getattr(self, field_name)
+            if value is not None and not Path(value).expanduser().is_absolute():
+                raise ValueError(f"runtime {field_name} must be absolute")
         return self
 
     def assert_transformers_baseline(self, *, requires_transformers: bool) -> None:
@@ -681,6 +748,7 @@ class RuntimeQualificationResult(BaseModel):
     stochastic_unique_output_count: int = Field(default=0, ge=0)
     stochastic_deterministic_match_rate: float = Field(default=0, ge=0, le=1)
     stochastic_seeds: tuple[int, ...] = ()
+    applied_seeds: tuple[int, ...] = ()
     stochastic_dispersion: float | None = Field(default=None, ge=0)
     stochastic_variation_observed: bool = False
     offline_cached_inference: bool = False
@@ -957,6 +1025,12 @@ class RuntimeWorkerIdentity(BaseModel):
 
     sys_executable: str
     model_family: str
+    sys_prefix: str
+    sys_base_prefix: str
+    python_launcher_hash: str
+    python_launcher_target: str | None = None
+    resolved_python_binary_hash: str
+    pyvenv_cfg_hash: str | None = None
     python_version: str
     package_versions: tuple[tuple[str, str | None], ...] = ()
     torch_version: str | None = None
@@ -964,6 +1038,7 @@ class RuntimeWorkerIdentity(BaseModel):
     runtime_lock_hash: str
     lock_artifact_hash: str
     python_executable_hash: str
+    installed_environment_sha256: str
     environment_fingerprint: str
     runner_version: str
     runner_hash: str
@@ -974,10 +1049,17 @@ class RuntimeWorkerIdentity(BaseModel):
             raise ValueError("worker model and runner identity are incomplete")
         if not Path(self.sys_executable).expanduser().is_absolute():
             raise ValueError("worker sys.executable must be absolute")
+        if not Path(self.sys_prefix).expanduser().is_absolute():
+            raise ValueError("worker sys.prefix must be absolute")
+        if not Path(self.sys_base_prefix).expanduser().is_absolute():
+            raise ValueError("worker sys.base_prefix must be absolute")
         for field_name in (
             "runtime_lock_hash",
             "lock_artifact_hash",
             "python_executable_hash",
+            "python_launcher_hash",
+            "resolved_python_binary_hash",
+            "installed_environment_sha256",
             "environment_fingerprint",
             "runner_hash",
         ):
@@ -1001,6 +1083,7 @@ class RuntimeWorkerResponse(BaseModel):
     batch_inference_ms: float = Field(default=0, ge=0)
     batch_size: int = Field(default=1, ge=1)
     rss_after_load_mib: float = Field(default=0, ge=0)
+    rss_after_unload_mib: float = Field(default=0, ge=0)
     vram_after_load_mib: float | None = Field(default=None, ge=0)
     vram_peak_mib: float | None = Field(default=None, ge=0)
     vram_after_unload_mib: float | None = Field(default=None, ge=0)
@@ -1012,6 +1095,7 @@ class RuntimeWorkerResponse(BaseModel):
     stochastic_unique_output_count: int = Field(default=0, ge=0)
     stochastic_deterministic_match_rate: float = Field(default=0, ge=0, le=1)
     stochastic_seeds: tuple[int, ...] = ()
+    applied_seeds: tuple[int, ...] = ()
     stochastic_dispersion: float | None = Field(default=None, ge=0)
     stochastic_variation_observed: bool = False
 
@@ -1124,6 +1208,47 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _launcher_identity_hash(path: Path) -> str:
+    """Hash launcher bytes or the symlink target string without following it."""
+
+    if path.is_symlink():
+        return sha256(os.readlink(path).encode()).hexdigest()
+    return sha256_file(path)
+
+
+def _installed_environment_inventory() -> tuple[str, ...]:
+    """Canonical complete distribution inventory for an interpreter."""
+
+    entries = {
+        f"{distribution.metadata['Name'] or distribution.name}=={distribution.version}"
+        for distribution in importlib.metadata.distributions()
+        if distribution.metadata.get("Name") or distribution.name
+    }
+    return tuple(sorted(entries, key=str.casefold))
+
+
+def _installed_environment_bytes(entries: Sequence[str]) -> bytes:
+    return json.dumps(tuple(entries), separators=(",", ":"), ensure_ascii=True).encode()
+
+
+def installed_environment_sha256(entries: Sequence[str] | None = None) -> str:
+    """Hash the complete normalized installed-distribution inventory."""
+
+    return sha256(_installed_environment_bytes(entries or _installed_environment_inventory())).hexdigest()
+
+
+def _python_constraint_satisfied(constraint: str, version: str) -> bool:
+    """Evaluate the simple comma-separated Python constraints used by pins."""
+
+    from packaging.specifiers import SpecifierSet
+    from packaging.version import Version
+
+    try:
+        return Version(version) in SpecifierSet(constraint)
+    except Exception as exc:  # pragma: no cover - malformed pins are rejected at admission
+        raise QualificationError("invalid runtime Python constraint") from exc
 
 
 def _repository_root(cache_root: Path, repository: RepositoryPin) -> Path:
@@ -1274,6 +1399,9 @@ def _environment_fingerprint(
     torch_version: str | None,
     cuda_version: str | None,
     runtime_lock_hash: str,
+    installed_environment_sha256: str,
+    sys_prefix: str,
+    sys_base_prefix: str,
 ) -> str:
     """Create the stable identity reported by an isolated worker."""
 
@@ -1287,6 +1415,9 @@ def _environment_fingerprint(
         "torch_version": torch_version,
         "cuda_version": cuda_version,
         "runtime_lock_hash": runtime_lock_hash,
+        "installed_environment_sha256": installed_environment_sha256,
+        "sys_prefix": str(Path(sys_prefix).expanduser().resolve(strict=False)),
+        "sys_base_prefix": str(Path(sys_base_prefix).expanduser().resolve(strict=False)),
     }
     payload = json.dumps(material, sort_keys=True, separators=(",", ":"))
     return sha256(payload.encode()).hexdigest()
@@ -1320,9 +1451,42 @@ def verify_runtime_pin(pin: RuntimePin, *, repository_root: Path | None = None) 
         raise QualificationError("pinned runtime lock artifact is missing")
     if sha256_file(lock_path) != pin.lock_hash:
         raise QualificationError("pinned runtime lock artifact hash mismatch")
-    executable = pin.resolve_python_executable()
-    if not pin.python_executable_hash or sha256_file(executable) != pin.python_executable_hash:
-        raise QualificationError("pinned runtime Python executable hash mismatch")
+    launcher = pin.resolve_python_launcher()
+    expected_launcher_hash = pin.python_launcher_hash or pin.python_executable_hash
+    if not expected_launcher_hash or _launcher_identity_hash(launcher) != expected_launcher_hash:
+        raise QualificationError("pinned runtime Python launcher hash mismatch")
+    binary = pin.resolve_python_binary()
+    expected_binary_hash = pin.resolved_python_binary_hash or pin.python_executable_hash
+    if not expected_binary_hash or sha256_file(binary) != expected_binary_hash:
+        raise QualificationError("pinned runtime resolved Python binary hash mismatch")
+    if pin.python_executable_hash and sha256_file(binary) != pin.python_executable_hash:
+        raise QualificationError("pinned runtime executable hash mismatch")
+    launcher_target = str(launcher.resolve(strict=False)) if launcher.is_symlink() else None
+    if pin.python_launcher_target != launcher_target:
+        raise QualificationError("pinned runtime launcher target mismatch")
+    cfg_path = Path(pin.pyvenv_cfg_path).expanduser() if pin.pyvenv_cfg_path else Path(pin.environment_path).expanduser() / "pyvenv.cfg"
+    try:
+        cfg_path.resolve(strict=False).relative_to(Path(pin.environment_path).expanduser().resolve(strict=False))
+    except ValueError as exc:
+        raise QualificationError("pyvenv.cfg must be inside the pinned environment") from exc
+    if cfg_path.exists():
+        if cfg_path.is_symlink() or not pin.pyvenv_cfg_hash or sha256_file(cfg_path) != pin.pyvenv_cfg_hash:
+            raise QualificationError("pinned pyvenv.cfg hash mismatch")
+    elif pin.pyvenv_cfg_hash:
+        raise QualificationError("pinned pyvenv.cfg is missing")
+    if not pin.installed_environment_manifest_path or not pin.installed_environment_sha256:
+        raise QualificationError("approved runtime is missing installed-environment attestation")
+    manifest_path = Path(pin.installed_environment_manifest_path).expanduser()
+    try:
+        manifest_path.resolve(strict=False).relative_to(root)
+    except ValueError:
+        pass
+    else:
+        raise QualificationError("installed-environment manifest must be outside the repository")
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise QualificationError("installed-environment manifest is missing")
+    if sha256_file(manifest_path) != pin.installed_environment_sha256:
+        raise QualificationError("installed-environment manifest hash mismatch")
     if not pin.worker_script:
         raise QualificationError("approved runtime worker script is missing")
     worker_script = Path(pin.worker_script).expanduser().resolve(strict=False)
@@ -1334,7 +1498,7 @@ def verify_runtime_pin(pin: RuntimePin, *, repository_root: Path | None = None) 
         raise QualificationError("pinned runtime worker/runner hash mismatch")
     if not pin.environment_fingerprint:
         raise QualificationError("approved runtime environment fingerprint is missing")
-    return executable
+    return launcher
 
 
 def runtime_environment(
@@ -1656,9 +1820,16 @@ def _worker_environment(
         runner_hash=identity.runner_hash,
         runtime_lock_hash=identity.runtime_lock_hash,
         lock_artifact_path=lock_artifact_path,
+        installed_environment_sha256=identity.installed_environment_sha256,
         environment_fingerprint=identity.environment_fingerprint,
         sys_executable=identity.sys_executable,
-        python_executable_hash=identity.python_executable_hash,
+        sys_prefix=identity.sys_prefix,
+        sys_base_prefix=identity.sys_base_prefix,
+        python_launcher_hash=identity.python_launcher_hash,
+        python_launcher_target=identity.python_launcher_target,
+        resolved_python_binary_hash=identity.resolved_python_binary_hash,
+        pyvenv_cfg_hash=identity.pyvenv_cfg_hash,
+        python_executable_hash=identity.resolved_python_binary_hash,
     )
 
 
@@ -1671,17 +1842,40 @@ def _validate_worker_identity(
 ) -> None:
     if identity.model_family != candidate.family.value:
         raise NoSilentFallbackError("isolated worker family does not match the requested candidate")
-    expected_executable = str(executable.resolve(strict=False))
-    if identity.sys_executable != expected_executable:
+    # The worker reports ``sys.executable`` as the launcher path, not the
+    # resolved base interpreter.  A POSIX venv is allowed to make this path a
+    # symlink, so compare the pinned launcher identity separately below.
+    expected_launcher = str(executable)
+    if Path(identity.sys_executable).expanduser().resolve(strict=False) != Path(expected_launcher).resolve(strict=False):
         raise QualificationError("isolated worker reported an unexpected sys.executable")
+    expected_environment = str(Path(pin.environment_path).expanduser().resolve(strict=False))
+    if str(Path(identity.sys_prefix).expanduser().resolve(strict=False)) != expected_environment:
+        raise QualificationError("isolated worker sys.prefix does not identify the pinned environment")
+    if str(Path(identity.sys_base_prefix).expanduser().resolve(strict=False)) == expected_environment:
+        raise QualificationError("isolated worker sys.base_prefix must identify the base interpreter")
     if identity.runtime_lock_hash != pin.lock_hash or identity.lock_artifact_hash != pin.lock_hash:
         raise QualificationError("isolated worker runtime lock identity does not match the pin")
-    if identity.python_executable_hash != pin.python_executable_hash:
-        raise QualificationError("isolated worker executable identity does not match the pin")
+    launcher_target = str(executable.resolve(strict=False)) if executable.is_symlink() else None
+    expected_launcher_hash = pin.python_launcher_hash or pin.python_executable_hash
+    if identity.python_launcher_hash != expected_launcher_hash:
+        raise QualificationError("isolated worker launcher identity does not match the pin")
+    if identity.python_launcher_target != launcher_target:
+        raise QualificationError("isolated worker launcher target does not match the pin")
+    expected_binary_hash = pin.resolved_python_binary_hash or pin.python_executable_hash
+    if identity.resolved_python_binary_hash != expected_binary_hash:
+        raise QualificationError("isolated worker resolved interpreter identity does not match the pin")
+    if identity.python_executable_hash != identity.resolved_python_binary_hash:
+        raise QualificationError("isolated worker legacy executable identity is inconsistent")
+    if identity.pyvenv_cfg_hash != pin.pyvenv_cfg_hash:
+        raise QualificationError("isolated worker pyvenv.cfg identity does not match the pin")
+    if identity.installed_environment_sha256 != pin.installed_environment_sha256:
+        raise QualificationError("isolated worker installed-environment identity does not match the pin")
     if identity.environment_fingerprint != pin.environment_fingerprint:
         raise QualificationError("isolated worker environment fingerprint does not match the pin")
     if identity.runner_version != pin.runner_version or identity.runner_hash != pin.runner_hash:
         raise QualificationError("isolated worker runner identity does not match the pin")
+    if not _python_constraint_satisfied(pin.python_constraint, identity.python_version):
+        raise CompatibilityError("isolated worker Python version does not satisfy the runtime pin")
     observed = {
         name.lower().replace("_", "-"): value for name, value in identity.package_versions
     }
@@ -1693,6 +1887,26 @@ def _validate_worker_identity(
         actual = observed.get(name.strip().lower().replace("_", "-"))
         if actual is None or (expected and actual != expected.strip()):
             raise QualificationError(f"isolated worker package identity mismatch for {name.strip()}")
+
+
+def _validate_worker_success_envelope(
+    response: RuntimeWorkerResponse,
+    *,
+    repeats: int,
+    expected_batch_size: int,
+) -> None:
+    if response.error_class is not None:
+        raise QualificationError("successful worker response contains an error class")
+    if not response.offline_cached_inference:
+        raise QualificationError("successful worker response did not prove offline inference")
+    if len(response.outputs) != repeats:
+        raise QualificationError("worker output repeat count does not match the request")
+    if len(response.warm_durations_ms) != repeats:
+        raise QualificationError("worker timing repeat count does not match the request")
+    if response.batch_size != expected_batch_size:
+        raise QualificationError("worker batch size does not match the request")
+    if response.batch_output is None:
+        raise QualificationError("worker success response is missing batch output")
 
 
 def _worker_request(
@@ -1714,17 +1928,27 @@ def _worker_request(
         "output_schema": candidate.output_schema,
         "repeatability_policy": candidate.repeatability_policy.value,
         "repeatability_seed": candidate.repeatability_seed,
+        "python_constraint": pin.python_constraint,
         "trust_remote_code": False,
         "sample_input": _canonical(sample_input),
         "batch_input": _canonical(batch_input),
         "cache_path": candidate.external_checkpoint.cache_path if candidate.external_checkpoint else None,
         "local_files_only": True,
         "repeats": repeats,
+        "expected_batch_size": _batch_size(batch_input),
         "expected_labels": labels,
         "dependencies": list(pin.dependencies),
         "lock_artifact_path": pin.lock_artifact_path,
         "lock_hash": pin.lock_hash,
-        "python_executable_hash": pin.python_executable_hash,
+        "installed_environment_manifest_path": pin.installed_environment_manifest_path,
+        "installed_environment_sha256": pin.installed_environment_sha256,
+        "python_launcher": pin.python_launcher or pin.python_executable,
+        "python_launcher_hash": pin.python_launcher_hash or pin.python_executable_hash,
+        "python_launcher_target": pin.python_launcher_target,
+        "resolved_python_binary_hash": pin.resolved_python_binary_hash or pin.python_executable_hash,
+        "pyvenv_cfg_path": pin.pyvenv_cfg_path,
+        "pyvenv_cfg_hash": pin.pyvenv_cfg_hash,
+        "python_executable_hash": pin.resolved_python_binary_hash or pin.python_executable_hash,
         "environment_fingerprint": pin.environment_fingerprint,
         "runner_version": pin.runner_version,
         "runner_hash": pin.runner_hash,
@@ -1769,12 +1993,20 @@ def _run_isolated_runtime_qualification(
         repeats=repeats,
     )
     worker_script = Path(str(pin.worker_script)).expanduser().resolve(strict=False)
-    if sha256_file(executable) != pin.python_executable_hash:
+    if _launcher_identity_hash(executable) != (pin.python_launcher_hash or pin.python_executable_hash):
         return _quarantined_result(
             candidate,
             dataset=dataset,
             environment=environment,
             reason="pinned runtime Python executable changed after verification",
+        )
+    binary = pin.resolve_python_binary()
+    if sha256_file(binary) != (pin.resolved_python_binary_hash or pin.python_executable_hash):
+        return _quarantined_result(
+            candidate,
+            dataset=dataset,
+            environment=environment,
+            reason="pinned runtime Python binary changed after verification",
         )
     if _worker_runner_hash(worker_script, str(pin.runner_version)) != pin.runner_hash:
         return _quarantined_result(
@@ -1861,6 +2093,21 @@ def _run_isolated_runtime_qualification(
         ceiling=ceiling,
         batch_size=_batch_size(batch_input),
     )
+    # Treat the worker's explicit privacy signal before any identity or output
+    # validation.  A network attempt is a fail-closed result even if a
+    # candidate worker cannot complete its normal identity envelope.
+    if response.network_access_attempted:
+        return RuntimeQualificationResult(
+            candidate=candidate,
+            status=QualificationStatus.FAILED,
+            environment=environment,
+            dataset_id=dataset.dataset_id,
+            dataset_version=dataset.version,
+            measured_at=datetime.now(UTC),
+            failure_reason="network access attempted during offline qualification",
+            resource=worker_resource,
+            network_access_attempted=True,
+        )
     try:
         _validate_worker_identity(response.identity, pin=pin, candidate=candidate, executable=executable)
         worker_environment_result = _worker_environment(
@@ -1870,12 +2117,15 @@ def _run_isolated_runtime_qualification(
             lock_artifact_path=pin.lock_artifact_path,
         )
         worker_environment_result.assert_transformers_baseline(requires_transformers=candidate.requires_transformers)
-        if response.network_access_attempted:
-            raise NetworkAccessAttemptError("network access attempted during offline qualification")
-        if response.error_class:
-            raise QualificationError("isolated runtime worker reported a sanitized failure")
-        if not response.offline_cached_inference:
-            raise QualificationError("isolated runtime worker did not prove offline cached inference")
+        _validate_worker_success_envelope(
+            response,
+            repeats=repeats,
+            expected_batch_size=_batch_size(batch_input),
+        )
+        if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
+            expected_seed = candidate.repeatability_seed
+            if expected_seed is None or response.applied_seeds != (expected_seed,) * repeats:
+                raise QualificationError("worker did not prove the requested seed was applied every repetition")
         output_shape = validate_candidate_output(candidate, response.outputs[0])
         batch_size = _batch_size(batch_input)
         validate_candidate_batch_output(candidate, response.batch_output, expected_batch_size=batch_size)
@@ -1917,10 +2167,13 @@ def _run_isolated_runtime_qualification(
             "offline_cached_inference": True,
             "one_inference_completed": True,
             "batch_completed": True,
+            "applied_seeds": response.applied_seeds,
             "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
             "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
             "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
         }
+        if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
+            common["stochastic_seeds"] = response.applied_seeds
         repeatability_failure = (
             candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED and not equal
         ) or (
@@ -2187,6 +2440,7 @@ def _run_loaded_qualification(
         rss_after_load, vram_after_load = _sample(sampler)
         durations: list[float] = []
         outputs: list[object] = []
+        applied_seeds: list[int] = []
         with network_blocked():
             for _ in range(repeats):
                 if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
@@ -2194,6 +2448,7 @@ def _run_loaded_qualification(
                     if not callable(seed_setter) or candidate.repeatability_seed is None:
                         raise QualificationError("seeded candidate runner must expose set_seed")
                     seed_setter(candidate.repeatability_seed)
+                    applied_seeds.append(candidate.repeatability_seed)
                 started = time.perf_counter()
                 output = runner.infer(model, sample_input)
                 durations.append((time.perf_counter() - started) * 1000)
@@ -2289,6 +2544,7 @@ def _run_loaded_qualification(
             "offline_cached_inference": True,
             "one_inference_completed": True,
             "batch_completed": True,
+            "applied_seeds": tuple(applied_seeds),
             "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
             "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
             "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
@@ -2386,7 +2642,7 @@ def _isolated_worker_resource(
         response.rss_after_load_mib,
         monitor.rss_peak_mib if monitor is not None else 0,
     )
-    rss_after_unload = 0.0 if response.unload_succeeded else response.rss_after_load_mib
+    rss_after_unload = response.rss_after_unload_mib
     rss_residual = max(0.0, rss_after_unload - rss_before)
     resource_limit_passed = rss_peak <= ceiling.max_rss_mib
     memory_released = response.unload_succeeded and rss_residual <= ceiling.max_residual_rss_mib

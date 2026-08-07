@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import platform
-import shutil
 import socket
 import subprocess
 import sys
+import venv
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -35,6 +35,7 @@ from advisorai.phase0.runtime_qualification import (
     RuntimePin,
     RuntimeResourceResult,
     _environment_fingerprint,
+    _launcher_identity_hash,
     _worker_runner_hash,
     cached_artifact_inventory,
     default_runtime_candidates,
@@ -110,18 +111,30 @@ def _isolated_runtime(
     *,
     worker_kind: str = "qualification",
     dependencies: tuple[str, ...] = (),
+    python_constraint: str = ">=3.12,<3.13",
 ) -> RuntimePin:
     runtime = tmp_path / "isolated-runtime"
+    venv.EnvBuilder(with_pip=False, clear=True, symlinks=True).create(runtime)
     executable = runtime / "bin" / "python"
-    executable.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(sys.executable, executable)
-    executable.chmod(0o700)
     lock = runtime / "uv.lock"
     lock.write_text("fixture-lock-v1\n", encoding="utf-8")
     worker = Path("scripts/runtime_qualification_worker.py").resolve()
+    inventory = subprocess.run(
+        [str(executable), "-I", str(worker), "--inventory"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    manifest = runtime / "installed-environment.txt"
+    manifest.write_text(inventory.stdout.strip(), encoding="utf-8")
     lock_hash = sha256_file(lock)
+    manifest_hash = sha256_file(manifest)
     runner_version = "fixture-worker-v1"
     runner_hash = _worker_runner_hash(worker, runner_version)
+    binary = executable.resolve()
+    launcher_target = str(binary) if executable.is_symlink() else None
+    cfg = runtime / "pyvenv.cfg"
+    base_prefix = Path(sys.base_prefix).resolve()
     fingerprint = _environment_fingerprint(
         sys_executable=str(executable),
         python_version=platform.python_version(),
@@ -129,17 +142,28 @@ def _isolated_runtime(
         torch_version=None,
         cuda_version=None,
         runtime_lock_hash=lock_hash,
+        installed_environment_sha256=manifest_hash,
+        sys_prefix=str(runtime.resolve()),
+        sys_base_prefix=str(base_prefix),
     )
     return RuntimePin(
         project="fixture-worker",
         version_or_commit="fixture-v1",
-        python_constraint=">=3.12,<3.13",
+        python_constraint=python_constraint,
         dependencies=dependencies,
         lock_hash=lock_hash,
         lock_artifact_path=str(lock),
+        installed_environment_manifest_path=str(manifest),
+        installed_environment_sha256=manifest_hash,
         environment_fingerprint=fingerprint,
         python_executable=str(executable),
-        python_executable_hash=sha256_file(executable),
+        python_executable_hash=sha256_file(binary),
+        python_launcher=str(executable),
+        python_launcher_hash=_launcher_identity_hash(executable),
+        python_launcher_target=launcher_target,
+        resolved_python_binary_hash=sha256_file(binary),
+        pyvenv_cfg_path=str(cfg),
+        pyvenv_cfg_hash=sha256_file(cfg),
         environment_path=str(runtime),
         worker_script=str(worker),
         worker_kind=worker_kind,
@@ -158,6 +182,8 @@ def _isolated_candidate(
     family: ModelFamily = ModelFamily.NAIVE,
     task: ModelTask = ModelTask.FORECAST,
     repeatability_policy: RepeatabilityPolicy = RepeatabilityPolicy.DETERMINISTIC_REQUIRED,
+    repeatability_seed: int | None = None,
+    python_constraint: str = ">=3.12,<3.13",
 ) -> CandidateSpec:
     cache = tmp_path / "cache"
     cache.mkdir(parents=True, exist_ok=True)
@@ -187,10 +213,12 @@ def _isolated_candidate(
         requires_transformers=False,
         output_schema="sentiment(label,confidence)" if task == ModelTask.FINANCE_SENTIMENT else "forecast[1]",
         repeatability_policy=repeatability_policy,
+        repeatability_seed=repeatability_seed,
         runtime_pin=_isolated_runtime(
             tmp_path,
             worker_kind=worker_kind,
             dependencies=dependencies,
+            python_constraint=python_constraint,
         ),
     )
 
@@ -540,6 +568,56 @@ def test_network_attempt_after_cache_fails_closed(tmp_path):
     assert result.to_bakeoff_result().privacy_passed is False
 
 
+def test_uncaught_network_attempt_from_inference_emits_privacy_evidence(tmp_path):
+    candidate = _isolated_candidate(tmp_path, worker_kind="fixture_network_inference")
+    dataset = BenchmarkDataset.synthetic_forecast()
+    result = run_runtime_qualification(
+        candidate,
+        runner=None,
+        dataset=dataset,
+        sample_input=dataset.inputs[:4],
+        batch_input=(dataset.inputs[:4],),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.FAILED
+    assert result.network_access_attempted is True
+    assert result.to_bakeoff_result().privacy_passed is False
+
+
+def test_malformed_success_envelope_fails_without_index_error(tmp_path):
+    candidate = _isolated_candidate(tmp_path, worker_kind="malformed_success")
+    dataset = BenchmarkDataset.synthetic_forecast()
+    result = run_runtime_qualification(
+        candidate,
+        runner=None,
+        dataset=dataset,
+        sample_input=dataset.inputs[:4],
+        batch_input=(dataset.inputs[:4],),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.FAILED
+    assert "QualificationError" in result.failure_reason
+
+
+def test_seeded_worker_reports_applied_seed_for_every_repeat(tmp_path):
+    candidate = _isolated_candidate(
+        tmp_path,
+        repeatability_policy=RepeatabilityPolicy.SEEDED_REPRODUCIBLE,
+        repeatability_seed=17,
+    )
+    dataset = BenchmarkDataset.synthetic_forecast()
+    result = run_runtime_qualification(
+        candidate,
+        runner=None,
+        dataset=dataset,
+        sample_input=dataset.inputs[:4],
+        batch_input=(dataset.inputs[:4],),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.MEASURED
+    assert result.applied_seeds == (17, 17, 17)
+
+
 def test_runtime_lock_hash_mismatch_is_quarantined_before_inference(tmp_path):
     candidate = _isolated_candidate(tmp_path)
     result = run_runtime_qualification(
@@ -568,7 +646,8 @@ def test_isolated_runtime_rejects_fake_lock_hash_and_wrong_executable(tmp_path):
     wrong = pin.model_copy(update={"python_executable_hash": "e" * 64})
     with pytest.raises(Exception, match="executable hash"):
         verify_runtime_pin(wrong)
-    missing = pin.model_copy(update={"python_executable": str(Path(pin.environment_path) / "bin" / "missing")})
+    missing_path = str(Path(pin.environment_path) / "bin" / "missing")
+    missing = pin.model_copy(update={"python_launcher": missing_path, "python_executable": missing_path})
     with pytest.raises(Exception, match="missing"):
         verify_runtime_pin(missing)
 
@@ -585,6 +664,29 @@ def test_isolated_runtime_package_identity_mismatch_is_rejected(tmp_path):
     )
     assert result.status == QualificationStatus.FAILED
     assert "isolated worker" in result.failure_reason
+
+
+def test_isolated_worker_enforces_python_constraint_before_inference(tmp_path):
+    candidate = _isolated_candidate(tmp_path, python_constraint="<3.0")
+    dataset = BenchmarkDataset.synthetic_forecast()
+    result = run_runtime_qualification(
+        candidate,
+        runner=None,
+        dataset=dataset,
+        sample_input=(1.0,),
+        batch_input=((1.0,),),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.FAILED
+    assert "isolated worker" in result.failure_reason
+
+
+def test_installed_environment_attestation_is_immutable(tmp_path):
+    candidate = _isolated_candidate(tmp_path)
+    manifest = Path(candidate.runtime_pin.installed_environment_manifest_path)
+    manifest.write_text(manifest.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    with pytest.raises(Exception, match="installed-environment manifest hash"):
+        verify_runtime_pin(candidate.runtime_pin)
 
 
 def test_isolated_runtime_worker_identity_and_boundary(tmp_path):
@@ -612,7 +714,7 @@ def test_isolated_runtime_rejects_wrong_reported_sys_executable(tmp_path):
     wrong_worker = tmp_path / "wrong-worker.py"
     wrong_worker.write_text(
         worker.read_text(encoding="utf-8").replace(
-            '"sys_executable": str(executable),',
+            '"sys_executable": str(launcher),',
             '"sys_executable": "/wrong/python",',
         ),
         encoding="utf-8",
