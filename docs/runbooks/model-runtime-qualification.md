@@ -54,11 +54,18 @@ external cache path, and explicit task role:
 
 External caches default to `~/.cache/advisorai-v3/models/<candidate>` and must
 remain outside the repository. Before a model can be measured, its approved
-license, isolated execution `RuntimePin`, runtime lock hash, and every declared
-artifact SHA-256 must pass. Runtime artifacts and provenance artifacts are
-separate; unexpected loadable files (including unreviewed Pickle-style model
-files) are rejected. `cached_artifact_inventory()` hashes every regular cached
-file for the sanitized manifest.
+license, isolated execution `RuntimePin`, immutable lock-artifact SHA-256,
+exact worker interpreter/executable hash, worker hash, and every declared
+artifact SHA-256 must pass. External candidates are never imported into the
+AdvisorAI core interpreter: the parent sends a sanitized JSON request to the
+exact `RuntimePin` Python executable and validates the worker's reported
+`sys.executable`, package versions, lock identity, environment fingerprint,
+and runner identity. Worker processes set `HF_HUB_OFFLINE=1` and
+`TRANSFORMERS_OFFLINE=1` and install a socket guard; any network attempt is a
+failed privacy result. Runtime artifacts and provenance artifacts are
+separate; unexpected loadable files (including `.py`, `.so`, `.dll`, `.sh`,
+and unreviewed Pickle-style model files) are rejected. `cached_artifact_inventory()`
+hashes every regular cached file for the sanitized manifest.
 
 `ProsusAI/finbert` currently has no declared Hub license metadata, so its
 license admission is explicitly `pending` and it cannot become `MEASURED`.
@@ -76,8 +83,8 @@ GPU candidates use the existing `GpuModelLease`, so at most one GPU family is
 resident at once.
 
 `run_finbert_qualification()` uses a fixed public finance-text fixture and
-requires labels from `{positive, negative, neutral}` plus confidence in
-`[0, 1]`. `run_tspulse_qualification()` uses the feature dataset and cannot
+requires labels from `{positive, negative, neutral}` plus normalized
+`confidence`/Hugging Face `score` in `[0, 1]`. `run_tspulse_qualification()` uses the feature dataset and cannot
 construct a price-forecast task. Forecast records compare naive, drift,
 seasonal, linear, and LightGBM through the existing `ForecastEvaluation`
 contract. One synthetic series is explicitly insufficient for superiority or

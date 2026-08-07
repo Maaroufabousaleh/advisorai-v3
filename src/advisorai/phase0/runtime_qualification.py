@@ -21,13 +21,15 @@ import importlib.util
 import inspect
 import json
 import math
+import os
 import platform
 import socket
 import statistics
+import subprocess
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
@@ -192,8 +194,19 @@ class RuntimePin(BaseModel):
     version_or_commit: str
     python_constraint: str
     dependencies: tuple[str, ...] = ()
-    lock_hash: str
+    # A pending registry entry intentionally has no lock identity.  An
+    # approved entry must point at an immutable, operator-created lock
+    # artifact; hashing the desired dependency strings is not sufficient.
+    lock_hash: str | None = None
+    lock_artifact_path: str | None = None
+    environment_fingerprint: str | None = None
+    python_executable: str | None = None
+    python_executable_hash: str | None = None
     environment_path: str
+    worker_script: str | None = None
+    worker_kind: str = "qualification"
+    runner_version: str | None = None
+    runner_hash: str | None = None
     status: RuntimeAdmissionStatus = RuntimeAdmissionStatus.PENDING
     evidence_reference: str | None = None
 
@@ -203,10 +216,21 @@ class RuntimePin(BaseModel):
             raise ValueError("runtime project and version/commit are required")
         if not self.python_constraint.strip():
             raise ValueError("runtime Python constraint is required")
-        if len(self.lock_hash) != 64 or any(character not in HEX64 for character in self.lock_hash):
-            raise ValueError("runtime lock hash must be a lowercase SHA-256 digest")
+        for field_name in (
+            "lock_hash",
+            "environment_fingerprint",
+            "python_executable_hash",
+            "runner_hash",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and (
+                len(value) != 64 or any(character not in HEX64 for character in value)
+            ):
+                raise ValueError(f"{field_name} must be a lowercase SHA-256 digest")
         if not Path(self.environment_path).expanduser().is_absolute():
             raise ValueError("runtime environment path must be absolute")
+        if self.worker_kind.strip() == "":
+            raise ValueError("runtime worker kind is required")
         if self.status == RuntimeAdmissionStatus.APPROVED and not self.evidence_reference:
             raise ValueError("approved runtime admission requires evidence")
         if self.status == RuntimeAdmissionStatus.APPROVED:
@@ -214,16 +238,61 @@ class RuntimePin(BaseModel):
                 raise ValueError("approved runtime admission cannot use a pending version")
             if any("==" not in dependency and "@" not in dependency for dependency in self.dependencies):
                 raise ValueError("approved runtime dependencies must be exact versions or commits")
+            required = {
+                "lock_hash": self.lock_hash,
+                "lock_artifact_path": self.lock_artifact_path,
+                "environment_fingerprint": self.environment_fingerprint,
+                "python_executable": self.python_executable,
+                "python_executable_hash": self.python_executable_hash,
+                "worker_script": self.worker_script,
+                "runner_version": self.runner_version,
+                "runner_hash": self.runner_hash,
+            }
+            missing = sorted(name for name, value in required.items() if not value)
+            if missing:
+                raise ValueError(
+                    "approved runtime admission requires immutable worker identity: "
+                    + ", ".join(missing)
+                )
+            for name in ("lock_artifact_path", "python_executable", "worker_script"):
+                if not Path(str(getattr(self, name))).expanduser().is_absolute():
+                    raise ValueError(f"approved runtime {name} must be an absolute path")
         return self
 
     def assert_environment_outside_repository(self, repository_root: Path) -> None:
-        environment = Path(self.environment_path).expanduser().resolve(strict=False)
+        environment_raw = Path(self.environment_path).expanduser()
+        if environment_raw.is_symlink():
+            raise QualificationError("execution runtime environment must not be a symlink")
+        environment = environment_raw.resolve(strict=False)
         root = repository_root.expanduser().resolve(strict=False)
         try:
             environment.relative_to(root)
         except ValueError:
             return
         raise QualificationError("execution runtime environment must be outside the repository")
+
+    def resolve_python_executable(self) -> Path:
+        """Resolve the only interpreter an external candidate may execute."""
+
+        environment_raw = Path(self.environment_path).expanduser()
+        if environment_raw.is_symlink():
+            raise QualificationError("execution runtime environment must not be a symlink")
+        environment = environment_raw.resolve(strict=False)
+        configured = (
+            Path(self.python_executable).expanduser()
+            if self.python_executable
+            else environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        )
+        if configured.is_symlink():
+            raise QualificationError("pinned runtime Python executable must not be a symlink")
+        executable = configured.resolve(strict=False)
+        try:
+            executable.relative_to(environment)
+        except ValueError as exc:
+            raise QualificationError("runtime Python executable must be inside its pinned environment") from exc
+        if executable.is_symlink() or not executable.is_file():
+            raise QualificationError("pinned runtime Python executable is missing or not a regular file")
+        return executable
 
 
 class RepositoryPin(BaseModel):
@@ -337,6 +406,10 @@ class RuntimeEnvironment(BaseModel):
     runner_version: str
     runner_hash: str
     runtime_lock_hash: str | None = None
+    lock_artifact_path: str | None = None
+    environment_fingerprint: str | None = None
+    sys_executable: str | None = None
+    python_executable_hash: str | None = None
 
     @model_validator(mode="after")
     def validate_environment(self) -> RuntimeEnvironment:
@@ -351,9 +424,19 @@ class RuntimeEnvironment(BaseModel):
             or any(character not in HEX64 for character in self.runtime_lock_hash)
         ):
             raise ValueError("runtime lock hash must be a lowercase SHA-256 digest")
+        for field_name in ("environment_fingerprint", "python_executable_hash"):
+            value = getattr(self, field_name)
+            if value is not None and (
+                len(value) != 64 or any(character not in HEX64 for character in value)
+            ):
+                raise ValueError(f"{field_name} must be a lowercase SHA-256 digest")
         cache = Path(self.cache_path).expanduser()
         if not cache.is_absolute():
             raise ValueError("runtime cache path must be absolute")
+        if self.lock_artifact_path is not None and not Path(self.lock_artifact_path).expanduser().is_absolute():
+            raise ValueError("runtime lock artifact path must be absolute")
+        if self.sys_executable is not None and not Path(self.sys_executable).expanduser().is_absolute():
+            raise ValueError("runtime sys.executable must be absolute")
         return self
 
     def assert_transformers_baseline(self, *, requires_transformers: bool) -> None:
@@ -594,6 +677,12 @@ class RuntimeQualificationResult(BaseModel):
     seeded_repeatability_match_rate: float = Field(default=0, ge=0, le=1)
     repeatability_seed: int | None = None
     stochastic_characterized: bool = False
+    stochastic_repeat_count: int = Field(default=0, ge=0)
+    stochastic_unique_output_count: int = Field(default=0, ge=0)
+    stochastic_deterministic_match_rate: float = Field(default=0, ge=0, le=1)
+    stochastic_seeds: tuple[int, ...] = ()
+    stochastic_dispersion: float | None = Field(default=None, ge=0)
+    stochastic_variation_observed: bool = False
     offline_cached_inference: bool = False
     one_inference_completed: bool = False
     batch_completed: bool = False
@@ -643,6 +732,13 @@ class RuntimeQualificationResult(BaseModel):
                 raise ValueError("seeded repeatability evidence must record the candidate seed")
             if policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED and not self.stochastic_characterized:
                 raise ValueError("stochastic candidate requires characterization evidence")
+            if policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED:
+                if self.stochastic_repeat_count < 2:
+                    raise ValueError("stochastic candidate requires repeated characterization")
+                if self.stochastic_unique_output_count < 2 or not self.stochastic_variation_observed:
+                    raise ValueError("stochastic candidate requires observed output variation")
+                if self.stochastic_dispersion is None or not math.isfinite(self.stochastic_dispersion):
+                    raise ValueError("stochastic candidate requires finite dispersion evidence")
         if self.status != QualificationStatus.MEASURED and not self.failure_reason:
             raise ValueError("quarantined/failed qualification requires a sanitized reason")
         if any(
@@ -854,6 +950,150 @@ class _ResourceMonitor:
         self._sample()
 
 
+class RuntimeWorkerIdentity(BaseModel):
+    """Sanitized identity returned by an external runtime worker."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sys_executable: str
+    model_family: str
+    python_version: str
+    package_versions: tuple[tuple[str, str | None], ...] = ()
+    torch_version: str | None = None
+    cuda_version: str | None = None
+    runtime_lock_hash: str
+    lock_artifact_hash: str
+    python_executable_hash: str
+    environment_fingerprint: str
+    runner_version: str
+    runner_hash: str
+
+    @model_validator(mode="after")
+    def validate_identity(self) -> RuntimeWorkerIdentity:
+        if not self.model_family.strip() or not self.runner_version.strip():
+            raise ValueError("worker model and runner identity are incomplete")
+        if not Path(self.sys_executable).expanduser().is_absolute():
+            raise ValueError("worker sys.executable must be absolute")
+        for field_name in (
+            "runtime_lock_hash",
+            "lock_artifact_hash",
+            "python_executable_hash",
+            "environment_fingerprint",
+            "runner_hash",
+        ):
+            value = getattr(self, field_name)
+            if len(value) != 64 or any(character not in HEX64 for character in value):
+                raise ValueError(f"worker {field_name} must be a SHA-256 digest")
+        return self
+
+
+class RuntimeWorkerResponse(BaseModel):
+    """Credential-free JSON response exchanged with an isolated worker."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    protocol_version: int = 1
+    identity: RuntimeWorkerIdentity
+    outputs: tuple[object, ...] = ()
+    batch_output: object | None = None
+    cold_load_ms: float = Field(default=0, ge=0)
+    warm_durations_ms: tuple[float, ...] = ()
+    batch_inference_ms: float = Field(default=0, ge=0)
+    batch_size: int = Field(default=1, ge=1)
+    rss_after_load_mib: float = Field(default=0, ge=0)
+    vram_after_load_mib: float | None = Field(default=None, ge=0)
+    vram_peak_mib: float | None = Field(default=None, ge=0)
+    vram_after_unload_mib: float | None = Field(default=None, ge=0)
+    unload_succeeded: bool = False
+    offline_cached_inference: bool = False
+    network_access_attempted: bool = False
+    error_class: str | None = None
+    stochastic_repeat_count: int = Field(default=0, ge=0)
+    stochastic_unique_output_count: int = Field(default=0, ge=0)
+    stochastic_deterministic_match_rate: float = Field(default=0, ge=0, le=1)
+    stochastic_seeds: tuple[int, ...] = ()
+    stochastic_dispersion: float | None = Field(default=None, ge=0)
+    stochastic_variation_observed: bool = False
+
+    @model_validator(mode="after")
+    def validate_worker_response(self) -> RuntimeWorkerResponse:
+        if self.protocol_version != 1:
+            raise ValueError("unsupported runtime worker protocol")
+        if self.warm_durations_ms and any(value < 0 or not math.isfinite(value) for value in self.warm_durations_ms):
+            raise ValueError("worker warm timings must be finite and non-negative")
+        if self.error_class and self.outputs:
+            raise ValueError("failed worker response cannot include model outputs")
+        return self
+
+
+class _ProcessTreeMonitor:
+    """Sample an isolated worker and its descendants, not the parent process."""
+
+    def __init__(self, pid: int, interval_seconds: float = 0.01) -> None:
+        self.pid = pid
+        self.interval_seconds = interval_seconds
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.rss_before_mib = 0.0
+        self.rss_peak_mib = 0.0
+        self.samples = 0
+
+    def _processes(self) -> tuple[psutil.Process, ...]:
+        try:
+            root = psutil.Process(self.pid)
+            return (root, *root.children(recursive=True))
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return ()
+
+    def _sample(self) -> None:
+        total = 0.0
+        for process in self._processes():
+            try:
+                total += process.memory_info().rss / (1024**2)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        if self.samples == 0:
+            self.rss_before_mib = total
+        self.rss_peak_mib = max(self.rss_peak_mib, total)
+        self.samples += 1
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_seconds):
+            self._sample()
+
+    def start(self) -> None:
+        self._sample()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="advisorai-runtime-worker-resource-monitor",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1)
+        self._sample()
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    try:
+        root = psutil.Process(process.pid)
+        children = root.children(recursive=True)
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        children = []
+    for child in reversed(children):
+        try:
+            child.kill()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    try:
+        process.kill()
+    except ProcessLookupError:
+        pass
+
+
 @contextmanager
 def network_blocked() -> Iterator[None]:
     """Fail closed if a cached qualification tries to access the network."""
@@ -903,6 +1143,15 @@ _LOADABLE_SUFFIXES = {
     ".pt",
     ".pth",
     ".safetensors",
+    # Model-side executable code is loadable even when it is not a weight
+    # format.  It must be explicitly reviewed, never accepted implicitly.
+    ".py",
+    ".pyc",
+    ".so",
+    ".pyd",
+    ".dll",
+    ".dylib",
+    ".sh",
 }
 
 
@@ -938,6 +1187,11 @@ def verify_checkpoint_artifacts(
 
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
+    if checkpoint.tokenizer is not None and (
+        checkpoint.tokenizer_license_admission is None
+        or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
+    ):
+        raise CheckpointPinError("tokenizer license admission is not approved")
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
     repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
     observed: list[ArtifactPin] = []
@@ -979,6 +1233,11 @@ def cached_artifact_inventory(
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
+    if checkpoint.tokenizer is not None and (
+        checkpoint.tokenizer_license_admission is None
+        or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
+    ):
+        raise CheckpointPinError("tokenizer license admission is not approved")
     repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
     inventory: list[ArtifactPin] = []
     for repository in repositories:
@@ -1005,6 +1264,77 @@ def _distribution_version(name: str) -> str | None:
         return importlib.metadata.version(name)
     except importlib.metadata.PackageNotFoundError:
         return None
+
+
+def _environment_fingerprint(
+    *,
+    sys_executable: str,
+    python_version: str,
+    package_versions: Mapping[str, str | None],
+    torch_version: str | None,
+    cuda_version: str | None,
+    runtime_lock_hash: str,
+) -> str:
+    """Create the stable identity reported by an isolated worker."""
+
+    material = {
+        "sys_executable": str(Path(sys_executable).expanduser().resolve(strict=False)),
+        "python_version": python_version,
+        "package_versions": {
+            str(name): value
+            for name, value in sorted(package_versions.items(), key=lambda item: str(item[0]))
+        },
+        "torch_version": torch_version,
+        "cuda_version": cuda_version,
+        "runtime_lock_hash": runtime_lock_hash,
+    }
+    payload = json.dumps(material, sort_keys=True, separators=(",", ":"))
+    return sha256(payload.encode()).hexdigest()
+
+
+def _worker_runner_hash(worker_script: Path, runner_version: str) -> str:
+    return sha256(f"{runner_version}\n{sha256_file(worker_script)}".encode()).hexdigest()
+
+
+def verify_runtime_pin(pin: RuntimePin, *, repository_root: Path | None = None) -> Path:
+    """Verify the immutable lock/interpreter/worker identity before dispatch."""
+
+    if pin.status != RuntimeAdmissionStatus.APPROVED:
+        raise QualificationError("execution runtime admission is not approved")
+    effective_root = repository_root or Path.cwd()
+    pin.assert_environment_outside_repository(effective_root)
+    if not pin.lock_hash or not pin.lock_artifact_path:
+        raise QualificationError("approved runtime is missing an immutable lock artifact")
+    lock_path_raw = Path(pin.lock_artifact_path).expanduser()
+    if lock_path_raw.is_symlink():
+        raise QualificationError("pinned runtime lock artifact must not be a symlink")
+    lock_path = lock_path_raw.resolve(strict=False)
+    root = effective_root.expanduser().resolve(strict=False)
+    try:
+        lock_path.relative_to(root)
+    except ValueError:
+        pass
+    else:
+        raise QualificationError("runtime lock artifact must be outside the repository")
+    if not lock_path.is_file():
+        raise QualificationError("pinned runtime lock artifact is missing")
+    if sha256_file(lock_path) != pin.lock_hash:
+        raise QualificationError("pinned runtime lock artifact hash mismatch")
+    executable = pin.resolve_python_executable()
+    if not pin.python_executable_hash or sha256_file(executable) != pin.python_executable_hash:
+        raise QualificationError("pinned runtime Python executable hash mismatch")
+    if not pin.worker_script:
+        raise QualificationError("approved runtime worker script is missing")
+    worker_script = Path(pin.worker_script).expanduser().resolve(strict=False)
+    if worker_script.is_symlink() or not worker_script.is_file():
+        raise QualificationError("pinned runtime worker script is missing")
+    if not pin.runner_version or not pin.runner_hash:
+        raise QualificationError("approved runtime runner identity is incomplete")
+    if _worker_runner_hash(worker_script, pin.runner_version) != pin.runner_hash:
+        raise QualificationError("pinned runtime worker/runner hash mismatch")
+    if not pin.environment_fingerprint:
+        raise QualificationError("approved runtime environment fingerprint is missing")
+    return executable
 
 
 def runtime_environment(
@@ -1061,6 +1391,46 @@ def _canonical(value: object) -> object:
 def output_digest(output: object) -> str:
     payload = json.dumps(_canonical(output), sort_keys=True, separators=(",", ":"), allow_nan=False)
     return sha256(payload.encode()).hexdigest()
+
+
+def _numeric_values(value: object) -> tuple[float, ...]:
+    """Flatten finite numeric output for small stochastic dispersion evidence."""
+
+    if isinstance(value, bool):
+        return ()
+    if isinstance(value, Mapping):
+        values: list[float] = []
+        for item in value.values():
+            values.extend(_numeric_values(item))
+        return tuple(values)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        values = []
+        for item in value:
+            values.extend(_numeric_values(item))
+        return tuple(values)
+    try:
+        number = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError, OverflowError):
+        return ()
+    return (number,) if math.isfinite(number) else ()
+
+
+def _stochastic_evidence(
+    outputs: Sequence[object],
+    *,
+    seed: int | None = None,
+) -> dict[str, object]:
+    digests = [output_digest(output) for output in outputs]
+    flattened = [number for output in outputs for number in _numeric_values(output)]
+    dispersion = statistics.pstdev(flattened) if len(flattened) >= 2 else 0.0
+    return {
+        "stochastic_repeat_count": len(outputs),
+        "stochastic_unique_output_count": len(set(digests)),
+        "stochastic_deterministic_match_rate": sum(digest == digests[0] for digest in digests) / len(digests),
+        "stochastic_seeds": (seed,) if seed is not None else (),
+        "stochastic_dispersion": dispersion,
+        "stochastic_variation_observed": len(set(digests)) > 1 and dispersion > 0,
+    }
 
 
 def _finite_number(value: object) -> float:
@@ -1264,6 +1634,328 @@ def _quarantined_result(
     )
 
 
+def _worker_environment(
+    identity: RuntimeWorkerIdentity,
+    *,
+    candidate: CandidateSpec,
+    cache_path: str,
+    lock_artifact_path: str | None = None,
+) -> RuntimeEnvironment:
+    packages = {name.lower().replace("_", "-"): value for name, value in identity.package_versions}
+    return RuntimeEnvironment(
+        python_version=identity.python_version,
+        transformers_version=packages.get("transformers"),
+        huggingface_hub_version=packages.get("huggingface-hub"),
+        torch_version=identity.torch_version,
+        cuda_version=identity.cuda_version,
+        device="cuda" if candidate.gpu else "cpu",
+        dtype="float32",
+        quantization=candidate.external_checkpoint.quantization if candidate.external_checkpoint else "none",
+        cache_path=cache_path,
+        runner_version=identity.runner_version,
+        runner_hash=identity.runner_hash,
+        runtime_lock_hash=identity.runtime_lock_hash,
+        lock_artifact_path=lock_artifact_path,
+        environment_fingerprint=identity.environment_fingerprint,
+        sys_executable=identity.sys_executable,
+        python_executable_hash=identity.python_executable_hash,
+    )
+
+
+def _validate_worker_identity(
+    identity: RuntimeWorkerIdentity,
+    *,
+    pin: RuntimePin,
+    candidate: CandidateSpec,
+    executable: Path,
+) -> None:
+    if identity.model_family != candidate.family.value:
+        raise NoSilentFallbackError("isolated worker family does not match the requested candidate")
+    expected_executable = str(executable.resolve(strict=False))
+    if identity.sys_executable != expected_executable:
+        raise QualificationError("isolated worker reported an unexpected sys.executable")
+    if identity.runtime_lock_hash != pin.lock_hash or identity.lock_artifact_hash != pin.lock_hash:
+        raise QualificationError("isolated worker runtime lock identity does not match the pin")
+    if identity.python_executable_hash != pin.python_executable_hash:
+        raise QualificationError("isolated worker executable identity does not match the pin")
+    if identity.environment_fingerprint != pin.environment_fingerprint:
+        raise QualificationError("isolated worker environment fingerprint does not match the pin")
+    if identity.runner_version != pin.runner_version or identity.runner_hash != pin.runner_hash:
+        raise QualificationError("isolated worker runner identity does not match the pin")
+    observed = {
+        name.lower().replace("_", "-"): value for name, value in identity.package_versions
+    }
+    for dependency in pin.dependencies:
+        name, separator, expected = dependency.partition("==")
+        if not separator:
+            name = dependency.split("@", 1)[0]
+            expected = ""
+        actual = observed.get(name.strip().lower().replace("_", "-"))
+        if actual is None or (expected and actual != expected.strip()):
+            raise QualificationError(f"isolated worker package identity mismatch for {name.strip()}")
+
+
+def _worker_request(
+    candidate: CandidateSpec,
+    *,
+    pin: RuntimePin,
+    dataset: BenchmarkDataset,
+    sample_input: object,
+    batch_input: object,
+    repeats: int,
+) -> dict[str, object]:
+    labels = [label for _text, label in dataset.public_text_fixture]
+    return {
+        "protocol_version": 1,
+        "worker_kind": pin.worker_kind,
+        "candidate": candidate.name,
+        "family": candidate.family.value,
+        "task": candidate.task.value,
+        "output_schema": candidate.output_schema,
+        "repeatability_policy": candidate.repeatability_policy.value,
+        "repeatability_seed": candidate.repeatability_seed,
+        "trust_remote_code": False,
+        "sample_input": _canonical(sample_input),
+        "batch_input": _canonical(batch_input),
+        "cache_path": candidate.external_checkpoint.cache_path if candidate.external_checkpoint else None,
+        "local_files_only": True,
+        "repeats": repeats,
+        "expected_labels": labels,
+        "dependencies": list(pin.dependencies),
+        "lock_artifact_path": pin.lock_artifact_path,
+        "lock_hash": pin.lock_hash,
+        "python_executable_hash": pin.python_executable_hash,
+        "environment_fingerprint": pin.environment_fingerprint,
+        "runner_version": pin.runner_version,
+        "runner_hash": pin.runner_hash,
+    }
+
+
+def _run_isolated_runtime_qualification(
+    candidate: CandidateSpec,
+    *,
+    dataset: BenchmarkDataset,
+    sample_input: object,
+    batch_input: object,
+    repeats: int,
+    ceiling: ResourceCeiling,
+    environment: RuntimeEnvironment,
+    repository_root: Path | None,
+) -> RuntimeQualificationResult:
+    """Run an external candidate only through its pinned Python worker."""
+
+    checkpoint = candidate.external_checkpoint
+    pin = candidate.runtime_pin
+    assert checkpoint is not None and pin is not None
+    observed_artifacts: tuple[ArtifactPin, ...] = ()
+    try:
+        observed_artifacts = verify_checkpoint_artifacts(checkpoint, repository_root=repository_root)
+        executable = verify_runtime_pin(pin, repository_root=repository_root)
+    except (CheckpointPinError, CheckpointNotCachedError, CheckpointIntegrityError, QualificationError) as exc:
+        return _quarantined_result(
+            candidate,
+            dataset=dataset,
+            environment=environment,
+            reason=str(exc),
+            missing_checkpoint=isinstance(exc, CheckpointNotCachedError),
+            corrupt_checkpoint=isinstance(exc, CheckpointIntegrityError),
+        )
+    request = _worker_request(
+        candidate,
+        pin=pin,
+        dataset=dataset,
+        sample_input=sample_input,
+        batch_input=batch_input,
+        repeats=repeats,
+    )
+    worker_script = Path(str(pin.worker_script)).expanduser().resolve(strict=False)
+    if sha256_file(executable) != pin.python_executable_hash:
+        return _quarantined_result(
+            candidate,
+            dataset=dataset,
+            environment=environment,
+            reason="pinned runtime Python executable changed after verification",
+        )
+    if _worker_runner_hash(worker_script, str(pin.runner_version)) != pin.runner_hash:
+        return _quarantined_result(
+            candidate,
+            dataset=dataset,
+            environment=environment,
+            reason="pinned runtime worker changed after verification",
+        )
+    request_json = json.dumps(request, sort_keys=True, separators=(",", ":"))
+    # Never inherit the process's secret inventory or arbitrary connector
+    # configuration into a third-party model runtime.  The worker receives a
+    # deliberately tiny environment and only the offline controls below.
+    worker_environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key in {"PATH", "HOME", "USER", "LANG", "LC_ALL", "TMPDIR", "TEMP", "TMP", "SYSTEMROOT"}
+    }
+    worker_environment.update(
+        {
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "TOKENIZERS_PARALLELISM": "false",
+            "PYTHONNOUSERSITE": "1",
+        }
+    )
+    monitor: _ProcessTreeMonitor | None = None
+    process: subprocess.Popen[str] | None = None
+    decoded: Mapping[str, object] | None = None
+    try:
+        process = subprocess.Popen(
+            [str(executable), "-I", str(worker_script)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=worker_environment,
+            cwd=str(worker_script.parent),
+        )
+        monitor = _ProcessTreeMonitor(process.pid)
+        monitor.start()
+        stdout, _stderr = process.communicate(request_json + "\n", timeout=120)
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        if lines:
+            parsed = json.loads(lines[-1])
+            if isinstance(parsed, Mapping):
+                decoded = parsed
+        if process.returncode not in (0, None) and decoded is None:
+            raise QualificationError("isolated runtime worker exited without a sanitized response")
+        if decoded is None:
+            raise QualificationError("isolated runtime worker returned no response")
+        response = RuntimeWorkerResponse.model_validate(decoded)
+    except subprocess.TimeoutExpired:
+        if process is not None:
+            _terminate_process_tree(process)
+            process.communicate()
+        return RuntimeQualificationResult(
+            candidate=candidate,
+            status=QualificationStatus.FAILED,
+            environment=environment,
+            dataset_id=dataset.dataset_id,
+            dataset_version=dataset.version,
+            measured_at=datetime.now(UTC),
+            failure_reason="isolated runtime worker timeout",
+            resource=None,
+        )
+    except (json.JSONDecodeError, ValueError, QualificationError) as exc:
+        return RuntimeQualificationResult(
+            candidate=candidate,
+            status=QualificationStatus.FAILED,
+            environment=environment,
+            dataset_id=dataset.dataset_id,
+            dataset_version=dataset.version,
+            measured_at=datetime.now(UTC),
+            failure_reason=f"isolated worker failure: {type(exc).__name__}",
+        )
+    finally:
+        if monitor is not None:
+            monitor.stop()
+
+    assert response is not None
+    worker_resource = _isolated_worker_resource(
+        response,
+        monitor=monitor,
+        ceiling=ceiling,
+        batch_size=_batch_size(batch_input),
+    )
+    try:
+        _validate_worker_identity(response.identity, pin=pin, candidate=candidate, executable=executable)
+        worker_environment_result = _worker_environment(
+            response.identity,
+            candidate=candidate,
+            cache_path=checkpoint.cache_path,
+            lock_artifact_path=pin.lock_artifact_path,
+        )
+        worker_environment_result.assert_transformers_baseline(requires_transformers=candidate.requires_transformers)
+        if response.network_access_attempted:
+            raise NetworkAccessAttemptError("network access attempted during offline qualification")
+        if response.error_class:
+            raise QualificationError("isolated runtime worker reported a sanitized failure")
+        if not response.offline_cached_inference:
+            raise QualificationError("isolated runtime worker did not prove offline cached inference")
+        output_shape = validate_candidate_output(candidate, response.outputs[0])
+        batch_size = _batch_size(batch_input)
+        validate_candidate_batch_output(candidate, response.batch_output, expected_batch_size=batch_size)
+        finbert_metrics = _finbert_metrics(dataset, response.batch_output) if candidate.task == ModelTask.FINANCE_SENTIMENT else None
+        repeat_digests = [output_digest(output) for output in response.outputs]
+        equal = len(set(repeat_digests)) == 1
+        stochastic_evidence = (
+            _stochastic_evidence(response.outputs, seed=candidate.repeatability_seed)
+            if candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+            else {
+                "stochastic_repeat_count": 0,
+                "stochastic_unique_output_count": 0,
+                "stochastic_deterministic_match_rate": 0,
+                "stochastic_seeds": (),
+                "stochastic_dispersion": None,
+                "stochastic_variation_observed": False,
+            }
+        )
+        if candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED and not stochastic_evidence["stochastic_variation_observed"]:
+            raise QualificationError("stochastic characterization observed no output variation")
+        resource = worker_resource
+        common = {
+            "candidate": candidate,
+            "environment": worker_environment_result,
+            "dataset_id": dataset.dataset_id,
+            "dataset_version": dataset.version,
+            "measured_at": datetime.now(UTC),
+            "observed_artifacts": observed_artifacts,
+            "resource": resource,
+            "output_shape": output_shape,
+            "output_schema_valid": True,
+            "nan_inf_rejection_passed": _nonfinite_rejection_probe(candidate.task),
+            "repeated_outputs_equal": equal,
+            "deterministic_match_rate": sum(digest == repeat_digests[0] for digest in repeat_digests) / len(repeat_digests),
+            "seeded_repeatability_match_rate": sum(digest == repeat_digests[0] for digest in repeat_digests) / len(repeat_digests),
+            "repeatability_seed": candidate.repeatability_seed,
+            "stochastic_characterized": bool(stochastic_evidence["stochastic_variation_observed"]),
+            **stochastic_evidence,
+            "offline_cached_inference": True,
+            "one_inference_completed": True,
+            "batch_completed": True,
+            "finbert_accuracy": finbert_metrics[0] if finbert_metrics else None,
+            "finbert_per_label_accuracy": finbert_metrics[1] if finbert_metrics else (),
+            "finbert_mean_confidence": finbert_metrics[2] if finbert_metrics else None,
+        }
+        repeatability_failure = (
+            candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED and not equal
+        ) or (
+            candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE
+            and common["seeded_repeatability_match_rate"] < 1
+        )
+        if not resource.resource_limit_passed or not resource.memory_released or repeatability_failure:
+            reason = "resource/recovery/repeatability policy failed"
+            return RuntimeQualificationResult(**common, status=QualificationStatus.FAILED, failure_reason=reason)
+        return RuntimeQualificationResult(**common, status=QualificationStatus.MEASURED)
+    except NetworkAccessAttemptError:
+        return RuntimeQualificationResult(
+            candidate=candidate,
+            status=QualificationStatus.FAILED,
+            environment=environment,
+            dataset_id=dataset.dataset_id,
+            dataset_version=dataset.version,
+            measured_at=datetime.now(UTC),
+            failure_reason="network access attempted during offline qualification",
+            resource=worker_resource,
+            network_access_attempted=True,
+        )
+    except (InvalidModelOutputError, QualificationError, ValueError) as exc:
+        return RuntimeQualificationResult(
+            candidate=candidate,
+            status=QualificationStatus.FAILED,
+            environment=environment,
+            dataset_id=dataset.dataset_id,
+            dataset_version=dataset.version,
+            measured_at=datetime.now(UTC),
+            failure_reason=f"isolated worker result rejected: {type(exc).__name__}",
+            resource=worker_resource,
+        )
+
+
 def run_runtime_qualification(
     candidate: CandidateSpec,
     *,
@@ -1289,15 +1981,29 @@ def run_runtime_qualification(
     if environment is None:
         environment = runtime_environment(cache_path=cache, device="cuda" if candidate.gpu else "cpu")
     if candidate.external_checkpoint is not None:
-        candidate.external_checkpoint.assert_cache_outside_repository(repository_root or Path.cwd())
-        if candidate.runtime_pin is not None:
-            candidate.runtime_pin.assert_environment_outside_repository(repository_root or Path.cwd())
-        if candidate.external_checkpoint.license_admission.status != LicenseAdmissionStatus.APPROVED:
+        checkpoint = candidate.external_checkpoint
+        try:
+            checkpoint.assert_cache_outside_repository(repository_root or Path.cwd())
+            if candidate.runtime_pin is not None:
+                candidate.runtime_pin.assert_environment_outside_repository(repository_root or Path.cwd())
+        except (CheckpointPinError, QualificationError) as exc:
+            return _quarantined_result(candidate, dataset=dataset, environment=environment, reason=str(exc))
+        if checkpoint.license_admission.status != LicenseAdmissionStatus.APPROVED:
             return _quarantined_result(
                 candidate,
                 dataset=dataset,
                 environment=environment,
                 reason="license admission is not approved",
+            )
+        if checkpoint.tokenizer is not None and (
+            checkpoint.tokenizer_license_admission is None
+            or checkpoint.tokenizer_license_admission.status != LicenseAdmissionStatus.APPROVED
+        ):
+            return _quarantined_result(
+                candidate,
+                dataset=dataset,
+                environment=environment,
+                reason="tokenizer license admission is not approved",
             )
         if candidate.runtime_pin is None:
             return _quarantined_result(
@@ -1313,12 +2019,30 @@ def run_runtime_qualification(
                 environment=environment,
                 reason="execution runtime admission is not approved",
             )
-        if environment.runtime_lock_hash != candidate.runtime_pin.lock_hash:
+        if runner is not None:
             return _quarantined_result(
                 candidate,
                 dataset=dataset,
                 environment=environment,
-                reason="execution runtime lock hash does not match the candidate pin",
+                reason="external candidates cannot execute an in-process runner",
+            )
+        if environment.runtime_lock_hash not in (None, candidate.runtime_pin.lock_hash):
+            return _quarantined_result(
+                candidate,
+                dataset=dataset,
+                environment=environment,
+                reason="supplied runtime lock hash identity does not match the candidate pin",
+            )
+        with (GpuModelLease(candidate.family.value) if candidate.gpu else nullcontext()):
+            return _run_isolated_runtime_qualification(
+                candidate,
+                dataset=dataset,
+                sample_input=sample_input,
+                batch_input=batch_input,
+                repeats=repeats,
+                ceiling=ceiling,
+                environment=environment,
+                repository_root=repository_root or Path.cwd(),
             )
     if candidate.requires_transformers:
         try:
@@ -1532,9 +2256,19 @@ def _run_loaded_qualification(
         )
         digests = [output_digest(output) for output in outputs]
         equal = len(set(digests)) == 1
-        stochastic_characterized = (
-            candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+        stochastic_evidence = (
+            _stochastic_evidence(outputs, seed=candidate.repeatability_seed)
+            if candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+            else {
+                "stochastic_repeat_count": 0,
+                "stochastic_unique_output_count": 0,
+                "stochastic_deterministic_match_rate": 0,
+                "stochastic_seeds": (),
+                "stochastic_dispersion": None,
+                "stochastic_variation_observed": False,
+            }
         )
+        stochastic_characterized = bool(stochastic_evidence["stochastic_variation_observed"])
         common = {
             "candidate": candidate,
             "environment": environment,
@@ -1551,6 +2285,7 @@ def _run_loaded_qualification(
             "seeded_repeatability_match_rate": sum(digest == digests[0] for digest in digests) / len(digests),
             "repeatability_seed": candidate.repeatability_seed,
             "stochastic_characterized": stochastic_characterized,
+            **stochastic_evidence,
             "offline_cached_inference": True,
             "one_inference_completed": True,
             "batch_completed": True,
@@ -1564,6 +2299,8 @@ def _run_loaded_qualification(
             candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE
             and common["seeded_repeatability_match_rate"] < 1
         )
+        if candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED and not stochastic_characterized:
+            repeatability_failure = True
         if not resource_limit_passed or not memory_released or repeatability_failure:
             reasons = []
             if not resource_limit_passed:
@@ -1573,7 +2310,7 @@ def _run_loaded_qualification(
             if not unload_succeeded:
                 reasons.append("runner unload failed")
             if repeatability_failure:
-                reasons.append("repeatability policy failed")
+                reasons.append("repeatability/characterization policy failed")
             return RuntimeQualificationResult(
                 **common,
                 status=QualificationStatus.FAILED,
@@ -1618,7 +2355,11 @@ def _finbert_metrics(
             (label, sum(correct[index] for index in indices) / len(indices))
         )
     confidences = [
-        _finite_number(cast(Mapping[str, object], item).get("confidence"))
+        _finite_number(
+            (item_mapping := cast(Mapping[str, object], item)).get(
+                "confidence", item_mapping.get("score")
+            )
+        )
         for item in batch_output
     ]
     return sum(correct) / len(correct), tuple(per_label), sum(confidences) / len(confidences)
@@ -1630,6 +2371,47 @@ def _percentile95(values: Sequence[float]) -> float:
     ordered = sorted(values)
     index = min(len(ordered) - 1, max(0, math.ceil(0.95 * len(ordered)) - 1))
     return ordered[index]
+
+
+def _isolated_worker_resource(
+    response: RuntimeWorkerResponse,
+    *,
+    monitor: _ProcessTreeMonitor | None,
+    ceiling: ResourceCeiling,
+    batch_size: int,
+) -> RuntimeResourceResult:
+    rss_before = monitor.rss_before_mib if monitor is not None else 0.0
+    rss_peak = max(
+        rss_before,
+        response.rss_after_load_mib,
+        monitor.rss_peak_mib if monitor is not None else 0,
+    )
+    rss_after_unload = 0.0 if response.unload_succeeded else response.rss_after_load_mib
+    rss_residual = max(0.0, rss_after_unload - rss_before)
+    resource_limit_passed = rss_peak <= ceiling.max_rss_mib
+    memory_released = response.unload_succeeded and rss_residual <= ceiling.max_residual_rss_mib
+    durations = response.warm_durations_ms or (0.0,)
+    return RuntimeResourceResult(
+        cold_load_ms=response.cold_load_ms,
+        warm_inference_p50_ms=statistics.median(durations),
+        warm_inference_p95_ms=_percentile95(durations),
+        batch_inference_ms=response.batch_inference_ms,
+        batch_size=batch_size,
+        batch_throughput_per_second=batch_size / max(response.batch_inference_ms / 1000, 1e-9),
+        rss_before_mib=rss_before,
+        rss_after_load_mib=response.rss_after_load_mib,
+        rss_peak_mib=rss_peak,
+        rss_after_unload_mib=rss_after_unload,
+        vram_before_mib=0 if response.vram_after_load_mib is not None else None,
+        vram_after_load_mib=response.vram_after_load_mib,
+        vram_peak_mib=response.vram_peak_mib or response.vram_after_load_mib,
+        vram_after_unload_mib=response.vram_after_unload_mib,
+        unload_succeeded=response.unload_succeeded,
+        memory_released=memory_released,
+        rss_residual_mib=rss_residual,
+        vram_residual_mib=response.vram_after_unload_mib,
+        resource_limit_passed=resource_limit_passed,
+    )
 
 
 def _candidate_by_family(family: ModelFamily) -> CandidateSpec:
@@ -1772,23 +2554,15 @@ def _runtime_pin(
     version_or_commit: str,
     dependencies: tuple[str, ...],
 ) -> RuntimePin:
-    material = json.dumps(
-        {
-            "candidate": candidate,
-            "project": project,
-            "version_or_commit": version_or_commit,
-            "python_constraint": ">=3.12,<3.13",
-            "dependencies": dependencies,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
+    # Registry candidates are deliberately pending until an operator creates
+    # an isolated environment and records its real lock artifact and worker
+    # identity.  A hash of this declaration is not an environment lock hash.
     return RuntimePin(
         project=project,
         version_or_commit=version_or_commit,
         python_constraint=">=3.12,<3.13",
         dependencies=dependencies,
-        lock_hash=sha256(material.encode()).hexdigest(),
+        lock_hash=None,
         environment_path=_runtime_path(candidate),
         evidence_reference=None,
     )

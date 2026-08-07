@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import platform
+import shutil
 import socket
 import subprocess
 import sys
@@ -25,11 +27,15 @@ from advisorai.phase0.runtime_qualification import (
     ModelFamily,
     ModelTask,
     QualificationStatus,
+    RepeatabilityPolicy,
     RepositoryPin,
     ResourceCeiling,
+    RuntimeAdmissionStatus,
     RuntimeEnvironment,
     RuntimePin,
     RuntimeResourceResult,
+    _environment_fingerprint,
+    _worker_runner_hash,
     cached_artifact_inventory,
     default_runtime_candidates,
     manifest_bytes,
@@ -45,6 +51,7 @@ from advisorai.phase0.runtime_qualification import (
     validate_model_batch_output,
     validate_model_output,
     verify_checkpoint_artifacts,
+    verify_runtime_pin,
     write_qualification_manifest,
 )
 
@@ -89,11 +96,101 @@ def _forecast_candidate(*, checkpoint: CheckpointPin | None = None) -> Candidate
                 dependencies=("fixture==1.0",),
                 lock_hash="c" * 64,
                 environment_path="/tmp/advisorai-fixture-runtime",
-                status="approved",
+                status="pending",
                 evidence_reference="fixture://runtime",
             )
             if checkpoint is not None
             else None
+        ),
+    )
+
+
+def _isolated_runtime(
+    tmp_path: Path,
+    *,
+    worker_kind: str = "qualification",
+    dependencies: tuple[str, ...] = (),
+) -> RuntimePin:
+    runtime = tmp_path / "isolated-runtime"
+    executable = runtime / "bin" / "python"
+    executable.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(sys.executable, executable)
+    executable.chmod(0o700)
+    lock = runtime / "uv.lock"
+    lock.write_text("fixture-lock-v1\n", encoding="utf-8")
+    worker = Path("scripts/runtime_qualification_worker.py").resolve()
+    lock_hash = sha256_file(lock)
+    runner_version = "fixture-worker-v1"
+    runner_hash = _worker_runner_hash(worker, runner_version)
+    fingerprint = _environment_fingerprint(
+        sys_executable=str(executable),
+        python_version=platform.python_version(),
+        package_versions={},
+        torch_version=None,
+        cuda_version=None,
+        runtime_lock_hash=lock_hash,
+    )
+    return RuntimePin(
+        project="fixture-worker",
+        version_or_commit="fixture-v1",
+        python_constraint=">=3.12,<3.13",
+        dependencies=dependencies,
+        lock_hash=lock_hash,
+        lock_artifact_path=str(lock),
+        environment_fingerprint=fingerprint,
+        python_executable=str(executable),
+        python_executable_hash=sha256_file(executable),
+        environment_path=str(runtime),
+        worker_script=str(worker),
+        worker_kind=worker_kind,
+        runner_version=runner_version,
+        runner_hash=runner_hash,
+        status=RuntimeAdmissionStatus.APPROVED,
+        evidence_reference="fixture://runtime-lock",
+    )
+
+
+def _isolated_candidate(
+    tmp_path: Path,
+    *,
+    worker_kind: str = "qualification",
+    dependencies: tuple[str, ...] = (),
+    family: ModelFamily = ModelFamily.NAIVE,
+    task: ModelTask = ModelTask.FORECAST,
+    repeatability_policy: RepeatabilityPolicy = RepeatabilityPolicy.DETERMINISTIC_REQUIRED,
+) -> CandidateSpec:
+    cache = tmp_path / "cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    weights = cache / "weights.bin"
+    weights.write_bytes(b"cached-fixture")
+    checkpoint = CheckpointPin(
+        model_family=family.value,
+        repository=RepositoryPin(
+            repository_id="fixture/model",
+            revision="a" * 40,
+            license="apache-2.0",
+            artifacts=(ArtifactPin(relative_path="weights.bin", sha256=sha256_file(weights)),),
+        ),
+        cache_path=str(cache),
+        license_admission=LicenseAdmission(
+            status=LicenseAdmissionStatus.APPROVED,
+            license_identifier="Apache-2.0",
+            reviewed_at=datetime(2026, 8, 7, tzinfo=UTC),
+            evidence_reference="fixture://model-license",
+        ),
+    )
+    return CandidateSpec(
+        name="isolated-fixture",
+        family=family,
+        task=task,
+        external_checkpoint=checkpoint,
+        requires_transformers=False,
+        output_schema="sentiment(label,confidence)" if task == ModelTask.FINANCE_SENTIMENT else "forecast[1]",
+        repeatability_policy=repeatability_policy,
+        runtime_pin=_isolated_runtime(
+            tmp_path,
+            worker_kind=worker_kind,
+            dependencies=dependencies,
         ),
     )
 
@@ -195,11 +292,24 @@ def test_execution_runtime_environment_cannot_be_inside_repository(tmp_path):
         dependencies=("fixture==1.0",),
         lock_hash="a" * 64,
         environment_path=str(tmp_path / "repo" / "venv"),
-        status="approved",
+        status="pending",
         evidence_reference="fixture://runtime",
     )
     with pytest.raises(Exception, match="outside"):
         pin.assert_environment_outside_repository(tmp_path / "repo")
+
+
+def test_approved_runtime_requires_real_lock_and_worker_identity():
+    with pytest.raises(ValueError, match="immutable worker identity"):
+        RuntimePin(
+            project="fixture",
+            version_or_commit="1.0.0",
+            python_constraint=">=3.12,<3.13",
+            lock_hash="a" * 64,
+            environment_path="/tmp/advisorai-fixture-runtime",
+            status="approved",
+            evidence_reference="fixture://runtime",
+        )
 
 
 def test_transformers_5_5_4_compatibility_boundary():
@@ -289,6 +399,7 @@ def test_unapproved_license_cannot_become_measured():
     result = run_finbert_qualification(runner=_runner(ModelFamily.FINBERT.value))
     assert result.status == QualificationStatus.QUARANTINED
     assert "license admission" in result.failure_reason
+    assert result.to_bakeoff_result().privacy_passed is None
 
 
 def test_finbert_fixture_scores_labels_and_batch_throughput():
@@ -304,11 +415,11 @@ def test_finbert_fixture_scores_labels_and_batch_throughput():
         model_family=ModelFamily.FINBERT.value,
         infer_fn=lambda _model, payload: (
             [
-                {"label": label, "confidence": 0.8}
+                {"label": label, "score": 0.8}
                 for label in expected
             ]
             if isinstance(payload, tuple)
-            else {"label": expected[0], "confidence": 0.8}
+            else {"label": expected[0], "score": 0.8}
         ),
     )
     result = run_runtime_qualification(
@@ -350,6 +461,34 @@ def test_stochastic_repeatability_policy_does_not_require_equal_bytes():
     assert result.status == QualificationStatus.MEASURED
     assert result.repeated_outputs_equal is False
     assert result.stochastic_characterized is True
+    assert result.stochastic_unique_output_count > 1
+    assert result.stochastic_variation_observed is True
+
+
+def test_stochastic_declaration_alone_does_not_pass_characterization():
+    candidate = CandidateSpec(
+        name="constant-stochastic-fixture",
+        family=ModelFamily.KRONOS_MINI,
+        task=ModelTask.FORECAST,
+        output_schema="forecast[1]",
+        repeatability_policy=RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED,
+    )
+    result = run_runtime_qualification(
+        candidate,
+        runner=FunctionalRunner(
+            model_family=ModelFamily.KRONOS_MINI.value,
+            infer_fn=lambda _model, payload: (
+                ((1.0,),) * len(payload)
+                if isinstance(payload, tuple) and payload and isinstance(payload[0], tuple)
+                else (1.0,)
+            ),
+        ),
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0, 2.0),
+        batch_input=((1.0, 2.0), (3.0, 4.0)),
+    )
+    assert result.status == QualificationStatus.FAILED
+    assert "characterization" in result.failure_reason
 
 
 def test_no_silent_fallback_between_model_families():
@@ -365,32 +504,15 @@ def test_no_silent_fallback_between_model_families():
     assert "does not match" in result.failure_reason
 
 
-def test_offline_cached_inference_requires_offline_runner_and_is_repeatable(tmp_path):
-    cache = tmp_path / "cache"
-    cache.mkdir()
-    weights = cache / "weights.bin"
-    weights.write_bytes(b"cached")
-    pin = _checkpoint(tmp_path, digest=sha256_file(weights), family=ModelFamily.NAIVE.value)
-    candidate = _forecast_candidate(checkpoint=pin)
+def test_offline_cached_inference_requires_isolated_runtime_and_is_repeatable(tmp_path):
+    candidate = _isolated_candidate(tmp_path)
     dataset = BenchmarkDataset.synthetic_forecast()
-    environment = RuntimeEnvironment.model_validate(
-        {
-            **runtime_environment(
-                cache_path=str(cache),
-                runner_version="fixture",
-                runtime_lock_hash="c" * 64,
-            ).model_dump(),
-            "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
-            "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
-        }
-    )
     result = run_runtime_qualification(
         candidate,
-        runner=_runner(),
+        runner=None,
         dataset=dataset,
         sample_input=dataset.inputs[:4],
         batch_input=(dataset.inputs[:4], dataset.inputs[4:8]),
-        environment=environment,
         repository_root=tmp_path / "repository",
     )
     assert result.status == QualificationStatus.MEASURED
@@ -398,35 +520,19 @@ def test_offline_cached_inference_requires_offline_runner_and_is_repeatable(tmp_
     assert result.repeated_outputs_equal is True
     assert result.nan_inf_rejection_passed is True
     assert result.resource.unload_succeeded is True
-    assert result.observed_artifacts[0].sha256 == sha256_file(weights)
+    assert result.observed_artifacts[0].sha256 == candidate.external_checkpoint.repository.artifacts[0].sha256
+    assert result.environment.sys_executable == candidate.runtime_pin.python_executable
 
 
 def test_network_attempt_after_cache_fails_closed(tmp_path):
-    cache = tmp_path / "cache"
-    cache.mkdir()
-    weights = cache / "weights.bin"
-    weights.write_bytes(b"cached")
-    pin = _checkpoint(tmp_path, digest=sha256_file(weights), family=ModelFamily.NAIVE.value)
-    candidate = _forecast_candidate(checkpoint=pin)
+    candidate = _isolated_candidate(tmp_path, worker_kind="network_attempt")
     dataset = BenchmarkDataset.synthetic_forecast()
-    environment = RuntimeEnvironment.model_validate(
-        {
-            **runtime_environment(
-                cache_path=str(cache),
-                runner_version="fixture",
-                runtime_lock_hash="c" * 64,
-            ).model_dump(),
-            "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
-            "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
-        }
-    )
     result = run_runtime_qualification(
         candidate,
-        runner=_runner(network=True),
+        runner=None,
         dataset=dataset,
         sample_input=dataset.inputs[:4],
         batch_input=(dataset.inputs[:4],),
-        environment=environment,
         repository_root=tmp_path / "repository",
     )
     assert result.status == QualificationStatus.FAILED
@@ -435,20 +541,15 @@ def test_network_attempt_after_cache_fails_closed(tmp_path):
 
 
 def test_runtime_lock_hash_mismatch_is_quarantined_before_inference(tmp_path):
-    cache = tmp_path / "cache"
-    cache.mkdir()
-    weights = cache / "weights.bin"
-    weights.write_bytes(b"cached")
-    pin = _checkpoint(tmp_path, digest=sha256_file(weights), family=ModelFamily.NAIVE.value)
-    candidate = _forecast_candidate(checkpoint=pin)
+    candidate = _isolated_candidate(tmp_path)
     result = run_runtime_qualification(
         candidate,
-        runner=_runner(),
+        runner=None,
         dataset=BenchmarkDataset.synthetic_forecast(),
         sample_input=(1.0,),
         batch_input=((1.0,),),
         environment=runtime_environment(
-            cache_path=str(cache),
+            cache_path=str(tmp_path / "cache"),
             runner_version="fixture",
             runtime_lock_hash="d" * 64,
         ),
@@ -458,56 +559,171 @@ def test_runtime_lock_hash_mismatch_is_quarantined_before_inference(tmp_path):
     assert "lock hash" in result.failure_reason
 
 
-def test_missing_or_corrupt_checkpoint_is_quarantined_with_reason(tmp_path):
+def test_isolated_runtime_rejects_fake_lock_hash_and_wrong_executable(tmp_path):
+    candidate = _isolated_candidate(tmp_path)
+    pin = candidate.runtime_pin
+    fake = pin.model_copy(update={"lock_hash": "f" * 64})
+    with pytest.raises(Exception, match="lock artifact hash"):
+        verify_runtime_pin(fake)
+    wrong = pin.model_copy(update={"python_executable_hash": "e" * 64})
+    with pytest.raises(Exception, match="executable hash"):
+        verify_runtime_pin(wrong)
+    missing = pin.model_copy(update={"python_executable": str(Path(pin.environment_path) / "bin" / "missing")})
+    with pytest.raises(Exception, match="missing"):
+        verify_runtime_pin(missing)
+
+
+def test_isolated_runtime_package_identity_mismatch_is_rejected(tmp_path):
+    candidate = _isolated_candidate(tmp_path, dependencies=("fixture-package==9.9",))
+    result = run_runtime_qualification(
+        candidate,
+        runner=None,
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0,),
+        batch_input=((1.0,),),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.FAILED
+    assert "isolated worker" in result.failure_reason
+
+
+def test_isolated_runtime_worker_identity_and_boundary(tmp_path):
+    candidate = _isolated_candidate(tmp_path)
     dataset = BenchmarkDataset.synthetic_forecast()
-    missing_pin = _checkpoint(tmp_path, digest="a" * 64, family=ModelFamily.NAIVE.value)
-    candidate = _forecast_candidate(checkpoint=missing_pin)
-    environment = RuntimeEnvironment.model_validate(
-        {
-            **runtime_environment(
-                cache_path=str(tmp_path / "missing"),
-                runner_version="fixture",
-                runtime_lock_hash="c" * 64,
-            ).model_dump(),
-            "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
-            "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
+    result = run_runtime_qualification(
+        candidate,
+        runner=None,
+        dataset=dataset,
+        sample_input=dataset.inputs[:4],
+        batch_input=(dataset.inputs[:4], dataset.inputs[4:8]),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.MEASURED
+    assert result.environment.sys_executable == candidate.runtime_pin.python_executable
+    assert result.environment.sys_executable != sys.executable
+    assert result.resource is not None
+    assert result.resource.rss_peak_mib >= result.resource.rss_before_mib
+
+
+def test_isolated_runtime_rejects_wrong_reported_sys_executable(tmp_path):
+    candidate = _isolated_candidate(tmp_path)
+    pin = candidate.runtime_pin
+    worker = Path(pin.worker_script)
+    wrong_worker = tmp_path / "wrong-worker.py"
+    wrong_worker.write_text(
+        worker.read_text(encoding="utf-8").replace(
+            '"sys_executable": str(executable),',
+            '"sys_executable": "/wrong/python",',
+        ),
+        encoding="utf-8",
+    )
+    wrong_pin = pin.model_copy(
+        update={
+            "worker_script": str(wrong_worker),
+            "runner_hash": _worker_runner_hash(wrong_worker, pin.runner_version),
         }
     )
-    missing = run_runtime_qualification(
+    result = run_runtime_qualification(
+        candidate.model_copy(update={"runtime_pin": wrong_pin}),
+        runner=None,
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0,),
+        batch_input=((1.0,),),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.FAILED
+    assert "isolated worker" in result.failure_reason
+
+
+def test_external_in_process_runner_is_rejected(tmp_path):
+    candidate = _isolated_candidate(tmp_path)
+    result = run_runtime_qualification(
         candidate,
         runner=_runner(),
+        dataset=BenchmarkDataset.synthetic_forecast(),
+        sample_input=(1.0,),
+        batch_input=((1.0,),),
+        repository_root=tmp_path / "repository",
+    )
+    assert result.status == QualificationStatus.QUARANTINED
+    assert "in-process" in result.failure_reason
+
+
+def test_tokenizer_license_pending_or_rejected_quarantines_before_worker(tmp_path):
+    candidate = _isolated_candidate(tmp_path)
+    tokenizer = RepositoryPin(
+        repository_id="fixture/tokenizer",
+        revision="b" * 40,
+        license="not-declared",
+        artifacts=(ArtifactPin(relative_path="tokenizer.json", sha256="c" * 64),),
+    )
+    for status in (LicenseAdmissionStatus.PENDING, LicenseAdmissionStatus.REJECTED):
+        checkpoint = candidate.external_checkpoint.model_copy(
+            update={"tokenizer": tokenizer, "tokenizer_license_admission": LicenseAdmission(status=status)}
+        )
+        candidate_with_tokenizer = candidate.model_copy(update={"external_checkpoint": checkpoint})
+        result = run_runtime_qualification(
+            candidate_with_tokenizer,
+            runner=None,
+            dataset=BenchmarkDataset.synthetic_forecast(),
+            sample_input=(1.0,),
+            batch_input=((1.0,),),
+            repository_root=tmp_path / "repository",
+        )
+        assert result.status == QualificationStatus.QUARANTINED
+        assert "tokenizer license" in result.failure_reason
+
+
+@pytest.mark.parametrize("suffix", [".py", ".so", ".dll", ".sh"])
+def test_executable_model_cache_artifacts_are_rejected(tmp_path, suffix):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    weights = cache / "weights.bin"
+    weights.write_bytes(b"model-fixture")
+    (cache / f"unreviewed{suffix}").write_bytes(b"code")
+    pin = _checkpoint(tmp_path, digest=sha256_file(weights), family=ModelFamily.NAIVE.value)
+    with pytest.raises(CheckpointIntegrityError, match="unexpected loadable"):
+        verify_checkpoint_artifacts(pin, cache_root=cache)
+
+
+def test_missing_or_corrupt_checkpoint_is_quarantined_with_reason(tmp_path):
+    dataset = BenchmarkDataset.synthetic_forecast()
+    candidate = _isolated_candidate(tmp_path)
+    missing_pin = candidate.external_checkpoint.model_copy(
+        update={"cache_path": str(tmp_path / "missing")}
+    )
+    candidate = candidate.model_copy(update={"external_checkpoint": missing_pin})
+    missing = run_runtime_qualification(
+        candidate,
+        runner=None,
         dataset=dataset,
         sample_input=dataset.inputs[:4],
         batch_input=(dataset.inputs[:4],),
-        environment=environment,
         repository_root=tmp_path / "repository",
     )
     assert missing.status == QualificationStatus.QUARANTINED
     assert missing.missing_checkpoint_quarantined is True
 
-    cache = tmp_path / "cache"
-    cache.mkdir()
-    (cache / "weights.bin").write_bytes(b"corrupt")
-    corrupt_pin = _checkpoint(tmp_path, digest="b" * 64, family=ModelFamily.NAIVE.value)
-    corrupt_candidate = _forecast_candidate(checkpoint=corrupt_pin)
-    corrupt_environment = RuntimeEnvironment.model_validate(
-        {
-            **runtime_environment(
-                cache_path=str(cache),
-                runner_version="fixture",
-                runtime_lock_hash="c" * 64,
-            ).model_dump(),
-            "transformers_version": REQUIRED_TRANSFORMERS_VERSION,
-            "huggingface_hub_version": REQUIRED_HUGGINGFACE_HUB_VERSION,
+    corrupt_candidate = _isolated_candidate(tmp_path / "corrupt")
+    (Path(corrupt_candidate.external_checkpoint.cache_path) / "weights.bin").write_bytes(b"corrupt")
+    corrupt_pin = corrupt_candidate.external_checkpoint.model_copy(
+        update={
+            "repository": corrupt_candidate.external_checkpoint.repository.model_copy(
+                update={
+                    "artifacts": (
+                        ArtifactPin(relative_path="weights.bin", sha256="b" * 64),
+                    )
+                }
+            )
         }
     )
+    corrupt_candidate = corrupt_candidate.model_copy(update={"external_checkpoint": corrupt_pin})
     corrupt = run_runtime_qualification(
         corrupt_candidate,
-        runner=_runner(),
+        runner=None,
         dataset=dataset,
         sample_input=dataset.inputs[:4],
         batch_input=(dataset.inputs[:4],),
-        environment=corrupt_environment,
         repository_root=tmp_path / "repository",
     )
     assert corrupt.status == QualificationStatus.QUARANTINED
