@@ -1,0 +1,10 @@
+# AdvisorAI Phase-0 Kronos-small GPU runtime (WSL/Linux x86_64, CPython 3.12).
+# The source wheel is built from shiyu-coder/Kronos commit
+# 67b630e67f6a18c9e9be918d9b4337c960db1e9a and added to the local lock.
+torch @ https://download-r2.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=628e89bd5110ced7debee2a57c69959725b7fbc64eab81a39dd70e46c7e28ba5
+numpy==2.5.1
+pandas==2.2.2
+einops==0.8.1
+huggingface-hub==0.33.1
+tqdm==4.67.1
+safetensors==0.6.2

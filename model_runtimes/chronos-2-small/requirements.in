@@ -1,0 +1,12 @@
+# AdvisorAI Phase-0 Chronos-2-small GPU runtime (WSL/Linux x86_64, CPython 3.12).
+# chronos-forecasting is built from exact Git commit
+# 7dc4435706a4454feb79df44ca9f33631f3027bf into the machine admission bundle.
+# The PyTorch CUDA 12.8 wheel URL and digest are from the official PyTorch index.
+torch @ https://download-r2.pytorch.org/whl/cu128/torch-2.10.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=628e89bd5110ced7debee2a57c69959725b7fbc64eab81a39dd70e46c7e28ba5
+transformers==5.5.4
+huggingface-hub==1.26.1
+safetensors==0.8.0
+numpy==2.5.1
+pandas==3.0.1
+einops==0.8.2
+accelerate==1.14.0

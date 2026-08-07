@@ -70,7 +70,13 @@ def _dataset_for(candidate: CandidateSpec) -> BenchmarkDataset:
         return BenchmarkDataset.finbert_fixture()
     if candidate.task == ModelTask.TSPULSE_FEATURES:
         return BenchmarkDataset.tspulse_runtime_fixture()
-    if candidate.family in {ModelFamily.TTM_R2, ModelFamily.TTM_R3}:
+    if candidate.family in {
+        ModelFamily.CHRONOS_2_SMALL,
+        ModelFamily.KRONOS_MINI,
+        ModelFamily.KRONOS_SMALL,
+        ModelFamily.TTM_R2,
+        ModelFamily.TTM_R3,
+    }:
         return BenchmarkDataset.ttm_runtime_fixture()
     return BenchmarkDataset.synthetic_forecast()
 

@@ -254,7 +254,16 @@ def test_default_registry_pins_exact_candidate_revisions_and_roles():
     assert by_name["ttm-r3"].external_checkpoint.revision == "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa"
     assert by_name["ttm-r2"].external_checkpoint.repository_id == "ibm-granite/granite-timeseries-ttm-r2"
     assert by_name["chronos-2-small"].external_checkpoint.repository_id == "autogluon/chronos-2-small"
+    assert by_name["chronos-2-small"].output_schema == "forecast[30]"
+    assert "chronos-forecasting==2.3.1" in by_name["chronos-2-small"].runtime_pin.dependencies
     assert by_name["kronos-mini"].external_checkpoint.tokenizer.repository_id == "NeoQuasar/Kronos-Tokenizer-2k"
+    assert by_name["kronos-mini"].output_schema == "forecast[30]"
+    assert by_name["kronos-small"].output_schema == "forecast[30]"
+    for kronos_name in ("kronos-mini", "kronos-small"):
+        assert "advisorai-kronos-runtime==0.0.0+67b630e" in by_name[
+            kronos_name
+        ].runtime_pin.dependencies
+        assert by_name[kronos_name].repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
     assert by_name["tabpfn-ts"].external_checkpoint.repository_id == "PriorLabs/tabpfn-time-series"
     assert by_name["tspulse"].task == ModelTask.TSPULSE_FEATURES
     with pytest.raises(ValueError, match="never a price forecaster"):

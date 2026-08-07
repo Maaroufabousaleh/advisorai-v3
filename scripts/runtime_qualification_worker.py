@@ -319,9 +319,12 @@ def _ttm_tensor(payload: Any) -> tuple[Any, bool]:
 
 def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     admitted_kinds = {
+        "chronos-2-small",
         "finbert-minilm",
         "finsentiment-deberta-v3",
         "modern-finbert",
+        "kronos-mini",
+        "kronos-small",
         "tspulse",
         "ttm-r2",
         "ttm-r3",
@@ -335,7 +338,49 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
 
     import torch
     load_kwargs: dict[str, Any] = {}
-    if kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
+    if kind in {"chronos-2-small", "kronos-mini", "kronos-small"}:
+        if not torch.cuda.is_available():
+            raise ValueError("the admitted GPU candidate requires CUDA")
+    if kind == "chronos-2-small":
+        from chronos import BaseChronosPipeline
+
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        pipeline = BaseChronosPipeline.from_pretrained(
+            str(model_root),
+            local_files_only=True,
+            trust_remote_code=False,
+            device_map="cuda",
+            dtype=torch.bfloat16,
+        )
+        model = pipeline.model
+        loading_info = {}
+    elif kind in {"kronos-mini", "kronos-small"}:
+        import json as _json
+
+        from model import Kronos, KronosPredictor, KronosTokenizer
+        from safetensors.torch import load_model
+
+        tokenizer_root = cache_root / "tokenizer"
+        if tokenizer_root.is_symlink() or not tokenizer_root.is_dir():
+            raise ValueError("Kronos tokenizer cache root is invalid")
+        model_config = _json.loads((model_root / "config.json").read_text(encoding="utf-8"))
+        tokenizer_config = _json.loads((tokenizer_root / "config.json").read_text(encoding="utf-8"))
+        model = Kronos(**model_config)
+        tokenizer = KronosTokenizer(**tokenizer_config)
+        model_missing, model_unexpected = load_model(
+            model, str(model_root / "model.safetensors"), strict=True, device="cpu"
+        )
+        tokenizer_missing, tokenizer_unexpected = load_model(
+            tokenizer, str(tokenizer_root / "model.safetensors"), strict=True, device="cpu"
+        )
+        if model_missing or model_unexpected or tokenizer_missing or tokenizer_unexpected:
+            raise ValueError("Kronos checkpoint loading identity mismatch")
+        model.eval()
+        tokenizer.eval()
+        predictor = KronosPredictor(model, tokenizer, device="cuda:0", max_context=512)
+        loading_info = {}
+    elif kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
@@ -360,12 +405,13 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
             if kind == "ttm-r3"
             else TinyTimeMixerForPrediction
         )
-    model, loading_info = model_class.from_pretrained(
-        str(model_root),
-        local_files_only=True,
-        output_loading_info=True,
-        **load_kwargs,
-    )
+    if kind not in {"chronos-2-small", "kronos-mini", "kronos-small"}:
+        model, loading_info = model_class.from_pretrained(
+            str(model_root),
+            local_files_only=True,
+            output_loading_info=True,
+            **load_kwargs,
+        )
     key_groups = {
         "missing": tuple(loading_info.get("missing_keys", ())),
         "unexpected": tuple(loading_info.get("unexpected_keys", ())),
@@ -378,15 +424,25 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
     parameter_count = sum(parameter.numel() for parameter in model.parameters())
     expected_parameters = {
         "modern-finbert": 149_607_171,
+        "chronos-2-small": 27_934_624,
         "finbert-minilm": 33_361_155,
         "finsentiment-deberta-v3": 184_424_451,
         "tspulse": 1_084_330,
         "ttm-r2": 805_280,
         "ttm-r3": 1_414_514,
+        "kronos-mini": 8_066_074,
+        "kronos-small": 28_699_418,
     }[kind]
+    if kind in {"kronos-mini", "kronos-small"}:
+        parameter_count += sum(parameter.numel() for parameter in tokenizer.parameters())
     if parameter_count != expected_parameters:
         raise ValueError("TTM parameter identity mismatch")
     state = {"model": model, "torch": torch}
+    if kind == "chronos-2-small":
+        state["pipeline"] = pipeline
+    if kind in {"kronos-mini", "kronos-small"}:
+        state["tokenizer"] = tokenizer
+        state["predictor"] = predictor
     if kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
         state["tokenizer"] = tokenizer
         state["id2label"] = {int(key): str(value) for key, value in model.config.id2label.items()}
@@ -404,14 +460,89 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
 
 def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
     if kind not in {
+        "chronos-2-small",
         "finbert-minilm",
         "finsentiment-deberta-v3",
         "modern-finbert",
+        "kronos-mini",
+        "kronos-small",
         "tspulse",
         "ttm-r2",
         "ttm-r3",
     }:
         raise ValueError("unsupported admitted real-model worker kind")
+    if kind == "chronos-2-small":
+        is_batch = isinstance(payload, list) and bool(payload) and isinstance(payload[0], list)
+        rows = payload if is_batch else [payload]
+        if not isinstance(rows, list) or not rows:
+            raise ValueError("Chronos input must contain at least one context")
+        contexts = []
+        for row in rows:
+            if not isinstance(row, list) or len(row) < 32 or len(row) > 8192:
+                raise ValueError("Chronos requires 32 to 8192 context values")
+            values = [float(value) for value in row]
+            if any(not float("-inf") < value < float("inf") for value in values):
+                raise ValueError("Chronos input must contain finite values")
+            contexts.append(state["torch"].tensor(values, dtype=state["torch"].float32))
+        _quantiles, means = state["pipeline"].predict_quantiles(
+            contexts,
+            prediction_length=30,
+            quantile_levels=[0.1, 0.5, 0.9],
+            batch_size=min(32, len(contexts)),
+        )
+        forecasts = [mean.squeeze(0).detach().cpu().tolist() for mean in means]
+        if any(len(row) != 30 for row in forecasts):
+            raise ValueError("Chronos returned an unexpected forecast shape")
+        if any(not float("-inf") < float(value) < float("inf") for row in forecasts for value in row):
+            raise ValueError("Chronos returned a non-finite forecast")
+        return forecasts if is_batch else forecasts[0]
+    if kind in {"kronos-mini", "kronos-small"}:
+        import pandas as pd
+
+        is_batch = isinstance(payload, list) and bool(payload) and isinstance(payload[0], list)
+        rows = payload if is_batch else [payload]
+        frames = []
+        history_times = []
+        future_times = []
+        for row in rows:
+            if not isinstance(row, list) or len(row) != 512:
+                raise ValueError("Kronos requires an exact 512-value context")
+            close = [float(value) for value in row]
+            if any(not float("-inf") < value < float("inf") for value in close):
+                raise ValueError("Kronos input must contain finite values")
+            opened = [close[0], *close[:-1]]
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "open": opened,
+                        "high": [max(left, right) for left, right in zip(opened, close, strict=True)],
+                        "low": [min(left, right) for left, right in zip(opened, close, strict=True)],
+                        "close": close,
+                        "volume": [1.0] * len(close),
+                        "amount": close,
+                    }
+                )
+            )
+            history = pd.Series(pd.date_range("2020-01-01", periods=len(close), freq="D"))
+            future = pd.Series(pd.date_range(history.iloc[-1] + pd.Timedelta(days=1), periods=30, freq="D"))
+            history_times.append(history)
+            future_times.append(future)
+        forecasts = state["predictor"].predict_batch(
+            frames,
+            history_times,
+            future_times,
+            pred_len=30,
+            T=1.0,
+            top_p=0.9,
+            sample_count=1,
+            verbose=False,
+        )
+        values = [frame["close"].astype(float).tolist() for frame in forecasts]
+        if any(len(row) != 30 for row in values):
+            raise ValueError("Kronos returned an unexpected forecast shape")
+        if any(not float("-inf") < value < float("inf") for row in values for value in row):
+            raise ValueError("Kronos returned a non-finite forecast")
+        return values if is_batch else values[0]
     if kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
         is_batch = isinstance(payload, list)
         texts = payload if is_batch else [payload]
@@ -629,9 +760,12 @@ def main() -> int:
         model_metadata: dict[str, Any] = {}
         real_state: dict[str, Any] | None = None
         if kind in {
+            "chronos-2-small",
             "finbert-minilm",
             "finsentiment-deberta-v3",
             "modern-finbert",
+            "kronos-mini",
+            "kronos-small",
             "tspulse",
             "ttm-r2",
             "ttm-r3",
@@ -682,6 +816,8 @@ def main() -> int:
         if real_state is not None:
             real_state["model"] = None
             real_state["tokenizer"] = None
+            real_state["pipeline"] = None
+            real_state["predictor"] = None
             real_state.clear()
         model = None
         gc.collect()
