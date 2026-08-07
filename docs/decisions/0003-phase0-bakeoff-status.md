@@ -23,6 +23,16 @@ The current laptop has real isolated/offline qualification evidence for:
 - OmniRoute, DuckLake, Hermes, and rclone: separate component workstreams and
   not admitted by this model bake-off.
 
+The separate remote route bake-off now has a sanitized live inventory and
+gateway-only evidence under `artifacts/phase0/remote-model-bakeoff/`. The
+current roster admits Ling/Novita as a measured private-worker candidate for
+short structured and read-only-tool probes; GPT-OSS/CoreWeave and
+DeepSeek/DigitalOcean remain failed/abstained observations pending a repeatable
+quality/reliability benchmark. `openrouter/free` is intentionally blocked from
+reproducible contributor admission because its provider/model pool is dynamic.
+No remote route is selected for production and no model receives execution
+authority.
+
 Runtime availability is not production admission. The orchestration and Nautilus
 wrappers remain quarantined unless an explicit Phase 0 admission record is
 provided, even when the package is installed locally.
