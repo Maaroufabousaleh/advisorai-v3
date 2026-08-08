@@ -26,6 +26,18 @@ def _host(url: str) -> str:
     return parsed.hostname.lower().rstrip(".")
 
 
+def _reviewed_hosts(values: tuple[str, ...]) -> tuple[str, ...]:
+    """Normalize an operator-reviewed hostname allowlist without resolving DNS."""
+
+    hosts: list[str] = []
+    for value in values:
+        host = value.strip().lower().rstrip(".")
+        if not host or "/" in host or ":" in host or any(char.isspace() for char in host):
+            raise ValueError("reviewed venue hosts must be bare hostnames")
+        hosts.append(host)
+    return tuple(dict.fromkeys(hosts))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -34,14 +46,22 @@ def main() -> int:
         default=Path(os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")),
         help="safe export-style env file; values are never printed",
     )
+    parser.add_argument(
+        "--venue-allowed-host",
+        action="append",
+        default=[],
+        help="operator-reviewed paper/testnet hostname; repeat for an explicit allowlist",
+    )
     args = parser.parse_args()
     values = load_env_file(args.secrets)
     settings = SecretSettings.from_mapping(values)
+    reviewed_hosts = _reviewed_hosts(tuple(args.venue_allowed_host))
     print(f"environment={settings.environment}")
     print(
         f"venue={settings.venue_name or '<unset>'} venue_environment={settings.venue_environment}"
     )
     print(f"venue_endpoint={settings.venue_base_url or '<unset>'}")
+    print("reviewed_venue_hosts=" + (",".join(reviewed_hosts) if reviewed_hosts else "<none>"))
     print(
         f"llm_provider={settings.llm_provider or '<unset>'} model={settings.llm_model or '<unset>'}"
     )
@@ -51,30 +71,34 @@ def main() -> int:
         if settings.credential_references()
         else "credential_refs=<none>"
     )
-    venue_ready = bool(
+    venue_credentials_ready = bool(
         settings.venue_name
         and settings.venue_base_url
         and settings.secret_for("ADVISORAI_VENUE_API_KEY")
         and settings.secret_for("ADVISORAI_VENUE_API_SECRET")
     )
+    endpoint_host = _host(settings.venue_base_url) if settings.venue_base_url else None
+    reviewed_host_ready = endpoint_host is not None and endpoint_host in reviewed_hosts
+    venue_ready = venue_credentials_ready and reviewed_host_ready
     print(
         "venue_readiness="
         + (
-            "configured_requires_reviewed_host_allowlist"
+            "configured_reviewed_host_allowlisted"
             if venue_ready
-            else "missing_configuration"
+            else (
+                "configured_requires_reviewed_host_allowlist"
+                if venue_credentials_ready
+                else "missing_configuration"
+            )
         )
     )
-    if settings.venue_base_url:
-        allowed_host = _host(settings.venue_base_url)
-    else:
-        allowed_host = "unset.invalid"
+    allowed_hosts = reviewed_hosts or ("unset.invalid",)
     card = ConnectorCard(
         name="transition-config",
         owner="operator",
         purpose="paper/testnet real API transition",
         endpoint=settings.venue_base_url or "https://unset.invalid",
-        allowed_hosts=(allowed_host,),
+        allowed_hosts=allowed_hosts,
         environment=settings.venue_environment,
         credential_refs=settings.credential_references(),
         source_grade="execution_grade",
