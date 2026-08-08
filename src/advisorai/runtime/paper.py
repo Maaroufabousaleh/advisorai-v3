@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -319,6 +320,24 @@ class PaperRuntime:
             return self._finish(cycle, RuntimeStage.FAILED, reasons=(type(exc).__name__,))
 
     def reconcile_once(self, *, venue_snapshot=None):
+        if venue_snapshot is None:
+            adapter = getattr(self.orders, "adapter", None)
+            fetch_snapshot = getattr(adapter, "account_snapshot", None)
+            if callable(fetch_snapshot):
+                try:
+                    venue_snapshot = fetch_snapshot()
+                    open_orders = getattr(adapter, "open_orders", None)
+                    if callable(open_orders):
+                        acknowledgements = open_orders()
+                        venue_snapshot = replace(
+                            venue_snapshot,
+                            venue_open_order_ids=frozenset(
+                                acknowledgement.order_id for acknowledgement in acknowledgements
+                            ),
+                        )
+                except Exception:
+                    self.risk_kernel.kill_switch.trip("paper_venue_reconciliation_error")
+                    raise
         result = self.reconciliation.run(
             account=self.account, orders=self.orders, venue_snapshot=venue_snapshot
         )

@@ -13,7 +13,13 @@ from advisorai.contracts import (
     TargetPortfolio,
     TargetPosition,
 )
-from advisorai.execution import AccountState, OrderManager, PaperVenueAdapter, RiskMarketState
+from advisorai.execution import (
+    AccountState,
+    OrderManager,
+    PaperVenueAdapter,
+    RiskMarketState,
+    VenueAccountSnapshot,
+)
 from advisorai.learning import PaperLearningLoop
 from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.runtime import (
@@ -33,6 +39,7 @@ def _runtime(
     cadence=None,
     observation_cutoff_provider=None,
     order_factory=None,
+    adapter=None,
     database_name="runtime.sqlite3",
 ):
     cutoff = datetime(2026, 8, 5, 15, 0, tzinfo=UTC)
@@ -76,7 +83,7 @@ def _runtime(
     )
     ledgers = SqliteLedgers(tmp_path / database_name)
     learning = PaperLearningLoop(ledgers) if with_learning else None
-    orders = OrderManager(ledgers, PaperVenueAdapter(venue="paper"))
+    orders = OrderManager(ledgers, adapter or PaperVenueAdapter(venue="paper"))
     runtime = PaperRuntime(
         config=PaperRuntimeConfig(),
         snapshot_provider=lambda requested: snapshot,
@@ -94,6 +101,53 @@ def _runtime(
         observation_cutoff_provider=observation_cutoff_provider,
     )
     return runtime, cutoff, ledgers, learning
+
+
+def test_runtime_reconcile_once_fetches_native_account_and_open_orders(tmp_path):
+    class ReadOnlyAdapter:
+        def account_snapshot(self):
+            return VenueAccountSnapshot(
+                as_of=datetime(2026, 8, 5, 15, 0, tzinfo=UTC),
+                cash=Decimal("1000"),
+                positions={},
+            )
+
+        def open_orders(self):
+            return ()
+
+    runtime, _cutoff, _ledgers, _learning = _runtime(
+        tmp_path,
+        admitted=False,
+        adapter=ReadOnlyAdapter(),
+        database_name="runtime-native-reconcile.sqlite3",
+    )
+    result = runtime.reconcile_once()
+    assert result.reconciled
+    assert not runtime.risk_kernel.kill_switch.tripped
+
+
+def test_runtime_reconcile_once_trips_kill_switch_on_venue_mismatch(tmp_path):
+    class ReadOnlyAdapter:
+        def account_snapshot(self):
+            return VenueAccountSnapshot(
+                as_of=datetime(2026, 8, 5, 15, 0, tzinfo=UTC),
+                cash=Decimal("999"),
+                positions={},
+            )
+
+        def open_orders(self):
+            return ()
+
+    runtime, _cutoff, _ledgers, _learning = _runtime(
+        tmp_path,
+        admitted=False,
+        adapter=ReadOnlyAdapter(),
+        database_name="runtime-native-mismatch.sqlite3",
+    )
+    result = runtime.reconcile_once()
+    assert not result.reconciled
+    assert "venue_cash_mismatch" in result.discrepancies[0]
+    assert runtime.risk_kernel.kill_switch.tripped
 
 
 def test_runtime_abstains_before_risk_when_evidence_gate_fails(tmp_path):

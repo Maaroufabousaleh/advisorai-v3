@@ -18,8 +18,16 @@ not authorize live capital.
   evidence → target → RiskKernel → OMS → paper venue chain, and durable cycle
   records. A reconciliation mismatch trips the independent kill switch.
 - `NativeVenueAdapter` rejects unknown or malformed venue open-order identities
-  during reconnect/reconciliation instead of silently dropping them. A native
+  during reconnect/reconciliation instead of silently dropping them. Its latest
+  venue projection replaces, rather than accumulates, the prior open-order set.
+  Ambiguous or reconnecting orders query the venue's order-by-client-ID path
+  before falling back to open orders, normalize terminal rejection states, and
+  reject a response that echoes a different client-order identity. A native
   cancel path persists `CANCEL_PENDING` before requesting venue acknowledgement.
+- When a native adapter exposes the read-only account snapshot, `PaperRuntime`
+  hydrates cash, positions, margin, and open-order projections before running
+  reconciliation. Any transport/projection error or mismatch trips the
+  independent kill switch and leaves the state closed for operator review.
 - `advisorai.learning.PaperLearningLoop` records the complete decision chain,
   creates incidents for material failures, replays problems on frozen inputs,
   and records scorecards only after the forecast horizon closes.
