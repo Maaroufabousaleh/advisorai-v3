@@ -6,7 +6,7 @@ or 60-day operational gate.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
-| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, and durable Phase-0 gate records | `tests/phase0`, gateway/port tests, immutable local bake-off report | Local candidates measured; selected TTM-R2/DeBERTa/MiniLM roles pending 24-hour stability and remaining non-model component gates |
+| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, and durable Phase-0 gate records | `tests/phase0`, gateway/port tests, immutable local bake-off reports, and the component evidence drill | Local component probes passed in `artifacts/phase0/component-bakeoff/20260808T031144.840248Z/phase0-component-bakeoff.json`; selected TTM-R2/DeBERTa/MiniLM roles still require 24-hour stability, remote route evidence, DuckLake comparison, external Hermes review, and real rclone-provider restore |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission | `tests/execution`, `tests/integrations`, `tests/runtime` | Paper failure fixtures pass; Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor | `tests/data` | Parser/lineage fixtures pass; source availability dashboards need live soak |
@@ -27,9 +27,9 @@ above.
 Latest local verification (2026-08-08):
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 116/151/96/22/19/34/10/7/9/11/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 118/151/96/22/19/34/10/7/9/11/5. Suite totals
 overlap a few shared contract tests. A single-process
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/pytest -q` passes all 478 collected
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/pytest -q` passes all 480 collected
 tests with the optional Nautilus runtime active. The acceptance runner stops at the
 first failed phase, so later suites are never counted as evidence after an
 earlier gate failure. The Phase 0 inventory was regenerated at
@@ -38,8 +38,8 @@ availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
 diff hygiene, and the dashboard TypeScript/Vite build. The recent scoped code
 changes are formatted. A repository-wide
-`./.venv/bin/ruff format --check .` passes with all 226 Python files formatted.
-The test collection check reports 478 collected tests. The dashboard build passes
+`./.venv/bin/ruff format --check .` passes with all 228 Python files formatted.
+The test collection check reports 480 collected tests. The dashboard build passes
 with `npm run build`
 from `dashboard/`.
 
@@ -59,3 +59,12 @@ The Phase-1 local operational report has SHA-256
 records zero network calls, three auditable configuration activations with
 restart-persistent rollback, and byte/row-identical Bronze rebuild output. It
 does not satisfy the real venue, Phase-7, or Phase-10 gates.
+
+The Phase-0 component evidence report has SHA-256
+`2a5c9d07be845b7222a065edc4d20a4a8d272bf7780918d3f27ad42abbb0523c` and
+records passing local probes for the guarded Nautilus replay seam, installed
+PydanticAI/Prefect/Hamilton runtime seams, deterministic Parquet manifest plus
+DuckDB reads, the repository Hermes isolation boundary, and two in-memory
+rclone adapter restores. It records zero network calls, credentials, or paper
+orders. DuckLake, the external Hermes package, and real rclone/provider restore
+remain quarantined; the report does not record or imply a Phase-0 pass.
