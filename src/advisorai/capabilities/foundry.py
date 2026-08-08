@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import builtins
 import hashlib
+import io
 import json
 import multiprocessing as mp
 import os
@@ -143,6 +145,10 @@ class HermesNetworkAccessError(RuntimeError):
     """A Hermes task attempted a socket or DNS operation outside its policy."""
 
 
+class HermesFilesystemWriteError(RuntimeError):
+    """A read-only Hermes task attempted to mutate local filesystem state."""
+
+
 class _HermesNetworkGuard(AbstractContextManager["_HermesNetworkGuard"]):
     """Enforce the child-process network allowlist at the socket boundary.
 
@@ -260,6 +266,100 @@ class _HermesNetworkGuard(AbstractContextManager["_HermesNetworkGuard"]):
         socket.getnameinfo = self._original_getnameinfo
 
 
+class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
+    """Reject common Python and OS filesystem mutations inside a task."""
+
+    _MUTATING_OS_FUNCTIONS = (
+        "remove",
+        "unlink",
+        "rename",
+        "replace",
+        "mkdir",
+        "makedirs",
+        "rmdir",
+        "chmod",
+        "fchmod",
+        "chown",
+        "fchown",
+        "lchown",
+        "utime",
+        "truncate",
+        "ftruncate",
+        "link",
+        "symlink",
+        "mknod",
+        "write",
+        "writev",
+        "pwrite",
+        "pwritev",
+        "copy_file_range",
+    )
+
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = enabled
+        self.attempted = False
+        self._original_builtin_open = builtins.open
+        self._original_io_open = io.open
+        self._original_os_open = os.open
+        self._original_os_fdopen = os.fdopen
+        self._original_os_functions = {
+            name: getattr(os, name) for name in self._MUTATING_OS_FUNCTIONS if hasattr(os, name)
+        }
+
+    def __enter__(self) -> _HermesFilesystemGuard:
+        if not self.enabled:
+            return self
+        guard = self
+
+        def reject(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+            guard.attempted = True
+            raise HermesFilesystemWriteError(
+                "Hermes read-only snapshot rejected a filesystem mutation"
+            )
+
+        def read_only_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+            if any(flag in str(mode) for flag in "wxa+"):
+                return reject(file, mode, *args, **kwargs)
+            return guard._original_builtin_open(file, mode, *args, **kwargs)
+
+        def read_only_io_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+            if any(flag in str(mode) for flag in "wxa+"):
+                return reject(file, mode, *args, **kwargs)
+            return guard._original_io_open(file, mode, *args, **kwargs)
+
+        write_flags = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND
+        if hasattr(os, "O_TMPFILE"):
+            write_flags |= os.O_TMPFILE
+
+        def read_only_os_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if flags & write_flags:
+                return reject(path, flags, *args, **kwargs)
+            return guard._original_os_open(path, flags, *args, **kwargs)
+
+        def read_only_fdopen(fd, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+            if any(flag in str(mode) for flag in "wxa+"):
+                return reject(fd, mode, *args, **kwargs)
+            return guard._original_os_fdopen(fd, mode, *args, **kwargs)
+
+        builtins.open = read_only_open
+        io.open = read_only_io_open
+        os.open = read_only_os_open
+        os.fdopen = read_only_fdopen
+        for name in self._original_os_functions:
+            setattr(os, name, reject)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore[no-untyped-def]
+        if not self.enabled:
+            return
+        builtins.open = self._original_builtin_open
+        io.open = self._original_io_open
+        os.open = self._original_os_open
+        os.fdopen = self._original_os_fdopen
+        for name, original in self._original_os_functions.items():
+            setattr(os, name, original)
+
+
 class HermesTaskResult(BaseModel):
     """Measured result of one bounded, isolated Hermes task attempt."""
 
@@ -271,6 +371,7 @@ class HermesTaskResult(BaseModel):
     passed: bool
     timed_out: bool = False
     network_access_attempted: bool = False
+    filesystem_write_attempted: bool = False
     output: object | None = None
     output_hash: str | None = None
     elapsed_ms: int = Field(ge=0)
@@ -309,6 +410,8 @@ class HermesTaskResult(BaseModel):
             raise ValueError("a passed Hermes task requires a bounded successful output")
         if self.passed and self.network_access_attempted:
             raise ValueError("a Hermes task that attempted network access cannot pass")
+        if self.passed and self.filesystem_write_attempted:
+            raise ValueError("a read-only Hermes task that attempted a write cannot pass")
         if self.timed_out and self.error is None:
             raise ValueError("a timed-out Hermes task requires an error")
         if self.error is not None and not self.error.strip():
@@ -316,7 +419,12 @@ class HermesTaskResult(BaseModel):
         return self
 
 
-def _run_hermes_task(task, result_queue, allowed_network_hosts: tuple[str, ...]) -> None:
+def _run_hermes_task(
+    task,
+    result_queue,
+    allowed_network_hosts: tuple[str, ...],
+    read_only_snapshot: bool,
+) -> None:
     """Child-process entry point; no broker/credential environment is inherited."""
 
     forbidden_environment_tokens = (
@@ -333,7 +441,10 @@ def _run_hermes_task(task, result_queue, allowed_network_hosts: tuple[str, ...])
         if any(token in key.upper() for token in forbidden_environment_tokens):
             os.environ.pop(key, None)
     started_cpu = time.process_time()
-    with _HermesNetworkGuard(allowed_network_hosts) as network_guard:
+    with (
+        _HermesNetworkGuard(allowed_network_hosts) as network_guard,
+        _HermesFilesystemGuard(read_only_snapshot) as filesystem_guard,
+    ):
         try:
             output = task()
             error = None
@@ -343,6 +454,7 @@ def _run_hermes_task(task, result_queue, allowed_network_hosts: tuple[str, ...])
             error = f"{type(exc).__name__}: {exc}"
             passed = False
     network_access_attempted = network_guard.attempted
+    filesystem_write_attempted = filesystem_guard.attempted
     elapsed_cpu = max(0.0, time.process_time() - started_cpu)
     peak_memory_mib = 0
     try:
@@ -360,6 +472,7 @@ def _run_hermes_task(task, result_queue, allowed_network_hosts: tuple[str, ...])
         {
             "passed": passed,
             "network_access_attempted": network_access_attempted,
+            "filesystem_write_attempted": filesystem_write_attempted,
             "output": output,
             "output_hash": output_hash,
             "cpu_seconds": elapsed_cpu,
@@ -392,7 +505,12 @@ class HermesIsolationRunner:
         result_queue = context.Queue(maxsize=1)
         process = context.Process(
             target=_run_hermes_task,
-            args=(task, result_queue, self.policy.allowed_network_hosts),
+            args=(
+                task,
+                result_queue,
+                self.policy.allowed_network_hosts,
+                self.policy.read_only_snapshot,
+            ),
         )
         policy_hash = hashlib.sha256(self.policy.model_dump_json().encode()).hexdigest()
         started = time.monotonic()
@@ -448,6 +566,7 @@ class HermesIsolationRunner:
         cpu_seconds = Decimal(str(payload.get("cpu_seconds", 0)))
         peak_memory_mib = int(payload.get("peak_memory_mib", 0))
         network_access_attempted = bool(payload.get("network_access_attempted", False))
+        filesystem_write_attempted = bool(payload.get("filesystem_write_attempted", False))
         child_passed = bool(payload.get("passed", False))
         error = payload.get("error")
         if not isinstance(error, str) and error is not None:
@@ -455,6 +574,9 @@ class HermesIsolationRunner:
         if network_access_attempted:
             child_passed = False
             error = "network_access_attempted"
+        if filesystem_write_attempted:
+            child_passed = False
+            error = "filesystem_write_attempted"
         if child_passed and cpu_seconds > Decimal(self.policy.cpu_seconds):
             child_passed = False
             error = "cpu_budget_exceeded"
@@ -470,6 +592,7 @@ class HermesIsolationRunner:
             policy_hash=policy_hash,
             passed=child_passed,
             network_access_attempted=network_access_attempted,
+            filesystem_write_attempted=filesystem_write_attempted,
             output=output if child_passed else None,
             output_hash=output_hash if child_passed else None,
             elapsed_ms=elapsed_ms,

@@ -23,6 +23,7 @@ def test_phase8_evidence_delivers_hermes_collector_to_active_read(tmp_path):
     assert hermes["reproducible_output"]
     assert hermes["secrets_scrubbed"]
     assert hermes["network_access_attempted"] is False
+    assert hermes["filesystem_write_attempted"] is False
     assert hermes["first"]["output"]["untrusted_flags"] == [True]
     assert hermes["first"]["output"]["network_calls"] == 0
 

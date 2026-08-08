@@ -1,5 +1,6 @@
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -68,6 +69,30 @@ def _dns_network_task():
     except Exception as exc:
         return {"caught": type(exc).__name__}
     return {"caught": None}
+
+
+def _caught_filesystem_write_task():
+    try:
+        Path("hermes-write-attempt.txt").write_text("must be rejected", encoding="utf-8")
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
+def _caught_os_write_task():
+    import os
+
+    try:
+        descriptor = os.open("hermes-os-write-attempt.txt", os.O_WRONLY | os.O_CREAT)
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    else:
+        os.close(descriptor)
+    return {"caught": None}
+
+
+def _read_filesystem_task():
+    return {"bytes": len(Path("pyproject.toml").read_bytes())}
 
 
 def _environment():
@@ -153,6 +178,26 @@ def test_hermes_isolation_runner_requires_an_allowlisted_network_host():
     assert not result.passed
     assert result.network_access_attempted
     assert result.error == "network_access_attempted"
+
+
+@pytest.mark.parametrize("task", [_caught_filesystem_write_task, _caught_os_write_task])
+def test_hermes_isolation_runner_rejects_filesystem_mutation(task):
+    policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
+    result = HermesIsolationRunner(policy).run(task_name="filesystem-attempt", task=task)
+    assert not result.passed
+    assert result.filesystem_write_attempted
+    assert result.error == "filesystem_write_attempted"
+    assert result.output is None
+
+
+def test_hermes_isolation_runner_allows_read_only_snapshot_access():
+    policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
+    result = HermesIsolationRunner(policy).run(
+        task_name="filesystem-read", task=_read_filesystem_task
+    )
+    assert result.passed
+    assert result.output == {"bytes": Path("pyproject.toml").stat().st_size}
+    assert not result.filesystem_write_attempted
 
 
 def test_capability_lifecycle_stops_at_active_read_without_approval():
