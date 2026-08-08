@@ -35,8 +35,11 @@ human gate into a unit-test claim.
 
 ## Verification record
 
-The latest local run on 2026-08-05 passed all 296 tests in one process with the
+The latest local run on 2026-08-07 passed all 472 tests in one process with the
 optional Nautilus runtime active, and all eleven isolated phase suites. The exact
 phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
-Phase 10’s human/live approval remain intentionally pending.
+Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
+format checking still identifies 32 pre-existing files for separate cleanup; the
+files changed by the paper-venue reconciliation work pass the targeted formatter
+check.

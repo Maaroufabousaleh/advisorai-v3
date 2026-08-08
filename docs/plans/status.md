@@ -23,20 +23,21 @@ The current repository therefore has broad executable coverage, but does not cla
 Phase 0, Phase 7, or Phase 10 gates without the external evidence explicitly named
 above.
 
-Latest local verification (2026-08-05):
+Latest local verification (2026-08-07):
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 21/85/77/22/19/34/10/7/9/11/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 116/150/93/22/19/34/10/7/9/11/5. Suite totals
 overlap a few shared contract tests. A single-process
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q` passes all 296 collected
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/pytest -q` passes all 472 collected
 tests with the optional Nautilus runtime active. The acceptance runner stops at the
 first failed phase, so later suites are never counted as evidence after an
 earlier gate failure. The Phase 0 inventory was regenerated at
 `artifacts/phase0/availability.json` (ignored runtime output), and remains an
-availability record rather than an admission decision. Final local static and
-reproducibility checks also pass: `./.venv/bin/ruff check .`; `./.venv/bin/ruff format --check .`
-(189 files); `UV_CACHE_DIR=/tmp/advisorai-uv-cache
-/home/maaro/.local/bin/uv lock --check`; `./.venv/bin/python -m compileall -q src
-tests scripts`; and `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/pytest
---collect-only -q tests` (296 collected). The dashboard TypeScript/Vite build
-also passes with `npm run build` from `dashboard/`.
+availability record rather than an admission decision. The local static and
+reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
+diff hygiene, and the dashboard TypeScript/Vite build. The five code files changed
+for the paper-venue reconciliation work are formatted. A repository-wide
+`./.venv/bin/ruff format --check .` still reports 32 pre-existing files that would
+be reformatted, so that separate hygiene item remains open. The test collection
+check reports 472 collected tests. The dashboard build passes with `npm run build`
+from `dashboard/`.
