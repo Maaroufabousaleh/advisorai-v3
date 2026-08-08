@@ -33,6 +33,10 @@ reproducible contributor admission because its provider/model pool is dynamic.
 No remote route is selected for production and no model receives execution
 authority.
 
+The combined role-oriented machine-readable index is
+`configs/models/phase0_model_roster.json`; it references the detailed local
+and remote rosters without embedding credentials or model weights.
+
 Runtime availability is not production admission. The orchestration and Nautilus
 wrappers remain quarantined unless an explicit Phase 0 admission record is
 provided, even when the package is installed locally.
