@@ -42,6 +42,10 @@ The credential-free Phase-0 component evidence drill and its quarantine
 interpretation are recorded in
 [`docs/runbooks/phase0-component-bakeoff.md`](../runbooks/phase0-component-bakeoff.md).
 
+The Phase-8 Hermes capability lifecycle evidence and active-read boundary are
+recorded in
+[`docs/runbooks/phase8-capability-evidence.md`](../runbooks/phase8-capability-evidence.md).
+
 The Alpha Team extension is an optional, post-Core research plan. It remains
 blocked until its E0 prerequisite and is not implementation or admission
 evidence for any existing phase.
