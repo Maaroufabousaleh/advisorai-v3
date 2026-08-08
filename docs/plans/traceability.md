@@ -20,6 +20,7 @@ earlier boundary or acceptance condition.
 | 13 | Acceptance matrix is non-negotiable | 1–10 | Per-domain gate evidence |
 | 14 | Explicit exclusions: no AI/browser/Hermes orders; no false independence/leakage/self-modification/HFT claims | 0–10 | Security, dependency, contract and review tests |
 | 15 | Success is safety, reproducibility and rejection on insufficiency—not profitability | 1–10 | Soak, recovery and decision records |
+| Alpha Team extension | Optional post-Core research intake, restricted factor discovery, independent validation, and challenger admission retain all base authorities and gates | 7, 8, 9, 10; E0-E7 | [`alpha-team-extension.md`](alpha-team-extension.md), artifact/replay/permission evidence when separately implemented |
 
 ## Global invariants
 
@@ -32,3 +33,6 @@ earlier boundary or acceptance condition.
 5. A component becomes active only through its phase gate and recorded evidence;
    it remains a challenger otherwise.
 6. Live capital is prohibited until Phase 10's explicit human approval gate.
+7. The optional Alpha Team can emit only versioned research evidence and
+   candidate artifacts. It has no order, credential, risk-limit-relaxation, or
+   self-promotion authority.

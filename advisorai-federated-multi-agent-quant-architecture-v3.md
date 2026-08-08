@@ -446,6 +446,19 @@ The Capability Broker exposes only a small permission- and resource-filtered set
 
 ## 9. Memory, observability and controlled learning
 
+### 9.0 Optional Alpha Team extension
+
+After the Phase 7 V3-Core proof, the optional Alpha Team extension may provide
+a governed research-intake, hypothesis, factor-discovery, experiment, and
+validation plane. It emits only versioned research evidence and candidate
+artifacts; it cannot create orders, access broker credentials, relax limits,
+self-promote, or replace the canonical data plane, Portfolio Constructor,
+RiskKernel, OMS, or NautilusTrader. Its Research Brain uses the existing
+Parquet/DuckDB analytical history, SQLite WAL registries, immutable evidence
+graph, and retrieval-only semantic index. Its E0-E7 sequence and detailed
+admission gates are maintained in
+[`docs/plans/alpha-team-extension.md`](docs/plans/alpha-team-extension.md).
+
 ### 9.1 Memory layers
 
 | Memory | Authority/use |
@@ -642,6 +655,9 @@ Expansion is gate-driven, not calendar-driven.
 
 **Gate:** Hermes can create a reproducible, quarantined capability that reaches active-read without accessing broker credentials, live deployment or order authority.
 
+If the optional Alpha Team extension has passed E0, only one E4 research
+capability adapter may enter through this same quarantine boundary at a time.
+
 ### Phase 9 — controlled expansion
 
 - add SEC/ALFRED/equity paper sources, corporate actions and an equity daily council;
@@ -651,6 +667,10 @@ Expansion is gate-driven, not calendar-driven.
 - expand asset universe and horizons only after capacity/data-quality tests.
 
 **Gate:** each addition shows positive marginal value and does not reduce core stability, safety, reproducibility or headroom.
+
+If the optional Alpha Team extension has passed E0, its E2-E6 work remains
+replayable challenger work. It cannot bypass the canonical data, portfolio,
+RiskKernel, OMS, or NautilusTrader owners.
 
 ### Phase 10 — limited live capital
 

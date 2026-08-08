@@ -2,6 +2,10 @@
 
 **Status:** post-Core extension blueprint — paper/testnet first  
 **Scope:** optional, staged extensions to the existing AdvisorAI V3 architecture: a governed Alpha Team, continuous research intake, alpha discovery, and a local research brain.  
+**Integration:** the phase binding, conformance rules, and E0-E7 admission map
+are now maintained in [`docs/plans/alpha-team-extension.md`](docs/plans/alpha-team-extension.md).
+This document remains the detailed design source; if wording diverges, the
+authoritative architecture and integrated phase plan govern.
 **Does not redesign V3:** PydanticAI/Pydantic Graph remains the typed decision layer; Prefect/Hamilton remain workflow and feature owners; the deterministic Portfolio Constructor, RiskKernel, OMS ledger, and NautilusTrader remain the only trading authority.
 
 ## 1. Extension decision
