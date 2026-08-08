@@ -38,7 +38,7 @@ availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
 diff hygiene, and the dashboard TypeScript/Vite build. The recent scoped code
 changes are formatted. A repository-wide
-`./.venv/bin/ruff format --check .` still reports 31 pre-existing files that would
-be reformatted, so that separate hygiene item remains open. The test collection
-check reports 476 collected tests. The dashboard build passes with `npm run build`
+`./.venv/bin/ruff format --check .` passes with all 223 Python files formatted.
+The test collection check reports 476 collected tests. The dashboard build passes
+with `npm run build`
 from `dashboard/`.
