@@ -3,6 +3,8 @@ import base64
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import pytest
 
@@ -24,6 +26,7 @@ from advisorai.integrations import (
     build_paper_venue_transport,
     build_v3_core_collectors,
 )
+from advisorai.integrations.http import _urllib_request
 from advisorai.integrations.websocket import RawWebSocketFeed
 from advisorai.ledger import SqliteLedgers
 from advisorai.ports import (
@@ -57,6 +60,43 @@ def client_for(responses, *, retries=0, threshold=5):
         sleeper=lambda _: None,
     )
     return client, calls
+
+
+def test_builtin_urllib_requester_does_not_follow_redirects():
+    class RedirectHandler(BaseHTTPRequestHandler):
+        redirected_requests = 0
+
+        def do_GET(self):  # noqa: N802 - stdlib handler protocol
+            if self.path == "/start":
+                self.send_response(302)
+                self.send_header("Location", "/redirected")
+                self.end_headers()
+                return
+            type(self).redirected_requests += 1
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), RedirectHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, _body, _headers = _urllib_request(
+            "GET",
+            f"http://127.0.0.1:{server.server_port}/start",
+            {"Authorization": "Bearer fixture-secret"},
+            None,
+            2.0,
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert status == 302
+    assert RedirectHandler.redirected_requests == 0
 
 
 def test_http_client_enforces_https_host_and_retries_5xx():
@@ -117,7 +157,11 @@ def test_direct_gateway_maps_openai_shape_and_rejects_non_typed_output():
     ).encode()
     client, calls = client_for([(200, body, ())])
     route = GatewayRoute(
-        provider="example", model="model-v1", gateway="direct", endpoint_variant="example-endpoint", schema_mode="typed_json"
+        provider="example",
+        model="model-v1",
+        gateway="direct",
+        endpoint_variant="example-endpoint",
+        schema_mode="typed_json",
     )
     adapter = OpenAICompatibleGatewayAdapter(route, client, api_key="secret-key")
     request = GatewayRequest(
@@ -171,12 +215,16 @@ def test_direct_gateway_accepts_tool_calls_with_null_content():
                         ],
                     }
                 }
-            ]
+            ],
         }
     ).encode()
     client, calls = client_for([(200, body, ())])
     route = GatewayRoute(
-        provider="example", model="model-v1", gateway="direct", endpoint_variant="example-endpoint", schema_mode="text"
+        provider="example",
+        model="model-v1",
+        gateway="direct",
+        endpoint_variant="example-endpoint",
+        schema_mode="text",
     )
     request = GatewayRequest(
         route=route,
@@ -297,9 +345,7 @@ def test_paper_venue_cancel_is_signed_and_uses_client_id():
             "ADVISORAI_VENUE_BASE_URL": "https://sandbox.example.test/api",
         }
     )
-    client, calls = client_for(
-        [(200, json.dumps({"result": {"cancelled": True}}).encode(), ())]
-    )
+    client, calls = client_for([(200, json.dumps({"result": {"cancelled": True}}).encode(), ())])
     signer = HmacVenueSigner("key", __import__("pydantic").SecretStr("secret"))
     transport = PaperTestnetVenueTransport(client, settings, signer=signer)
 

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from email.message import Message
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -68,6 +68,25 @@ Requester = Callable[
 ]
 
 
+class _NoRedirectHandler(HTTPRedirectHandler):
+    """Keep an external connector on its operator-reviewed URL."""
+
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise HTTPError(
+            request.full_url,
+            code,
+            "external connector redirects are disabled",
+            headers,
+            fp,
+        )
+
+
+_NO_REDIRECT_OPENER = build_opener(
+    _NoRedirectHandler,
+    HTTPSHandler(context=ssl.create_default_context()),
+)
+
+
 def _urllib_request(
     method: str,
     url: str,
@@ -77,7 +96,7 @@ def _urllib_request(
 ) -> tuple[int, bytes, Sequence[tuple[str, str]]]:
     request = Request(url=url, data=body, method=method.upper(), headers=dict(headers))
     try:
-        with urlopen(request, timeout=timeout, context=ssl.create_default_context()) as response:
+        with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
             return int(response.status), response.read(), tuple(response.headers.items())
     except HTTPError as exc:
         # HTTPError is also a response; retain the body for provider diagnostics
