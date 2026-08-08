@@ -41,5 +41,4 @@ optional Nautilus runtime active, and all eleven isolated phase suites. The exac
 phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
-format checking still identifies 31 pre-existing files for separate cleanup; the
-recent scoped code changes pass the targeted formatter check.
+format checking passes with all 223 Python files formatted.
