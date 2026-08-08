@@ -17,6 +17,7 @@ calendar-driven.
 | 6 | [institutional controls](phase-06-institutional-controls.md) | Portfolio/risk validity and attribution | Every paper order passes all checks |
 | 7 | [unattended paper soak](phase-07-paper-soak.md) | Continuous V3-Core proof | 60 days plus stable, safe evidence |
 | 0–7 bridge | [real API and paper-execution transition](real-api-paper-transition.md) | Real data/LLM APIs with one paper/testnet venue | Supplies evidence to existing gates; does not create a new gate |
+| Post-7; Phase 8/9 scope | [Alpha Team extension](alpha-team-extension.md) | Optional governed research intake, factor discovery, and validation plane | E0-E7 evidence gates; no new trading authority or altered V3 gate |
 | 8 | [Hermes and Skill Foundry](phase-08-hermes-skill-foundry.md) | Quarantined capability creation | Active-read only, no trading authority |
 | 9 | [controlled expansion](phase-09-controlled-expansion.md) | One challenger/source at a time | Positive marginal value without regression |
 | 10 | [limited live capital](phase-10-limited-live-capital.md) | Explicitly approved bounded live operation | Correctness survives all AI/research outages |
@@ -36,3 +37,7 @@ over these phase-owned services, not a new trading authority.
 
 The transition's manual deployment and external-evidence work is recorded in
 [`docs/runbooks/real-api-paper-operations.md`](../runbooks/real-api-paper-operations.md).
+
+The Alpha Team extension is an optional, post-Core research plan. It remains
+blocked until its E0 prerequisite and is not implementation or admission
+evidence for any existing phase.

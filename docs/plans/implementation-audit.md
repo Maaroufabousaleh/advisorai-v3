@@ -18,6 +18,7 @@ human gate into a unit-test claim.
 | 8 | Hermes isolation policy and concrete bounded process runner; sensitive-environment scrubbing; typed research/strategy/collector/model/runbook/capability artifacts; permission-filtered capability registry/broker; lifecycle through active-read; explicit human approval for active-write-limited | [`tests/capabilities`](../../tests/capabilities) | Actual isolated Hermes task, security/reproducibility review, and one deterministic capability delivered end-to-end |
 | 9 | Vintaged SEC/ALFRED boundary; equity corporate-action/daily-council boundary; compliant browser ladder; one-at-a-time challenger registry; duplicate-provider rejection, safe archive keys, and two-provider archive verification/rclone boundary | [`tests/expansion`](../../tests/expansion), [`tests/data/test_official.py`](../../tests/data/test_official.py) | Marginal-value and headroom evidence for each real source/model/framework addition |
 | 10 | Explicit human authorization artifact; fixed loss/notional budget; policy/state-hash-bound final order guard; AI-offline safety check; automatic paper-rollback readiness | [`tests/live`](../../tests/live) | Phase 7 completion, explicit human approval, and supervised bounded live validation |
+| Alpha Team extension | Integrated plan and conformance boundary only; no Research Brain, DSL, candidate, experiment, validation, or promotion implementation is claimed by this row | None; future evidence must be tied to the E0-E7 gate in [`alpha-team-extension.md`](alpha-team-extension.md) | E0 is not yet satisfied; no Alpha Team runtime, paper candidate, or admission evidence is claimed |
 
 ## Global invariant checks
 
@@ -35,8 +36,11 @@ human gate into a unit-test claim.
 
 ## Verification record
 
-The latest local run on 2026-08-05 passed all 296 tests in one process with the
+The latest local run on 2026-08-07 passed all 472 tests in one process with the
 optional Nautilus runtime active, and all eleven isolated phase suites. The exact
 phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
-Phase 10’s human/live approval remain intentionally pending.
+Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
+format checking still identifies 32 pre-existing files for separate cleanup; the
+files changed by the paper-venue reconciliation work pass the targeted formatter
+check.
