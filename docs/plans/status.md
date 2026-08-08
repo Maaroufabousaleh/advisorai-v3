@@ -78,3 +78,5 @@ metadata policies, secret scrubbing, untrusted RSS content preservation, an
 broker execution, and rejection of forbidden/write authority. It records zero
 network calls, credentials, and paper orders. The formal Phase-8 gate remains
 pending and no capability is globally admitted.
+The local process policy does not attest direct native syscalls or C-extension
+escapes; OS-level sandbox evidence remains an external requirement.
