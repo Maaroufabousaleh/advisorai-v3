@@ -42,3 +42,14 @@ changes are formatted. A repository-wide
 The test collection check reports 476 collected tests. The dashboard build passes
 with `npm run build`
 from `dashboard/`.
+
+Model stability evidence is still external and pending. On 2026-08-08, a
+pre-format 24-hour attempt was interrupted after the pinned worker hashes
+failed closed against the finalized source; its failed/quarantined cycles are
+preserved in the ignored stability evidence directory. A fresh admission root,
+`artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260808`,
+was attested against the formatted worker and passed a one-cycle smoke for all
+three pending role candidates. The supervised replacement run at
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808`
+has one passing cycle and remains in progress; no roster entry has moved from
+`pending_stability` to `selected`.
