@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Literal
 from uuid import UUID
 
@@ -217,14 +218,20 @@ class OrderManager:
     def reconcile_ambiguous(self, order_id: UUID) -> VenueAcknowledgement:
         if order_id not in self.ambiguous_orders:
             raise OrderStateError("order is not awaiting ambiguous acknowledgement reconciliation")
-        matches = [item for item in self.adapter.open_orders() if item.order_id == order_id]
-        if not matches:
-            raise OrderStateError(
-                "venue has no matching order; operator must investigate before retry"
-            )
-        self.transition(order_id, OrderState.ACKNOWLEDGED)
+        acknowledgement = self._query_venue_acknowledgement(order_id)
+        if acknowledgement is None:
+            matches = [item for item in self.adapter.open_orders() if item.order_id == order_id]
+            if not matches:
+                raise OrderStateError(
+                    "venue has no matching order; operator must investigate before retry"
+                )
+            acknowledgement = matches[0]
+        self.transition(
+            order_id,
+            OrderState.ACKNOWLEDGED if acknowledgement.accepted else OrderState.REJECTED,
+        )
         self.ambiguous_orders.remove(order_id)
-        return matches[0]
+        return acknowledgement
 
     def reconcile_routed(self, order_id: UUID) -> VenueAcknowledgement:
         """Resolve a lost normal acknowledgement after reconnect, never resubmit blindly."""
@@ -232,11 +239,61 @@ class OrderManager:
         order = self._get(order_id)
         if order.state is not OrderState.ROUTED:
             raise OrderStateError("only routed orders require reconnect reconciliation")
-        matches = [item for item in self.adapter.open_orders() if item.order_id == order_id]
-        if not matches:
-            raise OrderStateError("venue has no matching routed order")
-        self.transition(order_id, OrderState.ACKNOWLEDGED)
-        return matches[0]
+        acknowledgement = self._query_venue_acknowledgement(order_id)
+        if acknowledgement is None:
+            matches = [item for item in self.adapter.open_orders() if item.order_id == order_id]
+            if not matches:
+                raise OrderStateError("venue has no matching routed order")
+            acknowledgement = matches[0]
+        self.transition(
+            order_id,
+            OrderState.ACKNOWLEDGED if acknowledgement.accepted else OrderState.REJECTED,
+        )
+        return acknowledgement
+
+    def _query_venue_acknowledgement(self, order_id: UUID) -> VenueAcknowledgement | None:
+        """Resolve a submitted order even after it leaves the open-order set."""
+
+        reconcile = getattr(self.adapter, "reconcile", None)
+        if not callable(reconcile):
+            return None
+        order = self._get(order_id)
+        response = reconcile(order)
+        if response is None:
+            return None
+        if not isinstance(response, Mapping):
+            raise OrderStateError("venue order query returned a non-object response")
+        for key in ("client_order_id", "clientOrderId", "clordid", "origClientOrderId"):
+            if key not in response or response[key] is None:
+                continue
+            if str(response[key]).strip() != order.idempotency_key:
+                raise OrderStateError("venue order query references a different client order")
+        venue_order_id = str(
+            response.get("venue_order_id", response.get("id", response.get("orderId", "")))
+        ).strip()
+        if not venue_order_id:
+            raise OrderStateError("venue order query is missing a venue order identity")
+        accepted = response.get("accepted")
+        if not isinstance(accepted, bool):
+            state = str(response.get("state", response.get("status", ""))).strip().lower()
+            if state in {"rejected", "reject", "cancelled", "canceled", "expired"}:
+                accepted = False
+            elif state in {
+                "accepted",
+                "acknowledged",
+                "open",
+                "partially_filled",
+                "partial",
+                "filled",
+            }:
+                accepted = True
+            else:
+                raise OrderStateError("venue order query has no admitted order state")
+        return VenueAcknowledgement(
+            order_id=order_id,
+            venue_order_id=venue_order_id,
+            accepted=accepted,
+        )
 
     def expire_unacknowledged(self, order_id: UUID) -> Order:
         """Close a routed order only after an explicit failed reconciliation."""

@@ -20,6 +20,7 @@ from advisorai.contracts import (
 from advisorai.execution import (
     AccountLedger,
     AccountState,
+    AmbiguousAcknowledgement,
     DeterministicExecutionPolicy,
     ExecutionPolicyKind,
     KillSwitch,
@@ -1069,9 +1070,7 @@ def test_native_open_order_projection_resolves_client_ids_and_rejects_unknown_re
         unknown.open_orders()
 
 
-def test_native_open_order_projection_rejects_invalid_acceptance_and_conflicts(
-    btc_usdt, timestamp
-):
+def test_native_open_order_projection_rejects_invalid_acceptance_and_conflicts(btc_usdt, timestamp):
     order = _order(btc_usdt, timestamp)
 
     class Transport:
@@ -1102,6 +1101,28 @@ def test_native_open_order_projection_rejects_invalid_acceptance_and_conflicts(
         adapter.open_orders()
 
 
+def test_native_open_order_projection_drops_orders_absent_from_latest_snapshot(btc_usdt, timestamp):
+    order = _order(btc_usdt, timestamp)
+
+    class Transport:
+        def __init__(self):
+            self.records = [{"order_id": str(order.artifact_id), "id": "native-stale"}]
+
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-stale"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+        def list_open_orders(self):
+            records, self.records = self.records, []
+            return records
+
+    adapter = NativeVenueAdapter(venue="venue", environment="testnet", transport=Transport())
+    assert adapter.open_orders()[0].venue_order_id == "native-stale"
+    assert adapter.open_orders() == ()
+
+
 def test_native_open_order_projection_rehydrates_client_id_bindings_after_restart(
     tmp_path, btc_usdt, timestamp
 ):
@@ -1119,9 +1140,7 @@ def test_native_open_order_projection_rehydrates_client_id_bindings_after_restar
             return self.records
 
     ledgers = SqliteLedgers(tmp_path / "native-restart.sqlite")
-    first_adapter = NativeVenueAdapter(
-        venue="venue", environment="testnet", transport=Transport()
-    )
+    first_adapter = NativeVenueAdapter(venue="venue", environment="testnet", transport=Transport())
     first_oms = OrderManager(ledgers, first_adapter)
     order = _order(btc_usdt, timestamp)
     first_oms.create(order)
@@ -1145,9 +1164,85 @@ def test_native_open_order_projection_rehydrates_client_id_bindings_after_restar
     assert restarted_adapter.open_orders()[0].order_id == order.artifact_id
 
 
-def test_order_manager_persists_cancel_intent_and_requires_venue_ack(
+def test_oms_reconnect_queries_completed_order_before_open_order_projection(
     tmp_path, btc_usdt, timestamp
 ):
+    class Transport:
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-query"}
+
+        def query_order(self, *, client_order_id):
+            return {"id": "native-query", "state": "filled"}
+
+        def list_open_orders(self):
+            return ()
+
+    ledgers = SqliteLedgers(tmp_path / "native-query.sqlite")
+    adapter = NativeVenueAdapter(venue="venue", environment="testnet", transport=Transport())
+    orders = OrderManager(ledgers, adapter)
+    order = _order(btc_usdt, timestamp)
+    orders.create(order)
+    orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    orders.transition(order.artifact_id, OrderState.ROUTED)
+
+    acknowledgement = orders.reconcile_routed(order.artifact_id)
+    assert acknowledgement.venue_order_id == "native-query"
+    assert orders.orders[order.artifact_id].state is OrderState.ACKNOWLEDGED
+
+
+def test_oms_query_can_resolve_a_rejected_ambiguous_order(tmp_path, btc_usdt, timestamp):
+    class Transport:
+        def submit_order(self, payload):
+            raise AmbiguousAcknowledgement("ack timeout")
+
+        def query_order(self, *, client_order_id):
+            return {"id": "native-rejected", "state": "rejected"}
+
+        def list_open_orders(self):
+            return ()
+
+    ledgers = SqliteLedgers(tmp_path / "native-rejected.sqlite")
+    adapter = NativeVenueAdapter(venue="venue", environment="testnet", transport=Transport())
+    orders = OrderManager(ledgers, adapter)
+    order = _order(btc_usdt, timestamp)
+    orders.create(order)
+    orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    assert orders.route(order.artifact_id) is None
+
+    acknowledgement = orders.reconcile_ambiguous(order.artifact_id)
+    assert not acknowledgement.accepted
+    assert orders.orders[order.artifact_id].state is OrderState.REJECTED
+
+
+def test_oms_query_rejects_a_different_client_order_identity(tmp_path, btc_usdt, timestamp):
+    class Transport:
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-query"}
+
+        def query_order(self, *, client_order_id):
+            return {
+                "client_order_id": f"{client_order_id}-different",
+                "id": "native-query",
+                "state": "filled",
+            }
+
+        def list_open_orders(self):
+            return ()
+
+    ledgers = SqliteLedgers(tmp_path / "native-query-identity.sqlite")
+    adapter = NativeVenueAdapter(venue="venue", environment="testnet", transport=Transport())
+    orders = OrderManager(ledgers, adapter)
+    order = _order(btc_usdt, timestamp)
+    orders.create(order)
+    orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    orders.transition(order.artifact_id, OrderState.ROUTED)
+
+    with pytest.raises(OrderStateError, match="different client order"):
+        orders.reconcile_routed(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.ROUTED
+
+
+def test_order_manager_persists_cancel_intent_and_requires_venue_ack(tmp_path, btc_usdt, timestamp):
     ledgers = SqliteLedgers(tmp_path / "cancel-transition.sqlite")
     adapter = PaperVenueAdapter()
     orders = OrderManager(ledgers, adapter)

@@ -126,6 +126,7 @@ class NativeVenueAdapter:
             records = list_open_orders()
             if not isinstance(records, Sequence) or isinstance(records, (str, bytes, bytearray)):
                 raise NativeVenueProjectionError("venue open-order projection must be a sequence")
+            current: dict[UUID, VenueAcknowledgement] = {}
             for record in records:
                 if not isinstance(record, Mapping):
                     raise NativeVenueProjectionError(
@@ -144,18 +145,22 @@ class NativeVenueAdapter:
                     raise NativeVenueProjectionError(
                         "venue open-order projection has a non-boolean acceptance state"
                     )
-                prior = self._acknowledgements.get(order_id)
+                prior = current.get(order_id) or self._acknowledgements.get(order_id)
                 if prior is not None and (
                     prior.venue_order_id != venue_order_id or prior.accepted != accepted
                 ):
                     raise NativeVenueProjectionError(
                         "venue open-order projection conflicts with a prior acknowledgement"
                     )
-                self._acknowledgements[order_id] = VenueAcknowledgement(
+                current[order_id] = VenueAcknowledgement(
                     order_id=order_id,
                     venue_order_id=venue_order_id,
                     accepted=accepted,
                 )
+            # The venue projection is authoritative for the current open set;
+            # never retain an order that disappeared from the latest snapshot.
+            self._acknowledgements.clear()
+            self._acknowledgements.update(current)
         return tuple(self._acknowledgements.values())
 
     def _resolve_local_order_id(self, record: Mapping[str, object]) -> UUID:
