@@ -276,19 +276,38 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
     _SENSITIVE_PATH_NAMES = frozenset(
         {
             ".aws",
+            ".azure",
+            ".bundle",
             ".docker",
             ".env",
+            ".gnupg",
+            ".kube",
             ".netrc",
             ".npmrc",
+            ".password-store",
             ".pypirc",
+            ".ssh",
+            ".terraform.d",
             "api-keys",
+            "application_default_credentials.json",
+            "authorized_keys",
             "credentials",
             "credentials.env",
             "environ",
+            ".git-credentials",
+            "git-credentials",
+            "id_dsa",
+            "id_ecdsa",
+            "id_ed25519",
+            "id_rsa",
+            "keyrings",
+            "known_hosts",
             "private-keys",
             "proc",
             "secrets",
             "secrets.env",
+            "token",
+            "tokens",
         }
     )
     _SENSITIVE_PATH_PREFIXES = (
@@ -348,16 +367,26 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
         def check_sensitive_path(path: object) -> None:
             if isinstance(path, int):
                 return
+            raw_path = os.fspath(path)
             try:
-                normalized = os.fspath(path).decode(errors="ignore")
+                normalized = raw_path.decode(errors="ignore")
             except AttributeError:
-                normalized = str(os.fspath(path))
-            components = normalized.replace("\\", "/").lower().split("/")
-            if any(
-                component in guard._SENSITIVE_PATH_NAMES
-                or any(component.startswith(prefix) for prefix in guard._SENSITIVE_PATH_PREFIXES)
-                for component in components
-            ):
+                normalized = str(raw_path)
+            paths = {normalized}
+            try:
+                paths.add(os.path.realpath(normalized))
+            except (OSError, RuntimeError, ValueError):
+                pass
+            for candidate in paths:
+                components = candidate.replace("\\", "/").lower().split("/")
+                if not any(
+                    component in guard._SENSITIVE_PATH_NAMES
+                    or any(
+                        component.startswith(prefix) for prefix in guard._SENSITIVE_PATH_PREFIXES
+                    )
+                    for component in components
+                ):
+                    continue
                 guard.sensitive_access_attempted = True
                 raise HermesSensitivePathAccessError(
                     "Hermes task access to a sensitive path is not allowed"
