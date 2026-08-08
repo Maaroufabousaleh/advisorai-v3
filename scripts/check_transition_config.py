@@ -13,9 +13,17 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from advisorai.config import SecretSettings, load_env_file
 from advisorai.integrations import ConnectorCard, ConnectorState
+
+
+def _host(url: str) -> str:
+    parsed = urlsplit(url)
+    if not parsed.hostname:
+        raise ValueError("venue endpoint must contain a hostname")
+    return parsed.hostname.lower().rstrip(".")
 
 
 def main() -> int:
@@ -43,16 +51,30 @@ def main() -> int:
         if settings.credential_references()
         else "credential_refs=<none>"
     )
+    venue_ready = bool(
+        settings.venue_name
+        and settings.venue_base_url
+        and settings.secret_for("ADVISORAI_VENUE_API_KEY")
+        and settings.secret_for("ADVISORAI_VENUE_API_SECRET")
+    )
+    print(
+        "venue_readiness="
+        + (
+            "configured_requires_reviewed_host_allowlist"
+            if venue_ready
+            else "missing_configuration"
+        )
+    )
+    if settings.venue_base_url:
+        allowed_host = _host(settings.venue_base_url)
+    else:
+        allowed_host = "unset.invalid"
     card = ConnectorCard(
         name="transition-config",
         owner="operator",
         purpose="paper/testnet real API transition",
         endpoint=settings.venue_base_url or "https://unset.invalid",
-        allowed_hosts=(
-            (settings.venue_base_url or "https://unset.invalid")
-            .split("//", 1)[-1]
-            .split("/", 1)[0],
-        ),
+        allowed_hosts=(allowed_host,),
         environment=settings.venue_environment,
         credential_refs=settings.credential_references(),
         source_grade="execution_grade",

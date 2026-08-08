@@ -289,6 +289,56 @@ def test_paper_venue_open_order_reconciliation_is_signed():
     assert calls[0][2]["X-API-SIGNATURE"]
 
 
+def test_paper_venue_cancel_is_signed_and_uses_client_id():
+    settings = SecretSettings.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "example",
+            "ADVISORAI_VENUE_ENVIRONMENT": "testnet",
+            "ADVISORAI_VENUE_BASE_URL": "https://sandbox.example.test/api",
+        }
+    )
+    client, calls = client_for(
+        [(200, json.dumps({"result": {"cancelled": True}}).encode(), ())]
+    )
+    signer = HmacVenueSigner("key", __import__("pydantic").SecretStr("secret"))
+    transport = PaperTestnetVenueTransport(client, settings, signer=signer)
+
+    result = transport.cancel_order(client_order_id="local/order-1")
+    assert result["cancelled"] is True
+    assert calls[0][0] == "DELETE"
+    assert calls[0][1].endswith("/orders/local%2Forder-1")
+    assert calls[0][2]["X-API-SIGNATURE"]
+
+
+def test_paper_venue_custom_cancel_path_must_bind_the_client_id():
+    settings = SecretSettings.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "example",
+            "ADVISORAI_VENUE_ENVIRONMENT": "testnet",
+            "ADVISORAI_VENUE_BASE_URL": "https://sandbox.example.test/api",
+        }
+    )
+    client, _ = client_for([])
+    with pytest.raises(ValueError, match=r"include \{client_order_id\}"):
+        PaperTestnetVenueTransport(client, settings, cancel_path="/cancel")
+
+
+def test_paper_venue_rejects_malformed_collection_records():
+    settings = SecretSettings.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "example",
+            "ADVISORAI_VENUE_ENVIRONMENT": "testnet",
+            "ADVISORAI_VENUE_BASE_URL": "https://sandbox.example.test/api",
+        }
+    )
+    client, _ = client_for(
+        [(200, json.dumps({"result": {"fills": [{"id": "fill-1"}, "bad"]}}).encode(), ())]
+    )
+    transport = PaperTestnetVenueTransport(client, settings)
+    with pytest.raises(Exception, match="collection"):
+        transport.list_fills()
+
+
 def test_paper_venue_transport_maps_read_only_account_and_collections():
     settings = SecretSettings.from_mapping(
         {
@@ -450,6 +500,22 @@ def test_factories_bind_credentials_only_to_the_named_adapter():
     )
     route = GatewayRoute(provider="example", model="model", gateway="direct", schema_mode="text")
     gateway = build_direct_gateway(settings, route)
-    venue = build_paper_venue_transport(settings)
+    venue = build_paper_venue_transport(settings, allowed_hosts=("sandbox.example.test",))
     assert gateway.name == "direct_provider"
     assert venue.settings.venue_name == "example"
+
+
+def test_paper_venue_factory_requires_explicit_reviewed_host_allowlist():
+    settings = SecretSettings.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "example",
+            "ADVISORAI_VENUE_ENVIRONMENT": "testnet",
+            "ADVISORAI_VENUE_BASE_URL": "https://sandbox.example.test/api",
+            "ADVISORAI_VENUE_API_KEY": "venue-key",
+            "ADVISORAI_VENUE_API_SECRET": "venue-secret",
+        }
+    )
+    with pytest.raises(ValueError, match="explicit reviewed"):
+        build_paper_venue_transport(settings)
+    with pytest.raises(ValueError, match="allowlist"):
+        build_paper_venue_transport(settings, allowed_hosts=("other.example.test",))

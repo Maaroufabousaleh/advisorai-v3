@@ -66,6 +66,7 @@ class PaperTestnetVenueTransport(NativeTransport):
         *,
         signer: HmacVenueSigner | None = None,
         orders_path: str = "/orders",
+        cancel_path: str | None = None,
     ) -> None:
         if settings.venue_environment not in {"paper", "testnet", "paper_testnet"}:
             raise ValueError("native transport is paper/testnet only")
@@ -75,10 +76,19 @@ class PaperTestnetVenueTransport(NativeTransport):
             token in orders_path.lower() for token in ("withdraw", "transfer", "live", "prod")
         ):
             raise ValueError("venue order path is not admitted")
+        if cancel_path is not None and (
+            not cancel_path.startswith("/")
+            or any(token in cancel_path.lower() for token in ("withdraw", "transfer", "live", "prod"))
+            or "{client_order_id}" not in cancel_path
+        ):
+            raise ValueError(
+                "venue cancellation path must be absolute, paper-safe, and include {client_order_id}"
+            )
         self.client = client
         self.settings = settings
         self.signer = signer
         self.orders_path = orders_path.rstrip("/")
+        self.cancel_path = (cancel_path or f"{self.orders_path}/{{client_order_id}}").rstrip("/")
 
     def _request_payload(
         self, method: str, path: str, payload: Mapping[str, object] | None = None
@@ -131,6 +141,14 @@ class PaperTestnetVenueTransport(NativeTransport):
             raise VenueTransportError("paper venue orders require the local idempotency key")
         return self._request("POST", self.orders_path, payload)
 
+    def cancel_order(self, *, client_order_id: str) -> Mapping[str, object]:
+        if not client_order_id.strip():
+            raise VenueTransportError("paper venue cancellation requires a client order ID")
+        path = self.cancel_path.replace(
+            "{client_order_id}", quote(client_order_id, safe="")
+        )
+        return self._request("DELETE", path)
+
     def query_order(self, *, client_order_id: str) -> Mapping[str, object] | None:
         if not client_order_id.strip():
             raise VenueTransportError("paper venue reconciliation requires a client order ID")
@@ -158,7 +176,9 @@ class PaperTestnetVenueTransport(NativeTransport):
             raw = []
         if not isinstance(raw, list):
             raise VenueTransportError("paper venue open-order response must contain a list")
-        return tuple(item for item in raw if isinstance(item, Mapping))
+        if not all(isinstance(item, Mapping) for item in raw):
+            raise VenueTransportError("paper venue open-order records must be objects")
+        return tuple(raw)
 
     def account_state(self, *, path: str = "/account") -> Mapping[str, object]:
         """Fetch a read-only account projection for reconciliation."""
@@ -238,9 +258,9 @@ class PaperTestnetVenueTransport(NativeTransport):
                 break
         if isinstance(raw, Mapping):
             raw = raw.get("items", raw.get("records", []))
-        if not isinstance(raw, list):
+        if not isinstance(raw, list) or not all(isinstance(item, Mapping) for item in raw):
             raise VenueTransportError("paper venue response must contain a collection")
-        return tuple(item for item in raw if isinstance(item, Mapping))
+        return tuple(raw)
 
     @staticmethod
     def _decimal(value: object, label: str) -> Decimal:

@@ -119,6 +119,7 @@ class SafeHttpClient:
         self._next_request_at = 0.0
         self._failure_count = 0
         self._circuit_opened_at: float | None = None
+        self.request_count = 0
 
     def _validate_url(self, url: str) -> None:
         parsed = urlsplit(url)
@@ -179,6 +180,7 @@ class SafeHttpClient:
         for attempt in range(retries + 1):
             self._before_request()
             try:
+                self.request_count += 1
                 status, response_body, response_headers = self._requester(
                     method.upper(), url, request_headers, body, timeout
                 )

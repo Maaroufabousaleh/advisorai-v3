@@ -95,6 +95,9 @@ class OrderManager:
                         raise OrderStateError(
                             f"order ledger contains invalid transition {prior.state.value}->{order.state.value}"
                         )
+                    bind_order = getattr(self.adapter, "bind_order", None)
+                    if callable(bind_order):
+                        bind_order(order)
                     self.orders[order.artifact_id] = order
                     if event.event_type == "order_ack_ambiguous":
                         self.ambiguous_orders.add(order.artifact_id)
@@ -130,6 +133,9 @@ class OrderManager:
                 )
                 return prior
         stored_event = self._record(order, "order_created", publish=False)
+        bind_order = getattr(self.adapter, "bind_order", None)
+        if callable(bind_order):
+            bind_order(order)
         self.orders[order.artifact_id] = order
         self._publish_event(stored_event, event_type="order_created", artifact_id=order.artifact_id)
         return order
@@ -309,7 +315,23 @@ class OrderManager:
         return self._get(order.artifact_id)
 
     def cancel(self, order_id: UUID) -> Order:
-        return self.transition(order_id, OrderState.CANCEL_PENDING)
+        order = self._get(order_id)
+        # Persist cancellation intent before contacting the venue.  If the
+        # transport fails, the durable CANCEL_PENDING state forces recovery
+        # through reconciliation instead of allowing an unsafe resubmit.
+        pending = self.transition(order_id, OrderState.CANCEL_PENDING)
+        cancel = getattr(self.adapter, "cancel", None)
+        if not callable(cancel):
+            raise OrderStateError("venue adapter does not expose cancellation")
+        try:
+            accepted = cancel(order)
+        except Exception as exc:
+            raise OrderStateError("venue cancellation acknowledgement is ambiguous") from exc
+        if not isinstance(accepted, bool):
+            raise OrderStateError("venue cancellation acknowledgement must be boolean")
+        if not accepted:
+            raise OrderStateError("venue rejected cancellation")
+        return pending
 
     def acknowledge_cancel(self, order_id: UUID) -> Order:
         return self.transition(order_id, OrderState.CANCELLED)

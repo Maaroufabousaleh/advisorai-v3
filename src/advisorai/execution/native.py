@@ -22,6 +22,12 @@ class NativeTransport(Protocol):
 
     def list_open_orders(self) -> Sequence[Mapping[str, object]]: ...
 
+    def cancel_order(self, *, client_order_id: str) -> Mapping[str, object]: ...
+
+
+class NativeVenueProjectionError(RuntimeError):
+    """A venue projection cannot be safely bound to the local OMS."""
+
 
 @dataclass(frozen=True, slots=True)
 class NativeVenueAdapter:
@@ -30,6 +36,9 @@ class NativeVenueAdapter:
     transport: NativeTransport
     strict_venue: bool = False
     _acknowledgements: dict[UUID, VenueAcknowledgement] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
+    _known_order_ids: dict[str, UUID] = field(
         default_factory=dict, init=False, repr=False, compare=False
     )
 
@@ -44,6 +53,7 @@ class NativeVenueAdapter:
             raise ValueError(
                 f"order instrument venue {order.instrument.venue!r} does not match native venue"
             )
+        self.bind_order(order)
         response = self.transport.submit_order(
             {
                 "client_order_id": order.idempotency_key,
@@ -70,8 +80,38 @@ class NativeVenueAdapter:
             self._acknowledgements[order.artifact_id] = acknowledgement
         return acknowledgement
 
+    def bind_order(self, order: Order) -> None:
+        """Bind a durable OMS order for reconnect/open-order resolution."""
+
+        prior_order_id = self._known_order_ids.get(order.idempotency_key)
+        if prior_order_id is not None and prior_order_id != order.artifact_id:
+            raise NativeVenueProjectionError(
+                "venue idempotency key is already bound to a different local order"
+            )
+        self._known_order_ids[order.idempotency_key] = order.artifact_id
+
     def reconcile(self, order: Order) -> Mapping[str, object] | None:
         return self.transport.query_order(client_order_id=order.idempotency_key)
+
+    def cancel(self, order: Order) -> bool:
+        """Request a deterministic venue cancellation for an acknowledged order.
+
+        Cancellation intent is persisted by the OMS before this method is
+        called.  A transport that cannot expose a cancellation endpoint fails
+        closed instead of pretending that a local state transition cancelled
+        the venue order.
+        """
+
+        cancel_order = getattr(self.transport, "cancel_order", None)
+        if not callable(cancel_order):
+            raise NativeVenueProjectionError("native venue transport does not expose cancellation")
+        response = cancel_order(client_order_id=order.idempotency_key)
+        if not isinstance(response, Mapping):
+            raise NativeVenueProjectionError("native venue returned a non-mapping cancellation")
+        accepted = response.get("cancelled", response.get("accepted"))
+        if not isinstance(accepted, bool):
+            raise NativeVenueProjectionError("native venue returned an invalid cancellation result")
+        return accepted
 
     def open_orders(self) -> tuple[VenueAcknowledgement, ...]:
         """Return locally resolved acknowledgements for the OMS reconnect port.
@@ -83,24 +123,68 @@ class NativeVenueAdapter:
 
         list_open_orders = getattr(self.transport, "list_open_orders", None)
         if callable(list_open_orders):
-            for record in list_open_orders():
+            records = list_open_orders()
+            if not isinstance(records, Sequence) or isinstance(records, (str, bytes, bytearray)):
+                raise NativeVenueProjectionError("venue open-order projection must be a sequence")
+            for record in records:
                 if not isinstance(record, Mapping):
-                    continue
-                raw_order_id = record.get("order_id", record.get("local_order_id"))
-                try:
-                    order_id = UUID(str(raw_order_id))
-                except (TypeError, ValueError):
-                    continue
+                    raise NativeVenueProjectionError(
+                        "venue open-order projection contains a non-object record"
+                    )
+                order_id = self._resolve_local_order_id(record)
                 venue_order_id = str(
                     record.get("venue_order_id", record.get("id", record.get("orderId", "")))
                 ).strip()
-                if venue_order_id:
-                    self._acknowledgements[order_id] = VenueAcknowledgement(
-                        order_id=order_id,
-                        venue_order_id=venue_order_id,
-                        accepted=bool(record.get("accepted", True)),
+                if not venue_order_id:
+                    raise NativeVenueProjectionError(
+                        "venue open-order projection is missing a venue order identity"
                     )
+                accepted = record.get("accepted", True)
+                if not isinstance(accepted, bool):
+                    raise NativeVenueProjectionError(
+                        "venue open-order projection has a non-boolean acceptance state"
+                    )
+                prior = self._acknowledgements.get(order_id)
+                if prior is not None and (
+                    prior.venue_order_id != venue_order_id or prior.accepted != accepted
+                ):
+                    raise NativeVenueProjectionError(
+                        "venue open-order projection conflicts with a prior acknowledgement"
+                    )
+                self._acknowledgements[order_id] = VenueAcknowledgement(
+                    order_id=order_id,
+                    venue_order_id=venue_order_id,
+                    accepted=accepted,
+                )
         return tuple(self._acknowledgements.values())
+
+    def _resolve_local_order_id(self, record: Mapping[str, object]) -> UUID:
+        """Resolve only an explicitly local identity; never guess from venue IDs."""
+
+        for key in ("local_order_id", "local_order_uuid", "order_id"):
+            raw = record.get(key)
+            if raw is None:
+                continue
+            try:
+                return UUID(str(raw))
+            except (TypeError, ValueError):
+                if key != "order_id":
+                    raise NativeVenueProjectionError(
+                        "venue open-order projection contains an invalid local order identity"
+                    ) from None
+        for key in ("client_order_id", "clientOrderId", "clordid"):
+            raw = record.get(key)
+            if raw is None:
+                continue
+            local = self._known_order_ids.get(str(raw).strip())
+            if local is not None:
+                return local
+            raise NativeVenueProjectionError(
+                "venue open-order projection references an unknown client order"
+            )
+        raise NativeVenueProjectionError(
+            "venue open-order projection contains an unknown local order identity"
+        )
 
     def account_snapshot(self):
         """Return an optional read-only venue account projection.

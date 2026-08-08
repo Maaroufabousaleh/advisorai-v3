@@ -2,7 +2,7 @@
 
 from .account import AccountLedger, AccountState, AccountStateSnapshot
 from .events import MarketEvent, NativeMarketMessageParser, RawEventSpool, ReplayEngine
-from .native import NativeVenueAdapter
+from .native import NativeVenueAdapter, NativeVenueProjectionError
 from .nautilus import NautilusRuntimeError, NautilusTraderPipeline
 from .oms import OrderManager, OrderStateError
 from .paper import AmbiguousAcknowledgement, PaperVenueAdapter, VenueAcknowledgement
@@ -29,6 +29,7 @@ __all__ = [
     "NautilusRuntimeError",
     "NautilusTraderPipeline",
     "NativeVenueAdapter",
+    "NativeVenueProjectionError",
     "OrderManager",
     "OrderRiskCheck",
     "OrderStateError",
