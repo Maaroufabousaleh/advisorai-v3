@@ -15,7 +15,7 @@ human gate into a unit-test claim.
 | 5 | Policy Mission Router; bounded adaptive council waves; typed role results; snapshot/mission-bound runs; ancestry-aware evidence graph; dissent/expiry/cutoff handling; target-only DecisionBundle and RiskKernel hand-off | [`tests/agents`](../../tests/agents), [`tests/api`](../../tests/api) | Real provider route selection and scored multi-factor evidence from live V3-Core data |
 | 6 | Benchmark portfolio comparisons; robust covariance/factors/capacity/margin/stress; purged walk-forward, multiple-testing, sensitivity/regime checks; TCA/P&L attribution; incident/postmortem reconciliation; model challenge evidence | [`tests/institutional`](../../tests/institutional), [`tests/data/test_observability.py`](../../tests/data/test_observability.py) | Production paper-order sample proving exact attribution and unresolved-incident handling |
 | 7 | Durable soak samples/gate; data/model/agent/risk/execution scorecard fields; measured headroom and no-trade/benchmark net-utility checks; all required adverse scenarios; ledger-backed sample rebuild; recovery report and archive-restore boundary | [`tests/recovery/test_soak.py`](../../tests/recovery/test_soak.py) | At least 60 calendar days, meaningful adverse sample, stable resources, clean reconciliation, and positive net utility |
-| 8 | Hermes isolation policy and concrete bounded process runner with enforced child socket/DNS and read-only filesystem policies; sensitive-environment scrubbing; typed research/strategy/collector/model/runbook/capability artifacts; permission-filtered capability registry/broker; lifecycle through active-read; explicit human approval for active-write-limited | [`tests/capabilities`](../../tests/capabilities), [`scripts/run_phase8_capability_evidence.py`](../../scripts/run_phase8_capability_evidence.py), `artifacts/phase8/capability-evidence/20260808T041257.837542Z/phase8-capability-evidence.json` | Local Hermes-to-active-read evidence passed with SHA-256 `fad59563bf477a41d64007175c53637a170dae64cdf82bd89672f35b796dc9e9`; formal Phase-8 admission remains pending behind earlier phase gates and the external source is fixture-only |
+| 8 | Hermes isolation policy and concrete bounded process runner with enforced child socket/DNS, read-only filesystem, and conventional sensitive-path policies; sensitive-environment scrubbing; typed research/strategy/collector/model/runbook/capability artifacts; permission-filtered capability registry/broker; lifecycle through active-read; explicit human approval for active-write-limited | [`tests/capabilities`](../../tests/capabilities), [`scripts/run_phase8_capability_evidence.py`](../../scripts/run_phase8_capability_evidence.py), `artifacts/phase8/capability-evidence/20260808T042530.546706Z/phase8-capability-evidence.json` | Local Hermes-to-active-read evidence passed with SHA-256 `42dd329afa7543861846e6883e5e962a7ec7af9862ee28cd58a3c7b7b1b2748d`; formal Phase-8 admission remains pending behind earlier phase gates and the external source is fixture-only |
 | 9 | Vintaged SEC/ALFRED boundary; equity corporate-action/daily-council boundary; compliant browser ladder; one-at-a-time challenger registry; duplicate-provider rejection, safe archive keys, and two-provider archive verification/rclone boundary | [`tests/expansion`](../../tests/expansion), [`tests/data/test_official.py`](../../tests/data/test_official.py) | Marginal-value and headroom evidence for each real source/model/framework addition |
 | 10 | Explicit human authorization artifact; fixed loss/notional budget; policy/state-hash-bound final order guard; AI-offline safety check; automatic paper-rollback readiness | [`tests/live`](../../tests/live) | Phase 7 completion, explicit human approval, and supervised bounded live validation |
 | Alpha Team extension | Integrated plan and conformance boundary only; no Research Brain, DSL, candidate, experiment, validation, or promotion implementation is claimed by this row | None; future evidence must be tied to the E0-E7 gate in [`alpha-team-extension.md`](alpha-team-extension.md) | E0 is not yet satisfied; no Alpha Team runtime, paper candidate, or admission evidence is claimed |
@@ -36,7 +36,7 @@ human gate into a unit-test claim.
 
 ## Verification record
 
-The latest local run on 2026-08-08 passed all 490 tests in one process with the
+The latest local run on 2026-08-08 passed all 491 tests in one process with the
 optional Nautilus runtime active, and all eleven isolated phase suites. The exact
 phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
@@ -49,6 +49,7 @@ immutable evidence with SHA-256
 `2a5c9d07be845b7222a065edc4d20a4a8d272bf7780918d3f27ad42abbb0523c`; it also
 does not open any external or human gate. The Phase-8 capability report is
 immutable evidence with SHA-256
-`fad59563bf477a41d64007175c53637a170dae64cdf82bd89672f35b796dc9e9`; it also
-records enforced child socket/DNS and read-only filesystem policies and does
-not create a formal gate record or global capability admission.
+`42dd329afa7543861846e6883e5e962a7ec7af9862ee28cd58a3c7b7b1b2748d`; it also
+records enforced child socket/DNS, read-only filesystem, and conventional
+sensitive-path policies and does not create a formal gate record or global
+capability admission.
