@@ -24,14 +24,15 @@ The current laptop has real isolated/offline qualification evidence for:
   not admitted by this model bake-off.
 
 The separate remote route bake-off now has a sanitized live inventory and
-gateway-only evidence under `artifacts/phase0/remote-model-bakeoff/`. The
-current roster admits Ling/Novita as a measured private-worker candidate for
-short structured and read-only-tool probes; GPT-OSS/CoreWeave and
-DeepSeek/DigitalOcean remain failed/abstained observations pending a repeatable
-quality/reliability benchmark. `openrouter/free` is intentionally blocked from
-reproducible contributor admission because its provider/model pool is dynamic.
-No remote route is selected for production and no model receives execution
-authority.
+gateway-only evidence under
+`artifacts/phase0/remote-model-bakeoff/20260808T000627.596582Z-35412c8a/`.
+The current run measured Ling/Novita in structured, optional-tool, and
+required-tool modes and measured one structured DeepSeek/DigitalOcean call;
+GPT-OSS/CoreWeave and the remaining DeepSeek probes are failed/abstained
+observations pending a repeatable quality/reliability benchmark.
+`openrouter/free` is intentionally blocked from reproducible contributor
+admission because its provider/model pool is dynamic. No remote route is
+selected for production and no model receives execution authority.
 
 The combined role-oriented machine-readable index is
 `configs/models/phase0_model_roster.json`; it references the detailed local

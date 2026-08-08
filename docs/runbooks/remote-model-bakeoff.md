@@ -44,7 +44,7 @@ cost from `usage.cost` separately.
 
 ## Current evidence checkpoint
 
-The first live inventory was collected on 2026-08-07. It admitted these exact
+The latest live inventory was collected on 2026-08-08. It admitted these exact
 private candidates for probing:
 
 * `novita` / `inclusionai/ling-2.6-flash`, resolved
@@ -59,15 +59,17 @@ blocked from reproducible admission because its provider and model pool change
 between requests. This is an identity/reproducibility decision, not a quality
 claim.
 
-The latest bounded run measured all three invocation modes for Ling/Novita.
-Structured, tool-optional, and tool-required calls were accepted at
-approximately `$0.00000486`, `$0.00000301`, and `$0.00000309`; the required-tool
-response contained a validated `read_evidence` call and remained
+The latest bounded run is
+`20260808T000627.596582Z-35412c8a` (report SHA
+`a5b0aa59ef3f5c2ebc4a43abcf52b9b1aa56a77aa739821c1cccfc12f6d7f200`, inventory
+SHA `d9104650657d2f964dbb5dffbf9eff5ae3ac7ac159ec1720a019f4c868798ef9`). It
+measured Ling/Novita structured, tool-optional, and tool-required calls at
+`$0.00000243`, `$0.00000301`, and `$0.00000315`; the required-tool response
+contained a validated `read_evidence` call and remained
 `tool_execution_status=not_executed`. DeepSeek/DigitalOcean produced one valid
-structured response in an earlier bounded run, while its latest tool and
-structured probes—and all GPT-OSS/CoreWeave probes—were recorded as gateway
-abstentions without actual identities. These are short reliability observations,
-not quality or production-selection claims.
+structured response at `$0.000021504`; its tool probes and all GPT-OSS/CoreWeave
+probes were recorded as gateway abstentions without actual identities. These
+are short reliability observations, not quality or production-selection claims.
 
 Run-scoped sanitized evidence is written below:
 
@@ -78,8 +80,8 @@ configs/models/phase0_remote_roster.json
 ```
 
 The current sanitized report and inventory hashes are stored in that roster.
-The run reserved USD 0.009 of the USD 0.25/remaining-balance cap; no route is
-selected for production from this short evidence alone.
+The run billed `$0.000030094` and reserved USD 0.009 of the USD 0.25/remaining-
+balance cap; no route is selected for production from this short evidence alone.
 
 Reports contain requested and observed identities, endpoint-selection proof,
 latency, token counts, billed cost, safe failure classes, and whether a tool
