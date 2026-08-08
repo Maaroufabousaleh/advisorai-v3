@@ -103,6 +103,14 @@ def _caught_sensitive_path_task():
     return {"caught": None}
 
 
+def _caught_process_environment_task():
+    try:
+        Path("/proc/self/environ").read_bytes()
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
 def _environment():
     return EnvironmentManifest(image_digest="sha256:image", lock_hash="a" * 64, seed=7)
 
@@ -212,6 +220,17 @@ def test_hermes_isolation_runner_rejects_sensitive_path_reads():
     policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
     result = HermesIsolationRunner(policy).run(
         task_name="sensitive-path-attempt", task=_caught_sensitive_path_task
+    )
+    assert not result.passed
+    assert result.sensitive_path_access_attempted
+    assert result.error == "sensitive_path_access_attempted"
+    assert result.output is None
+
+
+def test_hermes_isolation_runner_rejects_process_environment_reads():
+    policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
+    result = HermesIsolationRunner(policy).run(
+        task_name="process-environment-attempt", task=_caught_process_environment_task
     )
     assert not result.passed
     assert result.sensitive_path_access_attempted

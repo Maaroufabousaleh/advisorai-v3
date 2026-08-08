@@ -284,7 +284,9 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
             "api-keys",
             "credentials",
             "credentials.env",
+            "environ",
             "private-keys",
+            "proc",
             "secrets",
             "secrets.env",
         }
