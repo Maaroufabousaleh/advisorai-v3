@@ -1,0 +1,188 @@
+{
+  "schema_version": "advisorai.phase0.model-roster.v1",
+  "state_semantics": {
+    "candidate": "known candidate not yet runtime-qualified",
+    "qualified": "short technical qualification passed; not necessarily stable",
+    "pending_stability": "qualification passed; 24-hour evidence is still required",
+    "blocked": "intentionally unavailable or non-reproducible",
+    "deterministic_only": "no model route is permitted"
+  },
+  "source_rosters": {
+    "local": "configs/models/phase0_local_roster.json",
+    "remote": "configs/models/phase0_remote_roster.json"
+  },
+  "roles": {
+    "forecast_primary": {
+      "candidate": "ttm-r2",
+      "repository_id": "ibm-granite/granite-timeseries-ttm-r2",
+      "revision": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
+      "license": "apache-2.0",
+      "qualification_status": "measured",
+      "stability_status": "pending",
+      "state": "pending_stability",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/ttm-r2.json",
+      "evidence_hash": "af821050a85c116f74bd1675a2142dd27c5a8306f857eeb89ceb57dc658c0380"
+    },
+    "forecast_fast": {
+      "candidate": "ttm-r2",
+      "repository_id": "ibm-granite/granite-timeseries-ttm-r2",
+      "revision": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
+      "license": "apache-2.0",
+      "qualification_status": "measured",
+      "stability_status": "pending",
+      "state": "pending_stability",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/ttm-r2.json",
+      "evidence_hash": "af821050a85c116f74bd1675a2142dd27c5a8306f857eeb89ceb57dc658c0380"
+    },
+    "forecast_challengers": {
+      "candidates": [
+        {
+          "candidate": "ttm-r3",
+          "repository_id": "ibm-granite/granite-timeseries-ttm-r3",
+          "revision": "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa",
+          "license": "apache-2.0",
+          "state": "qualified",
+          "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/ttm-r3.json",
+          "evidence_hash": "94561a898c3622cf8e33bb5417c366b5bd76cf50da1b419ecbd866597b0a2cce"
+        },
+        {
+          "candidate": "chronos-2-small",
+          "repository_id": "autogluon/chronos-2-small",
+          "revision": "ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a",
+          "license": "apache-2.0",
+          "state": "qualified",
+          "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/chronos-2-small.json",
+          "evidence_hash": "3846701e4f8cbd8eeadc96107375cba93dc6878053b0ec17a9f3c0949eaddcbb"
+        },
+        {
+          "candidate": "kronos-mini",
+          "repository_id": "NeoQuasar/Kronos-mini",
+          "revision": "f4e68697d9d5aed55cef5c96aabc3376bcad9f81",
+          "license": "mit",
+          "state": "qualified",
+          "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/kronos-mini.json",
+          "evidence_hash": "e9dd78635c67399162cbd7fde566c4bb3ce2739b27b8b3ed78427b5bd9885e29"
+        },
+        {
+          "candidate": "kronos-small",
+          "repository_id": "NeoQuasar/Kronos-small",
+          "revision": "901c26c1332695a2a8f243eb2f37243a37bea320",
+          "license": "mit",
+          "state": "qualified",
+          "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/kronos-small.json",
+          "evidence_hash": "866b9f251cfac98a880987c9a91db4d949f4f5607300339003c6704b6eefed32"
+        }
+      ],
+      "stability_status": "pending"
+    },
+    "probabilistic_forecast": {
+      "candidate": "chronos-2-small",
+      "state": "qualified",
+      "stability_status": "pending",
+      "source_role": "local.probabilistic_forecast"
+    },
+    "feature_regime_model": {
+      "candidate": "tspulse",
+      "repository_id": "ibm-granite/granite-timeseries-tspulse-r1",
+      "revision": "2e64fcdc2a06d3565dfadaf0065c0ab5055f80f2",
+      "license": "apache-2.0",
+      "state": "qualified",
+      "stability_status": "pending",
+      "price_forecast_prohibited": true,
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/tspulse.json",
+      "evidence_hash": "ab5c56a9b8cde21ddd085fdc55003632c24ec88fd9056d59f3a65866fca24ae5"
+    },
+    "finance_sentiment_primary": {
+      "candidate": "finsentiment-deberta-v3",
+      "repository_id": "anabdd/finsentiment-deberta-v3-base",
+      "revision": "f2312de96d6cfe6251da37afb0e99b8e29885bdd",
+      "license": "apache-2.0",
+      "state": "pending_stability",
+      "stability_status": "pending",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/finsentiment-deberta-v3.json",
+      "evidence_hash": "1804e69b91162f15da574696cea3de1faec8652640822e4445ee22730c6716cd"
+    },
+    "finance_sentiment_fast": {
+      "candidate": "finbert-minilm",
+      "repository_id": "9mark9/finbert-minilm-sentiment",
+      "revision": "fdbfec0cd09610bd5af26da8998507fe7838e838",
+      "license": "mit",
+      "state": "pending_stability",
+      "stability_status": "pending",
+      "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/finbert-minilm.json",
+      "evidence_hash": "3a6906ef12d52f28c8a6321638db4807a7ec5add37e09448d18f263c475ba851"
+    },
+    "finance_sentiment_challengers": {
+      "candidates": [
+        {
+          "candidate": "modern-finbert",
+          "repository_id": "tabularisai/ModernFinBERT",
+          "revision": "6c6de8332ea7f6824c0f8917358dce1e669c1710",
+          "license": "apache-2.0",
+          "state": "qualified",
+          "evidence_reference": "artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/qualification/modern-finbert.json",
+          "evidence_hash": "4d66004e63b0c973e2e7afac388bba361975278a1e514972bb9e2d4f7e3978f4"
+        }
+      ],
+      "stability_status": "pending"
+    },
+    "contributor_public": {
+      "candidate": "openrouter/free",
+      "state": "blocked",
+      "reason": "dynamic provider/model pool has no reproducible endpoint admission",
+      "source_roster": "configs/models/phase0_remote_roster.json"
+    },
+    "private_worker": {
+      "candidates": [
+        {
+          "candidate": "private-ling-novita",
+          "provider_selector": "novita",
+          "requested_model": "inclusionai/ling-2.6-flash",
+          "resolved_model": "inclusionai/ling-2.6-flash-20260421",
+          "state": "pending_quality_and_stability",
+          "zdr": true,
+          "allow_fallbacks": false,
+          "source_roster": "configs/models/phase0_remote_roster.json"
+        },
+        {
+          "candidate": "private-deepseek-digitalocean",
+          "provider_selector": "digitalocean",
+          "requested_model": "deepseek/deepseek-v4-flash",
+          "resolved_model": "deepseek/deepseek-v4-flash-20260423",
+          "state": "pending_quality_and_stability",
+          "zdr": true,
+          "allow_fallbacks": false,
+          "source_roster": "configs/models/phase0_remote_roster.json"
+        }
+      ],
+      "stability_status": "pending"
+    },
+    "private_reviewer": {
+      "candidates": [
+        {
+          "candidate": "private-gpt-oss-coreweave",
+          "provider_selector": "coreweave/fp4",
+          "requested_model": "openai/gpt-oss-20b",
+          "state": "quarantined_or_failed",
+          "zdr": true,
+          "allow_fallbacks": false,
+          "source_roster": "configs/models/phase0_remote_roster.json"
+        }
+      ],
+      "stability_status": "pending"
+    },
+    "blocked_execution": {
+      "state": "blocked",
+      "authority": "deterministic_only",
+      "source_roster": "configs/models/phase0_remote_roster.json"
+    }
+  },
+  "stability": {
+    "run_directory": "artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h",
+    "state": "running",
+    "required_duration_hours": 24,
+    "phase7_60_day_soak": "not_started",
+    "phase10_human_approval": "not_approved"
+  },
+  "live_capital": "not_approved"
+}
