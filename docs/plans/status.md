@@ -51,5 +51,5 @@ preserved in the ignored stability evidence directory. A fresh admission root,
 was attested against the formatted worker and passed a one-cycle smoke for all
 three pending role candidates. The supervised replacement run at
 `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808`
-has one passing cycle and remains in progress; no roster entry has moved from
+has passing cycles and remains in progress; no roster entry has moved from
 `pending_stability` to `selected`.
