@@ -149,6 +149,10 @@ class HermesFilesystemWriteError(RuntimeError):
     """A read-only Hermes task attempted to mutate local filesystem state."""
 
 
+class HermesSensitivePathAccessError(RuntimeError):
+    """A Hermes task attempted to read a path conventionally containing secrets."""
+
+
 class _HermesNetworkGuard(AbstractContextManager["_HermesNetworkGuard"]):
     """Enforce the child-process network allowlist at the socket boundary.
 
@@ -269,6 +273,33 @@ class _HermesNetworkGuard(AbstractContextManager["_HermesNetworkGuard"]):
 class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
     """Reject common Python and OS filesystem mutations inside a task."""
 
+    _SENSITIVE_PATH_NAMES = frozenset(
+        {
+            ".aws",
+            ".docker",
+            ".env",
+            ".netrc",
+            ".npmrc",
+            ".pypirc",
+            "api-keys",
+            "credentials",
+            "credentials.env",
+            "private-keys",
+            "secrets",
+            "secrets.env",
+        }
+    )
+    _SENSITIVE_PATH_PREFIXES = (
+        "access_key",
+        "api_key",
+        "credential_",
+        "credentials.",
+        "password",
+        "private_key",
+        "secret_",
+        "secrets.",
+    )
+
     _MUTATING_OS_FUNCTIONS = (
         "remove",
         "unlink",
@@ -298,6 +329,7 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
     def __init__(self, enabled: bool) -> None:
         self.enabled = enabled
         self.attempted = False
+        self.sensitive_access_attempted = False
         self._original_builtin_open = builtins.open
         self._original_io_open = io.open
         self._original_os_open = os.open
@@ -311,6 +343,24 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
             return self
         guard = self
 
+        def check_sensitive_path(path: object) -> None:
+            if isinstance(path, int):
+                return
+            try:
+                normalized = os.fspath(path).decode(errors="ignore")
+            except AttributeError:
+                normalized = str(os.fspath(path))
+            components = normalized.replace("\\", "/").lower().split("/")
+            if any(
+                component in guard._SENSITIVE_PATH_NAMES
+                or any(component.startswith(prefix) for prefix in guard._SENSITIVE_PATH_PREFIXES)
+                for component in components
+            ):
+                guard.sensitive_access_attempted = True
+                raise HermesSensitivePathAccessError(
+                    "Hermes task access to a sensitive path is not allowed"
+                )
+
         def reject(*_args, **_kwargs):  # type: ignore[no-untyped-def]
             guard.attempted = True
             raise HermesFilesystemWriteError(
@@ -318,11 +368,13 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
             )
 
         def read_only_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+            check_sensitive_path(file)
             if any(flag in str(mode) for flag in "wxa+"):
                 return reject(file, mode, *args, **kwargs)
             return guard._original_builtin_open(file, mode, *args, **kwargs)
 
         def read_only_io_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
+            check_sensitive_path(file)
             if any(flag in str(mode) for flag in "wxa+"):
                 return reject(file, mode, *args, **kwargs)
             return guard._original_io_open(file, mode, *args, **kwargs)
@@ -332,6 +384,7 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
             write_flags |= os.O_TMPFILE
 
         def read_only_os_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
+            check_sensitive_path(path)
             if flags & write_flags:
                 return reject(path, flags, *args, **kwargs)
             return guard._original_os_open(path, flags, *args, **kwargs)
@@ -372,6 +425,7 @@ class HermesTaskResult(BaseModel):
     timed_out: bool = False
     network_access_attempted: bool = False
     filesystem_write_attempted: bool = False
+    sensitive_path_access_attempted: bool = False
     output: object | None = None
     output_hash: str | None = None
     elapsed_ms: int = Field(ge=0)
@@ -412,6 +466,8 @@ class HermesTaskResult(BaseModel):
             raise ValueError("a Hermes task that attempted network access cannot pass")
         if self.passed and self.filesystem_write_attempted:
             raise ValueError("a read-only Hermes task that attempted a write cannot pass")
+        if self.passed and self.sensitive_path_access_attempted:
+            raise ValueError("a Hermes task that accessed a sensitive path cannot pass")
         if self.timed_out and self.error is None:
             raise ValueError("a timed-out Hermes task requires an error")
         if self.error is not None and not self.error.strip():
@@ -455,6 +511,7 @@ def _run_hermes_task(
             passed = False
     network_access_attempted = network_guard.attempted
     filesystem_write_attempted = filesystem_guard.attempted
+    sensitive_path_access_attempted = filesystem_guard.sensitive_access_attempted
     elapsed_cpu = max(0.0, time.process_time() - started_cpu)
     peak_memory_mib = 0
     try:
@@ -473,6 +530,7 @@ def _run_hermes_task(
             "passed": passed,
             "network_access_attempted": network_access_attempted,
             "filesystem_write_attempted": filesystem_write_attempted,
+            "sensitive_path_access_attempted": sensitive_path_access_attempted,
             "output": output,
             "output_hash": output_hash,
             "cpu_seconds": elapsed_cpu,
@@ -567,6 +625,9 @@ class HermesIsolationRunner:
         peak_memory_mib = int(payload.get("peak_memory_mib", 0))
         network_access_attempted = bool(payload.get("network_access_attempted", False))
         filesystem_write_attempted = bool(payload.get("filesystem_write_attempted", False))
+        sensitive_path_access_attempted = bool(
+            payload.get("sensitive_path_access_attempted", False)
+        )
         child_passed = bool(payload.get("passed", False))
         error = payload.get("error")
         if not isinstance(error, str) and error is not None:
@@ -577,6 +638,9 @@ class HermesIsolationRunner:
         if filesystem_write_attempted:
             child_passed = False
             error = "filesystem_write_attempted"
+        if sensitive_path_access_attempted:
+            child_passed = False
+            error = "sensitive_path_access_attempted"
         if child_passed and cpu_seconds > Decimal(self.policy.cpu_seconds):
             child_passed = False
             error = "cpu_budget_exceeded"
@@ -593,6 +657,7 @@ class HermesIsolationRunner:
             passed=child_passed,
             network_access_attempted=network_access_attempted,
             filesystem_write_attempted=filesystem_write_attempted,
+            sensitive_path_access_attempted=sensitive_path_access_attempted,
             output=output if child_passed else None,
             output_hash=output_hash if child_passed else None,
             elapsed_ms=elapsed_ms,

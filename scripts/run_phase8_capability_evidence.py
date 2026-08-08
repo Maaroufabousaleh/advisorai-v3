@@ -174,6 +174,7 @@ def _hermes_task_result(result) -> dict[str, Any]:
         "timed_out": result.timed_out,
         "network_access_attempted": result.network_access_attempted,
         "filesystem_write_attempted": result.filesystem_write_attempted,
+        "sensitive_path_access_attempted": result.sensitive_path_access_attempted,
         "policy_hash": result.policy_hash,
         "output_hash": result.output_hash,
         "elapsed_ms": result.elapsed_ms,
@@ -220,6 +221,9 @@ def _run_hermes_fixture() -> dict[str, Any]:
         ),
         "filesystem_write_attempted": (
             first.filesystem_write_attempted or second.filesystem_write_attempted
+        ),
+        "sensitive_path_access_attempted": (
+            first.sensitive_path_access_attempted or second.sensitive_path_access_attempted
         ),
         "network_calls": 0,
         "write_authority": False,
@@ -386,6 +390,7 @@ def run_evidence(
             and hermes["secrets_scrubbed"]
             and not hermes["network_access_attempted"]
             and not hermes["filesystem_write_attempted"]
+            and not hermes["sensitive_path_access_attempted"]
             and active.lifecycle is CapabilityLifecycle.ACTIVE_READ
             and restarted_active.lifecycle is CapabilityLifecycle.ACTIVE_READ
             and active_read["broker_read_executed"]
