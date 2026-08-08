@@ -17,6 +17,9 @@ quarantined capabilities.
    active-write-limited lifecycle handling.
 4. Deliver one missing deterministic collector or adapter through that complete
    lifecycle.
+5. If the optional [Alpha Team extension](alpha-team-extension.md) is admitted
+   after E0, accept only one E4 research capability adapter at a time through
+   the same `CapabilityBundle` lifecycle and permission boundary.
 
 ## Exit gate
 
@@ -26,4 +29,5 @@ without broker credentials, live deployment, or order authority.
 ## Explicitly out of scope
 
 No Hermes order tool, limit change, live-repository mutation, automatic
-live-capital write authority, or reliance on Hermes memory as authority.
+live-capital write authority, reliance on Hermes memory as authority, or
+automatic Alpha Team capability admission.

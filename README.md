@@ -39,6 +39,11 @@ required 24-hour Phase 0, 60-day Phase 7, or explicit human Phase 10 evidence.
 Implementation sequencing and non-negotiable phase gates are in
 [docs/plans](docs/plans/README.md).
 
+The optional post-Core [Alpha Team extension](docs/plans/alpha-team-extension.md)
+adds a governed research-intake and factor-discovery plane only after its E0
+prerequisite. It cannot alter the canonical data, portfolio, risk, OMS, or
+execution owners, and it is not currently admitted or implemented.
+
 ## Local secrets
 
 The ignored [`secrets.env`](secrets.env) file is the single blank-valued
