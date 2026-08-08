@@ -10,6 +10,7 @@ import multiprocessing as mp
 import os
 import queue as queue_module
 import socket
+import subprocess
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -151,6 +152,10 @@ class HermesFilesystemWriteError(RuntimeError):
 
 class HermesSensitivePathAccessError(RuntimeError):
     """A Hermes task attempted to read a path conventionally containing secrets."""
+
+
+class HermesProcessSpawnError(RuntimeError):
+    """A Hermes task attempted to create or replace a process."""
 
 
 class _HermesNetworkGuard(AbstractContextManager["_HermesNetworkGuard"]):
@@ -444,6 +449,73 @@ class _HermesFilesystemGuard(AbstractContextManager["_HermesFilesystemGuard"]):
             setattr(os, name, original)
 
 
+class _HermesProcessGuard(AbstractContextManager["_HermesProcessGuard"]):
+    """Reject common Python and OS process-creation entry points in a task."""
+
+    _SUBPROCESS_FUNCTIONS = (
+        "Popen",
+        "call",
+        "check_call",
+        "check_output",
+        "getoutput",
+        "getstatusoutput",
+        "run",
+    )
+    _OS_FUNCTIONS = (
+        "execl",
+        "execle",
+        "execlp",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+        "fork",
+        "forkpty",
+        "popen",
+        "posix_spawn",
+        "posix_spawnp",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+        "spawnv",
+        "spawnve",
+        "spawnvp",
+        "spawnvpe",
+        "system",
+    )
+
+    def __init__(self) -> None:
+        self.attempted = False
+        self._original_subprocess_functions = {
+            name: getattr(subprocess, name)
+            for name in self._SUBPROCESS_FUNCTIONS
+            if hasattr(subprocess, name)
+        }
+        self._original_os_functions = {
+            name: getattr(os, name) for name in self._OS_FUNCTIONS if hasattr(os, name)
+        }
+
+    def __enter__(self) -> _HermesProcessGuard:
+        guard = self
+
+        def reject(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+            guard.attempted = True
+            raise HermesProcessSpawnError("Hermes tasks may not create or replace processes")
+
+        for name in self._original_subprocess_functions:
+            setattr(subprocess, name, reject)
+        for name in self._original_os_functions:
+            setattr(os, name, reject)
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore[no-untyped-def]
+        for name, original in self._original_subprocess_functions.items():
+            setattr(subprocess, name, original)
+        for name, original in self._original_os_functions.items():
+            setattr(os, name, original)
+
+
 class HermesTaskResult(BaseModel):
     """Measured result of one bounded, isolated Hermes task attempt."""
 
@@ -457,6 +529,7 @@ class HermesTaskResult(BaseModel):
     network_access_attempted: bool = False
     filesystem_write_attempted: bool = False
     sensitive_path_access_attempted: bool = False
+    process_spawn_attempted: bool = False
     output: object | None = None
     output_hash: str | None = None
     elapsed_ms: int = Field(ge=0)
@@ -499,6 +572,8 @@ class HermesTaskResult(BaseModel):
             raise ValueError("a read-only Hermes task that attempted a write cannot pass")
         if self.passed and self.sensitive_path_access_attempted:
             raise ValueError("a Hermes task that accessed a sensitive path cannot pass")
+        if self.passed and self.process_spawn_attempted:
+            raise ValueError("a Hermes task that attempted process creation cannot pass")
         if self.timed_out and self.error is None:
             raise ValueError("a timed-out Hermes task requires an error")
         if self.error is not None and not self.error.strip():
@@ -531,6 +606,7 @@ def _run_hermes_task(
     with (
         _HermesNetworkGuard(allowed_network_hosts) as network_guard,
         _HermesFilesystemGuard(read_only_snapshot) as filesystem_guard,
+        _HermesProcessGuard() as process_guard,
     ):
         try:
             output = task()
@@ -543,6 +619,7 @@ def _run_hermes_task(
     network_access_attempted = network_guard.attempted
     filesystem_write_attempted = filesystem_guard.attempted
     sensitive_path_access_attempted = filesystem_guard.sensitive_access_attempted
+    process_spawn_attempted = process_guard.attempted
     elapsed_cpu = max(0.0, time.process_time() - started_cpu)
     peak_memory_mib = 0
     try:
@@ -562,6 +639,7 @@ def _run_hermes_task(
             "network_access_attempted": network_access_attempted,
             "filesystem_write_attempted": filesystem_write_attempted,
             "sensitive_path_access_attempted": sensitive_path_access_attempted,
+            "process_spawn_attempted": process_spawn_attempted,
             "output": output,
             "output_hash": output_hash,
             "cpu_seconds": elapsed_cpu,
@@ -659,6 +737,7 @@ class HermesIsolationRunner:
         sensitive_path_access_attempted = bool(
             payload.get("sensitive_path_access_attempted", False)
         )
+        process_spawn_attempted = bool(payload.get("process_spawn_attempted", False))
         child_passed = bool(payload.get("passed", False))
         error = payload.get("error")
         if not isinstance(error, str) and error is not None:
@@ -672,6 +751,9 @@ class HermesIsolationRunner:
         if sensitive_path_access_attempted:
             child_passed = False
             error = "sensitive_path_access_attempted"
+        if process_spawn_attempted:
+            child_passed = False
+            error = "process_spawn_attempted"
         if child_passed and cpu_seconds > Decimal(self.policy.cpu_seconds):
             child_passed = False
             error = "cpu_budget_exceeded"
@@ -689,6 +771,7 @@ class HermesIsolationRunner:
             network_access_attempted=network_access_attempted,
             filesystem_write_attempted=filesystem_write_attempted,
             sensitive_path_access_attempted=sensitive_path_access_attempted,
+            process_spawn_attempted=process_spawn_attempted,
             output=output if child_passed else None,
             output_hash=output_hash if child_passed else None,
             elapsed_ms=elapsed_ms,

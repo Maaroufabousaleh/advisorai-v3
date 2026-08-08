@@ -19,8 +19,8 @@ The drill performs the following sequence:
 
 1. Run the RSS collector twice inside bounded Hermes child processes.
 2. Verify identical output hashes, untrusted-content preservation, enforced
-   socket/DNS network policy, read-only filesystem policy, and sensitive-environment
-   scrubbing.
+   socket/DNS network policy, read-only filesystem policy, sensitive-path policy,
+   process-spawn policy, and sensitive-environment scrubbing.
 3. Export a typed `CollectorCandidate` and read-only `CapabilityCard` with
    parser, contract, security, performance, lock, and fixture identities.
 4. Persist the lifecycle in SQLite through `active_read`, restart the registry,
@@ -33,8 +33,9 @@ Each report directory is immutable. `latest.json` is only an atomically updated
 pointer; prior reports remain available for review.
 
 The read-only guard rejects common Python and `os` file mutation APIs plus
-conventional sensitive and process-environment metadata paths inside the
-child. It is an in-process policy boundary, not a container or VM attestation;
+conventional sensitive and process-environment metadata paths and common
+process-creation APIs inside the child. It is an in-process policy boundary,
+not a container or VM attestation;
 the report therefore retains its explicit local-source identity note and does
 not claim stronger isolation than was measured.
 
@@ -49,6 +50,7 @@ capability into a production authority. The report must retain:
 - `network_access_attempted: false` for every Hermes child result;
 - `filesystem_write_attempted: false` for every Hermes child result;
 - `sensitive_path_access_attempted: false` for every Hermes child result;
+- `process_spawn_attempted: false` for every Hermes child result;
 - `network_required: false`, an empty `secrets_required`, and only
   `read_source` in `allowed_actions`; and
 - the fixture-only environment identity note rather than a claimed container
