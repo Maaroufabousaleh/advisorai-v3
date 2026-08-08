@@ -1,6 +1,6 @@
 {
-  "report_hash": "e0b9f28c3333faee9ebb9f703a5178b9cf95f4412c9475484649bedb66d527f1",
-  "report_reference": "artifacts/phase0/remote-model-bakeoff/20260807T234824.109668Z-ebfa8d5a/remote-model-bakeoff.json",
+  "report_hash": "a5b0aa59ef3f5c2ebc4a43abcf52b9b1aa56a77aa739821c1cccfc12f6d7f200",
+  "report_reference": "artifacts/phase0/remote-model-bakeoff/20260808T000627.596582Z-35412c8a/remote-model-bakeoff.json",
   "roles": {
     "blocked_execution": {
       "authority": "deterministic_only",
@@ -16,7 +16,7 @@
         "allow_fallbacks": false,
         "candidate": "private-gpt-oss-coreweave",
         "data_collection": "deny",
-        "inventory_hash": "b8c3cb8a219af9a3ec859d67aeab2baa8b1697c8a193808198a72b062299b8b5",
+        "inventory_hash": "d9104650657d2f964dbb5dffbf9eff5ae3ac7ac159ec1720a019f4c868798ef9",
         "observed_successes": [],
         "probe_status": [
           "failed",
@@ -37,10 +37,10 @@
         "allow_fallbacks": false,
         "candidate": "private-ling-novita",
         "data_collection": "deny",
-        "inventory_hash": "b8c3cb8a219af9a3ec859d67aeab2baa8b1697c8a193808198a72b062299b8b5",
+        "inventory_hash": "d9104650657d2f964dbb5dffbf9eff5ae3ac7ac159ec1720a019f4c868798ef9",
         "observed_successes": [
           {
-            "billed_cost_usd": 1.47e-06,
+            "billed_cost_usd": 2.43e-06,
             "endpoint_selector_proof": "sha256:a4f3ae6e383f18f9064d3082661cc2c812551f4747cb8c78275bcf9bb1433acf",
             "invocation": "structured_output",
             "observed_provider_name": "Novita",
@@ -58,7 +58,7 @@
             "tool_execution_status": "not_executed"
           },
           {
-            "billed_cost_usd": 3.09e-06,
+            "billed_cost_usd": 3.15e-06,
             "endpoint_selector_proof": "sha256:a4f3ae6e383f18f9064d3082661cc2c812551f4747cb8c78275bcf9bb1433acf",
             "invocation": "tool_required",
             "observed_provider_name": "Novita",
@@ -84,30 +84,21 @@
         "allow_fallbacks": false,
         "candidate": "private-deepseek-digitalocean",
         "data_collection": "deny",
-        "inventory_hash": "b8c3cb8a219af9a3ec859d67aeab2baa8b1697c8a193808198a72b062299b8b5",
+        "inventory_hash": "d9104650657d2f964dbb5dffbf9eff5ae3ac7ac159ec1720a019f4c868798ef9",
         "observed_successes": [
           {
-            "billed_cost_usd": 1.0248e-05,
+            "billed_cost_usd": 2.1504e-05,
             "endpoint_selector_proof": "sha256:d29c7c548b83660c059ed6a368a4398a215fc8878e3b16e153d4e7073feb2570",
             "invocation": "structured_output",
             "observed_provider_name": "DigitalOcean",
             "resolved_endpoint_model": "deepseek/deepseek-v4-flash-20260423",
             "tool_called": false,
             "tool_execution_status": "not_executed"
-          },
-          {
-            "billed_cost_usd": 3.444e-05,
-            "endpoint_selector_proof": "sha256:d29c7c548b83660c059ed6a368a4398a215fc8878e3b16e153d4e7073feb2570",
-            "invocation": "tool_optional",
-            "observed_provider_name": "DigitalOcean",
-            "resolved_endpoint_model": "deepseek/deepseek-v4-flash-20260423",
-            "tool_called": true,
-            "tool_execution_status": "not_executed"
           }
         ],
         "probe_status": [
           "measured",
-          "measured",
+          "failed",
           "failed"
         ],
         "provider_selector": "digitalocean",

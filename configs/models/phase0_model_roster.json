@@ -11,6 +11,13 @@
     "local": "configs/models/phase0_local_roster.json",
     "remote": "configs/models/phase0_remote_roster.json"
   },
+  "remote_bakeoff_evidence": {
+    "report_reference": "artifacts/phase0/remote-model-bakeoff/20260808T000627.596582Z-35412c8a/remote-model-bakeoff.json",
+    "report_hash": "a5b0aa59ef3f5c2ebc4a43abcf52b9b1aa56a77aa739821c1cccfc12f6d7f200",
+    "inventory_hash": "d9104650657d2f964dbb5dffbf9eff5ae3ac7ac159ec1720a019f4c868798ef9",
+    "billed_spend_usd": 0.000030094,
+    "reserved_budget_usd": 0.009
+  },
   "roles": {
     "forecast_primary": {
       "candidate": "ttm-r2",

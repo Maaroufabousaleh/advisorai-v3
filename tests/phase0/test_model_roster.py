@@ -23,6 +23,10 @@ def test_combined_phase0_roster_is_role_oriented_and_secret_free():
     }
     assert required <= roles.keys()
     assert roster["live_capital"] == "not_approved"
+    remote = roster["remote_bakeoff_evidence"]
+    assert len(remote["report_hash"]) == 64
+    assert len(remote["inventory_hash"]) == 64
+    assert remote["billed_spend_usd"] < 0.25
     serialized = path.read_text(encoding="utf-8").lower()
     assert "api_key" not in serialized
     assert "secret" not in serialized
