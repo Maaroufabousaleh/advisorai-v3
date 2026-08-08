@@ -32,10 +32,11 @@ The drill performs the following sequence:
 Each report directory is immutable. `latest.json` is only an atomically updated
 pointer; prior reports remain available for review.
 
-The read-only guard rejects common Python and `os` file mutation APIs inside
-the child. It is an in-process policy boundary, not a container or VM
-attestation; the report therefore retains its explicit local-source identity
-note and does not claim stronger isolation than was measured.
+The read-only guard rejects common Python and `os` file mutation APIs plus
+conventional sensitive and process-environment metadata paths inside the
+child. It is an in-process policy boundary, not a container or VM attestation;
+the report therefore retains its explicit local-source identity note and does
+not claim stronger isolation than was measured.
 
 ## Evidence interpretation
 
