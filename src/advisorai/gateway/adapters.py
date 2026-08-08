@@ -77,8 +77,10 @@ class TypedGatewayAdapter:
         actual_identity: dict[str, str] = {}
         for field in ("actual_provider", "actual_model", "actual_gateway"):
             value = payload.get(field)
-            if field == "actual_provider" and value is None and isinstance(
-                payload.get("observed_provider_name"), str
+            if (
+                field == "actual_provider"
+                and value is None
+                and isinstance(payload.get("observed_provider_name"), str)
             ):
                 value = payload["observed_provider_name"]
             if field == "actual_model" and value is None:
@@ -88,6 +90,7 @@ class TypedGatewayAdapter:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{self.name} response omitted {field}")
             actual_identity[field] = value.strip()
+
         def optional_price(field: str) -> float | None:
             value = payload.get(field)
             if value is None:
@@ -113,7 +116,9 @@ class TypedGatewayAdapter:
             "provider": payload.get("route_provider", actual_identity["actual_provider"]),
             "model": payload.get("route_model", actual_identity["actual_model"]),
             "gateway": payload.get("route_gateway", actual_identity["actual_gateway"]),
-            "endpoint_variant": payload.get("route_endpoint_variant", request.route.endpoint_variant),
+            "endpoint_variant": payload.get(
+                "route_endpoint_variant", request.route.endpoint_variant
+            ),
             "fallback_chain": self.route.fallback_chain,
         }
         if any(
@@ -140,9 +145,15 @@ class TypedGatewayAdapter:
         ):
             if value is not None and (not isinstance(value, str) or not value.strip()):
                 raise ValueError(f"{self.name} returned invalid {field}")
-        if requested_provider_selector != request.route.provider or requested_model != request.route.model:
+        if (
+            requested_provider_selector != request.route.provider
+            or requested_model != request.route.model
+        ):
             raise ValueError(f"{self.name} returned a route selector different from the request")
-        if requested_gateway != request.route.gateway or requested_endpoint_selector != request.route.endpoint_variant:
+        if (
+            requested_gateway != request.route.gateway
+            or requested_endpoint_selector != request.route.endpoint_variant
+        ):
             raise ValueError(f"{self.name} returned a route endpoint different from the request")
 
         def optional_text(field: str) -> str | None:
@@ -275,8 +286,7 @@ class TypedGatewayAdapter:
                 else {}
             ),
             attempt_metadata=tuple(
-                item for item in payload.get("attempt_metadata", ())
-                if isinstance(item, Mapping)
+                item for item in payload.get("attempt_metadata", ()) if isinstance(item, Mapping)
             )
             if isinstance(payload.get("attempt_metadata", ()), Sequence)
             and not isinstance(payload.get("attempt_metadata", ()), (str, bytes))

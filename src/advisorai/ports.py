@@ -257,7 +257,15 @@ class GatewayTool(BaseModel):
             raise ValueError("gateway tool input schema required must be a list of names")
         if any(item not in properties for item in required):
             raise ValueError("gateway tool input schema required names must be declared properties")
-        forbidden_tokens = ("account", "balance", "broker", "credential", "order", "position", "secret")
+        forbidden_tokens = (
+            "account",
+            "balance",
+            "broker",
+            "credential",
+            "order",
+            "position",
+            "secret",
+        )
 
         def visit_schema(schema: Mapping[str, object]) -> None:
             nested_properties = schema.get("properties", {})
@@ -270,7 +278,9 @@ class GatewayTool(BaseModel):
                 ):
                     raise ValueError("gateway tool input schema required must be a list of names")
                 if any(item not in nested_properties for item in nested_required):
-                    raise ValueError("gateway tool input schema required names must be declared properties")
+                    raise ValueError(
+                        "gateway tool input schema required names must be declared properties"
+                    )
                 for name, child in nested_properties.items():
                     if not isinstance(name, str) or not name.strip():
                         raise ValueError("gateway tool input schema property names must be text")
@@ -278,7 +288,9 @@ class GatewayTool(BaseModel):
                     if is_forbidden_authority_action(normalized) or any(
                         token in normalized for token in forbidden_tokens
                     ):
-                        raise ValueError("gateway tool input schema cannot expose trading authority")
+                        raise ValueError(
+                            "gateway tool input schema cannot expose trading authority"
+                        )
                     if isinstance(child, Mapping):
                         visit_schema(child)
             items = schema.get("items")
@@ -473,10 +485,14 @@ class GatewayRequest(BaseModel):
             raise ValueError("gateway tool version cannot be blank")
         if self.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT and self.tools:
             raise ValueError("structured-output gateway requests cannot expose tools")
-        if self.invocation_mode in {
-            GatewayInvocationMode.TOOL_OPTIONAL,
-            GatewayInvocationMode.TOOL_REQUIRED,
-        } and not self.tools:
+        if (
+            self.invocation_mode
+            in {
+                GatewayInvocationMode.TOOL_OPTIONAL,
+                GatewayInvocationMode.TOOL_REQUIRED,
+            }
+            and not self.tools
+        ):
             raise ValueError("tool invocation modes require at least one reviewed tool")
         forbidden_provider_options = {
             "model",
@@ -487,6 +503,7 @@ class GatewayRequest(BaseModel):
             "endpoint_variants",
             "tool_choice",
         }
+
         def has_forbidden_provider_option(value: object) -> bool:
             if isinstance(value, Mapping):
                 for key, child in value.items():
@@ -499,7 +516,10 @@ class GatewayRequest(BaseModel):
             return False
 
         if has_forbidden_provider_option(self.provider_options):
-            raise ValueError("gateway provider options cannot override model content, credentials, or endpoint routing")
+            raise ValueError(
+                "gateway provider options cannot override model content, credentials, or endpoint routing"
+            )
+
         def has_credential_key(value: object) -> bool:
             if isinstance(value, Mapping):
                 for key, child in value.items():
@@ -510,7 +530,14 @@ class GatewayRequest(BaseModel):
                         continue
                     if any(
                         token in normalized
-                        for token in ("api_key", "authorization", "credential", "password", "secret", "token")
+                        for token in (
+                            "api_key",
+                            "authorization",
+                            "credential",
+                            "password",
+                            "secret",
+                            "token",
+                        )
                     ):
                         return True
                     if has_credential_key(child):
@@ -709,7 +736,12 @@ class GatewayResponse(BaseModel):
             value = getattr(self, field_name)
             if value is not None and not value.strip():
                 raise ValueError(f"gateway {field_name} cannot be blank")
-        for field_name in ("prompt_hash", "evidence_hash", "redaction_policy_hash", "route_policy_hash"):
+        for field_name in (
+            "prompt_hash",
+            "evidence_hash",
+            "redaction_policy_hash",
+            "route_policy_hash",
+        ):
             value = getattr(self, field_name)
             if value is not None and (
                 len(value) != 64 or any(char not in "0123456789abcdef" for char in value)

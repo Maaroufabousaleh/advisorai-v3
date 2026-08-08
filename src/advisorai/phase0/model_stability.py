@@ -162,7 +162,9 @@ class ModelStabilitySummary(BaseModel):
         if self.stability_24h_passed and (
             self.elapsed_hours < 24
             or not self.all_cycles_passed
-            or any(window is None or not window.passed for window in self.candidate_windows.values())
+            or any(
+                window is None or not window.passed for window in self.candidate_windows.values()
+            )
         ):
             raise ValueError("24-hour stability cannot pass without complete passing evidence")
         expected_status = (
@@ -196,9 +198,7 @@ def make_cycle(
     }
     unsealed = ModelStabilityCycle.model_construct(**payload, record_hash="0" * 64)
     canonical = unsealed.model_dump(mode="json", exclude={"record_hash"})
-    return ModelStabilityCycle.model_validate(
-        {**canonical, "record_hash": payload_hash(canonical)}
-    )
+    return ModelStabilityCycle.model_validate({**canonical, "record_hash": payload_hash(canonical)})
 
 
 def append_cycle(path: Path, cycle: ModelStabilityCycle) -> None:
@@ -279,8 +279,10 @@ def summarize_stability(
         and all(sample.passed for sample in cycle.samples)
         for cycle in cycles
     )
-    passed = elapsed >= 24 and all_passed and all(
-        window is not None and window.passed for window in windows.values()
+    passed = (
+        elapsed >= 24
+        and all_passed
+        and all(window is not None and window.passed for window in windows.values())
     )
     return ModelStabilitySummary(
         run_id=config.run_id,

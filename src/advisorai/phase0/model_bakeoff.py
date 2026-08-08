@@ -259,7 +259,9 @@ class ForecastBenchmarkSnapshot(BaseModel):
     def validate_snapshot(self) -> ForecastBenchmarkSnapshot:
         if self.acquired_at.tzinfo is None or self.acquired_at.utcoffset() is None:
             raise ValueError("snapshot acquisition time must include a timezone")
-        if len(self.content_hash) != 64 or any(character not in HEX for character in self.content_hash):
+        if len(self.content_hash) != 64 or any(
+            character not in HEX for character in self.content_hash
+        ):
             raise ValueError("snapshot content hash must be SHA-256")
         names = tuple(item.instrument for item in self.series)
         if len(names) != len(set(names)):
@@ -292,9 +294,7 @@ class ForecastCase(BaseModel):
         if any(not math.isfinite(value) or value <= 0 for value in (*self.context, *self.actual)):
             raise ValueError("walk-forward prices must be finite and positive")
         if any(
-            not math.isfinite(value) or value < 0
-            for row in self.context_ohlcv
-            for value in row
+            not math.isfinite(value) or value < 0 for row in self.context_ohlcv for value in row
         ):
             raise ValueError("walk-forward OHLCV values must be finite and non-negative")
         if tuple(self.context_timestamps) != tuple(sorted(self.context_timestamps)):
@@ -410,11 +410,9 @@ def snapshot_content_hash(
     return _sha256_bytes(_canonical_bytes(payload))
 
 
-def parse_nasdaq_history(
-    body: bytes, *, symbol: str, source: str
-) -> ForecastSeriesSnapshot:
+def parse_nasdaq_history(body: bytes, *, symbol: str, source: str) -> ForecastSeriesSnapshot:
     decoded = json.loads(body)
-    rows = (((decoded.get("data") or {}).get("tradesTable") or {}).get("rows") or [])
+    rows = ((decoded.get("data") or {}).get("tradesTable") or {}).get("rows") or []
     bars: list[MarketBar] = []
     for row in rows:
         if not isinstance(row, Mapping):
@@ -534,9 +532,7 @@ def forecast_metrics(
     interval_hits: list[bool] = []
     if bool(interval_lower) != bool(interval_upper):
         raise ValueError("forecast interval bounds must be supplied together")
-    if interval_lower and (
-        len(interval_lower) != len(cases) or len(interval_upper) != len(cases)
-    ):
+    if interval_lower and (len(interval_lower) != len(cases) or len(interval_upper) != len(cases)):
         raise ValueError("forecast interval batches must align with cases")
     for case_index, (case, prediction) in enumerate(zip(cases, predictions, strict=True)):
         if len(prediction) < len(case.actual):
@@ -598,7 +594,10 @@ def mandatory_baseline_metrics(
     results: list[ForecastBenchmarkMetrics] = []
     for model in models:
         predictions = tuple(
-            tuple(float(value) for value in model.predict(tuple(Decimal(str(x)) for x in case.context), 30))
+            tuple(
+                float(value)
+                for value in model.predict(tuple(Decimal(str(x)) for x in case.context), 30)
+            )
             for case in cases
         )
         results.append(forecast_metrics(model.name, cases, predictions))
@@ -658,7 +657,10 @@ def sentiment_metrics(
         math.log(max(epsilon, confidence if is_correct else (1 - confidence) / 2))
         for confidence, is_correct in zip(confidences, correct, strict=True)
     ) / len(expected)
-    brier = sum((confidence - float(is_correct)) ** 2 for confidence, is_correct in zip(confidences, correct, strict=True)) / len(expected)
+    brier = sum(
+        (confidence - float(is_correct)) ** 2
+        for confidence, is_correct in zip(confidences, correct, strict=True)
+    ) / len(expected)
     return SentimentBenchmarkMetrics(
         model_name=model_name,
         observations=len(expected),

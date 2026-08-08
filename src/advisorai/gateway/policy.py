@@ -87,7 +87,9 @@ _BEARER_VALUE = re.compile(r"(?P<prefix>\bBearer\s+)(?!\[REDACTED\])[^\s,;]+", r
 _PRIVATE_KEY = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.I | re.S
 )
-_TASK_BLOCK = re.compile(r"(?:submit|place|cancel|execute|execution|reconcile|broker[_-]?action)", re.I)
+_TASK_BLOCK = re.compile(
+    r"(?:submit|place|cancel|execute|execution|reconcile|broker[_-]?action)", re.I
+)
 _TASK_PRIVATE = re.compile(
     r"(?:risk|portfolio|sizing|allocation|decision|thesis|conflict|synthesis|council|"
     r"high[_-]?value|final[_-]?(?:research|thesis|review))",
@@ -166,7 +168,9 @@ def _normalise_sensitive_values(
     if values is None:
         return ()
     raw = tuple(values.values()) if isinstance(values, Mapping) else tuple(values)
-    return tuple(sorted({item for item in raw if isinstance(item, str) and item}, key=len, reverse=True))
+    return tuple(
+        sorted({item for item in raw if isinstance(item, str) and item}, key=len, reverse=True)
+    )
 
 
 def contains_secret_material(value: str, *, sensitive_values: Sequence[str] = ()) -> bool:
@@ -363,7 +367,9 @@ class ProviderEndpointAdmission(BaseModel):
         if self.allow_response_format_with_tools and (
             not self.supports_tools or not self.supports_structured_output
         ):
-            raise ValueError("combined response format needs tools and structured-output capabilities")
+            raise ValueError(
+                "combined response format needs tools and structured-output capabilities"
+            )
         return self
 
     @property
@@ -413,11 +419,15 @@ class ProviderEndpointInventory(BaseModel):
         keys = [(item.provider_selector_slug, item.requested_model) for item in self.admissions]
         if len(keys) != len(set(keys)):
             raise ValueError("provider endpoint inventory admissions must be unique")
-        if any(item.inventory_artifact_hash != self.inventory_artifact_hash for item in self.admissions):
+        if any(
+            item.inventory_artifact_hash != self.inventory_artifact_hash for item in self.admissions
+        ):
             raise ValueError("provider endpoint admission inventory hash does not match artifact")
         return self
 
-    def admission_for(self, selector_slug: str, requested_model: str) -> ProviderEndpointAdmission | None:
+    def admission_for(
+        self, selector_slug: str, requested_model: str
+    ) -> ProviderEndpointAdmission | None:
         return next(
             (
                 item
@@ -509,7 +519,9 @@ class ProviderRoutePolicy(BaseModel):
             if self.actual_identity_mode == "dynamic":
                 raise ValueError("private routes require exact or allowlisted provider identity")
         if self.endpoint_admission is not None:
-            if self.provider_only and self.provider_only != (self.endpoint_admission.provider_selector_slug,):
+            if self.provider_only and self.provider_only != (
+                self.endpoint_admission.provider_selector_slug,
+            ):
                 raise ValueError("provider policy selector does not match endpoint admission")
             if self.provider_order and self.provider_order != (
                 self.endpoint_admission.provider_selector_slug,
@@ -523,15 +535,21 @@ class ProviderRoutePolicy(BaseModel):
                     self.endpoint_admission.requested_model,
                 )
                 if artifact_admission != self.endpoint_admission:
-                    raise ValueError("provider endpoint admission is not the frozen inventory entry")
+                    raise ValueError(
+                        "provider endpoint admission is not the frozen inventory entry"
+                    )
             if self.endpoint_admission.zdr != self.zdr:
                 raise ValueError("provider endpoint admission ZDR does not match route policy")
             if self.endpoint_admission.data_collection != self.data_collection:
-                raise ValueError("provider endpoint admission data policy does not match route policy")
+                raise ValueError(
+                    "provider endpoint admission data policy does not match route policy"
+                )
             if self.endpoint_admission.policy_hash is not None:
                 expected = self._policy_hash_without_admission()
                 if self.endpoint_admission.policy_hash != expected:
-                    raise ValueError("provider endpoint admission policy hash does not match route policy")
+                    raise ValueError(
+                        "provider endpoint admission policy hash does not match route policy"
+                    )
         return self
 
     def policy_hash(self) -> str:
@@ -553,7 +571,9 @@ class ProviderRoutePolicy(BaseModel):
             admission.input_price_per_million if admission is not None else self.max_prompt_price
         )
         completion_price = (
-            admission.output_price_per_million if admission is not None else self.max_completion_price
+            admission.output_price_per_million
+            if admission is not None
+            else self.max_completion_price
         )
         request_price = admission.request_price if admission is not None else self.max_request_price
         provider: dict[str, object] = {
@@ -620,7 +640,9 @@ class ProviderRoutePolicy(BaseModel):
         actual = response.route
         actual_endpoint_variant = response.actual_endpoint_variant
         if not response.actual_provider or not response.actual_model or not response.actual_gateway:
-            raise GatewayPolicyError("provider response omitted actual provider/model/gateway identity")
+            raise GatewayPolicyError(
+                "provider response omitted actual provider/model/gateway identity"
+            )
         if not actual_endpoint_variant:
             raise GatewayPolicyError("provider response omitted actual endpoint identity")
         if (
@@ -628,22 +650,38 @@ class ProviderRoutePolicy(BaseModel):
             or actual.model != response.actual_model
             or actual.gateway != response.actual_gateway
         ):
-            raise GatewayPolicyError("provider response identity fields do not match its actual route")
+            raise GatewayPolicyError(
+                "provider response identity fields do not match its actual route"
+            )
         if actual.endpoint_variant and actual.endpoint_variant != actual_endpoint_variant:
-            raise GatewayPolicyError("provider response endpoint fields do not match its actual route")
+            raise GatewayPolicyError(
+                "provider response endpoint fields do not match its actual route"
+            )
         if self.actual_identity_mode == "exact":
             if (
                 actual.provider != pinned_route.provider
                 or actual.model != pinned_route.model
                 or actual.gateway != pinned_route.gateway
             ):
-                raise GatewayPolicyError("provider returned an identity different from its pinned route")
-        elif self.actual_identity_mode == "allowlisted" and not self.admits_route(actual, actual=True):
+                raise GatewayPolicyError(
+                    "provider returned an identity different from its pinned route"
+                )
+        elif self.actual_identity_mode == "allowlisted" and not self.admits_route(
+            actual, actual=True
+        ):
             raise GatewayPolicyError("provider returned an identity outside the reviewed allowlist")
-        elif self.actual_identity_mode == "dynamic" and self.route_tier is not RouteTier.CONTRIBUTOR_PUBLIC:
+        elif (
+            self.actual_identity_mode == "dynamic"
+            and self.route_tier is not RouteTier.CONTRIBUTOR_PUBLIC
+        ):
             raise GatewayPolicyError("dynamic provider identities are public-only")
-        if pinned_route.endpoint_variant and actual_endpoint_variant != pinned_route.endpoint_variant:
-            raise GatewayPolicyError("provider returned an endpoint variant different from its pinned route")
+        if (
+            pinned_route.endpoint_variant
+            and actual_endpoint_variant != pinned_route.endpoint_variant
+        ):
+            raise GatewayPolicyError(
+                "provider returned an endpoint variant different from its pinned route"
+            )
         if not self.admits_route(actual, actual=True):
             raise GatewayPolicyError("provider returned an identity outside the route policy")
         if self.require_parameters and (
@@ -662,7 +700,10 @@ class ProviderRoutePolicy(BaseModel):
             response.output_price_per_million > self.max_completion_price
         ):
             raise GatewayPolicyError("provider completion price exceeds the route policy cap")
-        if response.request_price_usd is not None and response.request_price_usd > self.max_request_price:
+        if (
+            response.request_price_usd is not None
+            and response.request_price_usd > self.max_request_price
+        ):
             raise GatewayPolicyError("provider request price exceeds the route policy cap")
 
     def _validate_admitted_response(
@@ -697,8 +738,14 @@ class ProviderRoutePolicy(BaseModel):
                     ("request", admission.request_price),
                 ):
                     value = max_price.get(key)
-                    if isinstance(value, bool) or not isinstance(value, (int, float)) or value > limit:
-                        raise GatewayPolicyError("pinned provider request price limit is not admitted")
+                    if (
+                        isinstance(value, bool)
+                        or not isinstance(value, (int, float))
+                        or value > limit
+                    ):
+                        raise GatewayPolicyError(
+                            "pinned provider request price limit is not admitted"
+                        )
         if response.endpoint_selected is not True:
             raise GatewayPolicyError("provider response did not select exactly one endpoint")
         if response.requested_provider_selector != admission.provider_selector_slug:
@@ -718,7 +765,10 @@ class ProviderRoutePolicy(BaseModel):
             raise GatewayPolicyError("pinned route gateway differs from admission")
         if response.requested_endpoint_selector != pinned_route.endpoint_variant:
             raise GatewayPolicyError("provider response endpoint selector differs from request")
-        if not response.endpoint_selector_proof or response.endpoint_selector_proof == admission.provider_selector_slug:
+        if (
+            not response.endpoint_selector_proof
+            or response.endpoint_selector_proof == admission.provider_selector_slug
+        ):
             raise GatewayPolicyError("provider response endpoint selector proof is invalid")
         if response.actual_endpoint_variant == response.observed_provider_name:
             raise GatewayPolicyError("provider display name cannot be an endpoint variant")
@@ -727,18 +777,28 @@ class ProviderRoutePolicy(BaseModel):
             endpoints = metadata.get("endpoints") if isinstance(metadata, Mapping) else None
             available = endpoints.get("available") if isinstance(endpoints, Mapping) else None
             selected = (
-                [item for item in available if isinstance(item, Mapping) and item.get("selected") is True]
+                [
+                    item
+                    for item in available
+                    if isinstance(item, Mapping) and item.get("selected") is True
+                ]
                 if isinstance(available, list)
                 else []
             )
             if len(selected) != 1:
-                raise GatewayPolicyError("OpenRouter response metadata must identify one selected endpoint")
+                raise GatewayPolicyError(
+                    "OpenRouter response metadata must identify one selected endpoint"
+                )
             selected_provider = selected[0].get("provider") or selected[0].get("provider_name")
             selected_model = selected[0].get("model") or selected[0].get("resolved_model")
             if selected_provider != response.observed_provider_name:
-                raise GatewayPolicyError("OpenRouter selected provider metadata does not match observation")
+                raise GatewayPolicyError(
+                    "OpenRouter selected provider metadata does not match observation"
+                )
             if selected_model != (response.resolved_endpoint_model or response.resolved_model):
-                raise GatewayPolicyError("OpenRouter selected model metadata does not match observation")
+                raise GatewayPolicyError(
+                    "OpenRouter selected model metadata does not match observation"
+                )
         if self.allow_fallbacks is not False:
             raise GatewayPolicyError("admitted pinned routes cannot allow fallback")
         if response.billed_cost_usd is None:
@@ -1002,9 +1062,13 @@ class PolicyGateway:
             profile_ids = {profile.profile_id for profile in self.profiles}
             for profile in self.profiles:
                 if any(fallback not in profile_ids for fallback in profile.fallback_profile_ids):
-                    raise ValueError(f"route profile {profile.profile_id!r} references an unknown fallback")
+                    raise ValueError(
+                        f"route profile {profile.profile_id!r} references an unknown fallback"
+                    )
             if self.config.route_order and set(self.config.route_order) != profile_ids:
-                raise ValueError("route_order must name every configured route profile exactly once")
+                raise ValueError(
+                    "route_order must name every configured route profile exactly once"
+                )
 
     def route_policy_hash(self) -> str:
         return _hash_json(
@@ -1025,7 +1089,9 @@ class PolicyGateway:
             }
         )
 
-    def classify(self, request: GatewayRequest, *, payload: object | None = None) -> GatewayDataClass:
+    def classify(
+        self, request: GatewayRequest, *, payload: object | None = None
+    ) -> GatewayDataClass:
         declared = _coerce_data_class(request.data_class)
         if declared is GatewayDataClass.UNCLASSIFIED:
             return declared
@@ -1081,7 +1147,10 @@ class PolicyGateway:
             reasons.append("research request")
         if request.conflicting_evidence:
             reasons.append("conflicting evidence")
-        if request.confidence is not None and request.confidence < self.config.low_confidence_threshold:
+        if (
+            request.confidence is not None
+            and request.confidence < self.config.low_confidence_threshold
+        ):
             reasons.append("low confidence")
         critical = (
             impact is DecisionImpact.PORTFOLIO_INFLUENCING
@@ -1165,7 +1234,10 @@ class PolicyGateway:
             response = GatewayResponse.model_validate(response)
             if response.request_id != candidate.request_id:
                 raise GatewayFailure("policy gateway received a response for another request")
-            permitted_routes = {attempt_request.route.gateway, *attempt_request.route.fallback_chain}
+            permitted_routes = {
+                attempt_request.route.gateway,
+                *attempt_request.route.fallback_chain,
+            }
             if response.route.gateway not in permitted_routes:
                 raise GatewayFailure("policy gateway received an unpinned route response")
             self._validate_response(response, selected.tier, attempt_request)
@@ -1179,7 +1251,9 @@ class PolicyGateway:
                     "output_kind": candidate.output_kind,
                     "policy_version": self.config.policy_version,
                     "redaction_policy_version": self.config.redaction_policy_version,
-                    "escalation_reason": decision.reason if selected.tier is GatewayTier.PRIVATE else None,
+                    "escalation_reason": decision.reason
+                    if selected.tier is GatewayTier.PRIVATE
+                    else None,
                     "retention_policy": selected.terms.retention_policy,
                     "training_policy": selected.terms.training_policy,
                     "terms_verified": selected.terms.terms_verified,
@@ -1219,7 +1293,9 @@ class PolicyGateway:
                 if transport_attempts:
                     for provider_attempt_number, metadata in enumerate(transport_attempts, start=1):
                         attempt = GatewayAttempt(
-                            adapter=getattr(selected.adapter, "name", type(selected.adapter).__name__),
+                            adapter=getattr(
+                                selected.adapter, "name", type(selected.adapter).__name__
+                            ),
                             route=attempt_request.route,
                             succeeded=False,
                             latency_ms=elapsed,
@@ -1528,7 +1604,9 @@ class PolicyGateway:
             admission = provider_policy.endpoint_admission
             if admission is not None:
                 PolicyGateway._validate_invocation_admission(request, admission)
-            updates["provider_options"] = provider_policy.request_options(adapter_route or request.route)
+            updates["provider_options"] = provider_policy.request_options(
+                adapter_route or request.route
+            )
             updates["response_format_with_tools_admitted"] = bool(
                 admission and admission.allow_response_format_with_tools
             )
@@ -1569,7 +1647,9 @@ class PolicyGateway:
     def _validate_tools(self, tools: tuple[GatewayTool, ...], tier: GatewayTier) -> None:
         self._validate_tools_for_route(
             tools,
-            RouteTier.CONTRIBUTOR_PUBLIC if tier is GatewayTier.CONTRIBUTOR else RouteTier.PRIVATE_REVIEWER,
+            RouteTier.CONTRIBUTOR_PUBLIC
+            if tier is GatewayTier.CONTRIBUTOR
+            else RouteTier.PRIVATE_REVIEWER,
         )
 
     def _validate_tools_for_route(
@@ -1592,7 +1672,9 @@ class PolicyGateway:
     def _is_read_only_tool(name: str) -> bool:
         return (
             name.startswith(("read_", "fetch_", "get_", "search_", "lookup_", "inspect_"))
-            and not any(token in name for token in ("order", "broker", "account", "balance", "position"))
+            and not any(
+                token in name for token in ("order", "broker", "account", "balance", "position")
+            )
             or name == "read_orderbook"
         )
 
@@ -1615,17 +1697,25 @@ class PolicyGateway:
         )
         if governed_identity:
             if response.requested_provider_selector != request.route.provider:
-                raise GatewayPolicyError("provider response selector differs from its requested route")
+                raise GatewayPolicyError(
+                    "provider response selector differs from its requested route"
+                )
             if response.requested_model != request.route.model:
                 raise GatewayPolicyError("provider response model differs from its requested route")
             if response.requested_gateway != request.route.gateway:
-                raise GatewayPolicyError("provider response gateway differs from its requested route")
+                raise GatewayPolicyError(
+                    "provider response gateway differs from its requested route"
+                )
             if response.requested_endpoint_selector != request.route.endpoint_variant:
-                raise GatewayPolicyError("provider response endpoint selector differs from its request")
+                raise GatewayPolicyError(
+                    "provider response endpoint selector differs from its request"
+                )
             if response.endpoint_selected is not True:
                 raise GatewayPolicyError("provider response did not select an endpoint")
             if not response.observed_provider_name or not response.top_level_response_model:
-                raise GatewayPolicyError("provider response omitted observed provider/model identity")
+                raise GatewayPolicyError(
+                    "provider response omitted observed provider/model identity"
+                )
             if not response.resolved_endpoint_model and not response.resolved_model:
                 raise GatewayPolicyError("provider response omitted resolved endpoint model")
             if not response.actual_gateway:
@@ -1636,8 +1726,14 @@ class PolicyGateway:
                 raise GatewayPolicyError("provider response omitted endpoint selector proof")
         else:
             actual_endpoint_variant = response.actual_endpoint_variant
-            if not response.actual_provider or not response.actual_model or not response.actual_gateway:
-                raise GatewayPolicyError("provider response omitted actual provider/model/gateway identity")
+            if (
+                not response.actual_provider
+                or not response.actual_model
+                or not response.actual_gateway
+            ):
+                raise GatewayPolicyError(
+                    "provider response omitted actual provider/model/gateway identity"
+                )
             if not actual_endpoint_variant:
                 raise GatewayPolicyError("provider response omitted actual endpoint identity")
             if (
@@ -1645,24 +1741,43 @@ class PolicyGateway:
                 or response.route.model != response.actual_model
                 or response.route.gateway != response.actual_gateway
             ):
-                raise GatewayPolicyError("provider response identity fields do not match its actual route")
-            if response.route.endpoint_variant and response.route.endpoint_variant != actual_endpoint_variant:
-                raise GatewayPolicyError("provider response endpoint fields do not match its actual route")
-            if request.route.endpoint_variant and request.route.endpoint_variant != actual_endpoint_variant:
-                raise GatewayPolicyError("provider response endpoint differs from its requested route")
+                raise GatewayPolicyError(
+                    "provider response identity fields do not match its actual route"
+                )
+            if (
+                response.route.endpoint_variant
+                and response.route.endpoint_variant != actual_endpoint_variant
+            ):
+                raise GatewayPolicyError(
+                    "provider response endpoint fields do not match its actual route"
+                )
+            if (
+                request.route.endpoint_variant
+                and request.route.endpoint_variant != actual_endpoint_variant
+            ):
+                raise GatewayPolicyError(
+                    "provider response endpoint differs from its requested route"
+                )
         if response.authoritative:
             raise GatewayPolicyError("model output cannot be authoritative")
-        if response.invocation_mode is not None and response.invocation_mode is not request.invocation_mode:
+        if (
+            response.invocation_mode is not None
+            and response.invocation_mode is not request.invocation_mode
+        ):
             raise GatewayPolicyError("provider response invocation mode differs from the request")
         if request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT:
             if not response.tool_calls and response.typed_payload is None:
-                raise GatewayPolicyError("structured-output responses require typed structured payloads")
+                raise GatewayPolicyError(
+                    "structured-output responses require typed structured payloads"
+                )
         elif request.invocation_mode is GatewayInvocationMode.TOOL_REQUIRED:
             if not response.tool_calls:
                 raise GatewayPolicyError("required-tool responses require at least one tool call")
         elif request.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL:
             if not response.tool_calls and response.typed_payload is None:
-                raise GatewayPolicyError("optional-tool responses require a tool call or typed payload")
+                raise GatewayPolicyError(
+                    "optional-tool responses require a tool call or typed payload"
+                )
         if response.typed_payload is None and not response.tool_calls:
             raise GatewayPolicyError(
                 "governed model outputs must be typed structured payloads or approved tool calls"
@@ -1674,14 +1789,14 @@ class PolicyGateway:
             and request.output_kind is not GatewayOutputKind.GENERIC
             and response.typed_payload is None
         ):
-            raise GatewayPolicyError(
-                f"{request.output_kind.value} output requires a typed payload"
-            )
+            raise GatewayPolicyError(f"{request.output_kind.value} output requires a typed payload")
         for call in response.tool_calls:
             name = str(call.get("name", "")).strip().lower()
             if tier is GatewayTier.CONTRIBUTOR:
                 raise GatewayPolicyError("contributor routes cannot return tool calls")
-            if name not in set(self.config.private_tool_allowlist) or not self._is_read_only_tool(name):
+            if name not in set(self.config.private_tool_allowlist) or not self._is_read_only_tool(
+                name
+            ):
                 raise GatewayPolicyError(f"model returned an unapproved tool call: {name}")
             definition = next(
                 (tool for tool in request.tools if tool.name.strip().lower() == name),
@@ -1696,7 +1811,9 @@ class PolicyGateway:
                 try:
                     decoded_arguments = json.loads(arguments)
                 except json.JSONDecodeError as exc:
-                    raise GatewayPolicyError("model tool-call arguments are not valid JSON") from exc
+                    raise GatewayPolicyError(
+                        "model tool-call arguments are not valid JSON"
+                    ) from exc
                 if not isinstance(decoded_arguments, Mapping):
                     raise GatewayPolicyError("model tool-call arguments must be a JSON object")
                 parsed_arguments = decoded_arguments
@@ -1723,7 +1840,9 @@ class PolicyGateway:
         if isinstance(value, Mapping):
             for key, child in value.items():
                 normalized = normalize_authority_action(str(key))
-                if normalized in _FORBIDDEN_OUTPUT_KEYS or is_forbidden_authority_action(normalized):
+                if normalized in _FORBIDDEN_OUTPUT_KEYS or is_forbidden_authority_action(
+                    normalized
+                ):
                     raise GatewayPolicyError(
                         f"model output contains a forbidden authority field: {key}"
                     )
@@ -1748,7 +1867,9 @@ class PolicyGateway:
                         cls._validate_tool_mapping(item)
 
     @classmethod
-    def _validate_json_schema(cls, value: object, schema: Mapping[str, object], path: str = "$") -> None:
+    def _validate_json_schema(
+        cls, value: object, schema: Mapping[str, object], path: str = "$"
+    ) -> None:
         schema_type = schema.get("type")
         if schema_type == "object":
             if not isinstance(value, Mapping):

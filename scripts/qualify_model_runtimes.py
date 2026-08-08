@@ -45,11 +45,7 @@ def _baseline_runner(candidate: CandidateSpec) -> FunctionalRunner:
     model = forecast_baseline_models()[candidate.family.value]
 
     def infer(loaded: object, payload: object) -> tuple[Decimal, ...]:
-        if (
-            isinstance(payload, (tuple, list))
-            and payload
-            and isinstance(payload[0], (tuple, list))
-        ):
+        if isinstance(payload, (tuple, list)) and payload and isinstance(payload[0], (tuple, list)):
             return tuple(
                 tuple(loaded.predict(_forecast_payload(history), 1))  # type: ignore[attr-defined]
                 for history in payload
@@ -113,7 +109,9 @@ def qualify(
     admissions = {
         admission.candidate_name: admission
         for path in admission_paths
-        for admission in (LocalCandidateAdmission.model_validate_json(path.read_text(encoding="utf-8")),)
+        for admission in (
+            LocalCandidateAdmission.model_validate_json(path.read_text(encoding="utf-8")),
+        )
     }
     roster = default_runtime_candidates()
     if selected_candidates is not None:
@@ -128,14 +126,14 @@ def qualify(
         sample, batch = _payloads(dataset)
         runner = _baseline_runner(candidate) if candidate.external_checkpoint is None else None
         result = run_runtime_qualification(
-                candidate,
-                runner=runner,
-                dataset=dataset,
-                sample_input=sample,
-                batch_input=batch,
-                repeats=3,
-                repository_root=Path.cwd(),
-            )
+            candidate,
+            runner=runner,
+            dataset=dataset,
+            sample_input=sample,
+            batch_input=batch,
+            repeats=3,
+            repository_root=Path.cwd(),
+        )
         if result.status.value == "measured" and result.resource is not None:
             evaluation = evaluations_by_name.get(candidate.family.value)
             if evaluation is not None:
@@ -168,9 +166,7 @@ def qualify(
         for result in results
     )
     benchmark_evaluations = [
-        evaluation
-        for result in results
-        for evaluation in result.forecast_evaluations
+        evaluation for result in results for evaluation in result.forecast_evaluations
     ]
     benchmark_path = run_dir / "forecast-baseline-benchmark.json"
     benchmark_payload = (
@@ -187,12 +183,19 @@ def qualify(
         + "\n"
     ).encode()
     if benchmark_path.exists() and benchmark_path.read_bytes() != benchmark_payload:
-        raise FileExistsError(f"immutable evidence already exists with different content: {benchmark_path}")
+        raise FileExistsError(
+            f"immutable evidence already exists with different content: {benchmark_path}"
+        )
     benchmark_path.write_bytes(benchmark_payload)
     gate_path = run_dir / "bakeoff-gate.json"
-    gate_payload = (json.dumps(project_bakeoff_gate(results).model_dump(mode="json"), sort_keys=True, indent=2) + "\n").encode()
+    gate_payload = (
+        json.dumps(project_bakeoff_gate(results).model_dump(mode="json"), sort_keys=True, indent=2)
+        + "\n"
+    ).encode()
     if gate_path.exists() and gate_path.read_bytes() != gate_payload:
-        raise FileExistsError(f"immutable evidence already exists with different content: {gate_path}")
+        raise FileExistsError(
+            f"immutable evidence already exists with different content: {gate_path}"
+        )
     gate_path.write_bytes(gate_payload)
     pointer = {
         "schema": "advisorai.phase0.model-runtime-qualification.latest.v1",

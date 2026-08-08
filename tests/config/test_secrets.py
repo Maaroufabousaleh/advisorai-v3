@@ -92,9 +92,7 @@ def test_credential_scopes_are_explicit_and_return_only_the_requested_subset():
     assert resolver.resolve(CredentialScope.PAPER_VENUE) == {
         "ADVISORAI_VENUE_API_SECRET": "venue-secret"
     }
-    assert resolver.resolve(CredentialScope.PAPER_VENUE_CCXT) == {
-        "CCXT_API_SECRET": "ccxt-secret"
-    }
+    assert resolver.resolve(CredentialScope.PAPER_VENUE_CCXT) == {"CCXT_API_SECRET": "ccxt-secret"}
     assert resolver.resolve(CredentialScope.EVENT_BUS) == {"NATS_PASSWORD": "event-secret"}
     assert resolver.resolve(CredentialScope.ARCHIVE_RCLONE) == {
         "RCLONE_CONFIG_PASS": "rclone-secret"
@@ -141,21 +139,17 @@ def test_credential_aliases_require_an_allowed_target_and_detect_conflicts():
     with pytest.raises(CredentialScopeError, match="conflicting"):
         resolver.resolve(
             CredentialScope.LITELLM,
-            aliases=(
-                CredentialAlias(
-                    target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_API_KEY"
-                ),
-            ),
+            aliases=(CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_API_KEY"),),
         )
     with pytest.raises(CredentialScopeError, match="outside"):
         resolver.resolve(
             CredentialScope.DIRECT_LLM,
-            aliases=(
-                CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_API_KEY"),
-            ),
+            aliases=(CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_API_KEY"),),
         )
     with pytest.raises(CredentialScopeError, match="not allowlisted"):
         resolver.resolve(
             CredentialScope.LITELLM,
-            aliases=(CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_PROVIDER"),),
+            aliases=(
+                CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_PROVIDER"),
+            ),
         )

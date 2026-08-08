@@ -211,7 +211,9 @@ def _isolated_candidate(
         task=task,
         external_checkpoint=checkpoint,
         requires_transformers=False,
-        output_schema="sentiment(label,confidence)" if task == ModelTask.FINANCE_SENTIMENT else "forecast[1]",
+        output_schema="sentiment(label,confidence)"
+        if task == ModelTask.FINANCE_SENTIMENT
+        else "forecast[1]",
         repeatability_policy=repeatability_policy,
         repeatability_seed=repeatability_seed,
         runtime_pin=_isolated_runtime(
@@ -245,25 +247,56 @@ def _runner(family: str = ModelFamily.NAIVE.value, *, network: bool = False) -> 
 def test_default_registry_pins_exact_candidate_revisions_and_roles():
     by_name = {candidate.name: candidate for candidate in default_runtime_candidates()}
     assert "finbert-family" not in by_name
-    assert by_name["modern-finbert"].external_checkpoint.repository_id == "tabularisai/ModernFinBERT"
-    assert by_name["modern-finbert"].external_checkpoint.revision == "6c6de8332ea7f6824c0f8917358dce1e669c1710"
-    assert by_name["finbert-minilm"].external_checkpoint.repository_id == "9mark9/finbert-minilm-sentiment"
-    assert by_name["finbert-minilm"].external_checkpoint.revision == "fdbfec0cd09610bd5af26da8998507fe7838e838"
-    assert by_name["finsentiment-deberta-v3"].external_checkpoint.revision == "f2312de96d6cfe6251da37afb0e99b8e29885bdd"
-    assert by_name["ttm-r3"].external_checkpoint.repository_id == "ibm-granite/granite-timeseries-ttm-r3"
-    assert by_name["ttm-r3"].external_checkpoint.revision == "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa"
-    assert by_name["ttm-r2"].external_checkpoint.repository_id == "ibm-granite/granite-timeseries-ttm-r2"
-    assert by_name["chronos-2-small"].external_checkpoint.repository_id == "autogluon/chronos-2-small"
+    assert (
+        by_name["modern-finbert"].external_checkpoint.repository_id == "tabularisai/ModernFinBERT"
+    )
+    assert (
+        by_name["modern-finbert"].external_checkpoint.revision
+        == "6c6de8332ea7f6824c0f8917358dce1e669c1710"
+    )
+    assert (
+        by_name["finbert-minilm"].external_checkpoint.repository_id
+        == "9mark9/finbert-minilm-sentiment"
+    )
+    assert (
+        by_name["finbert-minilm"].external_checkpoint.revision
+        == "fdbfec0cd09610bd5af26da8998507fe7838e838"
+    )
+    assert (
+        by_name["finsentiment-deberta-v3"].external_checkpoint.revision
+        == "f2312de96d6cfe6251da37afb0e99b8e29885bdd"
+    )
+    assert (
+        by_name["ttm-r3"].external_checkpoint.repository_id
+        == "ibm-granite/granite-timeseries-ttm-r3"
+    )
+    assert (
+        by_name["ttm-r3"].external_checkpoint.revision == "ea17cfd2e3edcaea21eb8dcecd18bf88971482fa"
+    )
+    assert (
+        by_name["ttm-r2"].external_checkpoint.repository_id
+        == "ibm-granite/granite-timeseries-ttm-r2"
+    )
+    assert (
+        by_name["chronos-2-small"].external_checkpoint.repository_id == "autogluon/chronos-2-small"
+    )
     assert by_name["chronos-2-small"].output_schema == "forecast[30]"
     assert "chronos-forecasting==2.3.1" in by_name["chronos-2-small"].runtime_pin.dependencies
-    assert by_name["kronos-mini"].external_checkpoint.tokenizer.repository_id == "NeoQuasar/Kronos-Tokenizer-2k"
+    assert (
+        by_name["kronos-mini"].external_checkpoint.tokenizer.repository_id
+        == "NeoQuasar/Kronos-Tokenizer-2k"
+    )
     assert by_name["kronos-mini"].output_schema == "forecast[30]"
     assert by_name["kronos-small"].output_schema == "forecast[30]"
     for kronos_name in ("kronos-mini", "kronos-small"):
-        assert "advisorai-kronos-runtime==0.0.0+67b630e" in by_name[
-            kronos_name
-        ].runtime_pin.dependencies
-        assert by_name[kronos_name].repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+        assert (
+            "advisorai-kronos-runtime==0.0.0+67b630e"
+            in by_name[kronos_name].runtime_pin.dependencies
+        )
+        assert (
+            by_name[kronos_name].repeatability_policy
+            == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+        )
     assert by_name["tabpfn-ts"].external_checkpoint.repository_id == "PriorLabs/tabpfn-time-series"
     assert by_name["tspulse"].task == ModelTask.TSPULSE_FEATURES
     with pytest.raises(ValueError, match="never a price forecaster"):
@@ -273,7 +306,10 @@ def test_default_registry_pins_exact_candidate_revisions_and_roles():
             task=ModelTask.FORECAST,
             output_schema="forecast[1]",
         )
-    assert by_name["modern-finbert"].external_checkpoint.license_admission.status == LicenseAdmissionStatus.APPROVED
+    assert (
+        by_name["modern-finbert"].external_checkpoint.license_admission.status
+        == LicenseAdmissionStatus.APPROVED
+    )
     assert by_name["modern-finbert"].runtime_pin.status.value == "pending"
     assert "pytorch_model.bin" not in {
         item.relative_path
@@ -321,7 +357,9 @@ def test_unexpected_cached_artifact_is_rejected(tmp_path):
         verify_checkpoint_artifacts(pin, cache_root=cache)
 
 
-@pytest.mark.parametrize("filename", ["config.json", "tokenizer.json", "generation_config.json", "processor_config.json"])
+@pytest.mark.parametrize(
+    "filename", ["config.json", "tokenizer.json", "generation_config.json", "processor_config.json"]
+)
 def test_unexpected_behavior_artifacts_are_rejected(tmp_path, filename):
     cache = tmp_path / "cache"
     cache.mkdir()
@@ -426,26 +464,35 @@ def test_invalid_output_and_nonfinite_values_are_rejected():
         validate_model_output(ModelTask.FINANCE_SENTIMENT, {"label": "buy", "confidence": 0.9})
     with pytest.raises(Exception, match="confidence"):
         validate_model_output(ModelTask.FINANCE_SENTIMENT, {"label": "positive", "confidence": 2})
-    assert validate_model_output(
-        ModelTask.FINANCE_SENTIMENT,
-        {"label": "neutral", "confidence": 0.5},
-    ) == "sentiment(label,confidence)"
+    assert (
+        validate_model_output(
+            ModelTask.FINANCE_SENTIMENT,
+            {"label": "neutral", "confidence": 0.5},
+        )
+        == "sentiment(label,confidence)"
+    )
 
 
 def test_singleton_and_batch_output_contracts_are_separate():
-    assert validate_model_batch_output(
-        ModelTask.FINANCE_SENTIMENT,
-        (
-            {"label": "positive", "confidence": 0.9},
-            {"label": "negative", "confidence": 0.8},
-        ),
-        expected_batch_size=2,
-    ) == "batch[2]<sentiment(label,confidence)>"
-    assert validate_model_batch_output(
-        ModelTask.TSPULSE_FEATURES,
-        ((0.1, 0.2), (0.3, 0.4)),
-        expected_batch_size=2,
-    ) == "batch[2]<features[2]>"
+    assert (
+        validate_model_batch_output(
+            ModelTask.FINANCE_SENTIMENT,
+            (
+                {"label": "positive", "confidence": 0.9},
+                {"label": "negative", "confidence": 0.8},
+            ),
+            expected_batch_size=2,
+        )
+        == "batch[2]<sentiment(label,confidence)>"
+    )
+    assert (
+        validate_model_batch_output(
+            ModelTask.TSPULSE_FEATURES,
+            ((0.1, 0.2), (0.3, 0.4)),
+            expected_batch_size=2,
+        )
+        == "batch[2]<features[2]>"
+    )
     with pytest.raises(Exception, match="cardinality"):
         validate_model_batch_output(
             ModelTask.FINANCE_SENTIMENT,
@@ -510,10 +557,7 @@ def test_finbert_fixture_scores_labels_and_batch_throughput():
     runner = FunctionalRunner(
         model_family=ModelFamily.FINBERT.value,
         infer_fn=lambda _model, payload: (
-            [
-                {"label": label, "score": 0.8}
-                for label in expected
-            ]
+            [{"label": label, "score": 0.8} for label in expected]
             if isinstance(payload, tuple)
             else {"label": expected[0], "score": 0.8}
         ),
@@ -616,7 +660,10 @@ def test_offline_cached_inference_requires_isolated_runtime_and_is_repeatable(tm
     assert result.repeated_outputs_equal is True
     assert result.nan_inf_rejection_passed is True
     assert result.resource.unload_succeeded is True
-    assert result.observed_artifacts[0].sha256 == candidate.external_checkpoint.repository.artifacts[0].sha256
+    assert (
+        result.observed_artifacts[0].sha256
+        == candidate.external_checkpoint.repository.artifacts[0].sha256
+    )
     assert result.environment.sys_executable == candidate.runtime_pin.python_executable
 
 
@@ -734,7 +781,9 @@ def test_isolated_runtime_rejects_fake_lock_hash_and_wrong_executable(tmp_path):
     with pytest.raises(Exception, match="executable hash"):
         verify_runtime_pin(wrong)
     missing_path = str(Path(pin.environment_path) / "bin" / "missing")
-    missing = pin.model_copy(update={"python_launcher": missing_path, "python_executable": missing_path})
+    missing = pin.model_copy(
+        update={"python_launcher": missing_path, "python_executable": missing_path}
+    )
     with pytest.raises(Exception, match="missing"):
         verify_runtime_pin(missing)
 
@@ -906,11 +955,7 @@ def test_missing_or_corrupt_checkpoint_is_quarantined_with_reason(tmp_path):
     corrupt_pin = corrupt_candidate.external_checkpoint.model_copy(
         update={
             "repository": corrupt_candidate.external_checkpoint.repository.model_copy(
-                update={
-                    "artifacts": (
-                        ArtifactPin(relative_path="weights.bin", sha256="b" * 64),
-                    )
-                }
+                update={"artifacts": (ArtifactPin(relative_path="weights.bin", sha256="b" * 64),)}
             )
         }
     )
@@ -969,7 +1014,9 @@ def test_forecast_benchmark_contains_all_mandatory_baselines():
     names = {evaluation.model_name for evaluation in evaluations}
     assert {"naive", "drift", "seasonal", "linear", "lightgbm"} == names
     assert all(evaluation.past_only for evaluation in evaluations)
-    assert all(evaluation.mae.is_finite() and evaluation.rmse.is_finite() for evaluation in evaluations)
+    assert all(
+        evaluation.mae.is_finite() and evaluation.rmse.is_finite() for evaluation in evaluations
+    )
 
 
 def test_forecast_candidate_benchmark_keeps_single_series_non_authoritative():
@@ -1012,6 +1059,7 @@ def test_tspulse_measured_result_preserves_typed_batch_features():
         task=ModelTask.TSPULSE_FEATURES,
         output_schema="features[3]",
     )
+
     def infer(_model, values):
         def features(row):
             return (float(len(row)), float(row[-1]), float(max(row) - min(row)))
@@ -1058,9 +1106,7 @@ def test_measured_result_requires_complete_evidence():
         batch_input=(dataset.inputs[:4],),
     )
     with pytest.raises(ValueError, match="complete offline"):
-        type(measured).model_validate(
-            {**measured.model_dump(), "batch_completed": False}
-        )
+        type(measured).model_validate({**measured.model_dump(), "batch_completed": False})
 
 
 def test_manifest_is_canonical_and_immutable(tmp_path):
@@ -1100,14 +1146,21 @@ def test_smoke_script_scopes_evidence_to_an_immutable_run(tmp_path):
     assert run_dir.is_dir()
     assert (run_dir / "index.json").exists()
     assert (run_dir / "bakeoff-gate.json").exists()
-    assert json.loads((output / "index.json").read_text(encoding="utf-8"))["run_id"] == latest["run_id"]
+    assert (
+        json.loads((output / "index.json").read_text(encoding="utf-8"))["run_id"]
+        == latest["run_id"]
+    )
 
 
 def test_finbert_fixture_is_fixed_and_labeled():
     dataset = BenchmarkDataset.finbert_fixture()
     assert dataset.task == ModelTask.FINANCE_SENTIMENT
     assert len(dataset.public_text_fixture) == 5
-    assert {label for _text, label in dataset.public_text_fixture} == {"positive", "negative", "neutral"}
+    assert {label for _text, label in dataset.public_text_fixture} == {
+        "positive",
+        "negative",
+        "neutral",
+    }
 
 
 def test_finbert_and_tspulse_helpers_keep_roles_explicit():

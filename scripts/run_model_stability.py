@@ -68,11 +68,7 @@ def _sentiment_subset(snapshot: SentimentBenchmarkSnapshot) -> tuple[tuple[str, 
             by_label[example.label].append((example.text, example.label))
     if any(len(items) != 4 for items in by_label.values()):
         raise ValueError("stability snapshot lacks the fixed balanced sentiment subset")
-    return tuple(
-        item
-        for label in ("negative", "neutral", "positive")
-        for item in by_label[label]
-    )
+    return tuple(item for label in ("negative", "neutral", "positive") for item in by_label[label])
 
 
 def _sample_from_result(result) -> CandidateStabilitySample:

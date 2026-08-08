@@ -78,7 +78,9 @@ class PaperTestnetVenueTransport(NativeTransport):
             raise ValueError("venue order path is not admitted")
         if cancel_path is not None and (
             not cancel_path.startswith("/")
-            or any(token in cancel_path.lower() for token in ("withdraw", "transfer", "live", "prod"))
+            or any(
+                token in cancel_path.lower() for token in ("withdraw", "transfer", "live", "prod")
+            )
             or "{client_order_id}" not in cancel_path
         ):
             raise ValueError(
@@ -144,9 +146,7 @@ class PaperTestnetVenueTransport(NativeTransport):
     def cancel_order(self, *, client_order_id: str) -> Mapping[str, object]:
         if not client_order_id.strip():
             raise VenueTransportError("paper venue cancellation requires a client order ID")
-        path = self.cancel_path.replace(
-            "{client_order_id}", quote(client_order_id, safe="")
-        )
+        path = self.cancel_path.replace("{client_order_id}", quote(client_order_id, safe=""))
         return self._request("DELETE", path)
 
     def query_order(self, *, client_order_id: str) -> Mapping[str, object] | None:

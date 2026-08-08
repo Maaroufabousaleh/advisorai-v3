@@ -384,9 +384,7 @@ CREDENTIAL_SCOPES: Mapping[CredentialScope, frozenset[str]] = MappingProxyType(
     }
 )
 
-_SCOPED_ENV_NAMES = frozenset(
-    name for names in CREDENTIAL_SCOPES.values() for name in names
-)
+_SCOPED_ENV_NAMES = frozenset(name for names in CREDENTIAL_SCOPES.values() for name in names)
 _UNKNOWN_SCOPED_NAMES = _SCOPED_ENV_NAMES - KNOWN_ENV_NAMES
 if _UNKNOWN_SCOPED_NAMES:  # pragma: no cover - protects future edits at import time
     raise RuntimeError("credential scope contains unknown environment names")
@@ -460,9 +458,7 @@ class CredentialResolver:
         selected_scope = self._scope(scope)
         allowed = CREDENTIAL_SCOPES[selected_scope]
         result = {
-            name: value
-            for name, value in self._values.items()
-            if name in allowed and value.strip()
+            name: value for name, value in self._values.items() if name in allowed and value.strip()
         }
         seen_targets: set[str] = set()
         for alias in aliases:

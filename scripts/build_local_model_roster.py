@@ -169,7 +169,9 @@ def main() -> int:
         benchmark_evidence_hash=claimed_hash,
         forecast_dataset_hash=report["forecast_snapshot"]["content_hash"],
         sentiment_dataset_hash=report["sentiment_snapshot"]["content_hash"],
-        forecast_primary=forecast_entry("ttm-r2", "forecast_primary", RosterState.PENDING_STABILITY),
+        forecast_primary=forecast_entry(
+            "ttm-r2", "forecast_primary", RosterState.PENDING_STABILITY
+        ),
         forecast_fast=forecast_entry("ttm-r2", "forecast_fast", RosterState.PENDING_STABILITY),
         forecast_challengers=(
             forecast_entry("ttm-r3", "forecast_challenger", RosterState.QUALIFIED),
@@ -222,9 +224,7 @@ def main() -> int:
                     "artifacts/phase0/model-runtime-qualification/"
                     "acquisition-20260807T222217.331347Z/tabpfn-ts/acquisition-failure.json"
                 ),
-                evidence_hash=(
-                    "1a6257a9d59ff3848001d4db1f126301cadc58c4bb223e7e88f8b2ee1dcc2436"
-                ),
+                evidence_hash=("1a6257a9d59ff3848001d4db1f126301cadc58c4bb223e7e88f8b2ee1dcc2436"),
                 notes=("upstream access is gated and requires personal terms acceptance",),
             ),
         ),

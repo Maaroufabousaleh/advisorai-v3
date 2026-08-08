@@ -86,14 +86,18 @@ worker_policy = ProviderRoutePolicy(
     model_only=("inclusionai/ling-2.6-flash",),
     data_collection="deny",
     zdr=True,
-    allow_fallbacks=False,       # no silent provider fallback
+    allow_fallbacks=False,  # no silent provider fallback
     require_parameters=True,
     max_prompt_price=0.1,
     max_completion_price=0.3,
 )
 worker = RouteProfile(
-    "ling-worker", RouteTier.PRIVATE_WORKER, worker_adapter,
-    worker_policy, worker_terms, fallback_profile_ids=("reviewer",),
+    "ling-worker",
+    RouteTier.PRIVATE_WORKER,
+    worker_adapter,
+    worker_policy,
+    worker_terms,
+    fallback_profile_ids=("reviewer",),
 )
 ```
 

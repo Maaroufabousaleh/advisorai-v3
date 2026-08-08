@@ -193,7 +193,11 @@ class LicenseAdmission(BaseModel):
         ):
             raise ValueError("license review timestamp must include a timezone")
         if self.status == LicenseAdmissionStatus.APPROVED:
-            if not self.license_identifier or not self.evidence_reference or self.reviewed_at is None:
+            if (
+                not self.license_identifier
+                or not self.evidence_reference
+                or self.reviewed_at is None
+            ):
                 raise ValueError("approved license admission requires identity, date, and evidence")
         if self.status in {
             LicenseAdmissionStatus.REJECTED,
@@ -278,7 +282,9 @@ class RuntimePin(BaseModel):
         if self.status == RuntimeAdmissionStatus.APPROVED:
             if "pending" in self.version_or_commit.lower():
                 raise ValueError("approved runtime admission cannot use a pending version")
-            if any("==" not in dependency and "@" not in dependency for dependency in self.dependencies):
+            if any(
+                "==" not in dependency and "@" not in dependency for dependency in self.dependencies
+            ):
                 raise ValueError("approved runtime dependencies must be exact versions or commits")
             required = {
                 "lock_hash": self.lock_hash,
@@ -347,7 +353,9 @@ class RuntimePin(BaseModel):
         try:
             configured.relative_to(environment)
         except ValueError as exc:
-            raise QualificationError("runtime Python launcher must be inside its pinned environment") from exc
+            raise QualificationError(
+                "runtime Python launcher must be inside its pinned environment"
+            ) from exc
         if configured.is_dir() or not configured.exists():
             raise QualificationError("pinned runtime Python launcher is missing")
         return configured
@@ -504,7 +512,9 @@ class RuntimeEnvironment(BaseModel):
             raise ValueError("runtime environment identity is incomplete")
         if not self.runner_version.strip():
             raise ValueError("runner version is required")
-        if len(self.runner_hash) != 64 or any(character not in HEX64 for character in self.runner_hash):
+        if len(self.runner_hash) != 64 or any(
+            character not in HEX64 for character in self.runner_hash
+        ):
             raise ValueError("runner hash must be a lowercase SHA-256 digest")
         if self.runtime_lock_hash is not None and (
             len(self.runtime_lock_hash) != 64
@@ -527,9 +537,15 @@ class RuntimeEnvironment(BaseModel):
         cache = Path(self.cache_path).expanduser()
         if not cache.is_absolute():
             raise ValueError("runtime cache path must be absolute")
-        if self.lock_artifact_path is not None and not Path(self.lock_artifact_path).expanduser().is_absolute():
+        if (
+            self.lock_artifact_path is not None
+            and not Path(self.lock_artifact_path).expanduser().is_absolute()
+        ):
             raise ValueError("runtime lock artifact path must be absolute")
-        if self.sys_executable is not None and not Path(self.sys_executable).expanduser().is_absolute():
+        if (
+            self.sys_executable is not None
+            and not Path(self.sys_executable).expanduser().is_absolute()
+        ):
             raise ValueError("runtime sys.executable must be absolute")
         for field_name in ("sys_prefix", "sys_base_prefix"):
             value = getattr(self, field_name)
@@ -720,7 +736,9 @@ class BenchmarkDataset(BaseModel):
             raise ValueError("forecast benchmark inputs and targets must have equal length")
         if self.task == ModelTask.FINANCE_SENTIMENT and not self.public_text_fixture:
             raise ValueError("FinBERT benchmark requires a fixed public text fixture")
-        if len(self.content_hash) != 64 or any(character not in HEX64 for character in self.content_hash):
+        if len(self.content_hash) != 64 or any(
+            character not in HEX64 for character in self.content_hash
+        ):
             raise ValueError("benchmark content hash must be SHA-256")
         if any(not math.isfinite(value) for value in (*self.inputs, *self.targets)):
             raise ValueError("benchmark numeric values must be finite")
@@ -756,7 +774,9 @@ class BenchmarkDataset(BaseModel):
             for index in range(1054)
         )
         targets = tuple(
-            100.0 + 0.015 * (index + 1) + math.sin((index + 1) / 17.0)
+            100.0
+            + 0.015 * (index + 1)
+            + math.sin((index + 1) / 17.0)
             + 0.2 * math.cos((index + 1) / 5.0)
             for index in range(1054)
         )
@@ -902,24 +922,43 @@ class RuntimeQualificationResult(BaseModel):
                     "resource, and output evidence"
                 )
             if self.candidate.external_checkpoint is not None and not self.observed_artifacts:
-                raise ValueError("measured external qualification requires observed artifact hashes")
+                raise ValueError(
+                    "measured external qualification requires observed artifact hashes"
+                )
             if self.network_access_attempted:
                 raise ValueError("measured qualification cannot include a network attempt")
             policy = self.candidate.repeatability_policy
-            if policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED and not self.repeated_outputs_equal:
+            if (
+                policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED
+                and not self.repeated_outputs_equal
+            ):
                 raise ValueError("deterministic candidate outputs must repeat exactly")
-            if policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE and self.seeded_repeatability_match_rate < 1:
+            if (
+                policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE
+                and self.seeded_repeatability_match_rate < 1
+            ):
                 raise ValueError("seeded candidate must reproduce its declared seed")
-            if policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE and self.repeatability_seed != self.candidate.repeatability_seed:
+            if (
+                policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE
+                and self.repeatability_seed != self.candidate.repeatability_seed
+            ):
                 raise ValueError("seeded repeatability evidence must record the candidate seed")
-            if policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED and not self.stochastic_characterized:
+            if (
+                policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+                and not self.stochastic_characterized
+            ):
                 raise ValueError("stochastic candidate requires characterization evidence")
             if policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED:
                 if self.stochastic_repeat_count < 2:
                     raise ValueError("stochastic candidate requires repeated characterization")
-                if self.stochastic_unique_output_count < 2 or not self.stochastic_variation_observed:
+                if (
+                    self.stochastic_unique_output_count < 2
+                    or not self.stochastic_variation_observed
+                ):
                     raise ValueError("stochastic candidate requires observed output variation")
-                if self.stochastic_dispersion is None or not math.isfinite(self.stochastic_dispersion):
+                if self.stochastic_dispersion is None or not math.isfinite(
+                    self.stochastic_dispersion
+                ):
                     raise ValueError("stochastic candidate requires finite dispersion evidence")
         if self.status != QualificationStatus.MEASURED and not self.failure_reason:
             raise ValueError("quarantined/failed qualification requires a sanitized reason")
@@ -959,9 +998,7 @@ class RuntimeQualificationResult(BaseModel):
                 if len(lower) != len(point) or len(upper) != len(point):
                     raise ValueError("forecast interval horizon must match predictions")
                 if any(
-                    not math.isfinite(left)
-                    or not math.isfinite(right)
-                    or left > right
+                    not math.isfinite(left) or not math.isfinite(right) or left > right
                     for left, right in zip(lower, upper, strict=True)
                 ):
                     raise ValueError("forecast intervals must be finite and ordered")
@@ -1014,9 +1051,7 @@ class RuntimeQualificationResult(BaseModel):
                 if self.network_access_attempted
                 else None
             ),
-            failure_handling_passed=(
-                True if self.status == QualificationStatus.MEASURED else None
-            ),
+            failure_handling_passed=(True if self.status == QualificationStatus.MEASURED else None),
             resource_samples=(),
             benchmark_hash=self.manifest_hash,
             notes=tuple(notes),
@@ -1090,7 +1125,9 @@ class LightGBMBaseline:
 
         features = np.asarray(tuple((float(index),) for index in range(len(values))), dtype=float)
         targets = [float(value) for value in values]
-        training = lgb.Dataset(features, label=np.asarray(targets, dtype=float), free_raw_data=False)
+        training = lgb.Dataset(
+            features, label=np.asarray(targets, dtype=float), free_raw_data=False
+        )
         model = lgb.train(
             {
                 "objective": "regression",
@@ -1168,7 +1205,9 @@ class _ResourceMonitor:
 
     def start(self) -> None:
         self._sample()
-        self._thread = threading.Thread(target=self._run, name="advisorai-runtime-resource-monitor", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="advisorai-runtime-resource-monitor", daemon=True
+        )
         self._thread.start()
 
     def stop(self) -> None:
@@ -1271,7 +1310,9 @@ class RuntimeWorkerResponse(BaseModel):
     def validate_worker_response(self) -> RuntimeWorkerResponse:
         if self.protocol_version != 1:
             raise ValueError("unsupported runtime worker protocol")
-        if self.warm_durations_ms and any(value < 0 or not math.isfinite(value) for value in self.warm_durations_ms):
+        if self.warm_durations_ms and any(
+            value < 0 or not math.isfinite(value) for value in self.warm_durations_ms
+        ):
             raise ValueError("worker warm timings must be finite and non-negative")
         if self.error_class and self.outputs:
             raise ValueError("failed worker response cannot include model outputs")
@@ -1366,10 +1407,14 @@ def network_blocked() -> Iterator[None]:
 
     class OfflineSocket(original_socket):
         def connect(self, *args: object, **kwargs: object) -> None:
-            raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+            raise NetworkAccessAttemptError(
+                "network access is disabled during offline qualification"
+            )
 
         def connect_ex(self, *args: object, **kwargs: object) -> int:
-            raise NetworkAccessAttemptError("network access is disabled during offline qualification")
+            raise NetworkAccessAttemptError(
+                "network access is disabled during offline qualification"
+            )
 
     socket.socket = cast(Any, OfflineSocket)
     socket.create_connection = cast(Any, blocked_connection)
@@ -1418,7 +1463,9 @@ def _installed_environment_bytes(entries: Sequence[str]) -> bytes:
 def installed_environment_sha256(entries: Sequence[str] | None = None) -> str:
     """Hash the complete normalized installed-distribution inventory."""
 
-    return sha256(_installed_environment_bytes(entries or _installed_environment_inventory())).hexdigest()
+    return sha256(
+        _installed_environment_bytes(entries or _installed_environment_inventory())
+    ).hexdigest()
 
 
 def _isolated_worker_environment() -> dict[str, str]:
@@ -1514,7 +1561,9 @@ def freeze_runtime_pin(
     manifest_path.write_bytes(manifest_bytes_value)
     manifest_hash = sha256(manifest_bytes_value).hexdigest()
 
-    dependency_names = [dependency.split("==", 1)[0].split("@", 1)[0].strip() for dependency in dependencies]
+    dependency_names = [
+        dependency.split("==", 1)[0].split("@", 1)[0].strip() for dependency in dependencies
+    ]
     identity_code = """
 import importlib.metadata, json, platform, socket, sys
 def blocked(*args, **kwargs):
@@ -1567,7 +1616,9 @@ print(json.dumps({
     package_versions = identity.get("package_versions")
     if not isinstance(package_versions, dict):
         raise QualificationError("isolated runtime package identity was malformed")
-    observed = {str(name).lower().replace("_", "-"): value for name, value in package_versions.items()}
+    observed = {
+        str(name).lower().replace("_", "-"): value for name, value in package_versions.items()
+    }
     for dependency in dependencies:
         name, separator, expected = dependency.partition("==")
         if not separator:
@@ -1575,7 +1626,9 @@ print(json.dumps({
             expected = ""
         actual = observed.get(name.strip().lower().replace("_", "-"))
         if actual is None or (expected and actual != expected.strip()):
-            raise QualificationError(f"isolated runtime package identity mismatch for {name.strip()}")
+            raise QualificationError(
+                f"isolated runtime package identity mismatch for {name.strip()}"
+            )
     if not _python_constraint_satisfied(python_constraint, str(identity["python_version"])):
         raise QualificationError("isolated runtime Python version violates its constraint")
 
@@ -1704,7 +1757,9 @@ def verify_checkpoint_artifacts(
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
-    repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
+    repositories = (checkpoint.repository,) + (
+        (checkpoint.tokenizer,) if checkpoint.tokenizer else ()
+    )
     observed: list[ArtifactPin] = []
     for repository in repositories:
         repo_root = _repository_root(root, repository)
@@ -1714,7 +1769,10 @@ def verify_checkpoint_artifacts(
         optional_provenance = repository.provenance_artifacts
         for artifact in (*required_artifacts, *optional_provenance):
             if artifact.sha256 is None:
-                if artifact in optional_provenance and not (repo_root / artifact.relative_path).exists():
+                if (
+                    artifact in optional_provenance
+                    and not (repo_root / artifact.relative_path).exists()
+                ):
                     continue
                 raise CheckpointPinError(
                     f"artifact {repository.repository_id}/{artifact.relative_path} has no pinned hash"
@@ -1729,7 +1787,13 @@ def verify_checkpoint_artifacts(
             actual = sha256_file(path)
             if actual != artifact.sha256:
                 raise CheckpointIntegrityError(f"artifact hash mismatch: {artifact.relative_path}")
-            observed.append(ArtifactPin(relative_path=artifact.relative_path, sha256=actual, size_bytes=path.stat().st_size))
+            observed.append(
+                ArtifactPin(
+                    relative_path=artifact.relative_path,
+                    sha256=actual,
+                    size_bytes=path.stat().st_size,
+                )
+            )
     return tuple(observed)
 
 
@@ -1744,7 +1808,9 @@ def cached_artifact_inventory(
     root = (cache_root or Path(checkpoint.cache_path).expanduser()).resolve(strict=False)
     if repository_root is not None:
         checkpoint.assert_cache_outside_repository(repository_root)
-    repositories = (checkpoint.repository,) + ((checkpoint.tokenizer,) if checkpoint.tokenizer else ())
+    repositories = (checkpoint.repository,) + (
+        (checkpoint.tokenizer,) if checkpoint.tokenizer else ()
+    )
     inventory: list[ArtifactPin] = []
     for repository in repositories:
         repo_root = _repository_root(root, repository)
@@ -1845,13 +1911,23 @@ def verify_runtime_pin(pin: RuntimePin, *, repository_root: Path | None = None) 
     launcher_target = str(launcher.resolve(strict=False)) if launcher.is_symlink() else None
     if pin.python_launcher_target != launcher_target:
         raise QualificationError("pinned runtime launcher target mismatch")
-    cfg_path = Path(pin.pyvenv_cfg_path).expanduser() if pin.pyvenv_cfg_path else Path(pin.environment_path).expanduser() / "pyvenv.cfg"
+    cfg_path = (
+        Path(pin.pyvenv_cfg_path).expanduser()
+        if pin.pyvenv_cfg_path
+        else Path(pin.environment_path).expanduser() / "pyvenv.cfg"
+    )
     try:
-        cfg_path.resolve(strict=False).relative_to(Path(pin.environment_path).expanduser().resolve(strict=False))
+        cfg_path.resolve(strict=False).relative_to(
+            Path(pin.environment_path).expanduser().resolve(strict=False)
+        )
     except ValueError as exc:
         raise QualificationError("pyvenv.cfg must be inside the pinned environment") from exc
     if cfg_path.exists():
-        if cfg_path.is_symlink() or not pin.pyvenv_cfg_hash or sha256_file(cfg_path) != pin.pyvenv_cfg_hash:
+        if (
+            cfg_path.is_symlink()
+            or not pin.pyvenv_cfg_hash
+            or sha256_file(cfg_path) != pin.pyvenv_cfg_hash
+        ):
             raise QualificationError("pinned pyvenv.cfg hash mismatch")
     elif pin.pyvenv_cfg_hash:
         raise QualificationError("pinned pyvenv.cfg is missing")
@@ -1920,7 +1996,10 @@ def runtime_environment(
 
 def _canonical(value: object) -> object:
     if isinstance(value, Mapping):
-        return {str(key): _canonical(item) for key, item in sorted(value.items(), key=lambda item: str(item[0]))}
+        return {
+            str(key): _canonical(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
     if isinstance(value, (tuple, list)):
         return [_canonical(item) for item in value]
     if hasattr(value, "item") and callable(value.item):
@@ -1971,7 +2050,8 @@ def _stochastic_evidence(
     return {
         "stochastic_repeat_count": len(outputs),
         "stochastic_unique_output_count": len(set(digests)),
-        "stochastic_deterministic_match_rate": sum(digest == digests[0] for digest in digests) / len(digests),
+        "stochastic_deterministic_match_rate": sum(digest == digests[0] for digest in digests)
+        / len(digests),
         "stochastic_seeds": (seed,) if seed is not None else (),
         "stochastic_dispersion": dispersion,
         "stochastic_variation_observed": len(set(digests)) > 1 and dispersion > 0,
@@ -2039,7 +2119,9 @@ def validate_model_batch_output(
     if isinstance(output, (str, bytes, Mapping)) or not isinstance(output, Sequence):
         raise InvalidModelOutputError("model batch output must be a sequence")
     if len(output) != expected_batch_size:
-        raise InvalidModelOutputError("model batch output cardinality does not match the input batch")
+        raise InvalidModelOutputError(
+            "model batch output cardinality does not match the input batch"
+        )
     shapes = [
         validate_model_output(task, item, expected_length=expected_forecast_horizon)
         for item in output
@@ -2068,7 +2150,9 @@ def validate_candidate_output(candidate: CandidateSpec, output: object) -> str:
     )
     if candidate.task == ModelTask.FINANCE_SENTIMENT and candidate.output_schema != shape:
         raise InvalidModelOutputError("output does not match the candidate schema")
-    if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith("features["):
+    if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith(
+        "features["
+    ):
         raise InvalidModelOutputError("TSPulse candidate schema must be features[n]")
     if candidate.task == ModelTask.TSPULSE_FEATURES and shape != candidate.output_schema:
         raise InvalidModelOutputError("TSPulse output does not match the candidate schema")
@@ -2095,7 +2179,9 @@ def validate_candidate_batch_output(
         "<sentiment(label,confidence)>"
     ):
         raise InvalidModelOutputError("FinBERT batch output does not match the candidate schema")
-    if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith("features["):
+    if candidate.task == ModelTask.TSPULSE_FEATURES and not candidate.output_schema.startswith(
+        "features["
+    ):
         raise InvalidModelOutputError("TSPulse candidate schema must be features[n]")
     if candidate.task == ModelTask.TSPULSE_FEATURES and not shape.endswith(
         f"<{candidate.output_schema}>"
@@ -2104,7 +2190,9 @@ def validate_candidate_batch_output(
     if candidate.task == ModelTask.FORECAST:
         expected = _forecast_horizon_from_schema(candidate.output_schema)
         if expected is None or not shape.endswith(f"<forecast[{expected}]>"):
-            raise InvalidModelOutputError("forecast batch output does not match the candidate schema")
+            raise InvalidModelOutputError(
+                "forecast batch output does not match the candidate schema"
+            )
     return shape
 
 
@@ -2201,7 +2289,9 @@ def _worker_environment(
         cuda_version=identity.cuda_version,
         device="cuda" if candidate.gpu else "cpu",
         dtype="float32",
-        quantization=candidate.external_checkpoint.quantization if candidate.external_checkpoint else "none",
+        quantization=candidate.external_checkpoint.quantization
+        if candidate.external_checkpoint
+        else "none",
         cache_path=cache_path,
         runner_version=identity.runner_version,
         runner_hash=identity.runner_hash,
@@ -2233,13 +2323,22 @@ def _validate_worker_identity(
     # resolved base interpreter.  A POSIX venv is allowed to make this path a
     # symlink, so compare the pinned launcher identity separately below.
     expected_launcher = str(executable)
-    if Path(identity.sys_executable).expanduser().resolve(strict=False) != Path(expected_launcher).resolve(strict=False):
+    if Path(identity.sys_executable).expanduser().resolve(strict=False) != Path(
+        expected_launcher
+    ).resolve(strict=False):
         raise QualificationError("isolated worker reported an unexpected sys.executable")
     expected_environment = str(Path(pin.environment_path).expanduser().resolve(strict=False))
     if str(Path(identity.sys_prefix).expanduser().resolve(strict=False)) != expected_environment:
-        raise QualificationError("isolated worker sys.prefix does not identify the pinned environment")
-    if str(Path(identity.sys_base_prefix).expanduser().resolve(strict=False)) == expected_environment:
-        raise QualificationError("isolated worker sys.base_prefix must identify the base interpreter")
+        raise QualificationError(
+            "isolated worker sys.prefix does not identify the pinned environment"
+        )
+    if (
+        str(Path(identity.sys_base_prefix).expanduser().resolve(strict=False))
+        == expected_environment
+    ):
+        raise QualificationError(
+            "isolated worker sys.base_prefix must identify the base interpreter"
+        )
     if identity.runtime_lock_hash != pin.lock_hash or identity.lock_artifact_hash != pin.lock_hash:
         raise QualificationError("isolated worker runtime lock identity does not match the pin")
     launcher_target = str(executable.resolve(strict=False)) if executable.is_symlink() else None
@@ -2250,22 +2349,24 @@ def _validate_worker_identity(
         raise QualificationError("isolated worker launcher target does not match the pin")
     expected_binary_hash = pin.resolved_python_binary_hash or pin.python_executable_hash
     if identity.resolved_python_binary_hash != expected_binary_hash:
-        raise QualificationError("isolated worker resolved interpreter identity does not match the pin")
+        raise QualificationError(
+            "isolated worker resolved interpreter identity does not match the pin"
+        )
     if identity.python_executable_hash != identity.resolved_python_binary_hash:
         raise QualificationError("isolated worker legacy executable identity is inconsistent")
     if identity.pyvenv_cfg_hash != pin.pyvenv_cfg_hash:
         raise QualificationError("isolated worker pyvenv.cfg identity does not match the pin")
     if identity.installed_environment_sha256 != pin.installed_environment_sha256:
-        raise QualificationError("isolated worker installed-environment identity does not match the pin")
+        raise QualificationError(
+            "isolated worker installed-environment identity does not match the pin"
+        )
     if identity.environment_fingerprint != pin.environment_fingerprint:
         raise QualificationError("isolated worker environment fingerprint does not match the pin")
     if identity.runner_version != pin.runner_version or identity.runner_hash != pin.runner_hash:
         raise QualificationError("isolated worker runner identity does not match the pin")
     if not _python_constraint_satisfied(pin.python_constraint, identity.python_version):
         raise CompatibilityError("isolated worker Python version does not satisfy the runtime pin")
-    observed = {
-        name.lower().replace("_", "-"): value for name, value in identity.package_versions
-    }
+    observed = {name.lower().replace("_", "-"): value for name, value in identity.package_versions}
     for dependency in pin.dependencies:
         name, separator, expected = dependency.partition("==")
         if not separator:
@@ -2273,7 +2374,9 @@ def _validate_worker_identity(
             expected = ""
         actual = observed.get(name.strip().lower().replace("_", "-"))
         if actual is None or (expected and actual != expected.strip()):
-            raise QualificationError(f"isolated worker package identity mismatch for {name.strip()}")
+            raise QualificationError(
+                f"isolated worker package identity mismatch for {name.strip()}"
+            )
 
 
 def _validate_worker_success_envelope(
@@ -2328,7 +2431,9 @@ def _worker_request(
         "trust_remote_code": False,
         "sample_input": _canonical(sample_input),
         "batch_input": _canonical(batch_input),
-        "cache_path": candidate.external_checkpoint.cache_path if candidate.external_checkpoint else None,
+        "cache_path": candidate.external_checkpoint.cache_path
+        if candidate.external_checkpoint
+        else None,
         "local_files_only": True,
         "repeats": repeats,
         "expected_batch_size": _batch_size(batch_input),
@@ -2341,7 +2446,8 @@ def _worker_request(
         "python_launcher": pin.python_launcher or pin.python_executable,
         "python_launcher_hash": pin.python_launcher_hash or pin.python_executable_hash,
         "python_launcher_target": pin.python_launcher_target,
-        "resolved_python_binary_hash": pin.resolved_python_binary_hash or pin.python_executable_hash,
+        "resolved_python_binary_hash": pin.resolved_python_binary_hash
+        or pin.python_executable_hash,
         "pyvenv_cfg_path": pin.pyvenv_cfg_path,
         "pyvenv_cfg_hash": pin.pyvenv_cfg_hash,
         "python_executable_hash": pin.resolved_python_binary_hash or pin.python_executable_hash,
@@ -2369,9 +2475,16 @@ def _run_isolated_runtime_qualification(
     assert checkpoint is not None and pin is not None
     observed_artifacts: tuple[ArtifactPin, ...] = ()
     try:
-        observed_artifacts = verify_checkpoint_artifacts(checkpoint, repository_root=repository_root)
+        observed_artifacts = verify_checkpoint_artifacts(
+            checkpoint, repository_root=repository_root
+        )
         executable = verify_runtime_pin(pin, repository_root=repository_root)
-    except (CheckpointPinError, CheckpointNotCachedError, CheckpointIntegrityError, QualificationError) as exc:
+    except (
+        CheckpointPinError,
+        CheckpointNotCachedError,
+        CheckpointIntegrityError,
+        QualificationError,
+    ) as exc:
         return _quarantined_result(
             candidate,
             dataset=dataset,
@@ -2389,7 +2502,9 @@ def _run_isolated_runtime_qualification(
         repeats=repeats,
     )
     worker_script = Path(str(pin.worker_script)).expanduser().resolve(strict=False)
-    if _launcher_identity_hash(executable) != (pin.python_launcher_hash or pin.python_executable_hash):
+    if _launcher_identity_hash(executable) != (
+        pin.python_launcher_hash or pin.python_executable_hash
+    ):
         return _quarantined_result(
             candidate,
             dataset=dataset,
@@ -2499,14 +2614,18 @@ def _run_isolated_runtime_qualification(
             network_access_attempted=True,
         )
     try:
-        _validate_worker_identity(response.identity, pin=pin, candidate=candidate, executable=executable)
+        _validate_worker_identity(
+            response.identity, pin=pin, candidate=candidate, executable=executable
+        )
         worker_environment_result = _worker_environment(
             response.identity,
             candidate=candidate,
             cache_path=checkpoint.cache_path,
             lock_artifact_path=pin.lock_artifact_path,
         )
-        worker_environment_result.assert_transformers_baseline(requires_transformers=candidate.requires_transformers)
+        worker_environment_result.assert_transformers_baseline(
+            requires_transformers=candidate.requires_transformers
+        )
         _validate_worker_success_envelope(
             response,
             repeats=repeats,
@@ -2515,11 +2634,19 @@ def _run_isolated_runtime_qualification(
         if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
             expected_seed = candidate.repeatability_seed
             if expected_seed is None or response.applied_seeds != (expected_seed,) * repeats:
-                raise QualificationError("worker did not prove the requested seed was applied every repetition")
+                raise QualificationError(
+                    "worker did not prove the requested seed was applied every repetition"
+                )
         output_shape = validate_candidate_output(candidate, response.outputs[0])
         batch_size = _batch_size(batch_input)
-        validate_candidate_batch_output(candidate, response.batch_output, expected_batch_size=batch_size)
-        finbert_metrics = _finbert_metrics(dataset, response.batch_output) if candidate.task == ModelTask.FINANCE_SENTIMENT else None
+        validate_candidate_batch_output(
+            candidate, response.batch_output, expected_batch_size=batch_size
+        )
+        finbert_metrics = (
+            _finbert_metrics(dataset, response.batch_output)
+            if candidate.task == ModelTask.FINANCE_SENTIMENT
+            else None
+        )
         forecast_batch_predictions = (
             tuple(tuple(float(value) for value in row) for row in response.batch_output)
             if candidate.task == ModelTask.FORECAST
@@ -2560,7 +2687,10 @@ def _run_isolated_runtime_qualification(
                 "stochastic_variation_observed": False,
             }
         )
-        if candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED and not stochastic_evidence["stochastic_variation_observed"]:
+        if (
+            candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+            and not stochastic_evidence["stochastic_variation_observed"]
+        ):
             raise QualificationError("stochastic characterization observed no output variation")
         resource = worker_resource
         common = {
@@ -2575,8 +2705,14 @@ def _run_isolated_runtime_qualification(
             "output_schema_valid": True,
             "nan_inf_rejection_passed": _nonfinite_rejection_probe(candidate.task),
             "repeated_outputs_equal": equal,
-            "deterministic_match_rate": sum(digest == repeat_digests[0] for digest in repeat_digests) / len(repeat_digests),
-            "seeded_repeatability_match_rate": sum(digest == repeat_digests[0] for digest in repeat_digests) / len(repeat_digests),
+            "deterministic_match_rate": sum(
+                digest == repeat_digests[0] for digest in repeat_digests
+            )
+            / len(repeat_digests),
+            "seeded_repeatability_match_rate": sum(
+                digest == repeat_digests[0] for digest in repeat_digests
+            )
+            / len(repeat_digests),
             "repeatability_seed": candidate.repeatability_seed,
             "stochastic_characterized": bool(stochastic_evidence["stochastic_variation_observed"]),
             **stochastic_evidence,
@@ -2598,14 +2734,21 @@ def _run_isolated_runtime_qualification(
         if candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE:
             common["stochastic_seeds"] = response.applied_seeds
         repeatability_failure = (
-            candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED and not equal
+            candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED
+            and not equal
         ) or (
             candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE
             and common["seeded_repeatability_match_rate"] < 1
         )
-        if not resource.resource_limit_passed or not resource.memory_released or repeatability_failure:
+        if (
+            not resource.resource_limit_passed
+            or not resource.memory_released
+            or repeatability_failure
+        ):
             reason = "resource/recovery/repeatability policy failed"
-            return RuntimeQualificationResult(**common, status=QualificationStatus.FAILED, failure_reason=reason)
+            return RuntimeQualificationResult(
+                **common, status=QualificationStatus.FAILED, failure_reason=reason
+            )
         return RuntimeQualificationResult(**common, status=QualificationStatus.MEASURED)
     except NetworkAccessAttemptError:
         return RuntimeQualificationResult(
@@ -2651,19 +2794,27 @@ def run_runtime_qualification(
     if dataset.task != candidate.task:
         raise ValueError("candidate task and benchmark dataset task must match")
     ceiling = ceiling or ResourceCeiling()
-    cache = candidate.external_checkpoint.cache_path if candidate.external_checkpoint else str(
-        Path("~/.cache/advisorai-v3/models").expanduser()
+    cache = (
+        candidate.external_checkpoint.cache_path
+        if candidate.external_checkpoint
+        else str(Path("~/.cache/advisorai-v3/models").expanduser())
     )
     if environment is None:
-        environment = runtime_environment(cache_path=cache, device="cuda" if candidate.gpu else "cpu")
+        environment = runtime_environment(
+            cache_path=cache, device="cuda" if candidate.gpu else "cpu"
+        )
     if candidate.external_checkpoint is not None:
         checkpoint = candidate.external_checkpoint
         try:
             checkpoint.assert_cache_outside_repository(repository_root or Path.cwd())
             if candidate.runtime_pin is not None:
-                candidate.runtime_pin.assert_environment_outside_repository(repository_root or Path.cwd())
+                candidate.runtime_pin.assert_environment_outside_repository(
+                    repository_root or Path.cwd()
+                )
         except (CheckpointPinError, QualificationError) as exc:
-            return _quarantined_result(candidate, dataset=dataset, environment=environment, reason=str(exc))
+            return _quarantined_result(
+                candidate, dataset=dataset, environment=environment, reason=str(exc)
+            )
         if license_blocks_private_use(checkpoint.license_admission):
             return _quarantined_result(
                 candidate,
@@ -2709,7 +2860,7 @@ def run_runtime_qualification(
                 environment=environment,
                 reason="supplied runtime lock hash identity does not match the candidate pin",
             )
-        with (GpuModelLease(candidate.family.value) if candidate.gpu else nullcontext()):
+        with GpuModelLease(candidate.family.value) if candidate.gpu else nullcontext():
             return _run_isolated_runtime_qualification(
                 candidate,
                 dataset=dataset,
@@ -2724,7 +2875,9 @@ def run_runtime_qualification(
         try:
             environment.assert_transformers_baseline(requires_transformers=True)
         except CompatibilityError as exc:
-            return _quarantined_result(candidate, dataset=dataset, environment=environment, reason=str(exc))
+            return _quarantined_result(
+                candidate, dataset=dataset, environment=environment, reason=str(exc)
+            )
     if runner is None:
         return _quarantined_result(
             candidate,
@@ -2735,7 +2888,9 @@ def run_runtime_qualification(
         )
     try:
         runner_version, runner_hash = _runner_identity(runner, candidate)
-        environment = environment.model_copy(update={"runner_version": runner_version, "runner_hash": runner_hash})
+        environment = environment.model_copy(
+            update={"runner_version": runner_version, "runner_hash": runner_hash}
+        )
         # model_copy does not revalidate in Pydantic; rebuild to retain the frozen contract.
         environment = RuntimeEnvironment.model_validate(environment.model_dump())
         observed_artifacts: tuple[ArtifactPin, ...] = ()
@@ -2762,7 +2917,9 @@ def run_runtime_qualification(
             corrupt_checkpoint=True,
         )
     except (NoSilentFallbackError, QualificationError) as exc:
-        return _quarantined_result(candidate, dataset=dataset, environment=environment, reason=str(exc))
+        return _quarantined_result(
+            candidate, dataset=dataset, environment=environment, reason=str(exc)
+        )
 
     sampler = _ResourceSampler()
     rss_before, vram_before = _sample(sampler)
@@ -2882,7 +3039,11 @@ def _run_loaded_qualification(
             batch_inference_ms = (time.perf_counter() - batch_started) * 1000
         batch_size = _batch_size(batch_input)
         validate_candidate_batch_output(candidate, batch_output, expected_batch_size=batch_size)
-        finbert_metrics = _finbert_metrics(dataset, batch_output) if candidate.task == ModelTask.FINANCE_SENTIMENT else None
+        finbert_metrics = (
+            _finbert_metrics(dataset, batch_output)
+            if candidate.task == ModelTask.FINANCE_SENTIMENT
+            else None
+        )
         try:
             runner.unload(model)
             unload_succeeded = True
@@ -2907,9 +3068,8 @@ def _run_loaded_qualification(
         memory_released = unload_succeeded and rss_residual <= ceiling.max_residual_rss_mib
         if vram_residual is not None:
             memory_released = memory_released and vram_residual <= ceiling.max_residual_vram_mib
-        resource_limit_passed = (
-            rss_peak <= ceiling.max_rss_mib
-            and (vram_peak is None or vram_peak <= ceiling.max_vram_mib)
+        resource_limit_passed = rss_peak <= ceiling.max_rss_mib and (
+            vram_peak is None or vram_peak <= ceiling.max_vram_mib
         )
         resource = RuntimeResourceResult(
             cold_load_ms=cold_load_ms,
@@ -2980,8 +3140,10 @@ def _run_loaded_qualification(
             "output_schema_valid": True,
             "nan_inf_rejection_passed": _nonfinite_rejection_probe(candidate.task),
             "repeated_outputs_equal": equal,
-            "deterministic_match_rate": sum(digest == digests[0] for digest in digests) / len(digests),
-            "seeded_repeatability_match_rate": sum(digest == digests[0] for digest in digests) / len(digests),
+            "deterministic_match_rate": sum(digest == digests[0] for digest in digests)
+            / len(digests),
+            "seeded_repeatability_match_rate": sum(digest == digests[0] for digest in digests)
+            / len(digests),
             "repeatability_seed": candidate.repeatability_seed,
             "stochastic_characterized": stochastic_characterized,
             **stochastic_evidence,
@@ -2997,12 +3159,16 @@ def _run_loaded_qualification(
             "feature_batch_predictions": feature_batch_predictions,
         }
         repeatability_failure = (
-            candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED and not equal
+            candidate.repeatability_policy == RepeatabilityPolicy.DETERMINISTIC_REQUIRED
+            and not equal
         ) or (
             candidate.repeatability_policy == RepeatabilityPolicy.SEEDED_REPRODUCIBLE
             and common["seeded_repeatability_match_rate"] < 1
         )
-        if candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED and not stochastic_characterized:
+        if (
+            candidate.repeatability_policy == RepeatabilityPolicy.STOCHASTIC_CHARACTERIZED
+            and not stochastic_characterized
+        ):
             repeatability_failure = True
         if not resource_limit_passed or not memory_released or repeatability_failure:
             reasons = []
@@ -3050,13 +3216,15 @@ def _finbert_metrics(
     if len(batch_output) != len(expected):
         raise InvalidModelOutputError("FinBERT batch does not cover the fixed fixture")
     labels = [str(cast(Mapping[str, object], item).get("label", "")) for item in batch_output]
-    correct = [label == expected_label for label, expected_label in zip(labels, expected, strict=True)]
+    correct = [
+        label == expected_label for label, expected_label in zip(labels, expected, strict=True)
+    ]
     per_label: list[tuple[str, float]] = []
     for label in sorted(set(expected)):
-        indices = [index for index, expected_label in enumerate(expected) if expected_label == label]
-        per_label.append(
-            (label, sum(correct[index] for index in indices) / len(indices))
-        )
+        indices = [
+            index for index, expected_label in enumerate(expected) if expected_label == label
+        ]
+        per_label.append((label, sum(correct[index] for index in indices) / len(indices)))
     confidences = [
         _finite_number(
             (item_mapping := cast(Mapping[str, object], item)).get(
@@ -3136,7 +3304,9 @@ def _isolated_worker_resource(
 
 
 def _candidate_by_family(family: ModelFamily) -> CandidateSpec:
-    return next(candidate for candidate in default_runtime_candidates() if candidate.family == family)
+    return next(
+        candidate for candidate in default_runtime_candidates() if candidate.family == family
+    )
 
 
 def run_finbert_qualification(
@@ -3257,7 +3427,10 @@ def run_forecast_candidate_benchmark(
         {**candidate_evaluation.model_dump(), "adds_marginal_value": False}
     )
     return RuntimeQualificationResult.model_validate(
-        {**result.model_dump(), "forecast_evaluations": (candidate_evaluation, *baseline_evaluations)}
+        {
+            **result.model_dump(),
+            "forecast_evaluations": (candidate_evaluation, *baseline_evaluations),
+        }
     )
 
 
@@ -3267,7 +3440,9 @@ def _cache_path(name: str) -> str:
 
 def _runtime_path(name: str) -> str:
     return str(
-        (Path("~/.local/share/advisorai-v3/venvs/model-qualification") / name / "pending").expanduser()
+        (
+            Path("~/.local/share/advisorai-v3/venvs/model-qualification") / name / "pending"
+        ).expanduser()
     )
 
 
@@ -3321,7 +3496,10 @@ def _repo(
         "pyproject.toml",
     }
     runtime_paths = tuple(
-        path for path in paths if Path(path).name not in provenance_names and Path(path).suffix.lower() not in {".webp", ".png", ".jpg", ".jpeg"}
+        path
+        for path in paths
+        if Path(path).name not in provenance_names
+        and Path(path).suffix.lower() not in {".webp", ".png", ".jpg", ".jpeg"}
     )
     provenance_paths = tuple(path for path in paths if path not in runtime_paths)
     return RepositoryPin(
@@ -3338,11 +3516,36 @@ def default_runtime_candidates() -> tuple[CandidateSpec, ...]:
     """Return the versioned initial roster; no weights are downloaded."""
 
     return (
-        CandidateSpec(name="naive", family=ModelFamily.NAIVE, task=ModelTask.FORECAST, output_schema="forecast[1]"),
-        CandidateSpec(name="drift", family=ModelFamily.DRIFT, task=ModelTask.FORECAST, output_schema="forecast[1]"),
-        CandidateSpec(name="seasonal", family=ModelFamily.SEASONAL, task=ModelTask.FORECAST, output_schema="forecast[1]"),
-        CandidateSpec(name="linear", family=ModelFamily.LINEAR, task=ModelTask.FORECAST, output_schema="forecast[1]"),
-        CandidateSpec(name="lightgbm", family=ModelFamily.LIGHTGBM, task=ModelTask.FORECAST, output_schema="forecast[1]"),
+        CandidateSpec(
+            name="naive",
+            family=ModelFamily.NAIVE,
+            task=ModelTask.FORECAST,
+            output_schema="forecast[1]",
+        ),
+        CandidateSpec(
+            name="drift",
+            family=ModelFamily.DRIFT,
+            task=ModelTask.FORECAST,
+            output_schema="forecast[1]",
+        ),
+        CandidateSpec(
+            name="seasonal",
+            family=ModelFamily.SEASONAL,
+            task=ModelTask.FORECAST,
+            output_schema="forecast[1]",
+        ),
+        CandidateSpec(
+            name="linear",
+            family=ModelFamily.LINEAR,
+            task=ModelTask.FORECAST,
+            output_schema="forecast[1]",
+        ),
+        CandidateSpec(
+            name="lightgbm",
+            family=ModelFamily.LIGHTGBM,
+            task=ModelTask.FORECAST,
+            output_schema="forecast[1]",
+        ),
         CandidateSpec(
             name="modern-finbert",
             family=ModelFamily.MODERN_FINBERT,
@@ -3842,10 +4045,15 @@ def write_qualification_manifest(result: RuntimeQualificationResult, output_dir:
     completed = RuntimeQualificationResult.model_validate(
         {**result.model_dump(), "manifest_hash": digest}
     )
-    filename = "".join(character if character.isalnum() or character in "-_" else "_" for character in result.candidate.name)
+    filename = "".join(
+        character if character.isalnum() or character in "-_" else "_"
+        for character in result.candidate.name
+    )
     path = output_dir / f"{filename}.json"
     output_dir.mkdir(parents=True, exist_ok=True)
-    payload = (json.dumps(completed.model_dump(mode="json"), sort_keys=True, indent=2) + "\n").encode()
+    payload = (
+        json.dumps(completed.model_dump(mode="json"), sort_keys=True, indent=2) + "\n"
+    ).encode()
     if path.exists() and path.read_bytes() != payload:
         raise FileExistsError(f"immutable evidence already exists with different content: {path}")
     path.write_bytes(payload)
@@ -3867,7 +4075,11 @@ def write_qualification_bundle(
         "schema": "advisorai.phase0.model-runtime-qualification.v1",
         "generated_at": generated_at,
         "candidate_manifests": [
-            {"candidate": result.candidate.name, "path": path.name, "sha256": sha256(path.read_bytes()).hexdigest()}
+            {
+                "candidate": result.candidate.name,
+                "path": path.name,
+                "sha256": sha256(path.read_bytes()).hexdigest(),
+            }
             for result, path in zip(results, paths, strict=True)
         ],
         "no_model_weights_committed": True,
@@ -3876,7 +4088,9 @@ def write_qualification_bundle(
     index_path = output_dir / "index.json"
     index_payload = (json.dumps(index, sort_keys=True, indent=2) + "\n").encode()
     if index_path.exists() and index_path.read_bytes() != index_payload:
-        raise FileExistsError(f"immutable evidence already exists with different content: {index_path}")
+        raise FileExistsError(
+            f"immutable evidence already exists with different content: {index_path}"
+        )
     index_path.write_bytes(index_payload)
     return (*paths, index_path)
 

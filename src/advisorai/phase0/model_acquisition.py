@@ -108,7 +108,9 @@ def _default_download(url: str, destination: Path, headers: Mapping[str, str]) -
             raise GatedTermsAcceptanceRequired(
                 "upstream access is gated or requires user acceptance"
             ) from exc
-        raise ModelAcquisitionError(f"upstream artifact request failed with HTTP {exc.code}") from exc
+        raise ModelAcquisitionError(
+            f"upstream artifact request failed with HTTP {exc.code}"
+        ) from exc
     except URLError as exc:
         raise ModelAcquisitionError("upstream artifact request failed") from exc
 
@@ -117,7 +119,9 @@ def _artifact_url(repository: RepositoryPin, relative_path: str) -> str:
     repository_id = quote(repository.repository_id, safe="/")
     revision = quote(repository.revision, safe="")
     artifact_path = "/".join(quote(part, safe="") for part in Path(relative_path).parts)
-    return f"https://huggingface.co/{repository_id}/resolve/{revision}/{artifact_path}?download=true"
+    return (
+        f"https://huggingface.co/{repository_id}/resolve/{revision}/{artifact_path}?download=true"
+    )
 
 
 def _assert_external_root(path: Path, repository_root: Path) -> Path:
@@ -144,7 +148,9 @@ def _download_repository(
     headers = {"User-Agent": "AdvisorAI-Phase0-Model-Acquisition/1"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    runtime_paths = {item.relative_path for item in repository.runtime_artifacts or repository.artifacts}
+    runtime_paths = {
+        item.relative_path for item in repository.runtime_artifacts or repository.artifacts
+    }
     observed_runtime: list[ArtifactPin] = []
     observed_provenance: list[ArtifactPin] = []
     for artifact in repository.all_artifacts:
@@ -245,7 +251,9 @@ def acquire_candidate_artifacts(
         revision_directory.parent.mkdir(parents=True, exist_ok=True)
         if revision_directory.exists():
             if not revision_directory.is_dir() or revision_directory.is_symlink():
-                raise ModelAcquisitionError("immutable cache destination is not a regular directory")
+                raise ModelAcquisitionError(
+                    "immutable cache destination is not a regular directory"
+                )
             if not _identical_cache(temporary, revision_directory):
                 raise ModelAcquisitionError("immutable cache already exists with different content")
         else:

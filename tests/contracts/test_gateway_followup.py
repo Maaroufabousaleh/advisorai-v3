@@ -124,9 +124,11 @@ def _profile_gateway(
     public_adapter = TypedGatewayAdapter(
         "public",
         public_route,
-        lambda request: public_transport(request)
-        if raw_identity
-        else payload(request, public_transport(request)),
+        lambda request: (
+            public_transport(request)
+            if raw_identity
+            else payload(request, public_transport(request))
+        ),
     )
     worker_adapter = TypedGatewayAdapter(
         "worker",
@@ -142,7 +144,9 @@ def _profile_gateway(
             contributor_terms,
             fallback_profile_ids=("worker",),
         ),
-        RouteProfile("worker", RouteTier.PRIVATE_WORKER, worker_adapter, worker_policy, private_terms),
+        RouteProfile(
+            "worker", RouteTier.PRIVATE_WORKER, worker_adapter, worker_policy, private_terms
+        ),
     )
     config = GatewayPolicyConfig(
         contributor_terms=contributor_terms,
@@ -197,7 +201,11 @@ def test_openrouter_metadata_header_exact_provider_tag_and_billed_cost_are_prese
                 "strategy": "direct",
                 "endpoints": {
                     "available": [
-                        {"provider": "private-provider", "model": "private-model", "selected": True},
+                        {
+                            "provider": "private-provider",
+                            "model": "private-model",
+                            "selected": True,
+                        },
                         {"provider": "other-provider", "model": "private-model", "selected": False},
                     ]
                 },

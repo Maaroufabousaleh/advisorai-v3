@@ -40,7 +40,9 @@ from advisorai.ports import (
 INVENTORY_HASH = "a" * 64
 
 
-def _admission(*, resolved: str = "inclusionai/ling-2.6-flash-20260421") -> ProviderEndpointAdmission:
+def _admission(
+    *, resolved: str = "inclusionai/ling-2.6-flash-20260421"
+) -> ProviderEndpointAdmission:
     return ProviderEndpointAdmission(
         provider_selector_slug="novita",
         allowed_provider_display_names=("Novita",),
@@ -77,7 +79,12 @@ def _route() -> GatewayRoute:
     )
 
 
-def _body(*, selected: bool = True, resolved: str = "inclusionai/ling-2.6-flash-20260421", cost: float = 0.00000102) -> bytes:
+def _body(
+    *,
+    selected: bool = True,
+    resolved: str = "inclusionai/ling-2.6-flash-20260421",
+    cost: float = 0.00000102,
+) -> bytes:
     return json.dumps(
         {
             "id": "gen-real-observation",
@@ -182,7 +189,9 @@ def test_real_success_separates_selector_display_and_observed_models():
 def test_frozen_admission_accepts_fixture_and_rejects_unknown_resolved_version():
     route = _route()
     admission = _admission()
-    inventory = ProviderEndpointInventory(inventory_artifact_hash=INVENTORY_HASH, admissions=(admission,))
+    inventory = ProviderEndpointInventory(
+        inventory_artifact_hash=INVENTORY_HASH, admissions=(admission,)
+    )
     policy = ProviderRoutePolicy(
         route_tier=RouteTier.PRIVATE_WORKER,
         provider_only=("novita",),
@@ -197,22 +206,39 @@ def test_frozen_admission_accepts_fixture_and_rejects_unknown_resolved_version()
     response = adapter.complete(_request(route))
     policy.validate_response(response, pinned_route=route, request=_request(route))
 
-    unknown_adapter, _ = _adapter([(200, _body(resolved="inclusionai/ling-2.6-flash-20260901"), ())])
+    unknown_adapter, _ = _adapter(
+        [(200, _body(resolved="inclusionai/ling-2.6-flash-20260901"), ())]
+    )
     unknown = unknown_adapter.complete(_request(route))
     with pytest.raises(GatewayPolicyError, match="resolved endpoint model"):
         policy.validate_response(unknown, pinned_route=route, request=_request(route))
 
 
-@pytest.mark.parametrize("available", [[], [{"provider": "Novita", "model": "inclusionai/ling-2.6-flash-20260421", "selected": True}, {"provider": "Novita", "model": "inclusionai/ling-2.6-flash-20260421", "selected": True}]])
+@pytest.mark.parametrize(
+    "available",
+    [
+        [],
+        [
+            {
+                "provider": "Novita",
+                "model": "inclusionai/ling-2.6-flash-20260421",
+                "selected": True,
+            },
+            {
+                "provider": "Novita",
+                "model": "inclusionai/ling-2.6-flash-20260421",
+                "selected": True,
+            },
+        ],
+    ],
+)
 def test_missing_or_multiple_selected_endpoints_fail_closed(available):
     body = json.loads(_body())
     body["openrouter_metadata"]["endpoints"]["available"] = available
     adapter, _ = _adapter([(200, json.dumps(body).encode(), ())])
 
     with pytest.raises(GatewayTransportError) as caught:
-        adapter.complete(
-            _request(_route(), generation_budget=GenerationBudget(maximum_attempts=1))
-        )
+        adapter.complete(_request(_route(), generation_budget=GenerationBudget(maximum_attempts=1)))
 
     assert caught.value.failure_metadata["error_type"] == "selected_endpoint_count"
     assert caught.value.attempt_metadata[0]["attempted_endpoints"] == tuple(available)
@@ -237,12 +263,12 @@ def test_unselected_429_preserves_attempted_identity_but_never_actual_identity()
             },
         }
     ).encode()
-    adapter, _ = _adapter([(429, body, (("Retry-After", "17"),))], budget=GenerationBudget(maximum_attempts=1))
+    adapter, _ = _adapter(
+        [(429, body, (("Retry-After", "17"),))], budget=GenerationBudget(maximum_attempts=1)
+    )
 
     with pytest.raises(GatewayTransportError) as caught:
-        adapter.complete(
-            _request(_route(), generation_budget=GenerationBudget(maximum_attempts=1))
-        )
+        adapter.complete(_request(_route(), generation_budget=GenerationBudget(maximum_attempts=1)))
 
     metadata = caught.value.failure_metadata
     assert metadata["provider_name"] == "Novita"
@@ -289,7 +315,10 @@ def test_billed_cost_and_output_budget_fail_deterministically():
     expensive, _ = _adapter([(200, _body(cost=2), ())])
     with pytest.raises(GatewayTransportError, match="billed cost"):
         expensive.complete(
-            _request(_route(), generation_budget=GenerationBudget(max_billed_cost_usd=1, max_expected_cost_usd=3))
+            _request(
+                _route(),
+                generation_budget=GenerationBudget(max_billed_cost_usd=1, max_expected_cost_usd=3),
+            )
         )
 
     oversized_body = json.loads(_body())
@@ -297,7 +326,10 @@ def test_billed_cost_and_output_budget_fail_deterministically():
     oversized, _ = _adapter([(200, json.dumps(oversized_body).encode(), ())])
     with pytest.raises(GatewayTransportError, match="output exceeds"):
         oversized.complete(
-            _request(_route(), generation_budget=GenerationBudget(max_output_tokens=2, max_expected_cost_usd=1))
+            _request(
+                _route(),
+                generation_budget=GenerationBudget(max_output_tokens=2, max_expected_cost_usd=1),
+            )
         )
 
 
@@ -309,7 +341,11 @@ def test_retry_after_retries_same_route_and_preserves_attempts():
             "openrouter_metadata": {
                 "endpoints": {
                     "available": [
-                        {"provider": "Novita", "model": "inclusionai/ling-2.6-flash-20260421", "selected": False}
+                        {
+                            "provider": "Novita",
+                            "model": "inclusionai/ling-2.6-flash-20260421",
+                            "selected": False,
+                        }
                     ]
                 }
             },
@@ -320,7 +356,9 @@ def test_retry_after_retries_same_route_and_preserves_attempts():
         sleeps=sleeps,
     )
 
-    response = adapter.complete(_request(_route(), generation_budget=GenerationBudget(maximum_attempts=2)))
+    response = adapter.complete(
+        _request(_route(), generation_budget=GenerationBudget(maximum_attempts=2))
+    )
 
     assert len(calls) == 2
     assert calls[0]["model"] == calls[1]["model"] == "inclusionai/ling-2.6-flash"
@@ -329,13 +367,17 @@ def test_retry_after_retries_same_route_and_preserves_attempts():
     assert len(response.attempt_metadata) == 1
 
 
-def test_retry_exhaustion_abstains_without_cross_provider_fallback_and_ledger_attempts_are_unique(tmp_path: Path):
+def test_retry_exhaustion_abstains_without_cross_provider_fallback_and_ledger_attempts_are_unique(
+    tmp_path: Path,
+):
     failures = json.dumps({"error": {"type": "rate_limit"}}).encode()
     primary, _ = _adapter(
         [(429, failures, ()), (429, failures, ())],
         budget=GenerationBudget(maximum_attempts=2),
     )
-    fallback_route = _route().model_copy(update={"provider": "other", "model": "other-model", "endpoint_variant": "other"})
+    fallback_route = _route().model_copy(
+        update={"provider": "other", "model": "other-model", "endpoint_variant": "other"}
+    )
     fallback = TypedGatewayAdapter(
         "other",
         fallback_route,
@@ -388,7 +430,14 @@ def test_retry_exhaustion_abstains_without_cross_provider_fallback_and_ledger_at
             route_order=("worker", "reviewer"),
         ),
         profiles=(
-            RouteProfile("worker", RouteTier.PRIVATE_WORKER, primary, primary_policy, terms, fallback_profile_ids=("reviewer",)),
+            RouteProfile(
+                "worker",
+                RouteTier.PRIVATE_WORKER,
+                primary,
+                primary_policy,
+                terms,
+                fallback_profile_ids=("reviewer",),
+            ),
             RouteProfile("reviewer", RouteTier.PRIVATE_REVIEWER, fallback, fallback_policy, terms),
         ),
         recorder=recorder,
@@ -401,9 +450,9 @@ def test_retry_exhaustion_abstains_without_cross_provider_fallback_and_ledger_at
     assert response.actual_model is None
     assert response.actual_gateway is None
     assert len(recorder.calls) == 2
-    assert len({
-        event.idempotency_key
-        for event in recorder.ledgers.events(LedgerNamespace.MODEL)
-    }) == 2
+    assert (
+        len({event.idempotency_key for event in recorder.ledgers.events(LedgerNamespace.MODEL)})
+        == 2
+    )
     assert all(record.actual_provider is None for record in recorder.calls)
     assert all(record.failure_metadata.get("status_code") == 429 for record in recorder.calls)

@@ -41,7 +41,9 @@ def build_direct_gateway(
     if settings.llm_provider:
         configured_provider = settings.llm_provider.lower()
         expected_provider = (
-            route.gateway.lower() if route.gateway.lower() == "openrouter" else route.provider.lower()
+            route.gateway.lower()
+            if route.gateway.lower() == "openrouter"
+            else route.provider.lower()
         )
         if configured_provider != expected_provider:
             raise ValueError("gateway route provider does not match configured provider")

@@ -82,9 +82,7 @@ def _environment_fingerprint(
     material = {
         "sys_executable": str(Path(sys_executable).expanduser().resolve(strict=False)),
         "python_version": python_version,
-        "package_versions": {
-            str(name): value for name, value in sorted(package_versions.items())
-        },
+        "package_versions": {str(name): value for name, value in sorted(package_versions.items())},
         "torch_version": torch_version,
         "cuda_version": cuda_version,
         "runtime_lock_hash": runtime_lock_hash,
@@ -337,6 +335,7 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
         raise ValueError("model cache root is invalid")
 
     import torch
+
     load_kwargs: dict[str, Any] = {}
     if kind in {"chronos-2-small", "kronos-mini", "kronos-small"}:
         if not torch.cuda.is_available():
@@ -401,9 +400,7 @@ def _load_real_model(kind: str, request: dict[str, Any]) -> tuple[dict[str, Any]
         )
 
         model_class = (
-            TinyTimeMixerForDecomposedPrediction
-            if kind == "ttm-r3"
-            else TinyTimeMixerForPrediction
+            TinyTimeMixerForDecomposedPrediction if kind == "ttm-r3" else TinyTimeMixerForPrediction
         )
     if kind not in {"chronos-2-small", "kronos-mini", "kronos-small"}:
         model, loading_info = model_class.from_pretrained(
@@ -499,16 +496,16 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
         ]
         if any(len(row) != 30 for row in forecasts):
             raise ValueError("Chronos returned an unexpected forecast shape")
-        if any(not float("-inf") < float(value) < float("inf") for row in forecasts for value in row):
+        if any(
+            not float("-inf") < float(value) < float("inf") for row in forecasts for value in row
+        ):
             raise ValueError("Chronos returned a non-finite forecast")
         return forecasts if is_batch else forecasts[0]
     if kind in {"kronos-mini", "kronos-small"}:
         import pandas as pd
 
         is_batch = (
-            isinstance(payload, list)
-            and bool(payload)
-            and isinstance(payload[0], (list, dict))
+            isinstance(payload, list) and bool(payload) and isinstance(payload[0], (list, dict))
         )
         rows = payload if is_batch else [payload]
         frames = []
@@ -532,7 +529,9 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
                 if any(len(item) != 5 for item in values):
                     raise ValueError("Kronos OHLCV rows require five values")
                 frame = pd.DataFrame(values, columns=["open", "high", "low", "close", "volume"])
-                frame["amount"] = frame["volume"] * frame[["open", "high", "low", "close"]].mean(axis=1)
+                frame["amount"] = frame["volume"] * frame[["open", "high", "low", "close"]].mean(
+                    axis=1
+                )
                 history = pd.Series(pd.to_datetime(timestamps, utc=True))
                 future = pd.Series(pd.to_datetime(future_values, utc=True))
             else:
@@ -543,8 +542,12 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
                 frame = pd.DataFrame(
                     {
                         "open": opened,
-                        "high": [max(left, right) for left, right in zip(opened, close, strict=True)],
-                        "low": [min(left, right) for left, right in zip(opened, close, strict=True)],
+                        "high": [
+                            max(left, right) for left, right in zip(opened, close, strict=True)
+                        ],
+                        "low": [
+                            min(left, right) for left, right in zip(opened, close, strict=True)
+                        ],
                         "close": close,
                         "volume": [1.0] * len(close),
                         "amount": close,
@@ -554,7 +557,9 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
                 future = pd.Series(
                     pd.date_range(history.iloc[-1] + pd.Timedelta(days=1), periods=30, freq="D")
                 )
-            if any(not float("-inf") < float(value) < float("inf") for value in frame.to_numpy().flat):
+            if any(
+                not float("-inf") < float(value) < float("inf") for value in frame.to_numpy().flat
+            ):
                 raise ValueError("Kronos input must contain finite values")
             frames.append(frame)
             history_times.append(history)
@@ -578,7 +583,11 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
     if kind in {"finbert-minilm", "finsentiment-deberta-v3", "modern-finbert"}:
         is_batch = isinstance(payload, list)
         texts = payload if is_batch else [payload]
-        if not isinstance(texts, list) or not texts or any(not isinstance(text, str) for text in texts):
+        if (
+            not isinstance(texts, list)
+            or not texts
+            or any(not isinstance(text, str) for text in texts)
+        ):
             raise ValueError("sentiment input must be non-empty text")
         encoded = state["tokenizer"](
             texts,
@@ -613,18 +622,26 @@ def _infer_real_model(kind: str, state: dict[str, Any], payload: Any) -> Any:
         hidden = output.backbone_hidden_state
         fft_reconstruction = output.reconstructed_ts_from_fft
         error = reconstruction - tensor
-        features = state["torch"].stack(
-            (
-                error.abs().mean(dim=(1, 2)),
-                error.square().mean(dim=(1, 2)).sqrt(),
-                error.abs().amax(dim=(1, 2)),
-                hidden.mean(dim=(1, 2)),
-                hidden.std(dim=(1, 2), unbiased=False),
-                (fft_reconstruction - tensor).abs().mean(dim=(1, 2)),
-            ),
-            dim=1,
-        ).detach().cpu().tolist()
-        if any(not float("-inf") < float(value) < float("inf") for row in features for value in row):
+        features = (
+            state["torch"]
+            .stack(
+                (
+                    error.abs().mean(dim=(1, 2)),
+                    error.square().mean(dim=(1, 2)).sqrt(),
+                    error.abs().amax(dim=(1, 2)),
+                    hidden.mean(dim=(1, 2)),
+                    hidden.std(dim=(1, 2), unbiased=False),
+                    (fft_reconstruction - tensor).abs().mean(dim=(1, 2)),
+                ),
+                dim=1,
+            )
+            .detach()
+            .cpu()
+            .tolist()
+        )
+        if any(
+            not float("-inf") < float(value) < float("inf") for row in features for value in row
+        ):
             raise ValueError("TSPulse returned non-finite features")
         return features if is_batch else features[0]
     predictions = output.prediction_outputs
@@ -699,7 +716,11 @@ def main() -> int:
         cfg_path = environment_path / "pyvenv.cfg"
         cfg_hash = _sha256_file(cfg_path) if cfg_path.is_file() else None
         installed_inventory_hash = _installed_environment_hash()
-        manifest_path = Path(str(request["installed_environment_manifest_path"])).expanduser().resolve(strict=False)
+        manifest_path = (
+            Path(str(request["installed_environment_manifest_path"]))
+            .expanduser()
+            .resolve(strict=False)
+        )
         manifest_hash = _sha256_file(manifest_path)
         dependencies = [str(item) for item in request.get("dependencies", [])]
         packages = _package_versions(dependencies)
@@ -831,12 +852,18 @@ def main() -> int:
         )
         batch_ms = (time.perf_counter() - batch_started) * 1000
         forecast_batch_lower = (
-            tuple(tuple(float(value) for value in row) for row in real_state.get("last_interval_lower", ()))
+            tuple(
+                tuple(float(value) for value in row)
+                for row in real_state.get("last_interval_lower", ())
+            )
             if real_state is not None
             else ()
         )
         forecast_batch_upper = (
-            tuple(tuple(float(value) for value in row) for row in real_state.get("last_interval_upper", ()))
+            tuple(
+                tuple(float(value) for value in row)
+                for row in real_state.get("last_interval_upper", ())
+            )
             if real_state is not None
             else ()
         )
@@ -867,7 +894,9 @@ def main() -> int:
         rss_after_unload = current_rss_mib()
         vram_after_unload, vram_peak = _gpu_memory_mib()
         digests = [json.dumps(item, sort_keys=True, separators=(",", ":")) for item in outputs]
-        numbers = [float(item) for output in outputs for item in output if isinstance(item, (int, float))]
+        numbers = [
+            float(item) for output in outputs for item in output if isinstance(item, (int, float))
+        ]
         dispersion = statistics.pstdev(numbers) if len(numbers) > 1 else 0.0
         response = {
             "protocol_version": 1,
@@ -890,7 +919,8 @@ def main() -> int:
             "offline_cached_inference": True,
             "stochastic_repeat_count": repeats,
             "stochastic_unique_output_count": len(set(digests)),
-            "stochastic_deterministic_match_rate": sum(item == digests[0] for item in digests) / len(digests),
+            "stochastic_deterministic_match_rate": sum(item == digests[0] for item in digests)
+            / len(digests),
             "stochastic_seeds": [],
             "applied_seeds": applied_seeds,
             "stochastic_dispersion": dispersion,
@@ -919,27 +949,30 @@ def main() -> int:
         return _emit(
             {
                 "protocol_version": 1,
-                "identity": locals().get("identity", {
-                    "sys_executable": str(Path(sys.executable).resolve()),
-                    "model_family": "unknown",
-                    "sys_prefix": str(Path(sys.prefix).resolve()),
-                    "sys_base_prefix": str(Path(sys.base_prefix).resolve()),
-                    "python_launcher_hash": "0" * 64,
-                    "python_launcher_target": None,
-                    "resolved_python_binary_hash": "0" * 64,
-                    "pyvenv_cfg_hash": None,
-                    "python_version": platform.python_version(),
-                    "package_versions": [],
-                    "torch_version": None,
-                    "cuda_version": None,
-                    "runtime_lock_hash": "0" * 64,
-                    "lock_artifact_hash": "0" * 64,
-                    "python_executable_hash": "0" * 64,
-                    "installed_environment_sha256": "0" * 64,
-                    "environment_fingerprint": "0" * 64,
-                    "runner_version": "unknown",
-                    "runner_hash": "0" * 64,
-                }),
+                "identity": locals().get(
+                    "identity",
+                    {
+                        "sys_executable": str(Path(sys.executable).resolve()),
+                        "model_family": "unknown",
+                        "sys_prefix": str(Path(sys.prefix).resolve()),
+                        "sys_base_prefix": str(Path(sys.base_prefix).resolve()),
+                        "python_launcher_hash": "0" * 64,
+                        "python_launcher_target": None,
+                        "resolved_python_binary_hash": "0" * 64,
+                        "pyvenv_cfg_hash": None,
+                        "python_version": platform.python_version(),
+                        "package_versions": [],
+                        "torch_version": None,
+                        "cuda_version": None,
+                        "runtime_lock_hash": "0" * 64,
+                        "lock_artifact_hash": "0" * 64,
+                        "python_executable_hash": "0" * 64,
+                        "installed_environment_sha256": "0" * 64,
+                        "environment_fingerprint": "0" * 64,
+                        "runner_version": "unknown",
+                        "runner_hash": "0" * 64,
+                    },
+                ),
                 "error_class": type(exc).__name__,
             }
         )
