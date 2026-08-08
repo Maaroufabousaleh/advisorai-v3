@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -191,9 +192,14 @@ class ResourceGovernor:
         self.configs = configs
         self.probe = probe
         self.ledgers = ledgers
+        self._lock = threading.RLock()
         self._leases: dict[UUID, ResourceLease] = {}
 
     def admit(self, mode: MissionMode, request: ResourceRequest) -> LeaseDecision:
+        with self._lock:
+            return self._admit(mode, request)
+
+    def _admit(self, mode: MissionMode, request: ResourceRequest) -> LeaseDecision:
         try:
             config = self.configs[mode]
         except KeyError as exc:
@@ -263,6 +269,11 @@ class ResourceGovernor:
         Browser and training are separate profiles in the architecture, but
         they still share measured memory/headroom and the global GPU lease.
         """
+
+        with self._lock:
+            return self._admit_profile(profile, request)
+
+    def _admit_profile(self, profile: ResourceProfile, request: ResourceRequest) -> LeaseDecision:
 
         if request.profile is not None and request.profile is not profile:
             return LeaseDecision(granted=False, reason="resource request profile mismatch")
@@ -374,12 +385,14 @@ class ResourceGovernor:
         return decision
 
     def release(self, lease_id: UUID) -> None:
-        lease = self._leases.pop(lease_id, None)
-        if lease is not None:
-            self._record_lease("resource_lease_released", lease)
+        with self._lock:
+            lease = self._leases.pop(lease_id, None)
+            if lease is not None:
+                self._record_lease("resource_lease_released", lease)
 
     def active_leases(self) -> tuple[ResourceLease, ...]:
-        return tuple(self._leases.values())
+        with self._lock:
+            return tuple(self._leases.values())
 
     def _record_measurement(
         self, mode: MissionMode, request: ResourceRequest, measured: MeasuredResources

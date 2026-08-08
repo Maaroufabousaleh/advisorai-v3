@@ -1,3 +1,5 @@
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -251,3 +253,31 @@ def test_resource_measurements_and_leases_are_durably_recorded(tmp_path):
         "resource_lease_released",
     ]
     assert events[0].payload["observed_at"] == observed_at.isoformat()
+
+
+def test_concurrent_admissions_cannot_oversubscribe_the_global_gpu_lease():
+    metrics = MeasuredResources(
+        memory_used_gib=4.0,
+        memory_available_gib=7.0,
+        gpu_free_mib=6000,
+        gpu_total_mib=8192,
+        observed_at=datetime.now(UTC),
+    )
+
+    class SlowProbe:
+        def measure(self):
+            time.sleep(0.01)
+            return metrics
+
+    governor = ResourceGovernor(_configs(), SlowProbe())
+    request = ResourceRequest(
+        workload=WorkloadClass.GPU, memory_reservation_gib=0.5, requires_gpu=True
+    )
+
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        decisions = tuple(
+            executor.map(lambda _index: governor.admit(MissionMode.STANDARD, request), range(16))
+        )
+
+    assert sum(decision.granted for decision in decisions) == 1
+    assert len(governor.active_leases()) == 1
