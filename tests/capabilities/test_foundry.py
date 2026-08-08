@@ -71,6 +71,26 @@ def _dns_network_task():
     return {"caught": None}
 
 
+def _caught_subprocess_task():
+    import subprocess
+
+    try:
+        subprocess.run(["cat", "secrets.env"], check=True, capture_output=True, text=True)
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
+def _caught_os_process_task():
+    import os
+
+    try:
+        os.system("true")
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
 def _caught_filesystem_write_task():
     try:
         Path("hermes-write-attempt.txt").write_text("must be rejected", encoding="utf-8")
@@ -196,6 +216,16 @@ def test_hermes_isolation_runner_rejects_network_even_when_task_catches_error(ta
     assert result.output is None
 
 
+@pytest.mark.parametrize("task", [_caught_subprocess_task, _caught_os_process_task])
+def test_hermes_isolation_runner_rejects_process_creation(task):
+    policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
+    result = HermesIsolationRunner(policy).run(task_name="process-attempt", task=task)
+    assert not result.passed
+    assert result.process_spawn_attempted
+    assert result.error == "process_spawn_attempted"
+    assert result.output is None
+
+
 def test_hermes_isolation_runner_requires_an_allowlisted_network_host():
     policy = HermesSandboxPolicy(
         mode="builder",
@@ -230,6 +260,7 @@ def test_hermes_isolation_runner_allows_read_only_snapshot_access():
     assert result.passed
     assert result.output == {"bytes": Path("pyproject.toml").stat().st_size}
     assert not result.filesystem_write_attempted
+    assert not result.process_spawn_attempted
 
 
 def test_hermes_isolation_runner_rejects_sensitive_path_reads():

@@ -25,6 +25,7 @@ def test_phase8_evidence_delivers_hermes_collector_to_active_read(tmp_path):
     assert hermes["network_access_attempted"] is False
     assert hermes["filesystem_write_attempted"] is False
     assert hermes["sensitive_path_access_attempted"] is False
+    assert hermes["process_spawn_attempted"] is False
     assert hermes["first"]["output"]["untrusted_flags"] == [True]
     assert hermes["first"]["output"]["network_calls"] == 0
 
