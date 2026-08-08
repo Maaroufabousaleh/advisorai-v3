@@ -10,10 +10,11 @@ not authorize live capital.
 
 - `advisorai.config.secrets` parses the ignored `export NAME=value` template
   without executing shell code, rejects live environments, and masks values.
-- `advisorai.integrations` provides HTTPS host/retry/rate/circuit guards, raw
-  WSS spooling, OpenAI-compatible typed output, HMAC paper/testnet order
-  transport, explicit reviewed-host admission, deterministic cancellation,
-  connector lifecycle cards, and fixed V3-Core collector factories.
+- `advisorai.integrations` provides HTTPS host/retry/rate/circuit guards and raw
+  WSS spooling. Its default requester rejects redirects, and its
+  OpenAI-compatible typed output, HMAC paper/testnet order transport, explicit
+  reviewed-host admission, deterministic cancellation, connector lifecycle cards,
+  and fixed V3-Core collector factories remain scoped to reviewed endpoints.
 - `advisorai.runtime.PaperRuntime` enforces closed hourly snapshots, the
   evidence → target → RiskKernel → OMS → paper venue chain, and durable cycle
   records. A reconciliation mismatch trips the independent kill switch.
