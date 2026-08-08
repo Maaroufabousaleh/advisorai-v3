@@ -18,8 +18,8 @@ uv run python scripts/run_phase8_capability_evidence.py \
 The drill performs the following sequence:
 
 1. Run the RSS collector twice inside bounded Hermes child processes.
-2. Verify identical output hashes, untrusted-content preservation, no network
-   calls, and sensitive-environment scrubbing.
+2. Verify identical output hashes, untrusted-content preservation, enforced
+   socket/DNS network policy, and sensitive-environment scrubbing.
 3. Export a typed `CollectorCandidate` and read-only `CapabilityCard` with
    parser, contract, security, performance, lock, and fixture identities.
 4. Persist the lifecycle in SQLite through `active_read`, restart the registry,
@@ -39,6 +39,7 @@ capability into a production authority. The report must retain:
 
 - `phase8_gate_decision: "pending"`;
 - `phase8_gate_recorded: false` and `phase8_admitted: false`;
+- `network_access_attempted: false` for every Hermes child result;
 - `network_required: false`, an empty `secrets_required`, and only
   `read_source` in `allowed_actions`; and
 - the fixture-only environment identity note rather than a claimed container

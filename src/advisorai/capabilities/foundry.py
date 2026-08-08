@@ -7,8 +7,10 @@ import json
 import multiprocessing as mp
 import os
 import queue as queue_module
+import socket
 import time
 from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -137,6 +139,127 @@ class HermesSandboxPolicy(BaseModel):
         return self
 
 
+class HermesNetworkAccessError(RuntimeError):
+    """A Hermes task attempted a socket or DNS operation outside its policy."""
+
+
+class _HermesNetworkGuard(AbstractContextManager["_HermesNetworkGuard"]):
+    """Enforce the child-process network allowlist at the socket boundary.
+
+    The guard deliberately fails closed for an empty allowlist.  An explicit
+    hostname allowlist is resolved once with the original resolver so that the
+    subsequent socket ``connect`` call can accept the resolved address without
+    allowing an unrelated address to bypass the hostname policy.
+    """
+
+    def __init__(self, allowed_hosts: tuple[str, ...]) -> None:
+        self.allowed_hosts = {host.strip().lower().rstrip(".") for host in allowed_hosts}
+        self.allowed_addresses: set[str] = set()
+        self.attempted = False
+        self._original_socket = socket.socket
+        self._stream_type = socket.SOCK_STREAM
+        self._original_create_connection = socket.create_connection
+        self._original_getaddrinfo = socket.getaddrinfo
+        self._original_gethostbyname = socket.gethostbyname
+        self._original_gethostbyname_ex = socket.gethostbyname_ex
+        self._original_gethostbyaddr = socket.gethostbyaddr
+        self._original_getnameinfo = socket.getnameinfo
+
+    def __enter__(self) -> _HermesNetworkGuard:
+        if self.allowed_hosts:
+            for host in self.allowed_hosts:
+                try:
+                    infos = self._original_getaddrinfo(
+                        host,
+                        None,
+                        type=self._stream_type,
+                    )
+                except OSError:
+                    continue
+                self.allowed_addresses.update(
+                    str(info[4][0]).lower().rstrip(".") for info in infos if info[4]
+                )
+
+        guard = self
+
+        def check_address(address: object) -> None:
+            host: object
+            if isinstance(address, tuple) and address:
+                host = address[0]
+            else:
+                host = address
+            normalized = str(host).strip().lower().rstrip(".")
+            if normalized in guard.allowed_hosts or normalized in guard.allowed_addresses:
+                return
+            guard.attempted = True
+            raise HermesNetworkAccessError("Hermes network access is not allowed for this task")
+
+        original_socket = self._original_socket
+
+        class GuardedSocket(original_socket):
+            def connect(self, address):  # type: ignore[no-untyped-def]
+                check_address(address)
+                return super().connect(address)
+
+            def connect_ex(self, address):  # type: ignore[no-untyped-def]
+                check_address(address)
+                return super().connect_ex(address)
+
+            def sendto(self, data, *args):  # type: ignore[no-untyped-def]
+                if args:
+                    check_address(args[-1])
+                return super().sendto(data, *args)
+
+            def sendmsg(self, buffers, ancdata=(), flags=0, address=None):  # type: ignore[no-untyped-def]
+                if address is not None:
+                    check_address(address)
+                    return super().sendmsg(buffers, ancdata, flags, address)
+                return super().sendmsg(buffers, ancdata, flags)
+
+        def guarded_getaddrinfo(host, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if host is not None:
+                check_address((host, 0))
+            return guard._original_getaddrinfo(host, *args, **kwargs)
+
+        def guarded_create_connection(address, *args, **kwargs):  # type: ignore[no-untyped-def]
+            check_address(address)
+            return guard._original_create_connection(address, *args, **kwargs)
+
+        def guarded_gethostbyname(host):  # type: ignore[no-untyped-def]
+            check_address((host, 0))
+            return guard._original_gethostbyname(host)
+
+        def guarded_gethostbyname_ex(host):  # type: ignore[no-untyped-def]
+            check_address((host, 0))
+            return guard._original_gethostbyname_ex(host)
+
+        def guarded_gethostbyaddr(host):  # type: ignore[no-untyped-def]
+            check_address((host, 0))
+            return guard._original_gethostbyaddr(host)
+
+        def guarded_getnameinfo(address, flags):  # type: ignore[no-untyped-def]
+            check_address(address)
+            return guard._original_getnameinfo(address, flags)
+
+        socket.socket = GuardedSocket
+        socket.getaddrinfo = guarded_getaddrinfo
+        socket.create_connection = guarded_create_connection
+        socket.gethostbyname = guarded_gethostbyname
+        socket.gethostbyname_ex = guarded_gethostbyname_ex
+        socket.gethostbyaddr = guarded_gethostbyaddr
+        socket.getnameinfo = guarded_getnameinfo
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore[no-untyped-def]
+        socket.socket = self._original_socket
+        socket.getaddrinfo = self._original_getaddrinfo
+        socket.create_connection = self._original_create_connection
+        socket.gethostbyname = self._original_gethostbyname
+        socket.gethostbyname_ex = self._original_gethostbyname_ex
+        socket.gethostbyaddr = self._original_gethostbyaddr
+        socket.getnameinfo = self._original_getnameinfo
+
+
 class HermesTaskResult(BaseModel):
     """Measured result of one bounded, isolated Hermes task attempt."""
 
@@ -147,6 +270,7 @@ class HermesTaskResult(BaseModel):
     policy_hash: str = Field(min_length=64, max_length=64)
     passed: bool
     timed_out: bool = False
+    network_access_attempted: bool = False
     output: object | None = None
     output_hash: str | None = None
     elapsed_ms: int = Field(ge=0)
@@ -183,6 +307,8 @@ class HermesTaskResult(BaseModel):
     def validate_result(self) -> HermesTaskResult:
         if self.passed and (self.timed_out or self.error is not None or self.output_hash is None):
             raise ValueError("a passed Hermes task requires a bounded successful output")
+        if self.passed and self.network_access_attempted:
+            raise ValueError("a Hermes task that attempted network access cannot pass")
         if self.timed_out and self.error is None:
             raise ValueError("a timed-out Hermes task requires an error")
         if self.error is not None and not self.error.strip():
@@ -190,7 +316,7 @@ class HermesTaskResult(BaseModel):
         return self
 
 
-def _run_hermes_task(task, result_queue) -> None:
+def _run_hermes_task(task, result_queue, allowed_network_hosts: tuple[str, ...]) -> None:
     """Child-process entry point; no broker/credential environment is inherited."""
 
     forbidden_environment_tokens = (
@@ -207,14 +333,16 @@ def _run_hermes_task(task, result_queue) -> None:
         if any(token in key.upper() for token in forbidden_environment_tokens):
             os.environ.pop(key, None)
     started_cpu = time.process_time()
-    try:
-        output = task()
-        error = None
-        passed = True
-    except Exception as exc:  # pragma: no cover - exact child exception is task-specific
-        output = None
-        error = f"{type(exc).__name__}: {exc}"
-        passed = False
+    with _HermesNetworkGuard(allowed_network_hosts) as network_guard:
+        try:
+            output = task()
+            error = None
+            passed = True
+        except Exception as exc:  # pragma: no cover - exact child exception is task-specific
+            output = None
+            error = f"{type(exc).__name__}: {exc}"
+            passed = False
+    network_access_attempted = network_guard.attempted
     elapsed_cpu = max(0.0, time.process_time() - started_cpu)
     peak_memory_mib = 0
     try:
@@ -231,6 +359,7 @@ def _run_hermes_task(task, result_queue) -> None:
     result_queue.put(
         {
             "passed": passed,
+            "network_access_attempted": network_access_attempted,
             "output": output,
             "output_hash": output_hash,
             "cpu_seconds": elapsed_cpu,
@@ -261,7 +390,10 @@ class HermesIsolationRunner:
         context_name = "fork" if "fork" in mp.get_all_start_methods() else "spawn"
         context = mp.get_context(context_name)
         result_queue = context.Queue(maxsize=1)
-        process = context.Process(target=_run_hermes_task, args=(task, result_queue))
+        process = context.Process(
+            target=_run_hermes_task,
+            args=(task, result_queue, self.policy.allowed_network_hosts),
+        )
         policy_hash = hashlib.sha256(self.policy.model_dump_json().encode()).hexdigest()
         started = time.monotonic()
         try:
@@ -315,10 +447,14 @@ class HermesIsolationRunner:
             )
         cpu_seconds = Decimal(str(payload.get("cpu_seconds", 0)))
         peak_memory_mib = int(payload.get("peak_memory_mib", 0))
+        network_access_attempted = bool(payload.get("network_access_attempted", False))
         child_passed = bool(payload.get("passed", False))
         error = payload.get("error")
         if not isinstance(error, str) and error is not None:
             error = str(error)
+        if network_access_attempted:
+            child_passed = False
+            error = "network_access_attempted"
         if child_passed and cpu_seconds > Decimal(self.policy.cpu_seconds):
             child_passed = False
             error = "cpu_budget_exceeded"
@@ -333,6 +469,7 @@ class HermesIsolationRunner:
             task_name=task_name,
             policy_hash=policy_hash,
             passed=child_passed,
+            network_access_attempted=network_access_attempted,
             output=output if child_passed else None,
             output_hash=output_hash if child_passed else None,
             elapsed_ms=elapsed_ms,

@@ -24,6 +24,52 @@ def _slow_hermes_task():
     return {"done": True}
 
 
+def _caught_network_task():
+    import socket
+
+    try:
+        socket.create_connection(("example.invalid", 443), timeout=0.1)
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
+def _direct_socket_network_task():
+    import socket
+
+    connection = socket.socket()
+    try:
+        connection.connect(("127.0.0.1", 9))
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    finally:
+        connection.close()
+    return {"caught": None}
+
+
+def _udp_network_task():
+    import socket
+
+    connection = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        connection.sendto(b"blocked", ("127.0.0.1", 9))
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    finally:
+        connection.close()
+    return {"caught": None}
+
+
+def _dns_network_task():
+    import socket
+
+    try:
+        socket.gethostbyname("example.invalid")
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
 def _environment():
     return EnvironmentManifest(image_digest="sha256:image", lock_hash="a" * 64, seed=7)
 
@@ -78,6 +124,35 @@ def test_hermes_isolation_runner_terminates_wall_time_overrun():
     assert not result.passed
     assert result.timed_out
     assert result.error == "wall_time_budget_exceeded"
+
+
+@pytest.mark.parametrize(
+    "task",
+    [_caught_network_task, _direct_socket_network_task, _udp_network_task, _dns_network_task],
+)
+def test_hermes_isolation_runner_rejects_network_even_when_task_catches_error(task):
+    policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
+    result = HermesIsolationRunner(policy).run(task_name="network-attempt", task=task)
+    assert not result.passed
+    assert result.network_access_attempted
+    assert result.error == "network_access_attempted"
+    assert result.output is None
+
+
+def test_hermes_isolation_runner_requires_an_allowlisted_network_host():
+    policy = HermesSandboxPolicy(
+        mode="builder",
+        allowed_network_hosts=("127.0.0.1",),
+        cpu_seconds=2,
+        memory_mib=512,
+        wall_time_seconds=1,
+    )
+    result = HermesIsolationRunner(policy).run(
+        task_name="network-attempt", task=_caught_network_task
+    )
+    assert not result.passed
+    assert result.network_access_attempted
+    assert result.error == "network_access_attempted"
 
 
 def test_capability_lifecycle_stops_at_active_read_without_approval():

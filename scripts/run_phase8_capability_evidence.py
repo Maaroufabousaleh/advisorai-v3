@@ -172,6 +172,7 @@ def _hermes_task_result(result) -> dict[str, Any]:
     return {
         "passed": result.passed,
         "timed_out": result.timed_out,
+        "network_access_attempted": result.network_access_attempted,
         "policy_hash": result.policy_hash,
         "output_hash": result.output_hash,
         "elapsed_ms": result.elapsed_ms,
@@ -212,6 +213,9 @@ def _run_hermes_fixture() -> dict[str, Any]:
             and first.output.get("broker_api_key_visible") is None
             and second.output is not None
             and second.output.get("broker_api_key_visible") is None
+        ),
+        "network_access_attempted": (
+            first.network_access_attempted or second.network_access_attempted
         ),
         "network_calls": 0,
         "write_authority": False,
@@ -376,6 +380,7 @@ def run_evidence(
             hermes["passed"]
             and hermes["reproducible_output"]
             and hermes["secrets_scrubbed"]
+            and not hermes["network_access_attempted"]
             and active.lifecycle is CapabilityLifecycle.ACTIVE_READ
             and restarted_active.lifecycle is CapabilityLifecycle.ACTIVE_READ
             and active_read["broker_read_executed"]
