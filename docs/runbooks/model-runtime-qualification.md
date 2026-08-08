@@ -188,19 +188,36 @@ hash-chained JSONL log, verifies the immutable benchmark hashes, supports a
 fixed run directory for safe restart, and uses the existing `StabilityWindow`
 contract. A short smoke remains explicitly distinct from the 24-hour gate.
 
+Admission manifests also pin the worker source hash. Any source or formatting
+change after a manifest is frozen must fail closed: stop the old supervisor,
+preserve its append-only cycles and interrupted status, attest a new admission
+root with `scripts/freeze_model_runtime.py`, run a one-cycle smoke, and start a
+new run directory. Never edit an old admission manifest or append new samples
+to a run whose source hash no longer matches.
+
 ```bash
 nohup uv run python scripts/run_model_stability.py \
   --forecast-snapshot ~/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
   --sentiment-snapshot ~/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
   --report artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json \
-  --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-final-20260808T020000Z \
-  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h \
-  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h.nohup.log 2>&1 &
+  --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260808 \
+  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808 \
+  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808.nohup.log 2>&1 &
 ```
 
 The 24-hour result must exist and pass before changing roster entries from
 `pending_stability` to `selected`. It does not approve paper execution or live
 capital.
+
+On 2026-08-08, the pre-format run was interrupted after the finalized
+repository formatting made its old worker hashes invalid. Its failed cycles
+remain at
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h`.
+The fresh post-format admission root passed a one-cycle smoke for TTM-R2,
+Finance DeBERTa-v3, and FinBERT-MiniLM. The supervised 24-hour replacement is
+running at
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808`;
+its first cycle passed, but the 24-hour gate remains pending.
 
 The pre-merge two-cycle smoke completed with all three candidates passing. Its
 append-only log is
