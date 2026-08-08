@@ -120,7 +120,9 @@ def test_complete_stability_uses_existing_window_contract():
 
     assert summary.status == "passed"
     assert summary.stability_24h_passed
-    assert all(window is not None and window.passed for window in summary.candidate_windows.values())
+    assert all(
+        window is not None and window.passed for window in summary.candidate_windows.values()
+    )
 
 
 def test_failed_sample_requires_reason_and_blocks_stability():

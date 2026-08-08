@@ -97,8 +97,7 @@ def test_nasdaq_parser_reorders_rows_and_hashes_raw_payload():
 
 def test_binance_parser_deduplicates_paginated_boundary():
     rows = [
-        [1_640_995_200_000 + index * 86_400_000, "10", "12", "9", "11", "5"]
-        for index in range(600)
+        [1_640_995_200_000 + index * 86_400_000, "10", "12", "9", "11", "5"] for index in range(600)
     ]
     body = json.dumps(rows).encode()
     parsed = parse_binance_klines(

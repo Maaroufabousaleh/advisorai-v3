@@ -52,7 +52,9 @@ def main() -> int:
         runtime_pin=runtime,
         created_at=datetime.now(UTC),
     )
-    payload = (json.dumps(admission.model_dump(mode="json"), sort_keys=True, indent=2) + "\n").encode()
+    payload = (
+        json.dumps(admission.model_dump(mode="json"), sort_keys=True, indent=2) + "\n"
+    ).encode()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists() and args.output.read_bytes() != payload:
         raise SystemExit(f"immutable runtime admission already differs: {args.output}")

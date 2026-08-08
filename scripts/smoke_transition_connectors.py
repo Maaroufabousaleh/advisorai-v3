@@ -51,9 +51,7 @@ def _config_hash(settings: SecretSettings) -> str | None:
         allowed_hosts=(_host(settings.venue_base_url),),
         environment=settings.venue_environment,
         credential_refs=tuple(
-            name
-            for name in settings.credential_references()
-            if name.startswith("ADVISORAI_VENUE_")
+            name for name in settings.credential_references() if name.startswith("ADVISORAI_VENUE_")
         ),
         source_grade="execution_grade",
         quota_and_cost="operator review required",

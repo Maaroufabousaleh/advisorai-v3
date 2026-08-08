@@ -52,6 +52,7 @@ def _routes() -> tuple[GatewayRoute, GatewayRoute]:
 
 def _gateway(*, contributor_transport=None, private_transport=None, recorder=None):
     contributor_route, private_route = _routes()
+
     def payload_with_identity(request, payload):
         return {
             **payload,
@@ -188,8 +189,9 @@ def test_low_confidence_and_conflicting_evidence_escalate_without_answer_length_
 def test_secret_execution_payload_is_blocked_before_any_provider_call():
     calls: list[str] = []
     gateway, contributor_route, _ = _gateway(
-        contributor_transport=lambda _: calls.append("contributor")
-        or {"content": "bad", "typed_payload": {"ok": True}}
+        contributor_transport=lambda _: (
+            calls.append("contributor") or {"content": "bad", "typed_payload": {"ok": True}}
+        )
     )
     request = _request(contributor_route)
 
@@ -221,7 +223,11 @@ def test_contributor_has_no_tools_and_private_accepts_only_allowlisted_read_tool
     gateway, contributor_route, private_route = _gateway()
     contributor_request = _request(
         contributor_route,
-        tools=(GatewayTool(name="read_evidence", input_schema_version="v1", output_schema_version="v1"),),
+        tools=(
+            GatewayTool(
+                name="read_evidence", input_schema_version="v1", output_schema_version="v1"
+            ),
+        ),
         invocation_mode=GatewayInvocationMode.TOOL_OPTIONAL,
     )
     with pytest.raises(GatewayPolicyError, match="cannot receive tools"):
@@ -230,7 +236,11 @@ def test_contributor_has_no_tools_and_private_accepts_only_allowlisted_read_tool
     private_request = _request(
         contributor_route.model_copy(update={"fallback_chain": (private_route.gateway,)}),
         data_class=GatewayDataClass.CONFIDENTIAL,
-        tools=(GatewayTool(name="read_evidence", input_schema_version="v1", output_schema_version="v1"),),
+        tools=(
+            GatewayTool(
+                name="read_evidence", input_schema_version="v1", output_schema_version="v1"
+            ),
+        ),
         invocation_mode=GatewayInvocationMode.TOOL_OPTIONAL,
     )
     assert gateway.complete(private_request).tier is GatewayTier.PRIVATE
@@ -254,9 +264,7 @@ def test_private_tool_calls_cannot_smuggle_account_or_execution_arguments():
     gateway, contributor_route, _ = _gateway(
         private_transport=lambda _: {
             "content": None,
-            "tool_calls": (
-                {"name": "read_evidence", "arguments": {"account_id": "acct-1"}},
-            ),
+            "tool_calls": ({"name": "read_evidence", "arguments": {"account_id": "acct-1"}},),
         }
     )
     request = _request(
@@ -328,10 +336,22 @@ def test_policy_gateway_accepts_only_explicit_fallback_routes():
 
 
 def test_classify_payload_is_conservative_for_internal_artifacts():
-    assert classify_payload({"article_text": "public"}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.PUBLIC
-    assert classify_payload({"position_weight_bucket": "high"}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.INTERNAL_SANITIZED
-    assert classify_payload({"position_exposure": 0.2}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.CONFIDENTIAL
-    assert classify_payload({"api_key": "secret"}, declared=GatewayDataClass.PUBLIC) is GatewayDataClass.SECRET_EXECUTION
+    assert (
+        classify_payload({"article_text": "public"}, declared=GatewayDataClass.PUBLIC)
+        is GatewayDataClass.PUBLIC
+    )
+    assert (
+        classify_payload({"position_weight_bucket": "high"}, declared=GatewayDataClass.PUBLIC)
+        is GatewayDataClass.INTERNAL_SANITIZED
+    )
+    assert (
+        classify_payload({"position_exposure": 0.2}, declared=GatewayDataClass.PUBLIC)
+        is GatewayDataClass.CONFIDENTIAL
+    )
+    assert (
+        classify_payload({"api_key": "secret"}, declared=GatewayDataClass.PUBLIC)
+        is GatewayDataClass.SECRET_EXECUTION
+    )
 
 
 def test_private_terms_must_prove_no_training_or_zdr():
@@ -488,11 +508,13 @@ def _profile_gateway(
         }
 
     public_transport = public_transport or (
-        lambda _: response(
-            "public",
-            {"claims": []},
+        lambda _: (
+            response(
+                "public",
+                {"claims": []},
+            )
+            | {"actual_provider": "openrouter", "actual_model": "free-worker"}
         )
-        | {"actual_provider": "openrouter", "actual_model": "free-worker"}
     )
     worker_transport = worker_transport or (
         lambda _: response("worker", {"claims": []}, prices=(0.01, 0.03, 0.0))
@@ -623,15 +645,19 @@ def test_portfolio_influencing_confidential_routes_to_reviewer():
 def test_public_failure_can_use_only_explicit_private_worker_fallback():
     calls: list[str] = []
     gateway, public_route, worker_route, reviewer_route = _profile_gateway(
-        public_transport=lambda _: calls.append("public") or (_ for _ in ()).throw(RuntimeError("down")),
-        worker_transport=lambda _: calls.append("worker")
-        or {
-            "content": "worker",
-            "typed_payload": {"ok": True},
-            "input_price_per_million": 0.01,
-            "output_price_per_million": 0.03,
-            "request_price_usd": 0,
-        },
+        public_transport=lambda _: (
+            calls.append("public") or (_ for _ in ()).throw(RuntimeError("down"))
+        ),
+        worker_transport=lambda _: (
+            calls.append("worker")
+            or {
+                "content": "worker",
+                "typed_payload": {"ok": True},
+                "input_price_per_million": 0.01,
+                "output_price_per_million": 0.03,
+                "request_price_usd": 0,
+            }
+        ),
     )
     response = gateway.complete(_request(public_route))
 
@@ -644,16 +670,19 @@ def test_public_failure_can_use_only_explicit_private_worker_fallback():
 def test_worker_failure_can_escalate_to_reviewer_but_never_to_public():
     calls: list[str] = []
     gateway, public_route, _, reviewer_route = _profile_gateway(
-        worker_transport=lambda _: calls.append("worker")
-        or (_ for _ in ()).throw(RuntimeError("worker down")),
-        reviewer_transport=lambda _: calls.append("reviewer")
-        or {
-            "content": "reviewer",
-            "typed_payload": {"review": True},
-            "input_price_per_million": 0.1,
-            "output_price_per_million": 0.3,
-            "request_price_usd": 0,
-        },
+        worker_transport=lambda _: (
+            calls.append("worker") or (_ for _ in ()).throw(RuntimeError("worker down"))
+        ),
+        reviewer_transport=lambda _: (
+            calls.append("reviewer")
+            or {
+                "content": "reviewer",
+                "typed_payload": {"review": True},
+                "input_price_per_million": 0.1,
+                "output_price_per_million": 0.3,
+                "request_price_usd": 0,
+            }
+        ),
     )
     response = gateway.complete(
         _request(public_route, data_class=GatewayDataClass.INTERNAL_SANITIZED)
@@ -667,8 +696,9 @@ def test_worker_failure_can_escalate_to_reviewer_but_never_to_public():
 def test_reviewer_exhaustion_returns_deterministic_abstention_not_public_downgrade():
     calls: list[str] = []
     gateway, public_route, _, _ = _profile_gateway(
-        reviewer_transport=lambda _: calls.append("reviewer")
-        or (_ for _ in ()).throw(RuntimeError("reviewer down")),
+        reviewer_transport=lambda _: (
+            calls.append("reviewer") or (_ for _ in ()).throw(RuntimeError("reviewer down"))
+        ),
     )
     response = gateway.complete(
         _request(

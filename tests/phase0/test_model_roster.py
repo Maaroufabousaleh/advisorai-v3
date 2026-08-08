@@ -35,8 +35,8 @@ def test_combined_phase0_roster_is_role_oriented_and_secret_free():
 
 
 def test_tspulse_is_not_admitted_as_a_forecaster():
-    role = json.loads(Path("configs/models/phase0_model_roster.json").read_text())[
-        "roles"
-    ]["feature_regime_model"]
+    role = json.loads(Path("configs/models/phase0_model_roster.json").read_text())["roles"][
+        "feature_regime_model"
+    ]
     assert role["candidate"] == "tspulse"
     assert role["price_forecast_prohibited"] is True

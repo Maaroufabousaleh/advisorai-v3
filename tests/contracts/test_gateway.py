@@ -44,7 +44,11 @@ def test_gateway_refuses_secret_recovery_request():
 
 def test_gateway_chain_dispatches_each_adapter_on_its_pinned_fallback_route():
     primary_route = GatewayRoute(
-        provider="provider", model="model", gateway="litellm", endpoint_variant="primary", fallback_chain=("omniroute",)
+        provider="provider",
+        model="model",
+        gateway="litellm",
+        endpoint_variant="primary",
+        fallback_chain=("omniroute",),
     )
     fallback_route = GatewayRoute(
         provider="provider", model="model", gateway="omniroute", endpoint_variant="fallback"

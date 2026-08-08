@@ -216,7 +216,9 @@ class GatewayCallRecord(BaseModel):
             raise ValueError("gateway optional metadata cannot be blank")
         return value.strip() if value is not None else None
 
-    @field_validator("estimated_cost_usd", "expected_cost_usd", "billed_cost_usd", "cost_difference_usd")
+    @field_validator(
+        "estimated_cost_usd", "expected_cost_usd", "billed_cost_usd", "cost_difference_usd"
+    )
     @classmethod
     def require_finite_cost(cls, value: float | None) -> float | None:
         if value is None:
@@ -265,12 +267,16 @@ class GatewayRecorder:
 
         route = response.route if response is not None else attempt.route
         requested_route = (
-            response.requested_route if response is not None and response.requested_route else request.route
+            response.requested_route
+            if response is not None and response.requested_route
+            else request.route
         )
         tool_called = (
             response.tool_called
             if response is not None and response.tool_called is not None
-            else bool(response.tool_calls) if response is not None else False
+            else bool(response.tool_calls)
+            if response is not None
+            else False
         )
         record = GatewayCallRecord(
             request_id=request.request_id,
@@ -334,41 +340,35 @@ class GatewayRecorder:
                 else requested_route.provider
             ),
             requested_gateway_selector=(
-                response.requested_gateway
-                if response is not None
-                else requested_route.gateway
+                response.requested_gateway if response is not None else requested_route.gateway
             ),
             requested_endpoint_selector=(
                 response.requested_endpoint_selector
                 if response is not None
                 else requested_route.endpoint_variant
             ),
-            observed_provider_name=response.observed_provider_name if response is not None else None,
-            top_level_response_model=response.top_level_response_model if response is not None else None,
+            observed_provider_name=response.observed_provider_name
+            if response is not None
+            else None,
+            top_level_response_model=response.top_level_response_model
+            if response is not None
+            else None,
             resolved_model=response.resolved_model if response is not None else None,
-            resolved_endpoint_model=response.resolved_endpoint_model if response is not None else None,
-            endpoint_selector_proof=response.endpoint_selector_proof if response is not None else None,
+            resolved_endpoint_model=response.resolved_endpoint_model
+            if response is not None
+            else None,
+            endpoint_selector_proof=response.endpoint_selector_proof
+            if response is not None
+            else None,
             endpoint_selected=response.endpoint_selected if response is not None else None,
             routing_strategy=response.routing_strategy if response is not None else None,
             routing_attempt=response.routing_attempt if response is not None else None,
             is_byok=response.is_byok if response is not None else None,
-            actual_provider=(
-                response.actual_provider
-                if response is not None
-                else None
-            ),
-            actual_model=(
-                response.actual_model if response is not None else None
-            ),
-            actual_gateway=(
-                response.actual_gateway
-                if response is not None
-                else None
-            ),
+            actual_provider=(response.actual_provider if response is not None else None),
+            actual_model=(response.actual_model if response is not None else None),
+            actual_gateway=(response.actual_gateway if response is not None else None),
             actual_endpoint_variant=(
-                response.actual_endpoint_variant
-                if response is not None
-                else None
+                response.actual_endpoint_variant if response is not None else None
             ),
             profile_id=attempt.profile_id,
             attempt_number=attempt.attempt_number,
@@ -402,7 +402,9 @@ class GatewayRecorder:
                 _ledger_safe_metadata(dict(response.cost_metadata)) if response is not None else {}
             ),
             routing_metadata=(
-                _ledger_safe_metadata(dict(response.routing_metadata)) if response is not None else {}
+                _ledger_safe_metadata(dict(response.routing_metadata))
+                if response is not None
+                else {}
             ),
             failure_metadata=(
                 _ledger_safe_metadata(dict(response.failure_metadata))

@@ -93,7 +93,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         object.__setattr__(self, "_output_price_per_million", output_price_per_million)
         object.__setattr__(self, "_request_price_usd", request_price_usd)
         object.__setattr__(self, "_retry_sleeper", retry_sleeper)
-        object.__setattr__(self, "_retry_jitter", retry_jitter or (lambda maximum: random.uniform(0, maximum)))
+        object.__setattr__(
+            self, "_retry_jitter", retry_jitter or (lambda maximum: random.uniform(0, maximum))
+        )
         object.__setattr__(self, "_clock", clock)
         object.__setattr__(self, "_reviewed_token_counter", reviewed_token_counter)
         super().__init__(
@@ -173,7 +175,10 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                 if not isinstance(decoded, Mapping):
                     raise GatewayTransportError(
                         "direct model gateway returned a non-object response",
-                        failure_metadata={"error_type": "invalid_response", "attempt": attempt_number},
+                        failure_metadata={
+                            "error_type": "invalid_response",
+                            "attempt": attempt_number,
+                        },
                         attempt_metadata=attempt_metadata,
                     )
                 identity = self._parse_routing_identity(decoded, request, attempt_number)
@@ -289,12 +294,17 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             provider_options = options.get("provider")
             if isinstance(provider_options, Mapping):
                 governed_provider = dict(provider_options)
-                if "only" in governed_provider and governed_provider["only"] != [request.route.provider]:
+                if "only" in governed_provider and governed_provider["only"] != [
+                    request.route.provider
+                ]:
                     raise GatewayTransportError(
                         "provider selector override is not permitted",
                         failure_metadata={"error_type": "routing_policy_override"},
                     )
-                if "allow_fallbacks" in governed_provider and governed_provider["allow_fallbacks"] is not False:
+                if (
+                    "allow_fallbacks" in governed_provider
+                    and governed_provider["allow_fallbacks"] is not False
+                ):
                     raise GatewayTransportError(
                         "provider fallback override is not permitted",
                         failure_metadata={"error_type": "routing_policy_override"},
@@ -315,7 +325,10 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                             "private route requires data-collection denial",
                             failure_metadata={"error_type": "routing_policy_override"},
                         )
-                if "require_parameters" in governed_provider and governed_provider["require_parameters"] is not True:
+                if (
+                    "require_parameters" in governed_provider
+                    and governed_provider["require_parameters"] is not True
+                ):
                     raise GatewayTransportError(
                         "provider parameter requirement override is not permitted",
                         failure_metadata={"error_type": "routing_policy_override"},
@@ -535,7 +548,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                         "direct model gateway tool call has no name",
                         failure_metadata={"error_type": "invalid_tool_call"},
                     )
-                calls.append({"name": function["name"], "arguments": function.get("arguments", "{}")})
+                calls.append(
+                    {"name": function["name"], "arguments": function.get("arguments", "{}")}
+                )
         if calls:
             self._validate_returned_tool_calls(request, calls)
         content = message.get("content")
@@ -563,14 +578,8 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         # responses without a call, still require typed JSON.
         parse_typed_content = content.strip() and (
             request.invocation_mode is GatewayInvocationMode.STRUCTURED_OUTPUT
-            or (
-                request.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL
-                and not calls
-            )
-            or (
-                request.route.schema_mode == "typed_json"
-                and not calls
-            )
+            or (request.invocation_mode is GatewayInvocationMode.TOOL_OPTIONAL and not calls)
+            or (request.route.schema_mode == "typed_json" and not calls)
         )
         if parse_typed_content:
             try:
@@ -836,7 +845,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                 f"tool arguments at {path} must be an integer",
                 failure_metadata={"error_type": "invalid_tool_arguments"},
             )
-        if schema_type == "number" and (isinstance(value, bool) or not isinstance(value, (int, float))):
+        if schema_type == "number" and (
+            isinstance(value, bool) or not isinstance(value, (int, float))
+        ):
             raise GatewayTransportError(
                 f"tool arguments at {path} must be a number",
                 failure_metadata={"error_type": "invalid_tool_arguments"},
@@ -867,16 +878,26 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             if not isinstance(raw_metadata, Mapping):
                 raise GatewayTransportError(
                     "OpenRouter response omitted openrouter_metadata",
-                    failure_metadata={"error_type": "missing_routing_metadata", "attempt": attempt_number},
+                    failure_metadata={
+                        "error_type": "missing_routing_metadata",
+                        "attempt": attempt_number,
+                    },
                 )
             endpoints = raw_metadata.get("endpoints")
             available = endpoints.get("available") if isinstance(endpoints, Mapping) else None
             if not isinstance(available, list):
                 raise GatewayTransportError(
                     "OpenRouter metadata omitted endpoint candidates",
-                    failure_metadata={"error_type": "missing_endpoint_candidates", "attempt": attempt_number},
+                    failure_metadata={
+                        "error_type": "missing_endpoint_candidates",
+                        "attempt": attempt_number,
+                    },
                 )
-            selected = [item for item in available if isinstance(item, Mapping) and item.get("selected") is True]
+            selected = [
+                item
+                for item in available
+                if isinstance(item, Mapping) and item.get("selected") is True
+            ]
             if len(selected) != 1:
                 raise GatewayTransportError(
                     "OpenRouter metadata must identify exactly one selected endpoint",
@@ -905,17 +926,26 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             if not isinstance(provider, str) or not provider.strip():
                 raise GatewayTransportError(
                     "OpenRouter metadata omitted the selected provider tag",
-                    failure_metadata={"error_type": "missing_provider_identity", "attempt": attempt_number},
+                    failure_metadata={
+                        "error_type": "missing_provider_identity",
+                        "attempt": attempt_number,
+                    },
                 )
             if not isinstance(model, str) or not model.strip():
                 raise GatewayTransportError(
                     "OpenRouter metadata omitted the selected model tag",
-                    failure_metadata={"error_type": "missing_resolved_model", "attempt": attempt_number},
+                    failure_metadata={
+                        "error_type": "missing_resolved_model",
+                        "attempt": attempt_number,
+                    },
                 )
             if not isinstance(top_level_model, str) or not top_level_model.strip():
                 raise GatewayTransportError(
                     "OpenRouter response omitted top-level model",
-                    failure_metadata={"error_type": "missing_top_level_model", "attempt": attempt_number},
+                    failure_metadata={
+                        "error_type": "missing_top_level_model",
+                        "attempt": attempt_number,
+                    },
                 )
             proof = cls._endpoint_proof(endpoint)
             return {
@@ -928,7 +958,8 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
                 if isinstance(raw_metadata.get("strategy"), str)
                 else None,
                 "routing_attempt": raw_metadata.get("attempt")
-                if isinstance(raw_metadata.get("attempt"), int) and not isinstance(raw_metadata.get("attempt"), bool)
+                if isinstance(raw_metadata.get("attempt"), int)
+                and not isinstance(raw_metadata.get("attempt"), bool)
                 else attempt_number,
                 "is_byok": cls._optional_bool(
                     endpoint.get("is_byok"), raw_metadata.get("is_byok"), decoded.get("is_byok")
@@ -939,10 +970,16 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         provider = decoded.get("provider")
         model = decoded.get("model")
         endpoint_variant = decoded.get("provider_variant") or decoded.get("actual_endpoint_variant")
-        if any(not isinstance(value, str) or not value.strip() for value in (provider, model, endpoint_variant)):
+        if any(
+            not isinstance(value, str) or not value.strip()
+            for value in (provider, model, endpoint_variant)
+        ):
             raise GatewayTransportError(
                 "provider response omitted exact routing identity metadata",
-                failure_metadata={"error_type": "missing_routing_identity", "attempt": attempt_number},
+                failure_metadata={
+                    "error_type": "missing_routing_identity",
+                    "attempt": attempt_number,
+                },
             )
         raw_metadata = decoded.get("routing_metadata")
         return {
@@ -975,7 +1012,14 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             attempts.append(
                 {
                     key: item[key]
-                    for key in ("provider", "provider_name", "model", "resolved_model", "selected", "is_byok")
+                    for key in (
+                        "provider",
+                        "provider_name",
+                        "model",
+                        "resolved_model",
+                        "selected",
+                        "is_byok",
+                    )
                     if key in item and isinstance(item[key], (str, bool, int, float))
                 }
             )
@@ -993,7 +1037,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         if value is None:
             return 0
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            raise GatewayTransportError(f"direct model gateway usage {field} must be a non-negative integer")
+            raise GatewayTransportError(
+                f"direct model gateway usage {field} must be a non-negative integer"
+            )
         return value
 
     @staticmethod
@@ -1021,7 +1067,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
             raise GatewayTransportError(f"direct model gateway {field} must be numeric")
         number = float(value)
         if not isfinite(number) or number < 0:
-            raise GatewayTransportError(f"direct model gateway {field} must be finite and non-negative")
+            raise GatewayTransportError(
+                f"direct model gateway {field} must be finite and non-negative"
+            )
         return number
 
     @classmethod
@@ -1076,10 +1124,7 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         provider_name = cls._first_text(
             *(source.get("provider_name") for source in metadata_sources),
             *(source.get("provider") for source in metadata_sources),
-            *(
-                item.get("provider") or item.get("provider_name")
-                for item in attempted
-            ),
+            *(item.get("provider") or item.get("provider_name") for item in attempted),
         )
         resolved_model = cls._first_text(
             *(source.get("resolved_model") for source in metadata_sources),
@@ -1118,7 +1163,9 @@ class OpenAICompatibleGatewayAdapter(TypedGatewayAdapter):
         metadata: dict[str, object] = {
             "http_status": error.status_code,
             "status_code": error.status_code,
-            "error_type": raw_classification or error.error_type or f"http_{error.status_code or 'transport'}",
+            "error_type": raw_classification
+            or error.error_type
+            or f"http_{error.status_code or 'transport'}",
             "raw_provider_error_classification": raw_classification,
             "provider_code": provider_code,
             "provider_name": provider_name,

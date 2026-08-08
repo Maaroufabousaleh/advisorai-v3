@@ -49,9 +49,7 @@ def _kronos_payload(case) -> dict[str, object]:
     }
 
 
-def _qualification_dataset(
-    snapshot: ForecastBenchmarkSnapshot, cases
-) -> BenchmarkDataset:
+def _qualification_dataset(snapshot: ForecastBenchmarkSnapshot, cases) -> BenchmarkDataset:
     return BenchmarkDataset(
         dataset_id=snapshot.dataset_id,
         version=snapshot.version,
@@ -72,11 +70,7 @@ def _sentiment_subset(snapshot: SentimentBenchmarkSnapshot):
             by_label[example.label].append(example)
     if any(len(items) != 60 for items in by_label.values()):
         raise ValueError("sentiment snapshot does not contain the required balanced subset")
-    return tuple(
-        item
-        for label in ("negative", "neutral", "positive")
-        for item in by_label[label]
-    )
+    return tuple(item for label in ("negative", "neutral", "positive") for item in by_label[label])
 
 
 def _hash_payload(payload: object) -> str:
@@ -241,14 +235,20 @@ def main() -> int:
         item for item in forecast_results if item.model_name not in FORECAST_CANDIDATES
     ]
     best_baseline_mase = min(item.mase for item in baseline_forecasters)
-    best_candidate = min(measured_forecasters, key=lambda item: (item.mase, item.rmse)) if measured_forecasters else None
+    best_candidate = (
+        min(measured_forecasters, key=lambda item: (item.mase, item.rmse))
+        if measured_forecasters
+        else None
+    )
     forecast_winner = (
         best_candidate.model_name
         if best_candidate is not None and best_candidate.mase < best_baseline_mase
         else None
     )
     nlp_winner = (
-        max(sentiment_results, key=lambda item: (item.macro_f1, -item.expected_calibration_error)).model_name
+        max(
+            sentiment_results, key=lambda item: (item.macro_f1, -item.expected_calibration_error)
+        ).model_name
         if sentiment_results
         else None
     )
@@ -281,7 +281,9 @@ def main() -> int:
         "decisions": {
             "forecast_primary_pending_stability": forecast_winner,
             "forecast_no_winner_reason": (
-                None if forecast_winner else "no external candidate beat the best mandatory baseline on MASE"
+                None
+                if forecast_winner
+                else "no external candidate beat the best mandatory baseline on MASE"
             ),
             "finance_sentiment_primary_pending_stability": nlp_winner,
             "finance_sentiment_fast_pending_stability": nlp_fast,

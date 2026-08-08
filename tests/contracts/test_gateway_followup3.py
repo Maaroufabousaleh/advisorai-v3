@@ -232,12 +232,18 @@ def test_nested_openrouter_429_records_safe_attempt_evidence_only(tmp_path: Path
     recorder = GatewayRecorder()
     gateway = PolicyGateway(
         config=_config(),
-        profiles=(RouteProfile("private", RouteTier.PRIVATE_WORKER, adapter, _policy(), _terms(GatewayTier.PRIVATE)),),
+        profiles=(
+            RouteProfile(
+                "private", RouteTier.PRIVATE_WORKER, adapter, _policy(), _terms(GatewayTier.PRIVATE)
+            ),
+        ),
         recorder=recorder,
     )
 
     response = gateway.complete(
-        _request(generation_budget=GenerationBudget(maximum_attempts=1, max_expected_cost_usd=0.001))
+        _request(
+            generation_budget=GenerationBudget(maximum_attempts=1, max_expected_cost_usd=0.001)
+        )
     )
 
     assert response.actual_provider is None
@@ -305,8 +311,11 @@ def test_pre_dispatch_cost_rejects_without_network_and_default_remote_budget_is_
     priced = _request(
         provider_options={
             "provider": {
-                "only": ["novita"], "allow_fallbacks": False, "zdr": True,
-                "data_collection": "deny", "require_parameters": True,
+                "only": ["novita"],
+                "allow_fallbacks": False,
+                "zdr": True,
+                "data_collection": "deny",
+                "require_parameters": True,
                 "max_price": {"prompt": 1.0, "completion": 1.0, "request": 0},
             }
         },
@@ -319,7 +328,11 @@ def test_pre_dispatch_cost_rejects_without_network_and_default_remote_budget_is_
     adapter = _adapter([(200, _success_body(), ())], calls=calls)
     gateway = PolicyGateway(
         config=_config(),
-        profiles=(RouteProfile("private", RouteTier.PRIVATE_WORKER, adapter, _policy(), _terms(GatewayTier.PRIVATE)),),
+        profiles=(
+            RouteProfile(
+                "private", RouteTier.PRIVATE_WORKER, adapter, _policy(), _terms(GatewayTier.PRIVATE)
+            ),
+        ),
     )
     gateway.complete(_request())
     assert calls[-1][0]["max_tokens"] == 256
@@ -342,7 +355,10 @@ def test_total_deadline_bounds_retry_wait_and_stops_new_attempts():
         calls=calls,
     )
     response = adapter.complete(
-        _request(data_class=GatewayDataClass.PUBLIC, generation_budget=GenerationBudget(timeout_seconds=2, maximum_attempts=2))
+        _request(
+            data_class=GatewayDataClass.PUBLIC,
+            generation_budget=GenerationBudget(timeout_seconds=2, maximum_attempts=2),
+        )
     )
     assert response.endpoint_selected is True
     assert waits == [1.0]
@@ -358,7 +374,10 @@ def test_total_deadline_bounds_retry_wait_and_stops_new_attempts():
     )
     with pytest.raises(GatewayTransportError, match="deadline exhausted before retry"):
         adapter.complete(
-            _request(data_class=GatewayDataClass.PUBLIC, generation_budget=GenerationBudget(timeout_seconds=1, maximum_attempts=2))
+            _request(
+                data_class=GatewayDataClass.PUBLIC,
+                generation_budget=GenerationBudget(timeout_seconds=1, maximum_attempts=2),
+            )
         )
     assert len(calls) == 1
 
