@@ -69,6 +69,7 @@ def build_paper_venue_transport(
     *,
     allowed_hosts: tuple[str, ...] | None = None,
     orders_path: str = "/orders",
+    cancel_path: str | None = None,
 ) -> PaperTestnetVenueTransport:
     if not settings.venue_base_url:
         raise ValueError("ADVISORAI_VENUE_BASE_URL is required for the paper venue")
@@ -76,7 +77,11 @@ def build_paper_venue_transport(
     api_secret = settings.secret_for("ADVISORAI_VENUE_API_SECRET")
     if not api_key or not api_secret:
         raise ValueError("paper venue API key and API secret are required")
-    hosts = allowed_hosts or (_host(settings.venue_base_url),)
+    if not allowed_hosts:
+        raise ValueError("an explicit reviewed paper/testnet host allowlist is required")
+    hosts = tuple(dict.fromkeys(host.strip().lower().rstrip(".") for host in allowed_hosts))
+    if not hosts or _host(settings.venue_base_url) not in hosts:
+        raise ValueError("venue URL hostname is not in the reviewed paper/testnet host allowlist")
     client = SafeHttpClient(
         HttpClientConfig(allowed_hosts=hosts, user_agent="advisorai-v3/paper-venue"),
         base_url=settings.venue_base_url,
@@ -95,7 +100,13 @@ def build_paper_venue_transport(
             else None
         ),
     )
-    return PaperTestnetVenueTransport(client, settings, signer=signer, orders_path=orders_path)
+    return PaperTestnetVenueTransport(
+        client,
+        settings,
+        signer=signer,
+        orders_path=orders_path,
+        cancel_path=cancel_path,
+    )
 
 
 def build_policy_gateway(

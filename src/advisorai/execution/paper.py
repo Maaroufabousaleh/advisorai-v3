@@ -83,3 +83,13 @@ class PaperVenueAdapter:
 
     def open_orders(self) -> tuple[VenueAcknowledgement, ...]:
         return tuple(self._orders.values())
+
+    def cancel(self, order: Order) -> bool:
+        """Apply the deterministic paper venue cancellation acknowledgement."""
+
+        acknowledgement = self._orders.get(order.idempotency_key)
+        if acknowledgement is None:
+            return False
+        if acknowledgement.order_id != order.artifact_id:
+            raise ValueError("paper venue order identity does not match cancellation")
+        return acknowledgement.accepted

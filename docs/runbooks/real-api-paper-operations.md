@@ -12,10 +12,14 @@ not authorize live capital.
   without executing shell code, rejects live environments, and masks values.
 - `advisorai.integrations` provides HTTPS host/retry/rate/circuit guards, raw
   WSS spooling, OpenAI-compatible typed output, HMAC paper/testnet order
-  transport, connector lifecycle cards, and fixed V3-Core collector factories.
+  transport, explicit reviewed-host admission, deterministic cancellation,
+  connector lifecycle cards, and fixed V3-Core collector factories.
 - `advisorai.runtime.PaperRuntime` enforces closed hourly snapshots, the
   evidence → target → RiskKernel → OMS → paper venue chain, and durable cycle
   records. A reconciliation mismatch trips the independent kill switch.
+- `NativeVenueAdapter` rejects unknown or malformed venue open-order identities
+  during reconnect/reconciliation instead of silently dropping them. A native
+  cancel path persists `CANCEL_PENDING` before requesting venue acknowledgement.
 - `advisorai.learning.PaperLearningLoop` records the complete decision chain,
   creates incidents for material failures, replays problems on frozen inputs,
   and records scorecards only after the forecast horizon closes.
@@ -43,7 +47,7 @@ not authorize live capital.
    `disabled → configured → smoke-tested → shadow → active-read` for read
    connectors and `disabled → smoke-tested → paper-only` for the venue.
 
-## Explicit integration smoke test
+## Explicit read-only integration smoke test
 
 Network tests are opt-in and must use a dedicated testnet account. Run them
 from the operator shell, never from a pull request or an untrusted capability:
@@ -52,14 +56,35 @@ from the operator shell, never from a pull request or an untrusted capability:
 uv sync --extra transition
 ADVISORAI_RUN_NETWORK_SMOKE=1 \
   uv run python scripts/smoke_transition_connectors.py \
-  --secrets "$HOME/.config/advisorai-v3/secrets.env"
+  --secrets "$HOME/.config/advisorai-v3/secrets.env" \
+  --venue-allowed-host sandbox.example.test \
+  --evidence-dir artifacts/phase1/paper-venue-transition
 ```
 
-The smoke command must be extended with the selected venue's documented health,
-account-read, open-order-read, and order-cancel/test-order endpoints. It must
-fail if the endpoint is not the reviewed testnet host, and it must redact the
-response before saving evidence. A smoke test must never submit a live order or
-call transfer/withdrawal endpoints.
+The command performs only account, open-order, fill, position, and balance
+reads. Supply the selected venue's documented paper/testnet paths explicitly
+when its generic defaults differ, for example:
+
+```bash
+ADVISORAI_RUN_NETWORK_SMOKE=1 \
+  uv run python scripts/smoke_transition_connectors.py \
+  --secrets "$HOME/.config/advisorai-v3/secrets.env" \
+  --venue-allowed-host sandbox.example.test \
+  --venue-account-path /v1/account \
+  --venue-orders-path /v1/orders \
+  --venue-fills-path /v1/fills \
+  --venue-positions-path /v1/positions \
+  --venue-balances-path /v1/balances
+```
+
+The script fails closed if configuration, scoped credentials, or the explicit
+reviewed host allowlist are missing,
+and emits only connector identity, status, counts, error class, and a
+credential-free configuration hash. It must fail if the endpoint is not the
+reviewed testnet host. A smoke test never submits or cancels an order and never
+calls transfer/withdrawal endpoints; cancellation and order lifecycle checks
+are performed only through the deterministic OMS/adapter contract tests until
+the operator has selected and reviewed one provider-specific API.
 
 ## Running the paper loop
 
@@ -72,7 +97,12 @@ from advisorai.integrations import build_paper_venue_transport
 from advisorai.execution import NativeVenueAdapter, OrderManager
 from advisorai.runtime import PaperRuntime, PaperRuntimeConfig
 
-transport = build_paper_venue_transport(settings)
+# This must be the operator-reviewed testnet hostname, not merely the URL's
+# hostname copied from secrets.
+transport = build_paper_venue_transport(
+    settings,
+    allowed_hosts=("reviewed-testnet.example",),
+)
 venue = NativeVenueAdapter(
     venue=settings.venue_name,
     environment=settings.venue_environment,
