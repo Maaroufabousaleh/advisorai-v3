@@ -47,6 +47,7 @@ capability into a production authority. The report must retain:
 - `phase8_gate_recorded: false` and `phase8_admitted: false`;
 - `network_access_attempted: false` for every Hermes child result;
 - `filesystem_write_attempted: false` for every Hermes child result;
+- `sensitive_path_access_attempted: false` for every Hermes child result;
 - `network_required: false`, an empty `secrets_required`, and only
   `read_source` in `allowed_actions`; and
 - the fixture-only environment identity note rather than a claimed container
