@@ -111,6 +111,22 @@ def _caught_process_environment_task():
     return {"caught": None}
 
 
+def _caught_ssh_key_task():
+    try:
+        Path.home().joinpath(".ssh", "id_rsa").read_bytes()
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
+def _read_sensitive_symlink_task():
+    try:
+        Path("hermes-safe-link").read_bytes()
+    except Exception as exc:
+        return {"caught": type(exc).__name__}
+    return {"caught": None}
+
+
 def _environment():
     return EnvironmentManifest(image_digest="sha256:image", lock_hash="a" * 64, seed=7)
 
@@ -231,6 +247,32 @@ def test_hermes_isolation_runner_rejects_process_environment_reads():
     policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
     result = HermesIsolationRunner(policy).run(
         task_name="process-environment-attempt", task=_caught_process_environment_task
+    )
+    assert not result.passed
+    assert result.sensitive_path_access_attempted
+    assert result.error == "sensitive_path_access_attempted"
+    assert result.output is None
+
+
+def test_hermes_isolation_runner_rejects_ssh_key_reads():
+    policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
+    result = HermesIsolationRunner(policy).run(
+        task_name="ssh-key-attempt", task=_caught_ssh_key_task
+    )
+    assert not result.passed
+    assert result.sensitive_path_access_attempted
+    assert result.error == "sensitive_path_access_attempted"
+    assert result.output is None
+
+
+def test_hermes_isolation_runner_rejects_symlinked_sensitive_paths(tmp_path, monkeypatch):
+    sensitive_file = tmp_path / "id_rsa"
+    sensitive_file.write_bytes(b"fixture-private-material")
+    (tmp_path / "hermes-safe-link").symlink_to(sensitive_file)
+    monkeypatch.chdir(tmp_path)
+    policy = HermesSandboxPolicy(mode="builder", cpu_seconds=2, memory_mib=512, wall_time_seconds=1)
+    result = HermesIsolationRunner(policy).run(
+        task_name="symlinked-sensitive-path-attempt", task=_read_sensitive_symlink_task
     )
     assert not result.passed
     assert result.sensitive_path_access_attempted
