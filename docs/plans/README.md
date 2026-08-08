@@ -38,6 +38,10 @@ over these phase-owned services, not a new trading authority.
 The transition's manual deployment and external-evidence work is recorded in
 [`docs/runbooks/real-api-paper-operations.md`](../runbooks/real-api-paper-operations.md).
 
+The credential-free Phase-0 component evidence drill and its quarantine
+interpretation are recorded in
+[`docs/runbooks/phase0-component-bakeoff.md`](../runbooks/phase0-component-bakeoff.md).
+
 The Alpha Team extension is an optional, post-Core research plan. It remains
 blocked until its E0 prerequisite and is not implementation or admission
 evidence for any existing phase.
