@@ -14,7 +14,7 @@ or 60-day operational gate.
 | 5 | Router, typed roles, bounded adaptive waves, evidence graph, independence gates, DecisionBundle and expiry/cutoff binding | `tests/agents`, `tests/api` | Correlated-evidence and target-only boundaries pass |
 | 6 | Portfolio comparisons, risk analytics/stress, validation, attribution incidents | `tests/institutional` | Deterministic controls pass |
 | 7 | Soak records/gate, incident-ledger rebuild, and immutable recovery rebuild | `tests/recovery/test_soak.py` | Requires actual 60-day paper operation and restore drills |
-| 8 | Hermes policy, bounded isolation runner, enforced child socket/DNS network policy, sensitive-environment scrubbing, artifact/capability lifecycle and broker | `tests/capabilities`, immutable active-read capability evidence | Local Hermes-to-active-read collector lifecycle passed in `artifacts/phase8/capability-evidence/20260808T040146.893766Z/phase8-capability-evidence.json`; formal Phase-8 admission remains pending behind earlier gates, and the feed remains fixture-only |
+| 8 | Hermes policy, bounded isolation runner, enforced child socket/DNS and read-only filesystem policy, sensitive-environment scrubbing, artifact/capability lifecycle and broker | `tests/capabilities`, immutable active-read capability evidence | Local Hermes-to-active-read collector lifecycle passed in `artifacts/phase8/capability-evidence/20260808T041257.837542Z/phase8-capability-evidence.json`; formal Phase-8 admission remains pending behind earlier gates, and the feed remains fixture-only |
 | 9 | Vintaged official releases, equity corporate-action/daily-council boundary, challenger registry, browser ladder, archive verification | `tests/expansion` | Requires one-at-a-time live data/challenger evidence |
 | 10 | Human approval, bounded live readiness, AI-offline invariant, order guard | `tests/live` | Must remain closed until Phase 7 and explicit human approval pass |
 | 0–7 bridge | Typed secret loader/redaction, reviewed connector cards, HTTPS/WSS transport guards, direct typed LLM adapter, durable gateway-call records, paper/testnet HMAC venue transport with signed open-order reconciliation and read-only account/fill/position/balance projection, raw-first native market normalization/replay, cadence-gated closed-cutoff `PaperRuntime` with durable kill-switch/dashboard control hydration and terminal per-order risk rejection, durable resource measurements/leases, refreshing/deduplicated ledger-backed dashboard/config projection, incident/replay/post-horizon scorecards | `tests/config/test_secrets.py`, `tests/integrations`, `tests/runtime`, `tests/learning`, `tests/resources`, `tests/data/test_market_events.py`, `tests/api/test_dashboard.py` | Local contracts pass; provider-specific endpoint smoke, continuous operation, Phase 0 stability, Phase 7 soak, and human decisions remain external |
@@ -27,9 +27,9 @@ above.
 Latest local verification (2026-08-08):
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 118/151/96/22/19/34/10/7/16/11/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 118/151/96/22/19/34/10/7/19/11/5. Suite totals
 overlap a few shared contract tests. A single-process
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/pytest -q` passes all 487 collected
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/pytest -q` passes all 490 collected
 tests with the optional Nautilus runtime active. The acceptance runner stops at the
 first failed phase, so later suites are never counted as evidence after an
 earlier gate failure. The Phase 0 inventory was regenerated at
@@ -39,7 +39,7 @@ reproducibility checks pass for Ruff lint, dependency locking, bytecode compilat
 diff hygiene, and the dashboard TypeScript/Vite build. The recent scoped code
 changes are formatted. A repository-wide
 `./.venv/bin/ruff format --check .` passes with all 232 Python files formatted.
-The test collection check reports 487 collected tests. The dashboard build passes
+The test collection check reports 490 collected tests. The dashboard build passes
 with `npm run build`
 from `dashboard/`.
 
@@ -70,10 +70,10 @@ orders. DuckLake, the external Hermes package, and real rclone/provider restore
 remain quarantined; the report does not record or imply a Phase-0 pass.
 
 The Phase-8 capability evidence report has SHA-256
-`8c37cf1e3c8f3fc40a1756f80e5418ad795418b724dfe6e2aaf5e8e1a426049f` and
+`fad59563bf477a41d64007175c53637a170dae64cdf82bd89672f35b796dc9e9` and
 records two identical Hermes child-process outputs, enforced child socket/DNS
-network policy, secret scrubbing, untrusted RSS content preservation, an
-11-event ledger lifecycle through `active_read`, restart hydration, read-only
-broker execution, and rejection of forbidden/write authority. It records zero
-network calls, credentials, and paper orders. The formal Phase-8 gate remains
-pending and no capability is globally admitted.
+and read-only filesystem policies, secret scrubbing, untrusted RSS content
+preservation, an 11-event ledger lifecycle through `active_read`, restart
+hydration, read-only broker execution, and rejection of forbidden/write
+authority. It records zero network calls, credentials, and paper orders. The
+formal Phase-8 gate remains pending and no capability is globally admitted.
