@@ -39,6 +39,11 @@ not a container or VM attestation;
 the report therefore retains its explicit local-source identity note and does
 not claim stronger isolation than was measured.
 
+Direct native syscalls and C-extension calls (for example, `ctypes`) are outside
+this Python-level guarantee. Any future Hermes admission that requires
+OS-level isolation must supply separate container, VM, or seccomp evidence;
+this local fixture cannot provide or simulate that attestation.
+
 ## Evidence interpretation
 
 `passed: true` and `local_exit_gate_evidence_passed: true` prove this bounded
