@@ -41,7 +41,7 @@ optional Nautilus runtime active, and all eleven isolated phase suites. The exac
 phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
-format checking passes with all 228 Python files formatted. The Phase-1 local
+format checking passes with all 229 Python files formatted. The Phase-1 local
 rollback/Bronze rebuild report is immutable evidence with SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and does
 not open any external or human gate. The Phase-0 component evidence report is
