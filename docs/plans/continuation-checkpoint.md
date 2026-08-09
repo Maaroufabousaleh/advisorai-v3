@@ -1,8 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint captured 2026-08-09 on branch
-`continuation/phase0-evidence-and-stability`, based on main
-`b16964544ddb9bfe12ef842f524273167df6d315`.
+Checkpoint captured 2026-08-09 on `main`
+`ce1548f8934907fbb0e8e00006f722230f27f43c` after PR #40 merged.
 
 ## Completed in this continuation
 
