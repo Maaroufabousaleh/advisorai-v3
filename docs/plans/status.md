@@ -6,7 +6,7 @@ or 60-day operational gate.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
-| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, and durable Phase-0 gate records | `tests/phase0`, gateway/port tests, immutable local bake-off reports, and the component evidence drill | Local component probes passed in `artifacts/phase0/component-bakeoff/20260808T031144.840248Z/phase0-component-bakeoff.json`; selected TTM-R2/DeBERTa/MiniLM roles still require 24-hour stability, remote route evidence, DuckLake comparison, external Hermes review, and real rclone-provider restore |
+| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, and durable Phase-0 gate records | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, and exact-route stability runner | Local component probes passed in `artifacts/phase0/component-bakeoff/20260808T031144.840248Z/phase0-component-bakeoff.json`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the DigitalOcean exact route has a durable 24-hour window with passing samples; selected local roles still require 24-hour stability and real rclone-provider restore |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission | `tests/execution`, `tests/integrations`, `tests/runtime` | Paper failure fixtures pass; Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor | `tests/data` | Parser/lineage fixtures pass; source availability dashboards need live soak |
@@ -14,7 +14,7 @@ or 60-day operational gate.
 | 5 | Router, typed roles, bounded adaptive waves, evidence graph, independence gates, DecisionBundle and expiry/cutoff binding | `tests/agents`, `tests/api` | Correlated-evidence and target-only boundaries pass |
 | 6 | Portfolio comparisons, risk analytics/stress, validation, attribution incidents | `tests/institutional` | Deterministic controls pass |
 | 7 | Soak records/gate, incident-ledger rebuild, and immutable recovery rebuild | `tests/recovery/test_soak.py` | Requires actual 60-day paper operation and restore drills |
-| 8 | Hermes policy, bounded isolation runner, enforced child socket/DNS, read-only filesystem, conventional sensitive-path and process-environment metadata policies, common process-spawn denial, sensitive-environment scrubbing, artifact/capability lifecycle and broker | `tests/capabilities`, immutable active-read capability evidence | Local Hermes-to-active-read collector lifecycle passed in `artifacts/phase8/capability-evidence/20260808T050150.878842Z/phase8-capability-evidence.json`; formal Phase-8 admission remains pending behind earlier gates, and the feed remains fixture-only |
+| 8 | Hermes policy, bounded isolation runner, enforced child socket/DNS, read-only filesystem, conventional sensitive-path and process-environment metadata policies, common process-spawn denial, sensitive-environment scrubbing, artifact/capability lifecycle and broker | `tests/capabilities`, immutable active-read capability evidence, and a disposable pinned upstream runtime review | Local Hermes-to-active-read collector lifecycle passed in `artifacts/phase8/capability-evidence/20260808T050150.878842Z/phase8-capability-evidence.json`; the pinned upstream runtime completed a synthetic loopback coordinator/subagent probe, but filesystem/native-syscall containment and a real provider route remain unattested; formal Phase-8 admission remains pending behind earlier gates |
 | 9 | Vintaged official releases, equity corporate-action/daily-council boundary, challenger registry, browser ladder, archive verification | `tests/expansion` | Requires one-at-a-time live data/challenger evidence |
 | 10 | Human approval, bounded live readiness, AI-offline invariant, order guard | `tests/live` | Must remain closed until Phase 7 and explicit human approval pass |
 | 0–7 bridge | Typed secret loader/redaction, reviewed connector cards, HTTPS/WSS transport guards, direct typed LLM adapter, durable gateway-call records, paper/testnet HMAC venue transport with signed open-order reconciliation and read-only account/fill/position/balance projection, raw-first native market normalization/replay, cadence-gated closed-cutoff `PaperRuntime` with durable kill-switch/dashboard control hydration and terminal per-order risk rejection, durable resource measurements/leases, refreshing/deduplicated ledger-backed dashboard/config projection, incident/replay/post-horizon scorecards | `tests/config/test_secrets.py`, `tests/integrations`, `tests/runtime`, `tests/learning`, `tests/resources`, `tests/data/test_market_events.py`, `tests/api/test_dashboard.py` | Local contracts pass; provider-specific endpoint smoke, continuous operation, Phase 0 stability, Phase 7 soak, and human decisions remain external |
@@ -24,22 +24,27 @@ The current repository therefore has broad executable coverage, but does not cla
 Phase 0, Phase 7, or Phase 10 gates without the external evidence explicitly named
 above.
 
-Latest local verification (2026-08-08):
+The complete checkpoint matrix is maintained in
+[`gate-matrix.md`](gate-matrix.md). It preserves the distinction between
+`TESTED`, `LOCALLY MEASURED`, `EXTERNALLY MEASURED`, `QUALIFIED`,
+`QUARANTINED`, `PENDING_STABILITY`, and `PENDING_OPERATOR_ACTION`.
+
+Latest local verification (2026-08-09):
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 118/151/96/22/19/34/10/7/25/11/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 123/151/96/22/19/34/10/7/25/11/5. Suite totals
 overlap a few shared contract tests. A single-process
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/pytest -q` passes all 496 collected
-tests with the optional Nautilus runtime active. The acceptance runner stops at the
-first failed phase, so later suites are never counted as evidence after an
-earlier gate failure. The Phase 0 inventory was regenerated at
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python -m pytest -q` passes all 501
+collected tests with the optional Nautilus runtime active. The acceptance runner
+stops at the first failed phase, so later suites are never counted as evidence
+after an earlier gate failure. The Phase 0 inventory was regenerated at
 `artifacts/phase0/availability.json` (ignored runtime output), and remains an
 availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
-diff hygiene, and the dashboard TypeScript/Vite build. The recent scoped code
-changes are formatted. A repository-wide
-`./.venv/bin/ruff format --check .` passes with all 232 Python files formatted.
-The test collection check reports 496 collected tests. The dashboard build passes
+diff hygiene, tracked secret/model-weight checks, and the dashboard TypeScript/Vite
+build. The recent scoped code changes are formatted. A repository-wide
+`./.venv/bin/ruff format --check .` passes with all 238 Python files formatted.
+The test collection check reports 499 collected tests. The dashboard build passes
 with `npm run build`
 from `dashboard/`.
 
@@ -50,9 +55,10 @@ preserved in the ignored stability evidence directory. A fresh admission root,
 `artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260808`,
 was attested against the formatted worker and passed a one-cycle smoke for all
 three pending role candidates. The supervised replacement run at
-`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808`
-has passing cycles and remains in progress; no roster entry has moved from
-`pending_stability` to `selected`.
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`
+is detached under PID `9456`, with passing current cycles and no roster entry
+moved from `pending_stability` to `selected`. The prior 20260808 run remains
+preserved as interrupted evidence and has not been concatenated.
 
 The Phase-1 local operational report has SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and
@@ -66,8 +72,43 @@ records passing local probes for the guarded Nautilus replay seam, installed
 PydanticAI/Prefect/Hamilton runtime seams, deterministic Parquet manifest plus
 DuckDB reads, the repository Hermes isolation boundary, and two in-memory
 rclone adapter restores. It records zero network calls, credentials, or paper
-orders. DuckLake, the external Hermes package, and real rclone/provider restore
-remain quarantined; the report does not record or imply a Phase-0 pass.
+orders. Real rclone/provider restore remains quarantined; the report does not
+record or imply a Phase-0 pass.
+
+The isolated DuckLake comparison is recorded at
+`artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`
+with SHA-256
+`77b88992a8dfd64d47ad4da0ee73d197644bb8a21a54d3199b254f4742026154`. It
+validated snapshot/time-travel, reopen, and portable-copy recovery, then
+rejected DuckLake because its catalog/extension/resource footprint and explicit
+relocation override did not justify a second catalog for this laptop baseline.
+
+The pinned upstream Hermes runtime review is recorded at
+`artifacts/phase0/external-hermes-review/20260809T162031Z/external-hermes-review.json`
+with SHA-256
+`2fcfe86c151bffe2f4c59af0f7e0e029005a4ad94675c47fc3c18348a151b51c`. It
+completed one synthetic loopback coordinator/subagent task inside WSL2 user,
+mount, network, and PID namespaces, measured 126,508 KiB peak RSS, and denied
+non-loopback networking. It explicitly does not attest filesystem restriction,
+seccomp, direct native syscalls, C-extension escapes, or a real provider route;
+formal Phase 8 remains closed.
+
+The exact-route stability runner is implemented in
+`scripts/run_remote_route_stability.py` with append-only contracts in
+`src/advisorai/phase0/remote_stability.py` and tests in
+`tests/phase0/test_remote_stability.py`. The Novita run at
+`artifacts/phase0/remote-route-stability/20260809T162800Z` is failed/quarantined
+after an upstream shared-pool HTTP 429; its incident report SHA-256 is
+`825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`. The
+DigitalOcean run at
+`artifacts/phase0/remote-route-stability/20260809T173237.710604Z` is detached under
+PID `33057`, has passing exact-identity samples, and remains
+`PENDING_STABILITY` until 24 hours elapse.
+The superseded pre-attestation roots remain preserved: the 20260809T171000Z
+root is quarantined by incident SHA-256
+`302220c0b2be692de953848d7cf2b8058baceb271581a776f52f82c3d13f8677`, and the
+20260809T173059.039176Z schema-label smoke is quarantined by incident SHA-256
+`a3f8a51aeb5a437b1dd5c570cf86ce2cc4eb47b86e108055fcbf0b0ae34a9f8e`.
 
 The Phase-8 capability evidence report has SHA-256
 `d6e44c90574c5209bd658319637605a00269fe49fe9cad7120766ecdc2cd79e5` and

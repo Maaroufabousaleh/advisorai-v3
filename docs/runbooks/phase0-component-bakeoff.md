@@ -48,4 +48,14 @@ Provider-specific catalog/archive setup, remote gateway evidence, selected-model
 separate gates. A changed dependency, source tree, or component boundary
 requires a fresh run; an existing report must never be edited into a pass.
 
+The separate DuckLake challenger comparison was completed in an isolated
+environment and rejected on measured resource/catalog portability cost. Its
+report is
+`artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`
+(SHA-256
+`77b88992a8dfd64d47ad4da0ee73d197644bb8a21a54d3199b254f4742026154`). The
+separate pinned upstream Hermes review is documented in
+[`external-hermes-review.md`](external-hermes-review.md) and does not replace
+the repository fixture evidence or open a formal Phase-8 gate.
+
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`
