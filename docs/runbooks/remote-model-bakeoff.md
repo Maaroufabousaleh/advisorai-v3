@@ -88,6 +88,54 @@ latency, token counts, billed cost, safe failure classes, and whether a tool
 was called. They explicitly record `tool_execution_status=not_executed`; a
 gateway probe never claims that a deterministic evidence tool ran.
 
+## Exact-route stability window
+
+The short bake-off is not a 24-hour route gate. The resumable stability runner
+uses the same scoped credential resolver and `PolicyGateway`, freezes the live
+inventory hash and exact provider/model/endpoint identity in its run directory,
+and sends only the structured synthetic probe. It does not use `openrouter/free`
+or any fallback route.
+
+```bash
+setsid nohup ./.venv/bin/python scripts/run_remote_route_stability.py \
+  --secrets /home/maaro/.config/advisorai-v3/secrets.env \
+  --roster configs/models/phase0_remote_roster.json \
+  --run-directory artifacts/phase0/remote-route-stability/<run-id> \
+  --candidate private-deepseek-digitalocean \
+  --duration-hours 24 \
+  --interval-seconds 600 \
+  > artifacts/phase0/remote-route-stability/<run-id>/runner.nohup.log 2>&1 < /dev/null &
+```
+
+Each run contains `config.json`, its write-once `config.sha256` sidecar,
+`inventory.json`, hash-chained `cycles.jsonl`, `status.json`, `summary.json`,
+and a PID in `runner.lock`. The first sample binds the config hash; the config
+also records the implementation hash and exact command. `status.json` is a
+heartbeat, not an admission record. A route can become
+`failed` from one provider identity/rate-limit failure; preserve that run and
+start another immutable root for a different already-reviewed route.
+
+The Novita trial at
+`artifacts/phase0/remote-route-stability/20260809T162800Z` recorded one valid
+sample followed by an upstream shared-pool HTTP 429. It is quarantined; its
+incident report has SHA-256
+`825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
+
+The earlier DigitalOcean trial at
+`artifacts/phase0/remote-route-stability/20260809T171000Z` was quarantined
+because its runner did not bind samples to immutable configuration/code
+attestation. The first post-fix smoke at
+`artifacts/phase0/remote-route-stability/20260809T173059.039176Z` was also
+quarantined because its config metadata retained the old schema label. Their
+incident records have SHA-256 values
+`302220c0b2be692de953848d7cf2b8058baceb271581a776f52f82c3d13f8677` and
+`a3f8a51aeb5a437b1dd5c570cf86ce2cc4eb47b86e108055fcbf0b0ae34a9f8e`. The
+current detached 24-hour window is
+`artifacts/phase0/remote-route-stability/20260809T173237.710604Z` under PID
+`33057`; its v2 config, code hash, config sidecar, and hash-chained samples
+are aligned. It remains `PENDING_STABILITY` until the full duration and all
+route/quality checks pass.
+
 ## Admission and selection
 
 A successful probe is not production approval. A route remains a candidate

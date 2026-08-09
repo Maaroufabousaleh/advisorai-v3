@@ -77,7 +77,16 @@
         "revision": [
           "inclusionai/ling-2.6-flash-20260421"
         ],
-        "state": "pending_quality_and_stability",
+        "stability_evidence": {
+          "config_sha256": "53933b1e4b73a0e197cedec9acfd5e09787367ebe78d3b25cf7eeaebc1b559cf",
+          "cycles_sha256": "5f73dc762befab436d8e0bf291b60c6de3c0f699421db50925ee9cb5dac5166a",
+          "incident_reference": "artifacts/phase0/remote-route-stability/20260809T162800Z/incident.json",
+          "incident_sha256": "825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6",
+          "reference": "artifacts/phase0/remote-route-stability/20260809T162800Z",
+          "state": "failed_quarantined",
+          "samples": 2
+        },
+        "state": "quarantined_or_failed",
         "zdr": true
       },
       {
@@ -106,6 +115,15 @@
         "revision": [
           "deepseek/deepseek-v4-flash-20260423"
         ],
+        "stability_evidence": {
+          "code_sha256": "900b2ef7df49654e8dde8981b56f1e4f6dea680ff44b4d66ca1fec54c70b81d0",
+          "config_sha256": "b0a27fdb5e9c55f88b384be476f8862cff5b5bb6a050e256c2ee7f5f60ba92a6",
+          "cycles_sha256": "9fb1e4bcd913e5395b171dfb45bc230cbccbb9f22c84235ae492f5ffc086cd65",
+          "inventory_sha256": "d23f261eb9868da7d69ee51aa8f5ff0e558ad938078878f590af17779432190f",
+          "reference": "artifacts/phase0/remote-route-stability/20260809T173237.710604Z",
+          "state": "pending_stability",
+          "samples": 1
+        },
         "state": "pending_quality_and_stability",
         "zdr": true
       }

@@ -196,14 +196,20 @@ new run directory. Never edit an old admission manifest or append new samples
 to a run whose source hash no longer matches.
 
 ```bash
-nohup uv run python scripts/run_model_stability.py \
+setsid nohup ./.venv/bin/python scripts/run_model_stability.py \
   --forecast-snapshot ~/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
   --sentiment-snapshot ~/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
   --report artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json \
   --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260808 \
-  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808 \
-  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808.nohup.log 2>&1 &
+  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809 \
+  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809.nohup.log 2>&1 < /dev/null &
 ```
+
+The current detached run was started on 2026-08-09 with PID `9456`. Inspect
+the process command, `status.json`, `cycles.jsonl`, `runner.lock`, and the
+append-only log before taking any action. A healthy run must not be restarted;
+the PID is evidence of the current process only and is not itself a passing
+gate.
 
 The 24-hour result must exist and pass before changing roster entries from
 `pending_stability` to `selected`. It does not approve paper execution or live
@@ -216,8 +222,10 @@ remain at
 The fresh post-format admission root passed a one-cycle smoke for TTM-R2,
 Finance DeBERTa-v3, and FinBERT-MiniLM. The supervised 24-hour replacement is
 running at
-`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260808`;
-its first cycle passed, but the 24-hour gate remains pending.
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`;
+its current cycles pass, but the 24-hour gate remains pending. The prior
+20260808 root remains preserved as an interrupted run and must not be
+concatenated with this run.
 
 The pre-merge two-cycle smoke completed with all three candidates passing. Its
 append-only log is

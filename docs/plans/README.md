@@ -30,6 +30,10 @@ promotion, or automatic capability authority.
 See [traceability.md](traceability.md) for the architecture-to-sub-plan mapping.
 See [implementation-audit.md](implementation-audit.md) for the package-to-code,
 test, and external-gate evidence matrix.
+See [gate-matrix.md](gate-matrix.md) for the current requirement-by-requirement
+state, blocker, and next admissible action.
+The durable-session handoff is maintained in
+[continuation-checkpoint.md](continuation-checkpoint.md).
 
 The user-facing operator console and its security boundary are specified in
 [secure-operator-dashboard.md](secure-operator-dashboard.md); it is an interface
@@ -41,6 +45,10 @@ The transition's manual deployment and external-evidence work is recorded in
 The credential-free Phase-0 component evidence drill and its quarantine
 interpretation are recorded in
 [`docs/runbooks/phase0-component-bakeoff.md`](../runbooks/phase0-component-bakeoff.md).
+
+The pinned external Hermes runtime review, synthetic-task evidence, and OS
+namespace limitations are recorded in
+[`docs/runbooks/external-hermes-review.md`](../runbooks/external-hermes-review.md).
 
 The Phase-8 Hermes capability lifecycle evidence and active-read boundary are
 recorded in
