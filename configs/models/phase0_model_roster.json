@@ -146,7 +146,15 @@
           "provider_selector": "novita",
           "requested_model": "inclusionai/ling-2.6-flash",
           "resolved_model": "inclusionai/ling-2.6-flash-20260421",
-          "state": "pending_quality_and_stability",
+          "state": "quarantined_or_failed",
+          "reason": "exact-route stability trial failed closed on upstream shared-pool HTTP 429",
+          "stability_evidence": {
+            "incident_reference": "artifacts/phase0/remote-route-stability/20260809T162800Z/incident.json",
+            "incident_sha256": "825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6",
+            "reference": "artifacts/phase0/remote-route-stability/20260809T162800Z",
+            "state": "failed_quarantined",
+            "samples": 2
+          },
           "zdr": true,
           "allow_fallbacks": false,
           "source_roster": "configs/models/phase0_remote_roster.json"
