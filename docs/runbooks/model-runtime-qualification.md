@@ -196,23 +196,31 @@ new run directory. Never edit an old admission manifest or append new samples
 to a run whose source hash no longer matches.
 
 ```bash
-setsid nohup bash -c 'cd /mnt/c/projects/advisorai-v3 && exec ./.venv/bin/python scripts/run_model_stability.py \
-  --forecast-snapshot ~/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
-  --sentiment-snapshot ~/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
-  --report artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json \
-  --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260810 \
-  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2' \
-  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2.nohup.log 2>&1 < /dev/null &
+setsid nohup bash -c 'cd /mnt/c/projects/advisorai-v3 || exit 1; exec /mnt/c/projects/advisorai-v3/.venv/bin/python /mnt/c/projects/advisorai-v3/scripts/run_model_stability.py \
+  --forecast-snapshot /home/maaro/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
+  --sentiment-snapshot /home/maaro/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
+  --report /mnt/c/projects/advisorai-v3/artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json \
+  --admission-root /mnt/c/projects/advisorai-v3/artifacts/phase0/model-runtime-qualification/runtime-admission-post-cwd-fix-20260810 \
+  --run-directory /mnt/c/projects/advisorai-v3/artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3 \
+  --repository-root /mnt/c/projects/advisorai-v3' \
+  > /mnt/c/projects/advisorai-v3/artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3.nohup.log 2>&1 < /dev/null &
 ```
 
-The replacement 2026-08-10 detached run is active under PID `40130`. Inspect
-the process command, `status.json`, `cycles.jsonl`, `runner.lock`, and the
-append-only log before taking any action. The prior root
+The first fresh root
 `phase0-selected-24h-terminal-sample-20260810` recorded seven passing cycles
 but exited at cycle execution with a sanitized `FileNotFoundError` because its
-worker cwd was unavailable. Its cycles, interruption record, and stderr log
-hash are preserved; do not resume, repair, or concatenate it. The r2 process
-uses an explicit stable workspace cwd and a fresh runtime-admission root.
+worker cwd was unavailable. The r2 root
+`phase0-selected-24h-terminal-sample-20260810-r2` recorded eight passing
+cycles before the same cwd failure; its interruption record SHA-256 is
+`4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. Both
+roots are preserved and must not be resumed, repaired, or concatenated. The
+runner now resolves all startup inputs to absolute paths and accepts an
+explicit `--repository-root`; the one-cycle cwd-fix smoke passed in
+`phase0-selected-24h-cwd-fix-smoke-20260810` with all candidates measured and
+status `short_smoke_complete`. The fresh real-duration replacement is active
+under PID `70598` at
+`phase0-selected-24h-terminal-sample-20260810-r3` using the new immutable
+runtime-admission root.
 
 The 24-hour result must exist and pass before changing roster entries from
 `pending_stability` to `selected`. It does not approve paper execution or live
@@ -231,11 +239,11 @@ all 273 cycles passed, but its terminal summary ended at
 duration boundary. Its summary SHA-256 is
 `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
 The runner now requires a real terminal sample at/after the target. The
-interrupted root and its failed-process log remain separate from the active
-fresh root
-`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2`
-under PID `40130`. The prior 20260808 root and both 20260810 roots must not be
-concatenated.
+interrupted r1 and r2 roots and their failed-process logs remain separate from
+the active fresh root
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`
+under PID `70598`. The prior 20260808 root and all predecessor 20260810 roots
+must not be concatenated.
 
 The pre-merge two-cycle smoke completed with all three candidates passing. Its
 append-only log is

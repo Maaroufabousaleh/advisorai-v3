@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -139,6 +140,14 @@ def test_terminal_sample_is_required_after_duration_boundary():
         target_end=target_end,
         last_sampled_at=target_end,
     )
+
+
+def test_stability_runner_uses_explicit_absolute_repository_paths():
+    runner_source = (
+        Path(__file__).resolve().parents[2] / "scripts/run_model_stability.py"
+    ).read_text(encoding="utf-8")
+    assert "Path.cwd()" not in runner_source
+    assert "--repository-root" in runner_source
 
 
 def test_failed_sample_requires_reason_and_blocks_stability():

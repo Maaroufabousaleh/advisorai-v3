@@ -104,6 +104,7 @@ def _run_cycle(
     admissions: dict[str, LocalCandidateAdmission],
     forecast_snapshot: ForecastBenchmarkSnapshot,
     sentiment_snapshot: SentimentBenchmarkSnapshot,
+    repository_root: Path,
 ) -> tuple[CandidateStabilitySample, ...]:
     candidates = {candidate.name: candidate for candidate in default_runtime_candidates()}
     cases = build_walk_forward_cases(forecast_snapshot, cases_per_series=2)
@@ -126,7 +127,7 @@ def _run_cycle(
         sample_input=cases[0].context,
         batch_input=tuple(case.context for case in cases),
         repeats=2,
-        repository_root=Path.cwd(),
+        repository_root=repository_root,
     )
 
     labeled_texts = _sentiment_subset(sentiment_snapshot)
@@ -154,7 +155,7 @@ def _run_cycle(
                 sample_input=texts[0],
                 batch_input=texts,
                 repeats=2,
-                repository_root=Path.cwd(),
+                repository_root=repository_root,
             )
         )
     return tuple(_sample_from_result(result) for result in results)
@@ -184,6 +185,11 @@ def main() -> int:
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--admission-root", type=Path, required=True)
     parser.add_argument("--run-directory", type=Path)
+    parser.add_argument(
+        "--repository-root",
+        type=Path,
+        help="absolute repository root used by worker qualification checks",
+    )
     parser.add_argument("--duration-hours", type=float, default=24)
     parser.add_argument("--interval-seconds", type=float, default=300)
     parser.add_argument("--max-cycles", type=int)
@@ -191,12 +197,22 @@ def main() -> int:
     if args.max_cycles is not None and args.max_cycles < 1:
         raise ValueError("max cycles must be positive")
 
-    report = _verify_report(args.report)
+    repository_root = (
+        args.repository_root.resolve()
+        if args.repository_root is not None
+        else Path(__file__).resolve().parents[1]
+    )
+    forecast_snapshot_path = args.forecast_snapshot.resolve()
+    sentiment_snapshot_path = args.sentiment_snapshot.resolve()
+    report_path = args.report.resolve()
+    admission_root = args.admission_root.resolve()
+
+    report = _verify_report(report_path)
     forecast_snapshot = ForecastBenchmarkSnapshot.model_validate_json(
-        args.forecast_snapshot.read_text(encoding="utf-8")
+        forecast_snapshot_path.read_text(encoding="utf-8")
     )
     sentiment_snapshot = SentimentBenchmarkSnapshot.model_validate_json(
-        args.sentiment_snapshot.read_text(encoding="utf-8")
+        sentiment_snapshot_path.read_text(encoding="utf-8")
     )
     if report["forecast_snapshot"]["content_hash"] != forecast_snapshot.content_hash:
         raise ValueError("forecast stability snapshot differs from the bake-off")
@@ -204,9 +220,10 @@ def main() -> int:
         raise ValueError("sentiment stability snapshot differs from the bake-off")
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S.%fZ")
-    run_directory = args.run_directory or Path(
-        f"artifacts/phase0/model-runtime-qualification/stability/{run_id}"
-    )
+    run_directory = (
+        args.run_directory
+        or Path(f"artifacts/phase0/model-runtime-qualification/stability/{run_id}")
+    ).resolve()
     run_directory.mkdir(parents=True, exist_ok=True)
     config_path = run_directory / "config.json"
     if config_path.exists():
@@ -226,7 +243,7 @@ def main() -> int:
 
     admissions = {
         name: LocalCandidateAdmission.model_validate_json(
-            (args.admission_root / name / "local-admission.json").read_text(encoding="utf-8")
+            (admission_root / name / "local-admission.json").read_text(encoding="utf-8")
         )
         for name in SELECTED_CANDIDATES
     }
@@ -260,6 +277,7 @@ def main() -> int:
                 admissions=admissions,
                 forecast_snapshot=forecast_snapshot,
                 sentiment_snapshot=sentiment_snapshot,
+                repository_root=repository_root,
             )
             cycle = make_cycle(
                 config,

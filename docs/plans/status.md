@@ -172,15 +172,18 @@ three pending role candidates. The supervised replacement run at
 completed with 273 passing cycles but only `23.968570833055555` elapsed hours;
 its summary status is `short_smoke_complete`, not a 24-hour pass. Its summary
 SHA-256 is `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
-The terminal-sample runner defect is fixed. The first fresh root
+The terminal-sample runner now resolves all startup inputs to absolute paths
+and accepts an explicit `--repository-root` so a transient WSL working-directory
+loss cannot terminate a long run. The first fresh root
 `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810`
 recorded seven passing cycles but exited at cycle execution with a sanitized
-`FileNotFoundError` because the worker cwd was unavailable; its interruption
-record and stderr-log hash are preserved and it is not resumed. A new immutable
-runtime-admission root was attested, and replacement root
-`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2`
-is active under PID `40130`, started `2026-08-10T17:07:41.985884Z`, with cycle
-1 passing. No cycles from any predecessor have been concatenated.
+`FileNotFoundError`. The r2 root recorded eight passing cycles before the same
+failure; its immutable interruption record SHA-256 is
+`4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. Neither
+root is resumed or concatenated. A fresh immutable runtime-admission root was
+attested, the one-cycle cwd-fix smoke passed with all candidates and status
+`short_smoke_complete`, and replacement r3 is active under PID `70598` from
+`2026-08-10T18:07:25.593600Z`; no 24-hour result exists yet.
 
 The Phase-1 local operational report has SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and
