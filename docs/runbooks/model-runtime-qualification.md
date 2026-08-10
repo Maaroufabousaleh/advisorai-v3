@@ -205,11 +205,11 @@ setsid nohup ./.venv/bin/python scripts/run_model_stability.py \
   > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809.nohup.log 2>&1 < /dev/null &
 ```
 
-The current detached run was started on 2026-08-09 with PID `9456`. Inspect
-the process command, `status.json`, `cycles.jsonl`, `runner.lock`, and the
-append-only log before taking any action. A healthy run must not be restarted;
-the PID is evidence of the current process only and is not itself a passing
-gate.
+The 2026-08-09 detached run used PID `9456` and is now complete as an
+incomplete short smoke. Inspect the process command, `status.json`,
+`cycles.jsonl`, `runner.lock`, and the append-only log before taking any action.
+A healthy active run must not be restarted; a completed short smoke requires a
+fresh immutable root after a runner defect is fixed.
 
 The 24-hour result must exist and pass before changing roster entries from
 `pending_stability` to `selected`. It does not approve paper execution or live
@@ -220,12 +220,16 @@ repository formatting made its old worker hashes invalid. Its failed cycles
 remain at
 `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h`.
 The fresh post-format admission root passed a one-cycle smoke for TTM-R2,
-Finance DeBERTa-v3, and FinBERT-MiniLM. The supervised 24-hour replacement is
-running at
+Finance DeBERTa-v3, and FinBERT-MiniLM. The supervised 24-hour replacement was
+run at
 `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`;
-its current cycles pass, but the 24-hour gate remains pending. The prior
-20260808 root remains preserved as an interrupted run and must not be
-concatenated with this run.
+all 273 cycles passed, but its terminal summary ended at
+`23.968570833055555` hours because the runner did not sample at/after the
+duration boundary. Its summary SHA-256 is
+`ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
+The runner now requires a real terminal sample at/after the target; start a
+new immutable root after this fix. The prior 20260808 root remains preserved as
+an interrupted run and must not be concatenated with either root.
 
 The pre-merge two-cycle smoke completed with all three candidates passing. Its
 append-only log is

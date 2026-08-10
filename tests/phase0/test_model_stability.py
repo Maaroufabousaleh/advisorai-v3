@@ -14,6 +14,7 @@ from advisorai.phase0 import (
     read_cycles,
     summarize_stability,
 )
+from scripts.run_model_stability import _terminal_sample_due
 
 
 def _config() -> ModelStabilityConfig:
@@ -122,6 +123,21 @@ def test_complete_stability_uses_existing_window_contract():
     assert summary.stability_24h_passed
     assert all(
         window is not None and window.passed for window in summary.candidate_windows.values()
+    )
+
+
+def test_terminal_sample_is_required_after_duration_boundary():
+    target_end = _config().started_at + timedelta(hours=24)
+
+    assert _terminal_sample_due(
+        now=target_end + timedelta(seconds=1),
+        target_end=target_end,
+        last_sampled_at=target_end - timedelta(seconds=1),
+    )
+    assert not _terminal_sample_due(
+        now=target_end + timedelta(seconds=1),
+        target_end=target_end,
+        last_sampled_at=target_end,
     )
 
 

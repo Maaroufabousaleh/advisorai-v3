@@ -115,10 +115,10 @@ Latest local verification (2026-08-10) used an isolated locked environment
 created with the repository's declared optional extras:
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 126/152/107/44/19/34/10/7/27/18/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 127/152/107/44/19/34/10/7/27/18/5. Suite totals
 overlap a few shared contract tests. A single-process
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python -m pytest -q`
-passes all 547 tests with every declared optional extra active in the isolated
+passes all 548 tests with every declared optional extra active in the isolated
 locked verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
@@ -141,9 +141,12 @@ preserved in the ignored stability evidence directory. A fresh admission root,
 was attested against the formatted worker and passed a one-cycle smoke for all
 three pending role candidates. The supervised replacement run at
 `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`
-is detached under PID `9456`, with passing current cycles and no roster entry
-moved from `pending_stability` to `selected`. The prior 20260808 run remains
-preserved as interrupted evidence and has not been concatenated.
+completed with 273 passing cycles but only `23.968570833055555` elapsed hours;
+its summary status is `short_smoke_complete`, not a 24-hour pass. Its summary
+SHA-256 is `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
+The terminal-sample runner defect is fixed and a fresh immutable root is
+required. The prior 20260808 run remains preserved as interrupted evidence and
+has not been concatenated.
 
 The Phase-1 local operational report has SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and

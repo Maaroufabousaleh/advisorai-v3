@@ -36,7 +36,7 @@ human gate into a unit-test claim.
 
 ## Verification record
 
-The latest local run on 2026-08-10 passed all 547 tests in one process with every
+The latest local run on 2026-08-10 passed all 548 tests in one process with every
 declared optional extra active in an isolated locked verification environment, and
 all eleven isolated phase suites. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
