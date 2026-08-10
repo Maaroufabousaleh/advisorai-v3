@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `547 passed`, acceptance suites
-  `126/152/107/44/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `548 passed`, acceptance suites
+  `127/152/107/44/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -117,7 +117,15 @@ Checkpoint captured 2026-08-10 on `main`
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
-  verification now pass with 547 tests.
+  verification now pass with 548 tests.
+- Discovered and fixed the selected-model stability runner's missing terminal
+  sample at the 24-hour boundary. The fresh post-format root
+  `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`
+  preserved 273 passing cycles but ended `short_smoke_complete` at
+  `23.968570833055555` hours; summary SHA-256:
+  `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
+  A fresh immutable root is required after the runner fix; no cycles are
+  concatenated.
 - Measured and hardened the disposable local Docker OS boundary for Phase 8.
   The probe used the explicit local Docker socket, no repository, credential,
   broker, order, or production mounts, and recorded zero external network calls,
@@ -135,7 +143,7 @@ Checkpoint captured 2026-08-10 on `main`
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 9456 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809` | `PENDING_STABILITY`; inspect status/heartbeat before action |
+| Selected local model stability | — | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809` (incomplete) | `PENDING_STABILITY`; preserve the short-smoke root and start a fresh root with the terminal-sample fix |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 Both current processes are detached with exact commands recorded by their

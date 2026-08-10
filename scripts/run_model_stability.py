@@ -166,6 +166,17 @@ def _write_status(path: Path, payload: dict[str, object]) -> None:
     os.replace(temporary, path)
 
 
+def _terminal_sample_due(
+    *,
+    now: datetime,
+    target_end: datetime,
+    last_sampled_at: datetime | None,
+) -> bool:
+    """Require one real sample at or after the configured duration boundary."""
+
+    return now >= target_end and (last_sampled_at is None or last_sampled_at < target_end)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--forecast-snapshot", type=Path, required=True)
@@ -233,9 +244,18 @@ def main() -> int:
     cycles = read_cycles(log_path)
     target_end = config.started_at + timedelta(hours=config.duration_hours)
     try:
-        while datetime.now(UTC) < target_end:
+        while True:
             if args.max_cycles is not None and len(cycles) >= args.max_cycles:
                 break
+            now = datetime.now(UTC)
+            last_sampled_at = cycles[-1].sampled_at if cycles else None
+            if last_sampled_at is not None and last_sampled_at >= target_end:
+                break
+            terminal_sample = _terminal_sample_due(
+                now=now,
+                target_end=target_end,
+                last_sampled_at=last_sampled_at,
+            )
             samples = _run_cycle(
                 admissions=admissions,
                 forecast_snapshot=forecast_snapshot,
@@ -262,9 +282,10 @@ def main() -> int:
                 },
             )
             remaining = (target_end - datetime.now(UTC)).total_seconds()
-            if remaining <= 0 or (args.max_cycles is not None and len(cycles) >= args.max_cycles):
+            if terminal_sample or (args.max_cycles is not None and len(cycles) >= args.max_cycles):
                 break
-            time.sleep(min(config.interval_seconds, remaining))
+            if remaining > 0:
+                time.sleep(min(config.interval_seconds, remaining))
     finally:
         fcntl.flock(lock_handle, fcntl.LOCK_UN)
         lock_handle.close()
