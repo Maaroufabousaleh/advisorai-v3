@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint captured 2026-08-10 on the current Phase-3 qualification branch;
-the merge SHA will be recorded after the branch is accepted.
+Checkpoint captured 2026-08-10 on `main`
+`d419f6b91814017d1e877bed818a0b0c3c88b2db` after PR #75 merged.
 
 ## Completed in this continuation
 
@@ -181,16 +181,17 @@ the merge SHA will be recorded after the branch is accepted.
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 40130 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2` | `PENDING_STABILITY`; cycle 1 passed after the prior root's cwd interruption; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, cycle 1 passed, last record SHA-256 `00948aa2e2ee50cc9a80fe30b90c76659c16f29d1595fca7a98bacceda9077ca`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
-Both current processes are detached with exact commands recorded by their
-runbooks. The selected-model predecessor root
+The current selected-model process is detached with its exact command recorded
+by the runbook. The selected-model predecessor root
 `phase0-selected-24h-terminal-sample-20260810` is preserved as interrupted
-after seven passing cycles and a sanitized `FileNotFoundError` caused by an
-unavailable worker cwd; its interruption record and stderr hash remain
-immutable. The replacement uses a fresh admission root and an explicit stable
-workspace cwd. The failed remote route process was stopped after its immutable
+after seven passing cycles; r2 is separately preserved as interrupted after
+eight passing cycles, both from the sanitized unavailable-cwd failure. Their
+interruption records and stderr hashes remain immutable. The fresh r3 run uses
+a new admission root, absolute startup/evidence paths, and an explicit
+repository root. The failed remote route process was stopped after its immutable
 failure evidence was preserved; the replacement uses only `DIRECT_LLM`, a
 synthetic structured probe, no fallbacks, and no tool execution. Failed samples
 must not be concatenated with the replacement root.
@@ -199,10 +200,11 @@ must not be concatenated with the replacement root.
 
 - Phase-0 local model stability remains in its 24-hour duration gate. The
   fresh `phase0-selected-24h-terminal-sample-20260810` root is interrupted
-  after seven passing cycles by a `FileNotFoundError` at cycle execution; it
-  is preserved and cannot be resumed or concatenated. Replacement root
-  `phase0-selected-24h-terminal-sample-20260810-r2` is active under PID
-  `40130` with a new immutable runtime-admission root. All
+  after seven passing cycles and r2 after eight passing cycles by the
+  unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
+  or concatenated. The cwd-fix smoke passed, and replacement root
+  `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
+  `70598` with a new immutable runtime-admission root. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected
   20260810T053600Z root stopped after a deadline-exhausted first probe. No
