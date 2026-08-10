@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`192d06809dfae754e37dde9733914a050d73627c` after PR #47 merged.
+`6aad3b994d1e7e8cffc717c59aaea47111d6b554` after PR #49 merged.
 
 ## Completed in this continuation
 
@@ -20,10 +20,11 @@ Checkpoint captured 2026-08-10 on `main`
 - Preserved and classified the Novita shared-pool HTTP 429 as an open,
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
-- Completed the repository verification pass: full pytest `513 passed`,
-  acceptance suites `124/151/107/22/19/34/10/7/25/11/5`, Ruff, format, lock,
-  compilation, dashboard build, diff hygiene, and secret/model-weight checks in
-  an isolated locked environment that left the durable worker environment
+- Re-ran the repository verification pass in the complete locked optional-extra
+  environment: full pytest `521 passed`, acceptance suites
+  `124/152/107/22/19/34/10/7/25/18/5`, Ruff, format, lock, compilation,
+  dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
+  The isolated verification environment left the durable worker environment
   unchanged.
 - Implemented and locally tested the Coinbase Exchange Sandbox-specific
   `CB-ACCESS-*` signer, exact sandbox REST/WS host guard, provider account/
