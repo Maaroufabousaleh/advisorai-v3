@@ -6,7 +6,7 @@ or 60-day operational gate.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
-| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the latest DigitalOcean exact-route root is quarantined after three upstream shared-pool HTTP 429 gateway abstentions; selected local roles still require 24-hour stability; the controlled archive runner is implemented and fixture-tested but the first real attempt found no populated scoped archive values, made zero network calls, and remains pending |
+| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the prior DigitalOcean exact-route root is quarantined after three upstream shared-pool HTTP 429 gateway abstentions and replacement root `artifacts/phase0/remote-route-stability/20260810T034500Z` is active with two passing samples; selected local roles still require 24-hour stability; the controlled archive runner is implemented and fixture-tested but the first real attempt found no populated scoped archive values, made zero network calls, and remains pending |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission, and Coinbase Exchange Sandbox-specific CB-ACCESS signer/schema transport | `tests/execution`, `tests/integrations`, `tests/runtime`, `tests/integrations/test_coinbase_exchange.py` | Local Coinbase signer/product/OMS boundary tests pass. Real smoke reached the reviewed sandbox `/time` and `/products`; the returned catalogue omitted required `ETH-USD`, while authenticated account/balance/position/open-order reads passed and the product-filtered fills read returned sanitized HTTP 401. The read-only gate and paper lifecycle remain pending. Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor | `tests/data` | Parser/lineage fixtures pass; source availability dashboards need live soak |
@@ -161,14 +161,15 @@ The exact-route stability runner is implemented in
 `artifacts/phase0/remote-route-stability/20260809T162800Z` is failed/quarantined
 after an upstream shared-pool HTTP 429; its incident report SHA-256 is
 `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`. The
-DigitalOcean run at
+DigitalOcean root
 `artifacts/phase0/remote-route-stability/20260809T173237.710604Z` recorded 62
 cycles, including three immutable upstream shared-pool HTTP 429 gateway
-abstentions, and was stopped and quarantined. Its incident report is at
-`artifacts/phase0/remote-route-stability/20260809T173237.710604Z/incident.json`
-with SHA-256
+abstentions, and was stopped and quarantined. Its incident report SHA-256 is
 `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
-A fresh exact-route 24-hour root is required; failed samples are not
+The replacement root
+`artifacts/phase0/remote-route-stability/20260810T034500Z` is active under PID
+`13831`, has two passing samples, and remains `PENDING_STABILITY` until the
+24-hour duration and all route/quality checks pass. Failed samples are not
 concatenated.
 The superseded pre-attestation roots remain preserved: the 20260809T171000Z
 root is quarantined by incident SHA-256
