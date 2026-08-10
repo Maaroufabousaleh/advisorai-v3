@@ -116,12 +116,14 @@
           "deepseek/deepseek-v4-flash-20260423"
         ],
         "stability_evidence": {
-          "code_sha256": "900b2ef7df49654e8dde8981b56f1e4f6dea680ff44b4d66ca1fec54c70b81d0",
-          "config_sha256": "b0a27fdb5e9c55f88b384be476f8862cff5b5bb6a050e256c2ee7f5f60ba92a6",
-          "cycles_sha256": "9fb1e4bcd913e5395b171dfb45bc230cbccbb9f22c84235ae492f5ffc086cd65",
-          "inventory_sha256": "d23f261eb9868da7d69ee51aa8f5ff0e558ad938078878f590af17779432190f",
-          "reference": "artifacts/phase0/remote-route-stability/20260809T173237.710604Z",
-          "state": "pending_stability",
+          "code_sha256": "ed27ea67df7c72adefd6959417cb3873628f2778effdd50a511aa47be33b6c0a",
+          "config_sha256": "a41ec45b48ae7579f2671e3f357aa7b7164ed73351669b06d293374c7528d603",
+          "cycles_sha256": "771f97ea67e7590cb855e84a03863d0dfea02a9465e57da589ec2f5d0a3b9384",
+          "incident_reference": "artifacts/phase0/remote-route-stability/20260810T053600Z/incident.json",
+          "incident_sha256": "5b6d5ffe9133811a664f24151b95fcd850f130cff718bc6ed1eae9289178cff1",
+          "inventory_sha256": "2234cb0972ecf2567fdaf8f6694537be59ae8c55e61ad9dbd263f52d3057f896",
+          "reference": "artifacts/phase0/remote-route-stability/20260810T053600Z",
+          "state": "failed_quarantined",
           "samples": 1
         },
         "state": "pending_quality_and_stability",
