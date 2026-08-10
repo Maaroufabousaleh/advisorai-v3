@@ -10,7 +10,7 @@ an external, timed, or human gate.
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | Phase 0 contracts, ports, policy gateway, model/runtime harness | architecture §11; phase-00 plan | yes | yes | yes | no | no | no | TESTED / LOCALLY MEASURED | none for local boundary | Preserve accepted local records; do not treat them as admission |
 | Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes | yes | partial | no | pending | no | PENDING_STABILITY | the prior run was interrupted after 31 passing cycles; the fresh 20260809 run is healthy but has not reached 24 hours | Inspect PID 9456 and its append-only evidence; do not restart or concatenate runs |
-| Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner | yes | short live route evidence plus current DigitalOcean samples | yes, exact provider/model/endpoint identity | pending 24-hour window | no | EXTERNALLY MEASURED / PENDING_STABILITY | Novita trial failed closed on upstream shared-pool 429 and is quarantined; DigitalOcean window is still short | Inspect detached DigitalOcean PID 33057 and its immutable hash chain; do not promote until the full duration passes |
+| Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner | yes | short live route evidence plus preserved failed DigitalOcean samples | yes, exact provider/model/endpoint identity | failed; fresh 24-hour window required | no | EXTERNALLY MEASURED / QUARANTINED / PENDING_STABILITY | Novita and the fresh DigitalOcean root both failed closed on upstream shared-pool HTTP 429 gateway abstentions; the DigitalOcean incident is preserved at `artifacts/phase0/remote-route-stability/20260809T173237.710604Z/incident.json` | Do not concatenate or restart the failed root; wait for a reviewed exact route and start a fresh immutable 24-hour root |
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
 | Phase 0 external Hermes coordinator/subagent review | architecture §8; phase-00 plan | repository harness and pinned external runtime reviewed | local security tests yes | yes | yes, synthetic loopback route only | no | no | EXTERNALLY MEASURED / QUARANTINED | real provider/model route and complete native/filesystem OS attestation remain absent | Preserve the pinned review; formal admission remains closed and no runtime enters AdvisorAI core |
@@ -78,10 +78,14 @@ an external, timed, or human gate.
   it used a synthetic loopback provider and does not open Phase 8.
 - The exact Novita route stability trial is preserved as a failed/quarantined
   run after an upstream shared-pool HTTP 429. Earlier DigitalOcean roots were
-  quarantined for runner-integrity defects. The fresh immutable DigitalOcean
-  route window is active at
-  `artifacts/phase0/remote-route-stability/20260809T173237.710604Z` under PID
-  `33057` with passing samples; it remains a time gate.
+  quarantined for runner-integrity defects. The later DigitalOcean root at
+  `artifacts/phase0/remote-route-stability/20260809T173237.710604Z` recorded 62
+  cycles, including three immutable `gateway_abstention` / upstream shared-pool
+  HTTP 429 failures, and was stopped and quarantined. Its incident evidence is
+  `artifacts/phase0/remote-route-stability/20260809T173237.710604Z/incident.json`
+  with SHA-256
+  `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
+  A fresh 24-hour root is required; no failed samples may be concatenated.
 - Phase 7 requires real paper/testnet operation plus an actual 60-day duration.
 - Phase 10 requires explicit human approval and remains closed.
 
