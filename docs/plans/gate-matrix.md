@@ -51,10 +51,10 @@ an external, timed, or human gate.
   `artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`
   with SHA-256 `79c359996cb8d330739495117730924c13ff29f909359e0c189dfea02498fdc7`.
   No order, cancel, transfer, or withdrawal was attempted.
-- A later strict local resolver check rejected the populated inventory on a
-  non-allowlisted variable before the scoped venue resolver was constructed.
-  The value was not logged or persisted; the operator must correct that local
-  inventory entry before rerunning the smoke.
+- The current zero-network resolver check passes against the canonical
+  repository-local secrets inventory with configuration hash
+  `138042cd88c96e9d3079493beee740ba1e96def1ea748c361e51bd8ea88094cf`; no
+  second secrets inventory is maintained.
 - The typed two-provider rclone qualification boundary is implemented and
   fixture-tested. The initial controlled real-run attempt found no populated
   `ARCHIVE_RCLONE` values and made zero network calls. The latest fresh root at

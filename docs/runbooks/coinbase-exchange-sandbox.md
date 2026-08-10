@@ -54,12 +54,11 @@ is:
 
 Do not print, source, copy, or paste any credential value.
 
-The scoped resolver is fail-closed on unknown inventory names. If a later
-configuration check rejects the populated inventory because it contains a
-non-allowlisted variable, remove or review that entry locally against the
-repository template before rerunning this smoke. Do not disclose its value in
-chat; this prerequisite is separate from Coinbase authentication and does not
-authorize a production fallback.
+The scoped resolver is fail-closed on unknown inventory names. The current
+repository-local inventory passes this zero-network check; do not create a
+second secrets file or disclose any value in chat. This prerequisite is
+separate from Coinbase authentication and does not authorize a production
+fallback.
 
 ## Read-only smoke gate
 
