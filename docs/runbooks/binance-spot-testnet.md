@@ -99,6 +99,29 @@ payload, reconnect, cancel race, stale state, divergence, restart, and kill
 switch cases must be real-provider evidence where safely inducible and typed
 fault-injection evidence otherwise.
 
+Run the supervised qualification only after inspecting the read-only evidence;
+both opt-in guards are required:
+
+```bash
+ADVISORAI_RUN_NETWORK_SMOKE=1 \
+ADVISORAI_RUN_PAPER_LIFECYCLE=1 \
+  ./.venv/bin/python scripts/qualify_binance_spot_testnet_lifecycle.py \
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env \
+  --configuration-hash <zero-network-binance-config-sha256> \
+  --read-only-evidence-dir artifacts/phase2/binance-spot-testnet/read-only-smoke \
+  --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle \
+  --ledger <new-supervised-ledger-path>
+```
+
+The runner validates the immutable read-only pointer and performs exactly one
+signed submission and, if the passive order remains open, one signed
+cancellation. It never retries a signed write after an ambiguous result; it
+queries venue truth first. The first measured run passed the no-fill/cancel
+path, restart recovery, TCA, attribution, duplicate protection, ambiguous-ack
+handling, cancel-race, divergence, interruption, and kill-switch drills. It
+did not observe a real fill, so fill ingestion remains fixture evidence rather
+than an externally measured fill claim.
+
 No model, LLM, Hermes task, research agent, browser task, dashboard, or venue
 provider can bypass `RiskKernel` or mutate OMS truth. Transfers, withdrawals,
 and production endpoints are prohibited.

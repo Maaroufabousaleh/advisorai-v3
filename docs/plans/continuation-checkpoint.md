@@ -1,7 +1,52 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint captured 2026-08-10 on `main`
-`b2d110e1fc611a1c595ef27b6780c661bc3af5dd` after PR #82 merged.
+Checkpoint continuation started 2026-08-10 from clean `main`
+`645554f550fb6485af1e0f6e0d8be25f52b4e621` after PR #82 merged.
+
+## Current continuation update — Binance Spot Testnet qualification
+
+The following supersedes the earlier pending-operator Binance bullets below.
+
+- Fresh authenticated read-only evidence passed all required operations at
+  `artifacts/phase2/binance-spot-testnet/read-only-smoke/20260810T193840.598161Z/binance-spot-testnet-read-only-smoke.json`,
+  SHA-256
+  `c365d4042a67214a3ff1fe1f7bdca34f38e46e78bfff920146873e5ab4a80f72`, with
+  exact reviewed host `testnet.binance.vision` and configuration hash
+  `b41638ffc13149796f29676826b54097d2e7c417d9e4b1ff4d72be6d12f87286`.
+- After the final adapter source was settled, a read-only-only smoke passed
+  again at
+  `artifacts/phase2/binance-spot-testnet/read-only-smoke/20260810T201450.306674Z/binance-spot-testnet-read-only-smoke.json`,
+  SHA-256
+  `b3a8b54f446599b50547bab98240db0fe8e1380fd969a6a220fccac1c83fe8e7`,
+  matching adapter source SHA-256
+  `ec3077cc726a045420c714f99c5c2e026351190348fdc9779f96e21cff034e0d` and
+  making no writes.
+- One supervised fake-funds BTCUSDT `LIMIT_MAKER` lifecycle then passed through
+  deterministic RiskKernel, authoritative OMS, Binance transport,
+  reconciliation, cancellation, restart hydration, TCA, attribution, and
+  deterministic failure drills. Evidence:
+  `artifacts/phase2/binance-spot-testnet/paper-lifecycle/20260810T195818.312420Z/binance-spot-testnet-paper-lifecycle.json`,
+  SHA-256
+  `db52d6a3db56a742eb1b2e4dd47abe5e43884ef768c32d34dac2483f81c33c70`.
+- The real order remained unfilled and was cancelled. Real fill ingestion is
+  therefore not claimed; the typed OMS fill path and non-inducible failure
+  cases are fixture-tested. No production, transfer, withdrawal, or fallback
+  venue call occurred.
+- The selected-model stability root
+  `phase0-selected-24h-terminal-sample-20260810-r3` remains active under PID
+  `70598`; it was not restarted, stopped, concatenated, or modified.
+- Archive/rclone work is externally deferred and was not touched. The next
+  legal independent work is Phase-3 source/reconnect evidence and truthful
+  status updates while Phase-0 stability continues.
+- The post-qualification locked verification passed 578 tests and all eleven
+  acceptance suites with results `128/152/126/54/19/34/10/7/27/18/5`.
+- A fresh bounded Phase-3 REST/raw-first retry made seven public calls at
+  `artifacts/phase3/source-qualification/20260810T201653.611706Z/phase3-v3-core-source-qualification.json`,
+  SHA-256
+  `60cac1ba77fa31735c87b02e29125985e9d4e69b2e592886e317b0ed61ecca01`.
+  BTC-USD native ticker, Deribit index, and SEC RSS passed; Coinbase ETH-USD
+  remained HTTP 404 and GDELT remained HTTP 429. The Phase-3 gate stays open
+  only for further external evidence; no source substitution was made.
 
 ## Completed in this continuation
 
@@ -78,9 +123,9 @@ Checkpoint captured 2026-08-10 on `main`
   `artifacts/phase2/binance-spot-testnet/public-truth/20260810T165904.357047Z/binance-spot-testnet-public-truth.json`
   with SHA-256
   `34af4ef5649c0d0b92635507b422d7217c8a83f72156a6e2d99561e6da6d56e6`.
-  Authenticated Binance reads and the paper lifecycle remain pending the
-  operator's review of the single canonical `PAPER_VENUE` profile; no order
-  was sent.
+  Authenticated Binance reads and the paper lifecycle were subsequently
+  qualified in the current continuation; see the immutable reports in the
+  current update above. The real path observed no fill.
 - Added the Binance venue-selection decision and runbook. The private smoke
   accepts an explicit `--secrets /mnt/c/projects/advisorai-v3/secrets.env`
   path, resolves only `PAPER_VENUE`, persists reference names and sanitized
@@ -187,10 +232,17 @@ Checkpoint captured 2026-08-10 on `main`
   `daee289fd1373477c5c22f4b792ff4e07b452c93e4544e21f757dde7080e9831`.
   This is preserved as a post-change provider/runtime availability failure,
   not clock-synchronized freshness evidence.
+- A further bounded 20-second retry at
+  `artifacts/phase3/binance-spot-testnet-depth/20260810T201946.533716Z/phase3-binance-spot-testnet-depth.json`
+  failed closed before the first WSS message on all four connections, made
+  zero REST calls, and passed deterministic drills. Its SHA-256 is
+  `ce402b7bdd67513c90b1cc5bf744d0a8d455a6f1b7f927610a84f997699b8415`.
+  This remains provider/runtime availability evidence, not a Phase-3 pass.
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
-  becoming stale as the calendar advances. The focused suite and full locked
-  verification now pass with 570 tests.
+  becoming stale as the calendar advances. The pre-qualification focused suite
+  and full locked verification passed with 570 tests; the post-qualification
+  rerun passed 578 tests and is recorded in the current update above.
 - Discovered and fixed the selected-model stability runner's missing terminal
   sample at the 24-hour boundary. The fresh post-format root
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`
@@ -216,7 +268,7 @@ Checkpoint captured 2026-08-10 on `main`
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, thirteen cycles passed, last record SHA-256 `9422faadb1f232d2b1ba98fb5cb2b7e16537af24755c2bcc97e649f735ffb821`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 25 cycles passed, last record SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -239,8 +291,10 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root; thirteen cycles have
-  passed and the 24-hour result does not yet exist. All
+  `70598` with a new immutable runtime-admission root; 25 cycles have passed,
+  the latest record hash is
+  `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`, and the
+  24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected
   20260810T053600Z root stopped after a deadline-exhausted first probe. No
@@ -269,12 +323,11 @@ must not be concatenated with the replacement root.
   catalogue did not expose `ETH-USD` and the product-filtered fills read
   returned HTTP 401. The required read-only gate and paper lifecycle remain
   closed. Secret values must not be sent in chat.
-- Binance Spot Testnet public truth passes for the required BTC/ETH symbols,
-  but the authenticated gate is not yet measured. The operator must review
-  the existing single `PAPER_VENUE` profile for the exact testnet host and
-  restricted fake-funds credentials, run the explicit Binance smoke, and
-  inspect its immutable sanitized result. No credential value may be printed,
-  copied into a second file, or persisted in evidence.
+- Binance Spot Testnet public truth and the authenticated read-only gate pass
+  for the required BTC/ETH symbols. One supervised no-fill/cancel lifecycle is
+  externally measured and qualified; real fill ingestion is not observed and
+  remains fixture-tested. No credential value may be printed, copied into a
+  second file, or persisted in evidence.
 - Phase 3–7 real source/paper operation and the 60-day soak cannot start until
   the selected venue, source, model, risk, OMS, reconciliation, and recovery
   prerequisites are genuinely admitted.
@@ -292,9 +345,9 @@ must not be concatenated with the replacement root.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.
 
 Next legal work is to preserve the healthy model stability worker, continue
-credential-free Phase-3 source evidence only when the reviewed provider is
-available, and wait for the reviewed Binance `PAPER_VENUE` profile before
-running authenticated reads. The archive
+credential-free Phase-3 source/reconnect evidence only when the reviewed
+providers are available, and use the already-qualified Binance adapter only
+through the deterministic paper chain. The archive
 gate is externally deferred and must not be touched in this continuation. No
 model, Hermes runtime, or remote route has trading authority.
 

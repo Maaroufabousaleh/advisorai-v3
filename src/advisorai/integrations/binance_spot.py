@@ -348,6 +348,28 @@ class BinanceSpotTestnetTransport(NativeTransport):
         self._verified_symbols = admitted
         return tuple(admitted[key] for key in sorted(admitted))
 
+    def book_ticker(self, symbol: str) -> Mapping[str, object]:
+        """Return a validated provider-truth best bid/ask for an admitted symbol."""
+
+        spec = self._verified_symbol(symbol)
+        payload = self._request(
+            "GET",
+            "/api/v3/ticker/bookTicker",
+            params={"symbol": spec.symbol},
+        )
+        if not isinstance(payload, Mapping):
+            raise VenueTransportError("Binance book ticker response must be an object")
+        returned_symbol = str(payload.get("symbol", "")).strip().upper()
+        if returned_symbol != spec.symbol:
+            raise VenueTransportError("Binance book ticker returned a different symbol")
+        bid_price = _decimal(payload.get("bidPrice"), f"{spec.symbol} bid price", positive=True)
+        ask_price = _decimal(payload.get("askPrice"), f"{spec.symbol} ask price", positive=True)
+        _decimal(payload.get("bidQty"), f"{spec.symbol} bid quantity", positive=True)
+        _decimal(payload.get("askQty"), f"{spec.symbol} ask quantity", positive=True)
+        if ask_price < bid_price:
+            raise VenueTransportError("Binance book ticker ask price is below bid price")
+        return dict(payload)
+
     def _verified_symbol(self, symbol: str) -> BinanceSpotSymbolSpec:
         normalized = symbol.strip().upper()
         try:
