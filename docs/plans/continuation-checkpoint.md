@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`8ebcf2e4884469f9aaf318a766662527429d8148` after PR #59 merged.
+`7bf4daa8fb3b38d25068beaa14dd39f5636132d0` after PR #60 merged.
 
 ## Completed in this continuation
 
@@ -87,16 +87,18 @@ Checkpoint captured 2026-08-10 on `main`
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
   verification now pass with 539 tests.
-- Measured a disposable local Docker OS boundary for Phase 8. The probe used
-  no repository, credential, broker, order, or production mounts and recorded
-  zero external network calls, read-only root denial, constrained tmpfs write,
-  zero effective capabilities, and bounded process controls. Evidence is at
-  `artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`
+- Measured and hardened the disposable local Docker OS boundary for Phase 8.
+  The probe used the explicit local Docker socket, no repository, credential,
+  broker, order, or production mounts, and recorded zero external network calls,
+  a root-identity read-only-root denial, constrained tmpfs write, zero effective
+  capabilities, denied unshare/mount probes, and bounded process controls.
+  Evidence is at
+  `artifacts/phase8/os-sandbox-probe/20260810T050947.907604Z/phase8-os-sandbox-probe.json`
   with SHA-256
-  `04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`.
-  Native syscall/C-extension containment, credential/production-tree isolation,
-  and a real Hermes capability task remain unattested; formal Phase-8 admission
-  stays closed.
+  `1671cd03a821a5751ff046d3732c009cb5a727b6b59d8e1bc89dc829196a7b1a`.
+  Universal native syscall/C-extension containment, credential/production-tree
+  isolation, and a real Hermes capability task remain unattested; formal
+  Phase-8 admission stays closed.
 
 ## Durable processes
 
