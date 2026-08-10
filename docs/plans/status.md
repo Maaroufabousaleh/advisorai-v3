@@ -6,7 +6,7 @@ or 60-day operational gate.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
-| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; DigitalOcean replacement roots `20260810T034500Z` and corrected `20260810T053600Z` are quarantined after immutable external route failures (HTTP 429/shared-pool capacity and deadline exhaustion); selected local roles still require 24-hour stability; the controlled archive runner is implemented and fixture-tested but the first real attempt found no populated scoped archive values, made zero network calls, and remains pending |
+| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py`, `tests/phase0/test_rclone_qualification.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; DigitalOcean replacement roots `20260810T034500Z` and corrected `20260810T053600Z` are quarantined after immutable external route failures (HTTP 429/shared-pool capacity and deadline exhaustion); selected local roles still require 24-hour stability; the latest real archive root measured independent A/B crypt restores and equal hashes, but Provider B raw recursive enumeration failed, so archive admission remains closed |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission, and Coinbase Exchange Sandbox-specific CB-ACCESS signer/schema transport | `tests/execution`, `tests/integrations`, `tests/runtime`, `tests/integrations/test_coinbase_exchange.py` | Local Coinbase signer/product/OMS boundary tests pass. Real smoke reached the reviewed sandbox `/time` and `/products`; the returned catalogue omitted required `ETH-USD`, while authenticated account/balance/position/open-order reads passed and the product-filtered fills read returned sanitized HTTP 401. The read-only gate and paper lifecycle remain pending. Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor, and bounded real-source qualification runners with freshness measurement | `tests/data`, `tests/phase3/test_source_qualification.py`, `tests/phase3/test_coinbase_wss_qualification.py`, `tests/phase3/test_coinbase_level2_qualification.py`, `scripts/qualify_phase3_sources.py`, `scripts/qualify_phase3_coinbase_wss.py`, `scripts/qualify_phase3_coinbase_level2.py` | Real source evidence is partial: REST replay passed for Coinbase BTC-USD ticker, Deribit BTC index, and SEC official RSS; Coinbase ETH-USD returned 404 and GDELT returned 429. Two real Coinbase Sandbox WSS connections replayed 29 ticker events and 23 heartbeats with freshness passing, but both observed provider sequence gaps. The public `level2_batch` path then delivered one BTC-USD snapshot, 79 updates, and 12 heartbeats; book-state replay matched, validation passed, and freshness passed. Continuous freshness soak/recovery/disagreement evidence remains pending and no Phase-3 admission is claimed |
@@ -111,13 +111,14 @@ event age 0.576 seconds, and maximum heartbeat interval 1.081 seconds. This is
 bounded external source evidence only; continuous recovery, source
 disagreement, and Phase-3 admission remain pending.
 
-Latest local verification (2026-08-10):
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python scripts/verify_acceptance.py`
+Latest local verification (2026-08-10) used an isolated locked environment
+created with the repository's declared optional extras:
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 125/152/107/44/19/34/10/7/27/18/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 126/152/107/44/19/34/10/7/27/18/5. Suite totals
 overlap a few shared contract tests. A single-process
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python -m pytest -q`
-passes all 546 tests with every declared optional extra active in the isolated
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python -m pytest -q`
+passes all 547 tests with every declared optional extra active in the isolated
 locked verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
@@ -168,25 +169,29 @@ uses only the `ARCHIVE_RCLONE` scope and passes a minimal process environment to
 
 The first controlled real opt-in attempt was recorded at
 `artifacts/phase0/rclone-crypt-qualification/20260810T003430.872217Z/rclone-crypt-qualification.json`.
-It generated a fresh harmless source artifact, recorded source SHA-256
-`ee41a072488cf8c2982d1889a037078c3e65516a23c410c168ee794188e7ba31`, found no
-populated `RCLONE_CONFIG`/`RCLONE_CONFIG_PASS`/provider-pair values through the
-scoped resolver, and made zero network calls. The sanitized manifest SHA-256 is
-`fde44ab7ed3e0572c999b6a749f6eeeb718e39251e070939e71ad045ccfe7aed`; the
-canonical evidence SHA-256 is
-`fb044389dbcb9bbe52a469c9993bf8cc45d1c11c83dcdcf259e2d6d4bc5bd67b`. This is
-`IMPLEMENTED / FIXTURE-TESTED / PENDING_OPERATOR_ACTION`, not real provider
-measurement or qualification. The operator must populate the scoped values
-locally and rerun the explicit command in the rclone archive runbook. No manual
-copy/restore statement is promoted into repository admission evidence.
+It generated a fresh harmless source artifact, found no populated scoped
+archive values, and made zero network calls. After the operator populated the
+same repo-local ignored file, the fresh root
+`artifacts/phase0/rclone-crypt-qualification/20260810T152950.120379Z/`
+measured independent Provider A/B crypt uploads/restores and three-way SHA-256
+equality. All recovery drills passed. Provider A raw-layer enumeration passed,
+but Provider B raw-layer recursive enumeration returned a sanitized provider
+command failure, so this is real partial evidence rather than archive
+qualification. The report SHA-256 is
+`be61fd185821d2ee4b7f38c92694828f63d0b92e7e7667414e8807b1c9b0f7bf`; the
+manifest SHA-256 is
+`202e1564c1b56fcde7a50e2a0307cbd36a2e05771e6f308c1de51584d3ed9093`.
+The runner fix applying the bounded timeout to raw listings is covered by
+`tests/phase0/test_rclone_qualification.py`. The manual copy/restore statement
+is still not promoted into repository admission evidence.
 
 | Archive evidence class | Current state | Evidence truth |
 |---|---|---|
 | Adapter fixture-tested | `IMPLEMENTED / TESTED` | In-memory adapter and two-provider automation tests pass; no external claim |
-| Real Provider A upload/restore | `PENDING_OPERATOR_ACTION` | No scoped archive values were available; no Provider A call was made |
-| Real Provider B upload/restore | `PENDING_OPERATOR_ACTION` | No scoped archive values were available; no Provider B call was made |
-| Independent two-provider restore | `PENDING_OPERATOR_ACTION` | The manual statement is not promoted; controlled three-way SHA evidence is absent |
-| Failure/recovery qualification | `IMPLEMENTED / PENDING_EXTERNAL_EVIDENCE` | The runner contains deterministic outage/interruption/integrity drills; real survivor restores and provider reads have not run |
+| Real Provider A upload/restore | `EXTERNALLY MEASURED / PARTIAL` | Upload, crypt restore, three-way hash participation, and raw-layer opaque-object check passed in the latest root |
+| Real Provider B upload/restore | `EXTERNALLY MEASURED / PARTIAL` | Upload, crypt restore, and three-way hash participation passed; raw-layer recursive enumeration returned a provider command failure |
+| Independent two-provider restore | `EXTERNALLY MEASURED / NOT QUALIFIED` | Source SHA equaled both restored SHA values, but the required Provider B raw-layer backing check is incomplete |
+| Failure/recovery qualification | `EXTERNALLY MEASURED / PARTIAL` | All listed injected and real survivor drills passed in the latest root; overall gate remains closed by Provider B raw enumeration |
 
 The isolated DuckLake comparison is recorded at
 `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`

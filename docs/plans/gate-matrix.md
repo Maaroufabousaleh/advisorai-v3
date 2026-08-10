@@ -14,7 +14,7 @@ an external, timed, or human gate.
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
 | Phase 0 external Hermes coordinator/subagent review | architecture §8; phase-00 plan | repository harness and pinned external runtime reviewed | local security tests yes | yes | yes, synthetic loopback route only | no | no | EXTERNALLY MEASURED / QUARANTINED | real provider/model route and complete native/filesystem OS attestation remain absent | Preserve the pinned review; formal admission remains closed and no runtime enters AdvisorAI core |
-| Phase 0 rclone-crypt upload/verify/restore | architecture §4.2; phase-00 plan; rclone archive qualification runbook | typed adapter, scoped process environment, backward-compatible singular config, and explicit A/B provider pairs yes | `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py`, and qualification runner present | in-memory restore yes; fresh machine-generated pending record | no real provider calls yet | no | operator must populate scoped archive values | PENDING_OPERATOR_ACTION / EXTERNAL_EVIDENCE | The controlled runner found no populated `ARCHIVE_RCLONE` values in the protected operator file and made zero network calls; manual provider statements are not admission evidence | Populate `RCLONE_CONFIG`, `RCLONE_CONFIG_PASS`, `RCLONE_REMOTE_A/B`, and `RCLONE_CRYPT_REMOTE_A/B` locally, then run the explicit real qualification and verify independent A/B restores plus drills |
+| Phase 0 rclone-crypt upload/verify/restore | architecture §4.2; phase-00 plan; rclone archive qualification runbook | typed adapter, scoped process environment, backward-compatible singular config, explicit A/B provider pairs, and bounded raw-list timeout yes | `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py`, `tests/phase0/test_rclone_qualification.py`, and qualification runner pass | in-memory restore yes; fresh real sanitized roots | yes, independent A/B crypt upload/restore and three-way SHA equality; Provider A raw-layer check passed, Provider B recursive raw enumeration failed | no | provider-B raw-listing recovery/configuration review | EXTERNALLY MEASURED / PARTIAL / NOT QUALIFIED | Latest root `artifacts/phase0/rclone-crypt-qualification/20260810T152950.120379Z` report SHA-256 `be61fd185821d2ee4b7f38c92694828f63d0b92e7e7667414e8807b1c9b0f7bf` has Provider B raw-layer command failure; no plaintext exposure is claimed for the incomplete listing | Diagnose or remediate the reviewed Provider B raw listing, then run a fresh explicit A/B qualification; never promote the three-way restore alone to archive admission |
 | Phase 0 resource/privacy/failure behavior | phase-00 plan; resource and gateway runbooks | yes | yes | yes | partial route observations | stability pending | no | TESTED / PENDING_STABILITY | selected runtime duration and real route repetition remain incomplete | Continue durable stability and bounded route evidence |
 | Phase 1 deterministic foundation and local rollback/Bronze rebuild | phase-01 plan | yes | yes | immutable local report | no provider deployment | no | no | QUALIFIED LOCALLY | real paper deployment rollback and archive restore remain external | Preserve local report; run provider-specific drill only after venue setup |
 | Phase 2 deterministic paper core and Coinbase Exchange Sandbox transport | phase-02 plan; real-api-paper-transition.md | yes; Coinbase-specific `CB-ACCESS-*` signer, schema mapper, exact sandbox host guard, and read-only smoke runner | yes, including `tests/integrations/test_coinbase_exchange.py` | replay/failure fixtures plus signer/product/OMS boundary tests | partial: real Coinbase `/time`, `/products`, `/accounts`, `/orders`, and `/fills` requests reached the reviewed sandbox; account/balance/position/open-order reads passed, but product mapping and fills did not | no | provider catalogue/profile and fills-permission action | EXTERNALLY MEASURED / PENDING_OPERATOR_ACTION | the returned 13-product sandbox catalogue contained `BTC-USD` but not the required `ETH-USD`; the product-filtered fills read returned HTTP 401; no order writes were attempted | Use a reviewed Coinbase Sandbox profile/catalogue that genuinely exposes both required products and grants the required fills read permission, then rerun the Coinbase-specific read-only smoke; never fall back to the generic smoke or production |
@@ -56,16 +56,15 @@ an external, timed, or human gate.
   The value was not logged or persisted; the operator must correct that local
   inventory entry before rerunning the smoke.
 - The typed two-provider rclone qualification boundary is implemented and
-  fixture-tested. The first controlled real-run attempt at
-  `artifacts/phase0/rclone-crypt-qualification/20260810T003430.872217Z/` found
-  no populated `ARCHIVE_RCLONE` values and made zero network calls. Its
-  sanitized manifest SHA-256 is
-  `fde44ab7ed3e0572c999b6a749f6eeeb718e39251e070939e71ad045ccfe7aed`; the
-  run remains `PENDING_OPERATOR_ACTION`, and the manual A/B copy statement is
-  deliberately not counted as real evidence. After the operator populates the
-  scoped values, run the qualification runner in the rclone archive runbook;
-  only a fresh result with independent provider uploads, raw-layer checks,
-  three-way SHA equality, and recovery drills can close this gate.
+  fixture-tested. The initial controlled real-run attempt found no populated
+  `ARCHIVE_RCLONE` values and made zero network calls. The latest fresh root at
+  `artifacts/phase0/rclone-crypt-qualification/20260810T152950.120379Z/`
+  measured independent A/B crypt uploads/restores, three-way SHA equality, and
+  all recovery drills. Provider A raw-layer enumeration passed; Provider B raw
+  recursive enumeration returned a sanitized provider command failure. The
+  latest report SHA-256 is
+  `be61fd185821d2ee4b7f38c92694828f63d0b92e7e7667414e8807b1c9b0f7bf`; the
+  manual A/B copy statement is deliberately not counted as qualification.
 - The previous Phase-0 24-hour worker was interrupted by the laptop shutdown;
   its evidence is preserved. A fresh detached run is active at
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`

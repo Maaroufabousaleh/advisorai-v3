@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -45,7 +46,7 @@ def main() -> int:
     parser.add_argument(
         "--secrets-file",
         type=Path,
-        default=Path("~/.config/advisorai-v3/secrets.env").expanduser(),
+        default=Path(os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")),
     )
     parser.add_argument(
         "--evidence-root",
