@@ -1,10 +1,14 @@
+from types import SimpleNamespace
+
 import pytest
 
 from advisorai.gateway import LocalDeterministicGateway
 from advisorai.ledger import SqliteLedgers
+from advisorai.phase0 import bakeoffs
 from advisorai.phase0.bakeoffs import (
     BakeoffGate,
     BakeoffResult,
+    ComponentCandidate,
     ComponentKind,
     benchmark_callable,
     benchmark_gateway_adapter,
@@ -52,6 +56,24 @@ def test_availability_inventory_quarantines_missing_dependencies():
     assert by_name["direct_api"].status == "available"
     assert by_name["litellm"].status in {"available", "quarantined"}
     assert all(item.status in {"available", "quarantined"} for item in result)
+
+
+def test_command_only_availability_records_a_reproducible_version(monkeypatch):
+    monkeypatch.setattr(bakeoffs.shutil, "which", lambda name: "/usr/bin/example")
+    monkeypatch.setattr(
+        bakeoffs.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="example v1.2.3\n", stderr=""),
+    )
+    candidate = ComponentCandidate(
+        name="example-archive",
+        kind=ComponentKind.ARCHIVE,
+        command_name="example",
+        privacy_boundary="encrypted_cold_archive",
+    )
+    result = run_availability_inventory((candidate,))
+    assert result[0].status == "available"
+    assert result[0].version == "example v1.2.3"
 
 
 def test_benchmark_probe_records_reproducible_result():

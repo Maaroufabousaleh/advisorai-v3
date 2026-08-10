@@ -12,6 +12,7 @@ import importlib.metadata
 import importlib.util
 import json
 import shutil
+import subprocess
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -286,6 +287,26 @@ def _version_for_import(import_name: str) -> str | None:
     return "installed"
 
 
+def _version_for_command(command_name: str) -> str | None:
+    """Return a bounded version for a command-only candidate."""
+
+    executable = shutil.which(command_name)
+    if executable is None:
+        return None
+    try:
+        completed = subprocess.run(
+            (executable, "--version"),
+            capture_output=True,
+            check=False,
+            text=True,
+            timeout=2,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    output = (completed.stdout or completed.stderr).strip()
+    return output.splitlines()[0].strip() if completed.returncode == 0 and output else None
+
+
 def run_availability_inventory(
     candidates: tuple[ComponentCandidate, ...],
 ) -> tuple[CandidateAvailability, ...]:
@@ -301,6 +322,13 @@ def run_availability_inventory(
         command_available = (
             shutil.which(candidate.command_name) is not None if candidate.command_name else None
         )
+        version = (
+            _version_for_import(candidate.import_name)
+            if candidate.import_name
+            else _version_for_command(candidate.command_name)
+            if candidate.command_name
+            else None
+        )
         available = (import_available is not False) and (command_available is not False)
         reason = (
             "all declared runtime probes available"
@@ -312,9 +340,7 @@ def run_availability_inventory(
                 candidate=candidate,
                 import_available=import_available,
                 command_available=command_available,
-                version=_version_for_import(candidate.import_name)
-                if candidate.import_name
-                else None,
+                version=version,
                 status="available" if available else "quarantined",
                 reason=reason,
             )

@@ -95,6 +95,16 @@ calls transfer/withdrawal endpoints; cancellation and order lifecycle checks
 are performed only through the deterministic OMS/adapter contract tests until
 the operator has selected and reviewed one provider-specific API.
 
+For the configured Coinbase Exchange Sandbox, use the provider-specific
+[`coinbase-exchange-sandbox.md`](coinbase-exchange-sandbox.md) runbook and
+[`smoke_coinbase_exchange_sandbox.py`](../../scripts/smoke_coinbase_exchange_sandbox.py).
+Do not use this generic smoke for Coinbase: its generic `/account`,
+`/positions`, and `/balances` defaults do not represent Coinbase Exchange's
+`/accounts` schema, and Coinbase `/fills` requires a product or order filter.
+The Coinbase runner verifies `BTC-USD` and `ETH-USD` from the returned product
+catalogue before any private read is admitted and before any future OMS order
+write.
+
 ## Running the paper loop
 
 The runtime is a library boundary so the real venue's symbol, bar, account, and
