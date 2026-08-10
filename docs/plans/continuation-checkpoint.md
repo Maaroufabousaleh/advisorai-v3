@@ -176,12 +176,13 @@ must not be concatenated with the replacement root.
   listing, then run a fresh explicit qualification. The manual provider copy
   statement is not admission evidence.
 - Coinbase Sandbox identity, reviewed REST host, and scoped credentials are
-  configured. The remaining provider blockers are that the actual sandbox
-  product catalogue did not expose `ETH-USD` and the product-filtered fills
-  read returned HTTP 401. A later strict local resolver check also rejected a
-  non-allowlisted inventory variable before constructing the scoped resolver;
-  no value was logged or persisted. The required read-only gate and paper
-  lifecycle remain closed. Secret values must not be sent in chat.
+  configured. The current zero-network resolver check passes against the
+  canonical repository-local secrets inventory with configuration hash
+  `138042cd88c96e9d3079493beee740ba1e96def1ea748c361e51bd8ea88094cf`.
+  The remaining provider blockers are that the actual sandbox product
+  catalogue did not expose `ETH-USD` and the product-filtered fills read
+  returned HTTP 401. The required read-only gate and paper lifecycle remain
+  closed. Secret values must not be sent in chat.
 - Phase 3–7 real source/paper operation and the 60-day soak cannot start until
 - Phase 3 now has partial real source evidence, but its complete gate remains
   closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and the bounded

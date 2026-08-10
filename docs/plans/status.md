@@ -26,18 +26,16 @@ above.
 
 ## Coinbase Exchange Sandbox evidence
 
-The zero-network transition configuration check passed for
+The zero-network transition configuration check passes for
 `coinbase_exchange_sandbox` at
 `https://api-public.sandbox.exchange.coinbase.com` with reviewed host
 `api-public.sandbox.exchange.coinbase.com`, configuration hash
 `138042cd88c96e9d3079493beee740ba1e96def1ea748c361e51bd8ea88094cf`, and only
-the `PAPER_VENUE` credential references bound to the adapter. The real,
-provider-specific smoke runner is
+the `PAPER_VENUE` credential references bound to the adapter. The current
+repository-local secrets inventory is the one used by the real,
+provider-specific smoke runner:
 [`scripts/smoke_coinbase_exchange_sandbox.py`](../../scripts/smoke_coinbase_exchange_sandbox.py).
-The later strict resolver recheck failed closed on a non-allowlisted inventory
-variable before constructing the scoped resolver; no value was logged or
-persisted. That local configuration prerequisite must be corrected before a
-future smoke rerun.
+No second secrets inventory is required or maintained.
 
 Its latest immutable 2026-08-09 attempt is at
 `artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`
