@@ -49,11 +49,11 @@ This remains provider/runtime availability evidence, not a Phase-3 pass.
 
 The pre-qualification local run on 2026-08-10 passed all 570 tests in one process with every
 declared optional extra active in an isolated locked verification environment, and
-all eleven isolated phase suites. The post-qualification rerun passed 578 tests
-and phase suites `128/152/126/54/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
+all eleven isolated phase suites. The post-qualification rerun passed 590 tests
+and phase suites `128/152/126/55/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
-format checking passes with all 266 Python files formatted. The Phase-1 local
+format checking passes with all 271 Python files formatted. The Phase-1 local
 rollback/Bronze rebuild report is immutable evidence with SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and does
 not open any external or human gate. The Phase-0 component evidence report is
