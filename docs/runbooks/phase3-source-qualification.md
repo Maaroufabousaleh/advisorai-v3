@@ -86,15 +86,17 @@ summary. Provider sequence gaps or reordering fail the bounded probe.
 The latest real evidence is:
 
 ```text
-artifacts/phase3/coinbase-wss-qualification/20260810T042758.896119Z/phase3-coinbase-wss-qualification.json
-evidence SHA-256: 1d9d8a45cf2d68772104c0fd51550fb2d8bf5dcc0473fdbb8b0134d5322b4f6a
+artifacts/phase3/coinbase-wss-qualification/20260810T044142.351959Z/phase3-coinbase-wss-qualification.json
+evidence SHA-256: a41fa2367a7f940e8197d5f8e0188765f9c522086091f93df988e0b2abbde702
 ```
 
 Both connections completed their 12-second windows, received subscription
-acknowledgements, 20 ticker messages and 24 heartbeats in total, and replayed
-all 20 ticker events deterministically. The provider reported non-consecutive
-sequence values on both connections (25 gaps/129 missing sequence values on
-the first and 13 gaps/55 on the second), so the report is
+acknowledgements, 29 ticker messages and 23 heartbeats in total, and replayed
+all 29 ticker events deterministically. Freshness passed on both connections:
+maximum provider-event age was 2.078 seconds and maximum heartbeat interval
+was 1.015 seconds. The provider nevertheless reported non-consecutive
+sequence values on both connections (21 gaps/141 missing sequence values on
+the first and 25 gaps/177 on the second), so the report is
 `EXTERNALLY_MEASURED / PENDING_EXTERNAL_EVIDENCE`; no WSS qualification or
 Phase-3 admission is claimed. A longer freshness soak, level-2 recovery
 strategy, and source-disagreement evidence remain separate requirements.

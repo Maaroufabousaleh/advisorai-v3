@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `535 passed`, acceptance suites
-  `124/152/107/36/19/34/10/7/25/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `537 passed`, acceptance suites
+  `124/152/107/38/19/34/10/7/25/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -73,15 +73,16 @@ Checkpoint captured 2026-08-10 on `main`
 - Added the bounded public Coinbase Sandbox WSS qualifier in
   `scripts/qualify_phase3_coinbase_wss.py` with host pinning, raw-first
   per-connection spools, typed ticker replay, reconnect measurement, and
-  provider sequence-gap detection. Its two real 12-second connections
-  completed and replayed 20 ticker events/24 heartbeats, but both observed
-  provider sequence gaps. Evidence is at
-  `artifacts/phase3/coinbase-wss-qualification/20260810T042758.896119Z/` with
-  SHA-256 `1d9d8a45cf2d68772104c0fd51550fb2d8bf5dcc0473fdbb8b0134d5322b4f6a`;
+  provider sequence-gap and freshness detection. Its two real 12-second
+  connections completed and replayed 29 ticker events/23 heartbeats; freshness
+  passed with maximum event age 2.078 seconds and maximum heartbeat interval
+  1.015 seconds, but both observed provider sequence gaps. Evidence is at
+  `artifacts/phase3/coinbase-wss-qualification/20260810T044142.351959Z/` with
+  SHA-256 `a41fa2367a7f940e8197d5f8e0188765f9c522086091f93df988e0b2abbde702`;
   the Phase-3 gate remains pending.
 - Added the Phase-3 REST/WSS qualification tests to the eleven-phase
-  acceptance runner. The Phase-3 acceptance suite now executes 36 tests rather
-  than omitting the qualification package.
+  acceptance runner. The Phase-3 acceptance suite now executes 38 tests,
+  including freshness and future-timestamp fail-closed coverage.
 
 ## Durable processes
 
