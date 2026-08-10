@@ -27,7 +27,14 @@ CONTAINER_SCRIPT = (
     "grep CapEff /proc/self/status; "
     "touch /etc/advisorai-probe 2>/dev/null || echo filesystem_write_denied; "
     "touch /tmp/advisorai-probe 2>/dev/null && echo tmpfs_write_allowed; "
+    "command -v wget >/dev/null && echo network_probe_tool_available || echo network_probe_tool_missing; "
     "wget -q -T 2 -O /dev/null http://192.0.2.1 2>/dev/null || echo network_probe_denied; "
+    "command -v unshare >/dev/null && echo unshare_tool_available || echo unshare_tool_missing; "
+    "if command -v unshare >/dev/null; then "
+    "unshare -Ur true >/dev/null 2>&1 && echo unshare_escape_allowed || echo unshare_escape_denied; "
+    "fi; "
+    "mkdir -p /tmp/mount-probe; "
+    "mount -t tmpfs none /tmp/mount-probe >/dev/null 2>&1 && echo mount_escape_allowed || echo mount_escape_denied; "
     "(sh -c true >/dev/null 2>&1 && echo child_shell_allowed)"
 )
 
@@ -50,14 +57,9 @@ def _write_immutable_json(path: Path, payload: object) -> None:
 
 
 def _process_environment() -> dict[str, str]:
-    """Pass only Docker routing variables; never inherit arbitrary secrets."""
+    """Force the local Docker socket and never inherit arbitrary secrets."""
 
-    environment = {"PATH": os.defpath}
-    for name in ("DOCKER_HOST", "DOCKER_CONTEXT"):
-        value = os.environ.get(name)
-        if value:
-            environment[name] = value
-    return environment
+    return {"PATH": os.defpath, "DOCKER_HOST": "unix:///var/run/docker.sock"}
 
 
 def _run(command: list[str]) -> dict[str, object]:
@@ -97,7 +99,15 @@ def _parse_container_output(stdout: str) -> dict[str, object]:
         or cap_eff == "CapEff: 0000000000000000",
         "filesystem_write_denied": "filesystem_write_denied" in lines,
         "tmpfs_write_allowed": "tmpfs_write_allowed" in lines,
+        "network_probe_tool_available": "network_probe_tool_available" in lines,
+        "network_probe_tool_missing": "network_probe_tool_missing" in lines,
         "network_probe_denied": "network_probe_denied" in lines,
+        "unshare_tool_available": "unshare_tool_available" in lines,
+        "unshare_tool_missing": "unshare_tool_missing" in lines,
+        "unshare_escape_denied": "unshare_escape_denied" in lines,
+        "unshare_escape_allowed": "unshare_escape_allowed" in lines,
+        "mount_escape_denied": "mount_escape_denied" in lines,
+        "mount_escape_allowed": "mount_escape_allowed" in lines,
         "child_shell_allowed": "child_shell_allowed" in lines,
     }
 
@@ -171,7 +181,7 @@ def run_evidence(output_root: Path) -> tuple[Path, dict[str, object], str]:
             "--tmpfs",
             "/tmp:rw,noexec,nosuid,nodev",
             "--user",
-            "65532:65532",
+            "0:0",
             image_target,
             "sh",
             "-c",
@@ -182,9 +192,14 @@ def run_evidence(output_root: Path) -> tuple[Path, dict[str, object], str]:
     container_passed = bool(
         container.get("available")
         and container.get("returncode") == 0
+        and attestations["uid"] == 0
         and attestations["filesystem_write_denied"]
         and attestations["tmpfs_write_allowed"]
+        and attestations["network_probe_tool_available"]
         and attestations["network_probe_denied"]
+        and attestations["unshare_tool_available"]
+        and attestations["unshare_escape_denied"]
+        and attestations["mount_escape_denied"]
         and attestations["effective_capabilities_zero"]
     )
     report: dict[str, object] = {
@@ -198,7 +213,7 @@ def run_evidence(output_root: Path) -> tuple[Path, dict[str, object], str]:
         "docker_security_options": docker["security_options"],
         "image_reference": IMAGE_REFERENCE,
         "image_id": image_id,
-        "process_environment": "minimal_docker_routing_only",
+        "process_environment": "minimal_local_docker_only",
         "external_network_calls": 0,
         "namespace_probe": _public_result(namespace),
         "image_probe": _public_result(image),
@@ -207,6 +222,7 @@ def run_evidence(output_root: Path) -> tuple[Path, dict[str, object], str]:
         "container_boundary_measured": container_passed,
         "limitations": {
             "native_syscall_containment": "not_attested",
+            "native_escape_probes": "unshare_and_mount_denied; universal_containment_not_attested",
             "c_extension_containment": "not_attested",
             "production_tree_mount": "not_attested_not_mounted",
             "credential_mount": "not_attested_not_mounted",

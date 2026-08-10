@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint regenerated 2026-08-10 from `main` at
-`8ebcf2e4884469f9aaf318a766662527429d8148` after PR #59 merged.
+`7bf4daa8fb3b38d25068beaa14dd39f5636132d0` after PR #60 merged.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -77,15 +77,16 @@ an external, timed, or human gate.
   `artifacts/phase0/external-hermes-review/20260809T162031Z/external-hermes-review.json`;
   it used a synthetic loopback provider and does not open Phase 8.
 - A disposable Docker boundary probe was measured on 2026-08-10 at
-  `artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`
+  `artifacts/phase8/os-sandbox-probe/20260810T050947.907604Z/phase8-os-sandbox-probe.json`
   with SHA-256
-  `04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`.
-  It recorded zero external network calls, a read-only root filesystem, a
-  constrained writable tmpfs, zero effective capabilities, and bounded process
-  controls using the local Docker runtime. It did not mount the repository,
-  credentials, broker, order, or production paths. Native syscall and
-  C-extension containment remain `not_attested`, so this evidence is not
-  formal Hermes or Phase-8 admission.
+  `1671cd03a821a5751ff046d3732c009cb5a727b6b59d8e1bc89dc829196a7b1a`.
+  It recorded zero external network calls, a root-identity read-only root
+  filesystem check, a constrained writable tmpfs, dropped capabilities, denied
+  unshare/mount escape probes, and bounded process controls using the local
+  Docker runtime. It did not mount the repository, credentials, broker, order,
+  or production paths. Universal native syscall and C-extension containment
+  remain `not_attested`, so this evidence is not formal Hermes or Phase-8
+  admission.
 - The exact Novita route stability trial is preserved as a failed/quarantined
   run after an upstream shared-pool HTTP 429. Earlier DigitalOcean roots were
   quarantined for runner-integrity defects, and the later root at

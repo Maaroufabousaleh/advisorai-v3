@@ -10,7 +10,11 @@ def test_os_sandbox_probe_classifies_container_boundary_without_payloads():
             "CapEff:\t0000000000000000",
             "filesystem_write_denied",
             "tmpfs_write_allowed",
+            "network_probe_tool_available",
             "network_probe_denied",
+            "unshare_tool_available",
+            "unshare_escape_denied",
+            "mount_escape_denied",
             "child_shell_allowed",
         )
     )
@@ -20,7 +24,15 @@ def test_os_sandbox_probe_classifies_container_boundary_without_payloads():
         "effective_capabilities_zero": True,
         "filesystem_write_denied": True,
         "tmpfs_write_allowed": True,
+        "network_probe_tool_available": True,
+        "network_probe_tool_missing": False,
         "network_probe_denied": True,
+        "unshare_tool_available": True,
+        "unshare_tool_missing": False,
+        "unshare_escape_denied": True,
+        "unshare_escape_allowed": False,
+        "mount_escape_denied": True,
+        "mount_escape_allowed": False,
         "child_shell_allowed": True,
     }
     assert "CapEff" not in json.dumps(result)
