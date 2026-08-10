@@ -59,6 +59,20 @@ export interface DataQualityView {
   finding: string
 }
 
+export interface SourceHealthView {
+  source_id: string
+  symbol: string
+  state: string
+  last_event_age_seconds: number | null
+  freshness: string
+  reconnect_count: number
+  sequence_gap_count: number
+  disagreement_state: string
+  snapshot_recovery_state: string
+  actual_provider_identity: string
+  fail_closed: boolean
+}
+
 export interface IncidentView {
   incident_id: string
   severity: string
@@ -124,6 +138,7 @@ export interface DashboardOverview {
   services: ServiceView[]
   audit: AuditEventView[]
   live_readiness: LiveReadinessView
+  source_health: SourceHealthView[]
 }
 
 export type CommandKind =

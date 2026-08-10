@@ -9,6 +9,7 @@ before live transports exist.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -125,6 +126,24 @@ class DataQualityView(BaseModel):
     finding: str = Field(min_length=1)
 
 
+class SourceHealthView(BaseModel):
+    """Read-only projection of the latest Phase-3 source-health snapshot."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: str = Field(min_length=1)
+    symbol: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+    last_event_age_seconds: float | None = Field(default=None, ge=0)
+    freshness: str = Field(min_length=1)
+    reconnect_count: int = Field(default=0, ge=0)
+    sequence_gap_count: int = Field(default=0, ge=0)
+    disagreement_state: str = Field(min_length=1)
+    snapshot_recovery_state: str = Field(min_length=1)
+    actual_provider_identity: str = Field(min_length=1)
+    fail_closed: bool
+
+
 class IncidentView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -202,6 +221,7 @@ class DashboardOverview(BaseModel):
     services: tuple[ServiceView, ...]
     audit: tuple[AuditEventView, ...]
     live_readiness: LiveReadinessView
+    source_health: tuple[SourceHealthView, ...] = ()
 
     @model_validator(mode="after")
     def require_aware_as_of(self) -> DashboardOverview:
@@ -884,10 +904,16 @@ class DashboardProjection:
         ledgers: SqliteLedgers | None = None,
         runtime: Any | None = None,
         config_store: ConfigBundleStore | None = None,
+        source_health_path: Path | None = None,
     ) -> None:
         self._ledgers = ledgers
         self._runtime = runtime
         self._config_store = config_store
+        self._source_health_path = source_health_path or (
+            Path(os.environ["ADVISORAI_PHASE3_HEALTH_SNAPSHOT"])
+            if os.getenv("ADVISORAI_PHASE3_HEALTH_SNAPSHOT")
+            else None
+        )
         self._overview = (
             build_ledger_overview(ledgers)
             if ledgers is not None
@@ -927,7 +953,52 @@ class DashboardProjection:
                 )
             }
         )
-        return self._overview.model_copy(update={"as_of": current, "status": status})
+        return self._overview.model_copy(
+            update={
+                "as_of": current,
+                "status": status,
+                "source_health": self.source_health(),
+            }
+        )
+
+    def source_health(self) -> tuple[SourceHealthView, ...]:
+        """Load only the sanitized operator-facing health projection.
+
+        The dashboard never reads raw public spools and never receives a
+        transport or command callback from this path.
+        """
+
+        if self._source_health_path is None or not self._source_health_path.exists():
+            return ()
+        try:
+            payload = json.loads(self._source_health_path.read_text(encoding="utf-8"))
+            records = payload.get("sources") if isinstance(payload, dict) else None
+            if not isinstance(records, list):
+                return ()
+            views: list[SourceHealthView] = []
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                views.append(
+                    SourceHealthView(
+                        source_id=str(record["source_id"]),
+                        symbol=str(record["symbol"]),
+                        state=str(record["state"]),
+                        last_event_age_seconds=record.get("last_event_age_seconds"),
+                        freshness=str(record.get("freshness", "unmeasured")),
+                        reconnect_count=int(record.get("reconnect_count", 0)),
+                        sequence_gap_count=int(record.get("sequence_gap_count", 0)),
+                        disagreement_state=str(record.get("disagreement_state", "unmeasured")),
+                        snapshot_recovery_state=str(
+                            record.get("snapshot_recovery_state", "unmeasured")
+                        ),
+                        actual_provider_identity=str(record["actual_provider_identity"]),
+                        fail_closed=bool(record["fail_closed"]),
+                    )
+                )
+            return tuple(sorted(views, key=lambda item: (item.source_id, item.symbol)))
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return ()
 
     def receipt_for(self, idempotency_key: str) -> CommandReceipt | None:
         return self._receipts.get(idempotency_key)
@@ -1136,7 +1207,15 @@ def create_dashboard_app(
     ledger = SqliteLedgers(Path(ledger_path)) if ledger_path else None
     config_root = os.getenv("ADVISORAI_CONFIG_BUNDLE_PATH")
     bundle_store = ConfigBundleStore(Path(config_root)) if config_root else None
-    store = projection or DashboardProjection(ledgers=ledger, config_store=bundle_store)
+    store = projection or DashboardProjection(
+        ledgers=ledger,
+        config_store=bundle_store,
+        source_health_path=(
+            Path(os.environ["ADVISORAI_PHASE3_HEALTH_SNAPSHOT"])
+            if os.getenv("ADVISORAI_PHASE3_HEALTH_SNAPSHOT")
+            else None
+        ),
+    )
     login_limiter = LoginRateLimiter()
     password_hash = configured_password_hash()
     totp_secret = configured_totp_secret()
@@ -1323,6 +1402,10 @@ def create_dashboard_app(
     async def paper_cycles(_: Principal = Depends(principal_for)) -> tuple[RuntimeCycle, ...]:  # noqa: B008
         return store.paper_cycles()
 
+    @app.get("/api/v1/dashboard/source-health", response_model=tuple[SourceHealthView, ...])
+    async def source_health(_: Principal = Depends(principal_for)) -> tuple[SourceHealthView, ...]:  # noqa: B008
+        return store.source_health()
+
     @app.post("/api/v1/control/command", response_model=CommandReceipt)
     async def command(
         payload: DashboardCommandRequest,
@@ -1357,6 +1440,7 @@ __all__ = [
     "DashboardProjection",
     "DashboardStatus",
     "LiveReadinessView",
+    "SourceHealthView",
     "build_demo_overview",
     "build_ledger_overview",
     "create_dashboard_app",

@@ -1,9 +1,11 @@
 # AdvisorAI V3 gate matrix
 
-Checkpoint refreshed 2026-08-10 from `main`
-`b52ba086ab6bd19bfe6768c7e244dedf4b180193` after PR #86 merged; the
-checkpoint includes the supervised Binance qualification and the current
-stability heartbeat.
+Checkpoint refreshed 2026-08-10 from the clean `main` anchor
+`4bf26b3f7ef447fc8a676f70851fb07a03de2b30` (PRs #86–#88 merged). The
+Phase-3 durable source-health implementation is being prepared on branch
+`phase3-durable-source-health` at `6efa78d991947e125ae27d6d25ac9ab0812b04db`;
+its active real qualification root is recorded below and is not yet an
+admission record.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -112,6 +114,13 @@ did not provide complete minimum-quantity fields; Deribit remains context-only.
 Longer freshness, reconnect/resubscription, gap/snapshot recovery,
 outage/backoff, source disagreement, and no-silent-substitution failover are
 still pending.
+
+## Current Phase-3 durable source-health gate
+
+| Requirement | Implementation and tests | Real evidence | Current state / next action |
+|---|---|---|---|
+| Restartable unattended qualification | `scripts/run_phase3_public_data_qualification.py`; `src/advisorai/collectors/source_health.py`, `market_recovery.py`, `source_disagreement.py`, and `source_failover.py`; `tests/phase3/test_source_health_controls.py` plus Phase-3/data/dashboard suites | Active root `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`, PID `62977`; config code SHA-256 `030bca24e1844a04277e5c33afe028e9eddf0638279fefdf18f4523d129b3558`, `credentials_loaded=false`, `order_writes_attempted=false`; start `2026-08-10T23:13:21.437160Z`, target end `2026-08-11T01:13:21.437160Z` | IMPLEMENTED / TESTED / EXTERNALLY MEASURED / RUNNING / PENDING_EXTERNAL_EVIDENCE. Leave the process running; independently validate append-only hashes, timestamps, replay, recovery, disagreement, and failover after completion. |
+| Deterministic health and failover | Typed HEALTHY, DEGRADED, STALE, DISCONNECTED, RECOVERING, and QUARANTINED transitions; hash-chained transition ledger; explicit severe-disagreement abstention and fail-closed selection; sanitized read-only dashboard/API | Heartbeat, status, health transitions, source selection, disagreement, and observation logs are advancing in the active root; no credentials or execution writes are available to the public connectors | No Phase-3 admission yet. A stale/disconnected/quarantined source or severe disagreement remains fail-closed; source identity cannot silently change. |
 
 ## Current external blockers
 

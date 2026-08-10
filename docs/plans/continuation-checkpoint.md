@@ -1,7 +1,35 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-10 from clean `main`
-`b52ba086ab6bd19bfe6768c7e244dedf4b180193` after PR #86 merged.
+`4bf26b3f7ef447fc8a676f70851fb07a03de2b30` (PRs #86–#88 merged). The current
+Phase-3 implementation branch is `phase3-durable-source-health` at
+`6efa78d991947e125ae27d6d25ac9ab0812b04db`; it is pending merge and its
+active external evidence is listed below.
+
+## Current continuation update — durable Phase-3 qualification
+
+- PID `70598` remains untouched under
+  `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
+  Its latest read-only status is still running with passing cycles; no root was
+  restarted, concatenated, or modified.
+- PID `62977` is a separate durable, read-only Phase-3 qualification process at
+  `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`.
+  It started at `2026-08-10T23:13:21.437160Z`, targets
+  `2026-08-11T01:13:21.437160Z`, and uses code SHA-256
+  `030bca24e1844a04277e5c33afe028e9eddf0638279fefdf18f4523d129b3558`. Its
+  immutable config records `credentials_loaded=false` and
+  `order_writes_attempted=false`. Heartbeat, status, raw spool, observation,
+  selection, disagreement, and health-transition logs are append-only; the
+  result is not yet an admission record.
+- The implementation supplies deterministic HEALTHY/DEGRADED/STALE/
+  DISCONNECTED/RECOVERING/QUARANTINED transitions, provider-truth snapshot and
+  sequence recovery, severe-disagreement abstention, and explicit failover or
+  fail-closed selection. The dashboard/API projection is read-only and names
+  the actual current source.
+- Archive/rclone remains externally deferred and was not touched. Coinbase and
+  Binance execution evidence remain preserved. Phase 0 stability, Phase 3
+  continuous admission, Phases 4–6 real paper evidence, Phase 7, Phase 8 formal
+  admission, Phase 9, Alpha E0–E7, and Phase 10 human approval remain open.
 
 ## Current continuation update — Phase-3 source spine
 
@@ -76,8 +104,8 @@ The following supersedes the earlier pending-operator Binance bullets below.
 - Archive/rclone work is externally deferred and was not touched. The next
   legal independent work is Phase-3 source/reconnect evidence and truthful
   status updates while Phase-0 stability continues.
-- The latest locked verification passed 590 tests and all eleven acceptance
-  suites with results `128/152/126/55/19/34/10/7/27/18/5`.
+- The latest locked verification passed 598 tests and all eleven acceptance
+  suites with results `128/152/126/63/19/34/10/7/27/18/5`.
 - A fresh bounded Phase-3 REST/raw-first retry made seven public calls at
   `artifacts/phase3/source-qualification/20260810T201653.611706Z/phase3-v3-core-source-qualification.json`,
   SHA-256
