@@ -6,7 +6,7 @@ or 60-day operational gate.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
-| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, and durable Phase-0 gate records | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, and exact-route stability runner | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the DigitalOcean exact route has a durable 24-hour window with passing samples; selected local roles still require 24-hour stability and real rclone-provider restore |
+| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the DigitalOcean exact route has a durable 24-hour window with passing samples; selected local roles still require 24-hour stability; the controlled archive runner is implemented and fixture-tested but the first real attempt found no populated scoped archive values, made zero network calls, and remains pending |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission, and Coinbase Exchange Sandbox-specific CB-ACCESS signer/schema transport | `tests/execution`, `tests/integrations`, `tests/runtime`, `tests/integrations/test_coinbase_exchange.py` | Local Coinbase signer/product/OMS boundary tests pass. Real smoke reached the reviewed sandbox `/time` and `/products`; the returned catalogue omitted required `ETH-USD`, while authenticated account/balance/position/open-order reads passed and the product-filtered fills read returned sanitized HTTP 401. The read-only gate and paper lifecycle remain pending. Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor | `tests/data` | Parser/lineage fixtures pass; source availability dashboards need live soak |
@@ -105,6 +105,28 @@ DuckDB reads, the repository Hermes isolation boundary, and two in-memory
 rclone adapter restores. It records zero network calls, credentials, or paper
 orders. Real rclone/provider restore remains quarantined; the report does not
 record or imply a Phase-0 pass.
+
+## Two-provider rclone-crypt evidence
+
+The typed archive boundary now supports independent provider A/B raw and crypt
+aliases while preserving the historical singular adapter contract. The runner
+[`scripts/qualify_rclone_archive.py`](../../scripts/qualify_rclone_archive.py)
+uses only the `ARCHIVE_RCLONE` scope and passes a minimal process environment to
+`rclone`; it never sources `secrets.env` or persists command output.
+
+The first controlled real opt-in attempt was recorded at
+`artifacts/phase0/rclone-crypt-qualification/20260810T003430.872217Z/rclone-crypt-qualification.json`.
+It generated a fresh harmless source artifact, recorded source SHA-256
+`ee41a072488cf8c2982d1889a037078c3e65516a23c410c168ee794188e7ba31`, found no
+populated `RCLONE_CONFIG`/`RCLONE_CONFIG_PASS`/provider-pair values through the
+scoped resolver, and made zero network calls. The sanitized manifest SHA-256 is
+`fde44ab7ed3e0572c999b6a749f6eeeb718e39251e070939e71ad045ccfe7aed`; the
+canonical evidence SHA-256 is
+`fb044389dbcb9bbe52a469c9993bf8cc45d1c11c83dcdcf259e2d6d4bc5bd67b`. This is
+`IMPLEMENTED / FIXTURE-TESTED / PENDING_OPERATOR_ACTION`, not real provider
+measurement or qualification. The operator must populate the scoped values
+locally and rerun the explicit command in the rclone archive runbook. No manual
+copy/restore statement is promoted into repository admission evidence.
 
 The isolated DuckLake comparison is recorded at
 `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`

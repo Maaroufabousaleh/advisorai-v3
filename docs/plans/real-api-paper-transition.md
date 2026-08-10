@@ -52,7 +52,8 @@ Record these decisions before enabling a connector:
 3. Whether LiteLLM is selected or remains a quarantined candidate.
 4. Dedicated read-only/testnet-only API credentials, with provider-side IP,
    permission, quota, and withdrawal restrictions where available.
-5. Local data/state paths and a tested rclone-crypt archive remote.
+5. Local data/state paths and tested rclone-crypt archive remotes with
+   independent two-provider restore evidence.
 
 Every connector must have an owner, purpose, endpoint identity, data grade,
 quota/cost, version, rollback procedure, contract test, integration smoke test,
