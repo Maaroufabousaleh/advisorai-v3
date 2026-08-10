@@ -128,6 +128,14 @@ measurement or qualification. The operator must populate the scoped values
 locally and rerun the explicit command in the rclone archive runbook. No manual
 copy/restore statement is promoted into repository admission evidence.
 
+| Archive evidence class | Current state | Evidence truth |
+|---|---|---|
+| Adapter fixture-tested | `IMPLEMENTED / TESTED` | In-memory adapter and two-provider automation tests pass; no external claim |
+| Real Provider A upload/restore | `PENDING_OPERATOR_ACTION` | No scoped archive values were available; no Provider A call was made |
+| Real Provider B upload/restore | `PENDING_OPERATOR_ACTION` | No scoped archive values were available; no Provider B call was made |
+| Independent two-provider restore | `PENDING_OPERATOR_ACTION` | The manual statement is not promoted; controlled three-way SHA evidence is absent |
+| Failure/recovery qualification | `IMPLEMENTED / PENDING_EXTERNAL_EVIDENCE` | The runner contains deterministic outage/interruption/integrity drills; real survivor restores and provider reads have not run |
+
 The isolated DuckLake comparison is recorded at
 `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`
 with SHA-256
