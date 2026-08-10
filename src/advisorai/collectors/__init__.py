@@ -1,9 +1,37 @@
 """Deterministic V3-Core source collectors and quality monitoring."""
 
 from .acquisition import AcquisitionDecision, AcquisitionPolicy, AcquisitionStep
+from .market_recovery import SequenceRecoveryResult, recover_binance_depth, replay_equivalent
 from .official import AlfredCollector, SecEdgarCollector, VintagedReleaseCollector
 from .public_market_data import PublicMarketDataSource, reviewed_public_market_data_sources
 from .quality import DataQualityMonitor, DataQualityReport, QualityDashboard, QualityFinding
+from .source_disagreement import (
+    DisagreementAction,
+    SourceDisagreementObservation,
+    SourceDisagreementPolicy,
+    SourceQuote,
+    compare_source_quotes,
+)
+from .source_failover import (
+    SourceCandidate,
+    SourceSelectionDecision,
+    SourceSelectionState,
+    select_source,
+)
+from .source_health import (
+    ClockConfidence,
+    DisagreementState,
+    ReconnectState,
+    SequenceState,
+    SnapshotState,
+    SourceHealthLedger,
+    SourceHealthObservation,
+    SourceHealthPolicy,
+    SourceHealthState,
+    SourceHealthTransition,
+    evaluate_source_health,
+    transition_source_health,
+)
 from .sources import (
     CcxtCollector,
     DeribitCollector,
@@ -42,4 +70,28 @@ __all__ = [
     "SourceDescriptor",
     "PublicMarketDataSource",
     "reviewed_public_market_data_sources",
+    "ClockConfidence",
+    "DisagreementAction",
+    "DisagreementState",
+    "ReconnectState",
+    "SequenceRecoveryResult",
+    "SequenceState",
+    "SnapshotState",
+    "SourceCandidate",
+    "SourceDisagreementObservation",
+    "SourceDisagreementPolicy",
+    "SourceHealthLedger",
+    "SourceHealthObservation",
+    "SourceHealthPolicy",
+    "SourceHealthState",
+    "SourceHealthTransition",
+    "SourceQuote",
+    "SourceSelectionDecision",
+    "SourceSelectionState",
+    "compare_source_quotes",
+    "evaluate_source_health",
+    "recover_binance_depth",
+    "replay_equivalent",
+    "select_source",
+    "transition_source_health",
 ]

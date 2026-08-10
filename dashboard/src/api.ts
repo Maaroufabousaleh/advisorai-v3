@@ -3,6 +3,7 @@ import type {
   CommandReceipt,
   CommandRequest,
   DashboardOverview,
+  SourceHealthView,
 } from './types'
 
 const apiBase = (import.meta.env.VITE_API_BASE as string | undefined) ?? ''
@@ -31,6 +32,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const dashboardApi = {
   status: () => request<AuthStatus>('/api/v1/auth/status'),
   overview: () => request<DashboardOverview>('/api/v1/dashboard/overview'),
+  sourceHealth: () => request<SourceHealthView[]>('/api/v1/dashboard/source-health'),
   login: (password: string, totpCode: string) =>
     request<{ csrf_token: string; subject: string }>('/api/v1/auth/login', {
       method: 'POST',

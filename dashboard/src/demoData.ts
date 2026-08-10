@@ -72,4 +72,5 @@ export const demoOverview: DashboardOverview = {
     blockers: ['Phase 7 paper soak evidence not admitted', 'Explicit human Phase 10 authorization missing', 'Live venue credentials are disabled'],
     approval: 'sealed by Phase 10 guard',
   },
+  source_health: [],
 }
