@@ -1,8 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint captured 2026-08-10 from `main`
-`dfde626ac592bcdbf055d7a6074f98aff939a2cb` after PR #62 merged; this branch
-contains the subsequent level-2 qualification and route-failure remediation.
+Checkpoint captured 2026-08-10 on `main`
+`9851e699f7d8d16dd5c1d844bfc87baaa4bd216a` after PR #63 merged.
 
 ## Completed in this continuation
 
