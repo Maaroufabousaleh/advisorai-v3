@@ -1,7 +1,8 @@
 # AdvisorAI V3 gate matrix
 
-Checkpoint regenerated 2026-08-10 from `main` at
-`b2d110e1fc611a1c595ef27b6780c661bc3af5dd` after PR #82 merged.
+Checkpoint regenerated 2026-08-10 from the clean `main` baseline
+`645554f550fb6485af1e0f6e0d8be25f52b4e621` before the supervised Binance
+qualification continuation.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -13,8 +14,8 @@ interruption record SHA-256 is
 `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. The
 absolute-path runner fix is implemented and regression-tested; a one-cycle
 cwd-fix smoke passed with all three candidates, while fresh r3 is active under
-PID `70598` from `2026-08-10T18:07:25.593600Z` with thirteen passing cycles and
-last record SHA-256 `9422faadb1f232d2b1ba98fb5cb2b7e16537af24755c2bcc97e649f735ffb821`. State remains
+PID `70598` from `2026-08-10T18:07:25.593600Z` with 25 passing cycles and
+last record SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`. State remains
 `PENDING_STABILITY`; no predecessor cycles are concatenated and no roster role
 is promoted. The prompt-named non-r3 root remains append-only and is not
 modified; its status file still names PID `12973`, while that PID is no longer
@@ -24,7 +25,7 @@ under PID `70598`.
 | Stage / requirement | Authoritative source | Implementation present? | Automated tests? | Local deterministic evidence? | Real external evidence? | Timed evidence? | Human action? | Current gate state | Blocker | Next admissible action |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | Phase 0 contracts, ports, policy gateway, model/runtime harness | architecture §11; phase-00 plan | yes | yes | yes | no | no | no | TESTED / LOCALLY MEASURED | none for local boundary | Preserve accepted local records; do not treat them as admission |
-| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with thirteen passing cycles and last record SHA-256 `9422faadb1f232d2b1ba98fb5cb2b7e16537af24755c2bcc97e649f735ffb821` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
+| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with 25 passing cycles and last record SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
 | Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner with stop-on-failure | yes | short live route evidence plus preserved hash-chained failures | yes, exact provider/model/endpoint identity on earlier successful samples; current retries failed closed | pending 24-hour window | provider availability/time-dependent | EXTERNALLY MEASURED / QUARANTINED | Novita and DigitalOcean roots are quarantined after shared-pool HTTP 429, deadline exhaustion, and earlier runner-integrity incidents; corrected root `artifacts/phase0/remote-route-stability/20260810T053600Z` stopped after its first failed probe and has no eligible duration evidence | Preserve incident roots; retry the reviewed exact route only after provider availability returns, using a fresh systemd-backed root; never concatenate failed samples |
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
@@ -33,8 +34,9 @@ under PID `70598`.
 | Phase 0 resource/privacy/failure behavior | phase-00 plan; resource and gateway runbooks | yes | yes | yes | partial route observations | stability pending | no | TESTED / PENDING_STABILITY | selected runtime duration and real route repetition remain incomplete | Continue durable stability and bounded route evidence |
 | Phase 1 deterministic foundation and local rollback/Bronze rebuild | phase-01 plan | yes | yes | immutable local report | no provider deployment | no | no | QUALIFIED LOCALLY | real paper deployment rollback and archive restore remain external | Preserve local report; run provider-specific drill only after venue setup |
 | Phase 2 deterministic paper core and Coinbase Exchange Sandbox transport | phase-02 plan; real-api-paper-transition.md | yes; Coinbase-specific `CB-ACCESS-*` signer, schema mapper, exact sandbox host guard, and read-only smoke runner | yes, including `tests/integrations/test_coinbase_exchange.py` | replay/failure fixtures plus signer/product/OMS boundary tests | partial: real Coinbase `/time`, `/products`, `/accounts`, `/orders`, and `/fills` requests reached the reviewed sandbox; account/balance/position/open-order reads passed, but product mapping and fills did not | no | provider catalogue/profile and fills-permission action | EXTERNALLY MEASURED / PENDING_OPERATOR_ACTION | the returned 13-product sandbox catalogue contained `BTC-USD` but not the required `ETH-USD`; the product-filtered fills read returned HTTP 401; no order writes were attempted | Preserve the Coinbase evidence and rerun only if a reviewed sandbox profile genuinely exposes both required products and grants the documented fills read permission; never fall back to the generic smoke or production |
-| Phase 2 selected BTC/ETH paper venue candidate — Binance Spot Testnet | phase-02 plan; real-api-paper-transition.md; paper-venue-selection.md | yes; provider-specific HMAC signer, exact testnet host/path guard, product/filter mapper, account/balance/position/order/fill schema mapper, scoped read-only smoke, and existing `NativeTransport` boundary | yes, `tests/integrations/test_binance_spot.py`, `tests/integrations/test_paper_venue_bakeoff.py`, plus offline config/path tests | signer, provider schema, idempotent write, restart-query, production/transfer rejection fixtures, and credential-free ordered Binance/Bybit comparison runner | Binance and Bybit testnet public APIs both measured server time, BTC/ETH product truth and filters, BTC/ETH order books, and public trades. Immutable comparison: `artifacts/phase2/paper-venue-bakeoff/20260810T190539.057729Z/paper-venue-candidate-bakeoff.json`, SHA-256 `78d8034c56a1b651da968129e463d73d23745a95565e1d9e80092a0bbd569b3a`; Binance selected by the ordered preference rule; authenticated reads not yet run | no | operator must review the single `PAPER_VENUE` profile for the exact Binance testnet host and create/restrict testnet API credentials | IMPLEMENTED / TESTED / EXTERNALLY MEASURED / PENDING_OPERATOR_ACTION | public product truth passes for both candidates, but the current scoped profile is still Coinbase and no authenticated Binance read-only smoke or paper order has been admitted | Run `scripts/check_transition_config.py` with `testnet.binance.vision`, then the explicit opt-in `scripts/smoke_binance_spot_testnet.py`; do not send an order until all read-only operations pass |
+| Phase 2 selected BTC/ETH paper venue candidate — Binance Spot Testnet | phase-02 plan; real-api-paper-transition.md; paper-venue-selection.md | yes; provider-specific HMAC signer, exact testnet host/path guard, product/filter mapper, account/balance/position/order/fill schema mapper, top-of-book read, scoped read-only smoke, supervised lifecycle runner, and existing `NativeTransport` boundary | yes, `tests/integrations/test_binance_spot.py`, `tests/integrations/test_binance_spot_lifecycle.py`, `tests/integrations/test_paper_venue_bakeoff.py`, plus offline config/path tests | signer, provider schema, idempotent write, restart-query, production/transfer rejection fixtures, deterministic lifecycle/failure-drill tests, and credential-free ordered Binance/Bybit comparison runner | Fresh authenticated read-only evidence passed all eight required operations at `artifacts/phase2/binance-spot-testnet/read-only-smoke/20260810T193840.598161Z/binance-spot-testnet-read-only-smoke.json`, SHA-256 `c365d4042a67214a3ff1fe1f7bdca34f38e46e78bfff920146873e5ab4a80f72`, configuration hash `b41638ffc13149796f29676826b54097d2e7c417d9e4b1ff4d72be6d12f87286`; one supervised fake-funds `LIMIT_MAKER` BTCUSDT lifecycle then measured one signed POST, one signed DELETE, authoritative query/reconciliation, restart hydration, TCA/zero-residual attribution, and no real fill at `artifacts/phase2/binance-spot-testnet/paper-lifecycle/20260810T195818.312420Z/binance-spot-testnet-paper-lifecycle.json`, SHA-256 `db52d6a3db56a742eb1b2e4dd47abe5e43884ef768c32d34dac2483f81c33c70`; no transfer/withdrawal/production call | no | no new operator action for this venue-specific paper qualification; real fill and longer source/soak evidence remain separate gates | EXTERNALLY MEASURED / QUALIFIED / PENDING_BASE_GATES | the Binance venue/read-only/cancel lifecycle is measured and qualified for the observed no-fill path; real fill ingestion remains unobserved, and Phase 0 stability plus Phase 3–7 admission gates remain open | Preserve the immutable evidence and use Binance only through the existing RiskKernel → OMS chain; do not repeat a signed order merely to obtain a fill |
 | Phase 3 V3-Core source spine | phase-03 plan; real-api-paper-transition.md | yes, including bounded raw-first REST/WSS qualification runners, native event-time normalization, WSS freshness measurement, and a separate Coinbase level-2 book reducer | yes, `tests/data`, `tests/phase3/test_source_qualification.py`, `tests/phase3/test_coinbase_wss_qualification.py`, `tests/phase3/test_coinbase_level2_qualification.py` | parser/replay fixtures | partial: the latest bounded REST retry still records BTC-USD native ticker, Deribit index, and SEC RSS replay passes, Coinbase ETH-USD 404, and GDELT 429; ticker WSS freshness passed but provider sequence gaps were observed; public `level2_batch` measured one BTC-USD snapshot, 79 updates, and 12 heartbeats with zero book-validation failures and matching replay state | no continuous source operation | no, reviewed public endpoints only | EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE | REST root `artifacts/phase3/source-qualification/20260810T044558.818461Z` has 3 passes/2 failures; ticker WSS remains gap-flagged; direct `level2` had no snapshot, while `level2_batch` bounded evidence passed | Preserve immutable REST/WSS/level2 roots; collect longer freshness, reconnect/recovery, and source-disagreement evidence without substituting sources |
+| Phase 3 latest REST retry | phase-03 plan; real-api-paper-transition.md | raw-first public REST qualification runner | `tests/phase3/test_source_qualification.py` | replay/duplicate-append/freshness fixtures | Fresh root `artifacts/phase3/source-qualification/20260810T201653.611706Z/phase3-v3-core-source-qualification.json`, SHA-256 `60cac1ba77fa31735c87b02e29125985e9d4e69b2e592886e317b0ed61ecca01`, made seven public calls: Coinbase BTC-USD ticker, Deribit index, and SEC RSS passed; Coinbase ETH-USD returned HTTP 404 and GDELT HTTP 429 | no | no | EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE | the provider failures remain real external availability/product truth; continuous freshness, reconnect/recovery, and independent-source disagreement remain unmeasured | Preserve the root; do not substitute ETH or GDELT data, and collect the next independent Phase-3 evidence only when available |
 | Phase 3 current evidence addendum | phase-03 plan; real-api-paper-transition.md | Binance public depth qualifier, raw snapshot/update replay, and bounded provider/local clock-offset measurement are implemented | `tests/phase3/test_binance_depth_qualification.py`; Phase-3 acceptance includes it | reducer, replay, clock-offset, and deterministic fault-drill fixtures | bounded root `artifacts/phase3/binance-spot-testnet-depth/20260810T173135.489992Z/phase3-binance-spot-testnet-depth.json`, SHA-256 `b794c7fd2c014c89928c7bf2ad4b73fde253a615818dddd27a4da53a025c76c0`: four BTC/ETH snapshots and 289 updates replay-equivalent; all four connections completed; provider event timestamps were ahead of local receipt. A fresh requested 120-second root `artifacts/phase3/binance-spot-testnet-depth/20260810T182011.404029Z/phase3-binance-spot-testnet-depth.json`, SHA-256 `7b249a125c78e346c7b9d028850e2b7cbf004c890e005bad6f6f8d70b92ddd08`, failed closed before the first message on all four WSS attempts with `WebSocketTransportError`; both reports predate the offset implementation, and no REST snapshot or write was attempted in the fresh root | no continuous window | no | EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE | prior real freshness failure plus a subsequent provider/runtime WSS availability failure; independent source disagreement remains unmeasured | preserve both immutable roots; retry only after availability is reviewed, then run the offset-aware qualifier and collect recovery and independent-source disagreement |
 | Phase 4 quantitative baseline council | phase-04 plan | yes | yes | public-data bake-off and roster | no paper utility | stability pending | no | LOCALLY MEASURED / PENDING_STABILITY | role winners require stability; paper net utility is later | Finish Phase 0 stability, then collect real paper outcomes |
 | Phase 5 typed evidence council | phase-05 plan | yes | yes | independence/authority fixtures | no real V3-Core scored council | no | no | TESTED / PENDING_EXTERNAL_EVIDENCE | real source/model/provider route and data are absent | Exercise with admitted real V3-Core data after earlier gates |
@@ -43,7 +45,7 @@ under PID `70598`.
 | Phase 8 Hermes capability lifecycle | phase-08 plan | yes, including disposable Docker boundary probe | yes, including `tests/capabilities/test_os_sandbox_probe.py` | immutable fixture active-read report plus real local Docker boundary measurement | partial: pinned external runtime/synthetic task; no real model route or real Hermes capability task | no | review required for active-write only | EXTERNALLY MEASURED / QUARANTINED | Docker measured network denial, read-only root denial, zero effective capabilities, and bounded process controls, but native syscall/C-extension containment and credential/production-tree isolation are not attested; earlier gates remain closed | Preserve the OS-boundary report; evaluate a real isolated Hermes capability only after earlier phase gates and stronger containment evidence permit it |
 | Phase 9 controlled expansion | phase-09 plan | yes | yes | challenger/source boundaries | no marginal-value challenger evidence | no | no | QUARANTINED | Phase 0–7 and E0 are not satisfied | Keep additions quarantined; reject challengers with evidence when evaluated |
 | Phase 10 bounded-live readiness guards | phase-10 plan | yes | yes | readiness/AI-offline fixtures | no live validation | no | explicit human approval required | PENDING_OPERATOR_ACTION | Phase 7 and all prerequisites incomplete; no human authorization | Keep live closed; do not create approval or enable production |
-| Real API/paper transition bridge | real-api-paper-transition.md; Coinbase and Binance connector runbooks | yes | yes | offline config/adapter evidence, Coinbase and Binance contract tests | partial: Coinbase private reads reached the reviewed sandbox but failed required product/fills checks; Binance public server/product truth measured both required symbols | no | operator venue selection/profile review and Binance testnet credentials | EXTERNALLY MEASURED / PENDING_OPERATOR_ACTION | Coinbase cannot satisfy the required ETH-USD/fills gate from the observed sandbox; Binance authenticated read-only evidence and paper lifecycle are still absent | Keep Coinbase quarantined, review the Binance Spot Testnet profile in the canonical `PAPER_VENUE` inventory, then run the Binance-specific read-only smoke; no generic smoke or production fallback |
+| Real API/paper transition bridge | real-api-paper-transition.md; Coinbase and Binance connector runbooks | yes | yes | offline config/adapter evidence, Coinbase and Binance contract tests, supervised Binance lifecycle tests | Coinbase private reads remain partial; Binance authenticated read-only, provider-filtered BTC/ETH mapping, and one supervised fake-funds cancellation lifecycle are externally measured and preserved | no | no new venue operator action; later fill/soak gates remain supervised | EXTERNALLY MEASURED / QUALIFIED / PENDING_BASE_GATES | Coinbase cannot satisfy the required ETH-USD/fills gate; Binance is usable for the observed no-fill paper path, while real fill, Phase 0 stability, Phase 3 operational source, and later Phase 4–7 evidence remain open | Keep Coinbase quarantined; continue Phase 3 independently and use the selected Binance adapter only behind deterministic RiskKernel and authoritative OMS |
 | Alpha E0 — V3-Core prerequisite | alpha-team-extension.md | plan-only | none | none beyond base evidence | no | inherits Phase 0–7 | no | BLOCKED | Phase 0–7 paper/recovery/data/risk/resource gates are not complete | Do not implement Alpha runtime; continue base gates |
 | Alpha E1 — Research Brain | alpha-team-extension.md | no, plan-only | no | no | no | no | no | BLOCKED | E0 and Phase 7 prerequisite | Wait; only maintain plan/traceability |
 | Alpha E2 — Controlled Alpha Lab | alpha-team-extension.md | no, plan-only | no | no | no | no | no | BLOCKED | E0/E1 gates | Do not build DSL or candidate runtime early |
@@ -52,6 +54,17 @@ under PID `70598`.
 | Alpha E5 — equities / long horizon | alpha-team-extension.md | no, plan-only | no | no | no | no | no | BLOCKED | E4 and point-in-time equity gate | No equity expansion |
 | Alpha E6 — controlled candidate expansion | alpha-team-extension.md | no, plan-only | no | no | 60+ healthy paper days required | no | BLOCKED | E5 and per-scope soak | No candidate activation |
 | Alpha E7 — bounded-live scope | alpha-team-extension.md | no, plan-only | no | no | no | human approval required | BLOCKED | Phase 10 explicit go-live review | No live scope or approval |
+
+## Latest Phase-3 Binance WSS availability retry
+
+A further bounded 20-second retry at
+`artifacts/phase3/binance-spot-testnet-depth/20260810T201946.533716Z/phase3-binance-spot-testnet-depth.json`
+has SHA-256
+`ce402b7bdd67513c90b1cc5bf744d0a8d455a6f1b7f927610a84f997699b8415`.
+All four public WSS connections failed closed before their first message with
+`WebSocketTransportError`, made zero REST calls, and passed deterministic
+fault drills. This is provider/runtime availability evidence, not a
+freshness, reconnect, or Phase-3 admission pass.
 
 ## Current external blockers
 
@@ -70,19 +83,29 @@ under PID `70598`.
   No order, cancel, transfer, or withdrawal was attempted.
 - Binance Spot Testnet is the selected BTC/ETH replacement candidate. Its
   public, credential-free qualifier measured server time and provider product
-  truth for both `BTCUSDT` and `ETHUSDT`. Evidence is at
-  `artifacts/phase2/binance-spot-testnet/public-truth/20260810T165904.357047Z/binance-spot-testnet-public-truth.json`
+  truth for both `BTCUSDT` and `ETHUSDT`. Fresh authenticated read-only
+  evidence then passed server time, products, BTC/ETH mapping, account,
+  balances, positions, open orders, and fills at
+  `artifacts/phase2/binance-spot-testnet/read-only-smoke/20260810T193840.598161Z/binance-spot-testnet-read-only-smoke.json`
   with SHA-256
-  `34af4ef5649c0d0b92635507b422d7217c8a83f72156a6e2d99561e6da6d56e6`.
-  The provider-specific adapter and private smoke are implemented and tested;
-  authenticated Binance evidence remains pending because the canonical scoped
-  `PAPER_VENUE` profile has not yet been reviewed/switched to Binance. No
-  Binance credential value was printed or persisted, and no order was sent.
-- The Binance private smoke requires the operator to review the existing single
-  `PAPER_VENUE` inventory for the exact `testnet.binance.vision` host and
-  restricted fake-funds credentials, then run the explicit `--secrets`
-  command in `docs/runbooks/binance-spot-testnet.md`. A second secrets file is
-  not allowed.
+  `c365d4042a67214a3ff1fe1f7bdca34f38e46e78bfff920146873e5ab4a80f72`.
+  One supervised fake-funds `LIMIT_MAKER` lifecycle then passed the
+  deterministic RiskKernel → OMS → Binance transport → reconciliation chain
+  with one signed submission, one cancellation, restart recovery, TCA, zero
+  unexplained attribution residuals, and deterministic failure drills. Its
+  report is at
+  `artifacts/phase2/binance-spot-testnet/paper-lifecycle/20260810T195818.312420Z/binance-spot-testnet-paper-lifecycle.json`
+  with SHA-256
+  `db52d6a3db56a742eb1b2e4dd47abe5e43884ef768c32d34dac2483f81c33c70`.
+  The real path observed no fill; fill ingestion remains fixture-tested. No
+  Binance credential value was printed or persisted, and no production,
+  transfer, or withdrawal endpoint was called.
+- The final-source read-only rerun is immutable evidence at
+  `artifacts/phase2/binance-spot-testnet/read-only-smoke/20260810T201450.306674Z/binance-spot-testnet-read-only-smoke.json`
+  with SHA-256
+  `b3a8b54f446599b50547bab98240db0fe8e1380fd969a6a220fccac1c83fe8e7` and
+  adapter source SHA-256
+  `ec3077cc726a045420c714f99c5c2e026351190348fdc9779f96e21cff034e0d`.
 - The current zero-network resolver check passes against the canonical
   repository-local secrets inventory with configuration hash
   `138042cd88c96e9d3079493beee740ba1e96def1ea748c361e51bd8ea88094cf`; no
@@ -116,8 +139,9 @@ under PID `70598`.
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2`
   is preserved as interrupted after eight passing cycles; its interruption
   record SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`.
-  Fresh r3 is active under PID `70598` with seven passing cycles; do not
-  concatenate roots.
+  Fresh r3 is active under PID `70598` with 25 passing cycles and last record
+  SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`;
+  do not concatenate roots.
 - DuckLake comparison is complete and rejected with measured evidence at
   `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`.
 - The pinned upstream Hermes review is complete as partial external-runtime

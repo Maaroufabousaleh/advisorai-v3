@@ -131,6 +131,32 @@ def test_binance_product_truth_requires_btc_and_eth():
         transport.verify_symbol_mappings(_symbols()[:1])
 
 
+def test_binance_book_ticker_is_public_and_bound_to_an_admitted_symbol():
+    responses = [
+        (
+            200,
+            json.dumps(
+                {
+                    "symbol": "BTCUSDT",
+                    "bidPrice": "100.00",
+                    "bidQty": "1.0",
+                    "askPrice": "100.10",
+                    "askQty": "2.0",
+                }
+            ).encode(),
+            (),
+        )
+    ]
+    transport, calls = _transport(responses)
+    transport.verify_symbol_mappings(_symbols())
+    ticker = transport.book_ticker("BTCUSDT")
+    assert ticker["symbol"] == "BTCUSDT"
+    assert ticker["bidPrice"] == "100.00"
+    assert "X-MBX-APIKEY" not in calls[0][2]
+    with pytest.raises(VenueTransportError, match="not admitted"):
+        transport.book_ticker("SOLUSDT")
+
+
 def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
     responses = [
         (200, json.dumps({"serverTime": 1700000000000}).encode(), ()),
