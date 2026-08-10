@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint regenerated 2026-08-10 from `main` at
-`d9d07d28a1e170666b136ac4fba5df24014e6ef1` after PR #52 merged.
+`de573ba22ccf10b8b705d7de5a5243045e59dd1b` after PR #53 merged.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
