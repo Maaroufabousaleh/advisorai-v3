@@ -170,3 +170,13 @@ sequence-gap, stale-data, and snapshot-disagreement drills passed. This is
 real partial source evidence, not Phase-3 admission. Clock-synchronized
 freshness, recovery/resubscription, longer unattended operation, and
 independent source-disagreement evidence remain pending.
+
+A fresh requested 120-second run on 2026-08-10 was preserved separately at
+`artifacts/phase3/binance-spot-testnet-depth/20260810T182011.404029Z/phase3-binance-spot-testnet-depth.json`
+with SHA-256
+`7b249a125c78e346c7b9d028850e2b7cbf004c890e005bad6f6f8d70b92ddd08`.
+All four public WSS attempts failed closed before their first message with the
+sanitized `WebSocketTransportError` class; no REST snapshot or write was
+attempted. The deterministic drills still passed. This is a provider/runtime
+availability failure, not a longer-operation pass; preserve it and do not
+concatenate it with the earlier bounded root.
