@@ -2,6 +2,7 @@
 
 from .acquisition import AcquisitionDecision, AcquisitionPolicy, AcquisitionStep
 from .official import AlfredCollector, SecEdgarCollector, VintagedReleaseCollector
+from .public_market_data import PublicMarketDataSource, reviewed_public_market_data_sources
 from .quality import DataQualityMonitor, DataQualityReport, QualityDashboard, QualityFinding
 from .sources import (
     CcxtCollector,
@@ -39,4 +40,6 @@ __all__ = [
     "QualityFinding",
     "RSSCollector",
     "SourceDescriptor",
+    "PublicMarketDataSource",
+    "reviewed_public_market_data_sources",
 ]

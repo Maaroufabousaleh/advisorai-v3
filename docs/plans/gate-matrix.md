@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-10 from `main`
-`738c1057a86d40961768ac539397caf103f8c862` after PR #84 merged; the
+`687597bdbb59514a6f35d099ce49195401412e95` after PR #85 merged; the
 checkpoint includes the supervised Binance qualification and the current
 stability heartbeat.
 This matrix separates implementation, tests, local measurements, external
@@ -15,8 +15,9 @@ interruption record SHA-256 is
 `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. The
 absolute-path runner fix is implemented and regression-tested; a one-cycle
 cwd-fix smoke passed with all three candidates, while fresh r3 is active under
-PID `70598` from `2026-08-10T18:07:25.593600Z` with 26 passing cycles and
-last record SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`. State remains
+PID `70598` from `2026-08-10T18:07:25.593600Z` with 37 passing cycles as of
+`2026-08-10T21:20:29.661771Z` and last record SHA-256
+`39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`. State remains
 `PENDING_STABILITY`; no predecessor cycles are concatenated and no roster role
 is promoted. The prompt-named non-r3 root remains append-only and is not
 modified; its status file still names PID `12973`, while that PID is no longer
@@ -26,7 +27,7 @@ under PID `70598`.
 | Stage / requirement | Authoritative source | Implementation present? | Automated tests? | Local deterministic evidence? | Real external evidence? | Timed evidence? | Human action? | Current gate state | Blocker | Next admissible action |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | Phase 0 contracts, ports, policy gateway, model/runtime harness | architecture §11; phase-00 plan | yes | yes | yes | no | no | no | TESTED / LOCALLY MEASURED | none for local boundary | Preserve accepted local records; do not treat them as admission |
-| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with 26 passing cycles and last record SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
+| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with 37 passing cycles as of `2026-08-10T21:20:29.661771Z` and last record SHA-256 `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
 | Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner with stop-on-failure | yes | short live route evidence plus preserved hash-chained failures | yes, exact provider/model/endpoint identity on earlier successful samples; current retries failed closed | pending 24-hour window | provider availability/time-dependent | EXTERNALLY MEASURED / QUARANTINED | Novita and DigitalOcean roots are quarantined after shared-pool HTTP 429, deadline exhaustion, and earlier runner-integrity incidents; corrected root `artifacts/phase0/remote-route-stability/20260810T053600Z` stopped after its first failed probe and has no eligible duration evidence | Preserve incident roots; retry the reviewed exact route only after provider availability returns, using a fresh systemd-backed root; never concatenate failed samples |
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
@@ -39,6 +40,7 @@ under PID `70598`.
 | Phase 3 V3-Core source spine | phase-03 plan; real-api-paper-transition.md | yes, including bounded raw-first REST/WSS qualification runners, native event-time normalization, WSS freshness measurement, and a separate Coinbase level-2 book reducer | yes, `tests/data`, `tests/phase3/test_source_qualification.py`, `tests/phase3/test_coinbase_wss_qualification.py`, `tests/phase3/test_coinbase_level2_qualification.py` | parser/replay fixtures | partial: the latest bounded REST retry still records BTC-USD native ticker, Deribit index, and SEC RSS replay passes, Coinbase ETH-USD 404, and GDELT 429; ticker WSS freshness passed but provider sequence gaps were observed; public `level2_batch` measured one BTC-USD snapshot, 79 updates, and 12 heartbeats with zero book-validation failures and matching replay state | no continuous source operation | no, reviewed public endpoints only | EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE | REST root `artifacts/phase3/source-qualification/20260810T044558.818461Z` has 3 passes/2 failures; ticker WSS remains gap-flagged; direct `level2` had no snapshot, while `level2_batch` bounded evidence passed | Preserve immutable REST/WSS/level2 roots; collect longer freshness, reconnect/recovery, and source-disagreement evidence without substituting sources |
 | Phase 3 latest REST retry | phase-03 plan; real-api-paper-transition.md | raw-first public REST qualification runner | `tests/phase3/test_source_qualification.py` | replay/duplicate-append/freshness fixtures | Fresh root `artifacts/phase3/source-qualification/20260810T201653.611706Z/phase3-v3-core-source-qualification.json`, SHA-256 `60cac1ba77fa31735c87b02e29125985e9d4e69b2e592886e317b0ed61ecca01`, made seven public calls: Coinbase BTC-USD ticker, Deribit index, and SEC RSS passed; Coinbase ETH-USD returned HTTP 404 and GDELT HTTP 429 | no | no | EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE | the provider failures remain real external availability/product truth; continuous freshness, reconnect/recovery, and independent-source disagreement remain unmeasured | Preserve the root; do not substitute ETH or GDELT data, and collect the next independent Phase-3 evidence only when available |
 | Phase 3 current evidence addendum | phase-03 plan; real-api-paper-transition.md | Binance public depth qualifier, raw snapshot/update replay, and bounded provider/local clock-offset measurement are implemented | `tests/phase3/test_binance_depth_qualification.py`; Phase-3 acceptance includes it | reducer, replay, clock-offset, and deterministic fault-drill fixtures | bounded root `artifacts/phase3/binance-spot-testnet-depth/20260810T173135.489992Z/phase3-binance-spot-testnet-depth.json`, SHA-256 `b794c7fd2c014c89928c7bf2ad4b73fde253a615818dddd27a4da53a025c76c0`: four BTC/ETH snapshots and 289 updates replay-equivalent; all four connections completed; provider event timestamps were ahead of local receipt. A fresh requested 120-second root `artifacts/phase3/binance-spot-testnet-depth/20260810T182011.404029Z/phase3-binance-spot-testnet-depth.json`, SHA-256 `7b249a125c78e346c7b9d028850e2b7cbf004c890e005bad6f6f8d70b92ddd08`, failed closed before the first message on all four WSS attempts with `WebSocketTransportError`; both reports predate the offset implementation, and no REST snapshot or write was attempted in the fresh root | no continuous window | no | EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE | prior real freshness failure plus a subsequent provider/runtime WSS availability failure; independent source disagreement remains unmeasured | preserve both immutable roots; retry only after availability is reviewed, then run the offset-aware qualifier and collect recovery and independent-source disagreement |
+| Phase 3 public market-data plane and execution separation | phase-03 plan; real-api-paper-transition.md | yes; credential-free reviewed public REST/WSS source cards, raw-first bake-off, provider-time metadata, product/filter truth, and explicit no-write separation from Binance Spot Testnet execution | yes, `tests/data/test_public_market_data.py` and WSS/depth regression suites | deterministic source-card/selection tests and replay boundaries | v2 root `artifacts/phase3/public-market-data-qualification/20260810T211233.301638Z/phase3-public-market-data-qualification.json`, SHA-256 `14df66c9cb142598c0cca98d653af2896bb08c6faea2dc6c7221ed71d5a51c41`: Binance public BTCUSDT/ETHUSDT completed four full read-only windows, two reconnects per symbol, adjusted freshness passed after a measured 0.794-second provider/local offset, and real Coinbase-vs-Binance BTC/ETH top-of-book observations were recorded; Coinbase had one adjusted-future session and Deribit remained context-only | no continuous unattended window | no | EXTERNALLY MEASURED / PARTIAL / PENDING_EXTERNAL_EVIDENCE | longer unattended operation, sequence/snapshot recovery, source disagreement policy, and provider failover are not yet admitted; Binance Testnet WSS remains intermittent and is not silently substituted | Run longer independent source windows, recovery, and explicit failover drills; keep execution writes confined to the admitted Binance transport |
 | Phase 4 quantitative baseline council | phase-04 plan | yes | yes | public-data bake-off and roster | no paper utility | stability pending | no | LOCALLY MEASURED / PENDING_STABILITY | role winners require stability; paper net utility is later | Finish Phase 0 stability, then collect real paper outcomes |
 | Phase 5 typed evidence council | phase-05 plan | yes | yes | independence/authority fixtures | no real V3-Core scored council | no | no | TESTED / PENDING_EXTERNAL_EVIDENCE | real source/model/provider route and data are absent | Exercise with admitted real V3-Core data after earlier gates |
 | Phase 6 institutional controls and attribution | phase-06 plan | yes | yes | deterministic risk/attribution fixtures | no real paper order sample | no | no | TESTED / PENDING_EXTERNAL_EVIDENCE | real paper fills and residual incidents are absent | Run the complete paper chain and reconcile exact attribution |
@@ -66,6 +68,50 @@ All four public WSS connections failed closed before their first message with
 `WebSocketTransportError`, made zero REST calls, and passed deterministic
 fault drills. This is provider/runtime availability evidence, not a
 freshness, reconnect, or Phase-3 admission pass.
+
+## Latest Phase-3 WSS layer diagnosis
+
+The credential-free diagnostic at
+`artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json`
+has SHA-256
+`8690b776e6e4237de9f4fe5ff775eb4da1cb7e16efbd11e2c3bd1fd5f2789e1b`.
+DNS resolved, TCP connectivity succeeded, and TLS negotiated TLS 1.3. The
+isolated locked transition runtime reported `websockets` 16.1.1; direct BTC
+and ETH attempts reached first public market messages on successful attempts,
+valid subscriptions received acknowledgements, and BTC reconnect passed. ETH
+had one connection timeout before a later successful attempt. The final
+classification is `websocket_connection_timeout`, not provider-unavailable.
+The earlier `.venv` probe is preserved separately as a local missing-library
+classification with SHA-256
+`bc08d878e70193368bea67981a24ba3033704314e61626f7c796951caa13da9f`.
+Malformed subscriptions were not sent.
+
+The post-diagnostic depth run at
+`artifacts/phase3/binance-spot-testnet-depth/20260810T211531.293435Z/phase3-binance-spot-testnet-depth.json`
+has SHA-256
+`f75f4e25ba48d923df4cba4e29d7ccf4b45e7382a05b5f63bb3a500b8b59fcde`.
+It captured an ETH stream with live/replay equivalence and preserved a BTC
+connection failure plus adjusted-future fail-closed results on other streams.
+The preserved report is partial
+operational evidence, not a Phase-3 admission.
+
+## Public market-data plane selection
+
+The credential-free public bake-off selected Binance public market data as the
+current primary candidate at
+`artifacts/phase3/public-market-data-qualification/20260810T211233.301638Z/phase3-public-market-data-qualification.json`
+with SHA-256
+`14df66c9cb142598c0cca98d653af2896bb08c6faea2dc6c7221ed71d5a51c41`.
+It verified public product truth, filters, books, trades, server time, four
+full BTC/ETH WSS windows, two reconnects per symbol, adjusted freshness, and
+cross-source top-of-book observations without credentials or write methods.
+The source card is separate from the Binance Spot Testnet execution
+adapter; it does not load broker credentials and cannot submit orders. Coinbase
+public data remains an unselected candidate because its current product records
+did not provide complete minimum-quantity fields; Deribit remains context-only.
+Longer freshness, reconnect/resubscription, gap/snapshot recovery,
+outage/backoff, source disagreement, and no-silent-substitution failover are
+still pending.
 
 ## Current external blockers
 
@@ -140,8 +186,9 @@ freshness, reconnect, or Phase-3 admission pass.
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2`
   is preserved as interrupted after eight passing cycles; its interruption
   record SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`.
-  Fresh r3 is active under PID `70598` with 26 passing cycles and last record
-  SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`;
+  Fresh r3 is active under PID `70598` with 37 passing cycles as of
+  `2026-08-10T21:20:29.661771Z` and last record SHA-256
+  `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`;
   do not concatenate roots.
 - DuckLake comparison is complete and rejected with measured evidence at
   `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`.

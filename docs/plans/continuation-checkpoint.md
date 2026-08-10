@@ -1,7 +1,45 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-10 from clean `main`
-`738c1057a86d40961768ac539397caf103f8c862` after PR #84 merged.
+`687597bdbb59514a6f35d099ce49195401412e95` after PR #85 merged.
+
+## Current continuation update — Phase-3 source spine
+
+- PID `70598` remains untouched and active under
+  `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
+  Its latest read-only heartbeat at `2026-08-10T21:20:29.661771Z` recorded 37
+  passing cycles with last record SHA-256
+  `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`.
+  The 24-hour gate remains pending; no earlier root was concatenated.
+- The layered Binance Testnet WSS diagnostic at
+  `artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json`
+  has SHA-256
+  `8690b776e6e4237de9f4fe5ff775eb4da1cb7e16efbd11e2c3bd1fd5f2789e1b`.
+  DNS, TCP, and TLS passed. The locked runtime reached valid BTC/ETH public
+  WSS messages on successful attempts, but an ETH connection timeout remained;
+  classification is intermittent `websocket_connection_timeout`, not
+  provider-unavailable. The earlier missing-library root remains independent.
+- The corrected depth run at
+  `artifacts/phase3/binance-spot-testnet-depth/20260810T211531.293435Z/phase3-binance-spot-testnet-depth.json`
+  has SHA-256
+  `f75f4e25ba48d923df4cba4e29d7ccf4b45e7382a05b5f63bb3a500b8b59fcde`.
+  An ETH stream was replay-equivalent; BTC and other streams include WSS/runtime
+  or adjusted-future fail-closed results. The pre-fix local snapshot
+  selector incident is preserved and was regression-tested.
+- The credential-free public market-data bake-off selected Binance public
+  BTCUSDT/ETHUSDT as the current primary candidate at
+  `artifacts/phase3/public-market-data-qualification/20260810T211233.301638Z/phase3-public-market-data-qualification.json`,
+  SHA-256
+  `14df66c9cb142598c0cca98d653af2896bb08c6faea2dc6c7221ed71d5a51c41`.
+  It completed four full BTC/ETH public windows, two reconnects per symbol,
+  adjusted freshness, and real cross-source observations. It is explicitly
+  read-only and separate from Binance testnet execution; longer unattended
+  operation, sequence/snapshot recovery, and failover evidence remain open.
+- Archive/rclone remains externally deferred and was not touched. Coinbase and
+  the previously qualified Binance no-fill/cancel evidence remain preserved.
+
+The next legal work item is longer Phase-3 public-source freshness/recovery and
+independent-source disagreement evidence while the Phase-0 timer continues.
 
 ## Current continuation update — Binance Spot Testnet qualification
 
@@ -268,7 +306,7 @@ The following supersedes the earlier pending-operator Binance bullets below.
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 26 cycles passed, last record SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 37 cycles had passed at `2026-08-10T21:20:29.661771Z`, last record SHA-256 `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -291,9 +329,9 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root; 26 cycles have passed,
-  the latest record hash is
-  `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`, and the
+  `70598` with a new immutable runtime-admission root; 37 cycles had passed at
+  `2026-08-10T21:20:29.661771Z`, and the latest record hash was
+  `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`, and the
   24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected

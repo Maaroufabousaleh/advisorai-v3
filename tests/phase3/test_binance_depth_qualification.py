@@ -12,7 +12,9 @@ from scripts.qualify_phase3_binance_spot_testnet_depth import (
     _depth_event,
     _fault_drills,
     _fetch_server_time,
+    _fetch_snapshot,
     _process_records,
+    _snapshot_from_spool,
     _validated_stream_url,
     _write_latest_pointer,
 )
@@ -132,6 +134,33 @@ def test_binance_server_time_is_spooled_and_offset_is_measured(tmp_path):
     assert client.request_count == 1
     assert len(spool.read()) == 1
     assert spool.read()[0].url.endswith("/api/v3/time")
+
+
+def test_binance_snapshot_selector_ignores_spooled_server_time(tmp_path):
+    responses = [
+        (200, json.dumps({"serverTime": int(time.time() * 1000)}).encode(), ()),
+        (200, json.dumps(_snapshot(), separators=(",", ":")).encode(), ()),
+    ]
+
+    def requester(_method, url, _headers, _body, _timeout):
+        response = responses.pop(0)
+        if url.endswith("/api/v3/time"):
+            return response
+        return response[0], response[1], response[2]
+
+    spool = RawHttpSpool(tmp_path / "raw-http.jsonl")
+    client = SafeHttpClient(
+        HttpClientConfig(allowed_hosts=("testnet.binance.vision",), requests_per_second=100),
+        base_url="https://testnet.binance.vision",
+        requester=requester,
+        failed_response_sink=spool.append,
+    )
+    _fetch_server_time(client, spool)
+    snapshot = _fetch_snapshot(client, spool, "BTCUSDT")
+
+    assert snapshot["lastUpdateId"] == 100
+    assert _snapshot_from_spool(spool, symbol="BTCUSDT")["lastUpdateId"] == 100
+    assert len(spool.read()) == 2
 
 
 def test_binance_depth_fault_drills_are_explicitly_injected():
