@@ -60,13 +60,13 @@ The complete checkpoint matrix is maintained in
 `QUARANTINED`, `PENDING_STABILITY`, and `PENDING_OPERATOR_ACTION`.
 
 Latest local verification (2026-08-10):
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-verify.VM2tnK/bin/python scripts/verify_acceptance.py`
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 124/151/107/22/19/34/10/7/25/11/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 124/152/107/22/19/34/10/7/25/18/5. Suite totals
 overlap a few shared contract tests. A single-process
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-verify.VM2tnK/bin/python -m pytest -q`
-passes all 513 tests with the optional runtimes active in the isolated locked
-verification environment. The acceptance runner stops at the first failed
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python -m pytest -q`
+passes all 521 tests with every declared optional extra active in the isolated
+locked verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
 `artifacts/phase0/availability.json` (ignored runtime output), and remains an
@@ -74,10 +74,10 @@ availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
 diff hygiene, tracked secret/model-weight checks, and the dashboard TypeScript/Vite
 build. The recent scoped code changes are formatted. A repository-wide Ruff
-format check passes with all 242 Python files formatted.
-The test collection check reports 499 collected tests. The dashboard build passes
-with `npm run build`
-from `dashboard/`.
+format check passes with all 244 Python files formatted.
+The dashboard build passes with `npm run build` from `dashboard/`. The complete
+verification environment was isolated under `/tmp` so the two durable Phase-0
+stability workers continued using their original environment unchanged.
 
 Model stability evidence is still external and pending. On 2026-08-08, a
 pre-format 24-hour attempt was interrupted after the pinned worker hashes
