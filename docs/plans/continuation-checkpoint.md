@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `546 passed`, acceptance suites
-  `125/152/107/44/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `547 passed`, acceptance suites
+  `126/152/107/44/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -65,15 +65,22 @@ Checkpoint captured 2026-08-10 on `main`
   SHA-256 `79c359996cb8d330739495117730924c13ff29f909359e0c189dfea02498fdc7`.
 - Implemented the scoped two-provider rclone-crypt boundary with backward-
   compatible singular settings, explicit provider A/B raw and crypt aliases,
-  sanitized command failures, and the controlled qualification runner. The
-  first explicit real-run attempt generated a fresh source artifact but found
-  no populated `ARCHIVE_RCLONE` values and made zero network calls. Its
-  immutable evidence is at
-  `artifacts/phase0/rclone-crypt-qualification/20260810T003430.872217Z/rclone-crypt-qualification.json`
-  with manifest SHA-256
-  `fde44ab7ed3e0572c999b6a749f6eeeb718e39251e070939e71ad045ccfe7aed` and
-  canonical evidence SHA-256
-  `fb044389dbcb9bbe52a469c9993bf8cc45d1c11c83dcdcf259e2d6d4bc5bd67b`.
+  sanitized command failures, repo-local explicit secrets plumbing, and the
+  controlled qualification runner. The initial real run found no populated
+  scoped values and made zero network calls. After the operator populated the
+  canonical `/mnt/c/projects/advisorai-v3/secrets.env`, fresh roots
+  `20260810T151929.702375Z` and `20260810T152427.385117Z` were preserved. The
+  latest root
+  `artifacts/phase0/rclone-crypt-qualification/20260810T152950.120379Z/`
+  measured independent Provider A/B crypt uploads/restores, three-way SHA-256
+  equality, and all recovery drills. Provider A raw-layer enumeration passed;
+  Provider B raw recursive enumeration returned a sanitized provider command
+  failure, so the gate remains partial and not qualified. Report SHA-256:
+  `be61fd185821d2ee4b7f38c92694828f63d0b92e7e7667414e8807b1c9b0f7bf`;
+  manifest SHA-256:
+  `202e1564c1b56fcde7a50e2a0307cbd36a2e05771e6f308c1de51584d3ed9093`.
+  The runner now applies the bounded timeout to raw listings and has regression
+  coverage in `tests/phase0/test_rclone_qualification.py`.
 - Added native provider event-time normalization and the bounded real-source
   qualification runner in `scripts/qualify_phase3_sources.py`. The latest
   real run used seven public calls and recorded successful raw-spool replay for
@@ -110,7 +117,7 @@ Checkpoint captured 2026-08-10 on `main`
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
-  verification now pass with 546 tests.
+  verification now pass with 547 tests.
 - Measured and hardened the disposable local Docker OS boundary for Phase 8.
   The probe used the explicit local Docker socket, no repository, credential,
   broker, order, or production mounts, and recorded zero external network calls,
@@ -152,13 +159,14 @@ must not be concatenated with the replacement root.
   `artifacts/phase0/remote-route-stability/20260809T173059.039176Z/incident.json`
   (SHA-256
   `a3f8a51aeb5a437b1dd5c570cf86ce2cc4eb47b86e108055fcbf0b0ae34a9f8e`).
-- Phase-0 real `rclone crypt` upload/verify/restore remains
-  `PENDING_OPERATOR_ACTION`: configure `RCLONE_CONFIG`,
-  `RCLONE_CONFIG_PASS`, `RCLONE_REMOTE_A`, `RCLONE_CRYPT_REMOTE_A`,
-  `RCLONE_REMOTE_B`, and `RCLONE_CRYPT_REMOTE_B` through the reviewed scoped
-  secrets boundary, then rerun the command in the rclone archive runbook. Do
-  not paste any values into chat. The manual provider copy statement is not
-  admission evidence.
+- Phase-0 real `rclone crypt` evidence is `EXTERNALLY MEASURED / PARTIAL`, not
+  admitted: both independent crypt restores matched the fresh source SHA and
+  all recovery drills passed in the latest root, but Provider B raw recursive
+  enumeration returned a sanitized provider command failure. The six scoped
+  values were consumed only from `/mnt/c/projects/advisorai-v3/secrets.env`;
+  no values were printed or persisted. Resolve the reviewed Provider B raw
+  listing, then run a fresh explicit qualification. The manual provider copy
+  statement is not admission evidence.
 - Coinbase Sandbox identity, reviewed REST host, and scoped credentials are
   configured. The remaining provider blockers are that the actual sandbox
   product catalogue did not expose `ETH-USD` and the product-filtered fills
@@ -177,10 +185,11 @@ must not be concatenated with the replacement root.
   attestation remain incomplete. Formal admission is still closed.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.
 
-Next legal work is to preserve both healthy stability workers, complete the
-remaining unblocked Phase-0 checks, and inspect their durable evidence without
-restarting or concatenating runs. Rerun the Coinbase-specific read-only smoke
-only after the reviewed sandbox catalogue genuinely exposes both required
-products. No model, Hermes runtime, or remote route has trading authority.
+Next legal work is to preserve the healthy model stability worker, resolve or
+reproduce the Provider B raw-layer listing failure, complete the remaining
+unblocked Phase-0 checks, and inspect durable evidence without restarting or
+concatenating runs. Rerun the Coinbase-specific read-only smoke only after the
+reviewed sandbox catalogue genuinely exposes both required products. No model,
+Hermes runtime, or remote route has trading authority.
 
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`

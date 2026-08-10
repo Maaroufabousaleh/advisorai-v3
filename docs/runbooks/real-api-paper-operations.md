@@ -37,10 +37,11 @@ not authorize live capital.
 
 ## Safe local setup
 
-1. Keep populated secrets on the Linux filesystem, for example
-   `~/.config/advisorai-v3/secrets.env`; do not put values in Git, prompts,
-   browser/Hermes tasks, artifacts, or screenshots. If a value was exposed in
-   an untrusted location, rotate it at the provider before use.
+1. Keep the single populated AdvisorAI secrets inventory at
+   `/mnt/c/projects/advisorai-v3/secrets.env`; do not create a second copy or
+   put values in Git, prompts, browser/Hermes tasks, artifacts, or screenshots.
+   If a value was exposed in an untrusted location, rotate it at the provider
+   before use.
 2. Fill the existing ignored `secrets.env` template with paper/testnet-only
    credentials and the selected direct LLM route. Do not add production hosts,
    withdrawal/transfer keys, or live venue permissions.
@@ -48,7 +49,7 @@ not authorize live capital.
 
    ```bash
    uv run python scripts/check_transition_config.py \
-     --secrets "$HOME/.config/advisorai-v3/secrets.env"
+     --secrets /mnt/c/projects/advisorai-v3/secrets.env
    ```
 
 4. Select explicit reviewed hosts and endpoints in the connector cards. A
@@ -65,7 +66,7 @@ from the operator shell, never from a pull request or an untrusted capability:
 uv sync --extra transition
 ADVISORAI_RUN_NETWORK_SMOKE=1 \
   uv run python scripts/smoke_transition_connectors.py \
-  --secrets "$HOME/.config/advisorai-v3/secrets.env" \
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env \
   --venue-allowed-host sandbox.example.test \
   --evidence-dir artifacts/phase1/paper-venue-transition
 ```
@@ -77,7 +78,7 @@ when its generic defaults differ, for example:
 ```bash
 ADVISORAI_RUN_NETWORK_SMOKE=1 \
   uv run python scripts/smoke_transition_connectors.py \
-  --secrets "$HOME/.config/advisorai-v3/secrets.env" \
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env \
   --venue-allowed-host sandbox.example.test \
   --venue-account-path /v1/account \
   --venue-orders-path /v1/orders \

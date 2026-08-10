@@ -9,6 +9,11 @@ local immutable data and ledgers remain the source of truth.
 The operator configures these names in the reviewed local secrets file. The
 values must not be pasted into chat, printed, or sourced by a shell:
 
+The canonical local file on this installation is
+`/mnt/c/projects/advisorai-v3/secrets.env`. Do not maintain a second AdvisorAI
+secrets inventory elsewhere. Callers may instead provide another reviewed path
+explicitly with `--secrets` or `ADVISORAI_SECRETS_FILE`.
+
 - `RCLONE_CONFIG` — absolute path to the password-encrypted rclone config;
 - `RCLONE_CONFIG_PASS` — the rclone config password;
 - `RCLONE_REMOTE_A` / `RCLONE_CRYPT_REMOTE_A` — the raw and crypt aliases for
@@ -35,9 +40,14 @@ After the operator has configured the names above locally, run:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
   scripts/qualify_rclone_archive.py \
   --real \
-  --secrets /home/maaro/.config/advisorai-v3/secrets.env \
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env \
+  --timeout-seconds 180 \
   --evidence-dir artifacts/phase0/rclone-crypt-qualification
 ```
+
+The timeout is a bounded per-operation ceiling and applies equally to raw-layer
+listings and crypt upload/restore calls. It is not an unbounded retry or a
+qualification bypass.
 
 The runner generates a fresh harmless payload and exercises, independently for
 both providers:
@@ -64,3 +74,20 @@ The manual operator copy/restore statement is useful context but is not
 admission evidence until this controlled path produces a passing immutable run.
 An absent or malformed scoped configuration produces
 `PENDING_OPERATOR_ACTION` with zero network calls.
+
+## Latest measured state
+
+The canonical secrets input for this installation is
+`/mnt/c/projects/advisorai-v3/secrets.env`; the latest controlled runs used
+that path explicitly and did not maintain a second AdvisorAI inventory. The
+fresh root `20260810T152950.120379Z` measured independent Provider A and B
+crypt uploads/restores, equal source/restored SHA-256 values, and all recovery
+drills. Provider A raw-layer enumeration passed with one new opaque object and
+no plaintext key exposure. Provider B raw-layer recursive enumeration returned
+a sanitized provider command failure, so the overall root is failed/quarantined
+and the archive gate remains closed. Its immutable report SHA-256 is
+`be61fd185821d2ee4b7f38c92694828f63d0b92e7e7667414e8807b1c9b0f7bf` and its
+manifest SHA-256 is
+`202e1564c1b56fcde7a50e2a0307cbd36a2e05771e6f308c1de51584d3ed9093`.
+The runner now applies the explicit bounded timeout to raw listings as well as
+crypt operations; it does not convert an incomplete raw listing into a pass.

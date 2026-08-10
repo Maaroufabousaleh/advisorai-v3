@@ -28,7 +28,7 @@ provider errors:
 
 ```bash
 uv run python scripts/run_remote_model_bakeoff.py \
-  --secrets /home/maaro/.config/advisorai-v3/secrets.env
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env
 ```
 
 The spend budget is:
@@ -98,7 +98,7 @@ or any fallback route.
 
 ```bash
 setsid --fork ./.venv/bin/python scripts/run_remote_route_stability.py \
-  --secrets /home/maaro/.config/advisorai-v3/secrets.env \
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env \
   --roster configs/models/phase0_remote_roster.json \
   --run-directory artifacts/phase0/remote-route-stability/<run-id> \
   --candidate private-deepseek-digitalocean \

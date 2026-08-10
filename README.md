@@ -59,11 +59,11 @@ production endpoints. Validate the file without shell execution:
 
 ```bash
 uv run python scripts/check_transition_config.py \
-  --secrets "$HOME/.config/advisorai-v3/secrets.env"
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env
 ```
 
-On WSL, keep populated secrets on a Linux-filesystem path rather than a shared
-`/mnt/c` mount. Never put live broker credentials in this transition file.
+Use this single repo-local ignored inventory; do not duplicate it under another
+path. Never put live broker credentials in this transition file.
 
 ## Dashboard status
 
@@ -103,7 +103,7 @@ tests:
 uv sync --extra transition
 ADVISORAI_RUN_NETWORK_SMOKE=1 \
   uv run python scripts/smoke_transition_connectors.py \
-  --secrets "$HOME/.config/advisorai-v3/secrets.env"
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env
 ```
 
 This smoke command is read-only and opt-in. Actual venue choice, endpoint

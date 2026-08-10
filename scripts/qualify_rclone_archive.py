@@ -187,6 +187,8 @@ def _raw_listing(
     remote: str,
     environment: dict[str, str] | Any,
     recorder: CommandRecorder,
+    *,
+    timeout_seconds: float,
 ) -> set[str] | None:
     try:
         result = recorder(
@@ -194,7 +196,7 @@ def _raw_listing(
             check=False,
             capture_output=True,
             env=dict(environment),
-            timeout=45,
+            timeout=timeout_seconds,
         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
         return None
@@ -439,16 +441,19 @@ def main() -> int:
     parser.add_argument(
         "--secrets",
         type=Path,
-        default=Path(
-            os.getenv("ADVISORAI_SECRETS_FILE", "/home/maaro/.config/advisorai-v3/secrets.env")
-        ),
+        default=Path(os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")),
     )
     parser.add_argument(
         "--evidence-dir",
         type=Path,
         default=Path("artifacts/phase0/rclone-crypt-qualification"),
     )
-    parser.add_argument("--timeout-seconds", type=float, default=45.0)
+    parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=180.0,
+        help="bounded timeout applied to every rclone operation, including raw listings",
+    )
     args = parser.parse_args()
 
     args.evidence_dir.mkdir(parents=True, exist_ok=True)
@@ -520,14 +525,24 @@ def main() -> int:
     }
     observed = {name: _ObservedBackend(backend) for name, backend in backends.items()}
     raw_before = {
-        provider.name: _raw_listing(provider.raw_remote, config.process_environment, recorder)
+        provider.name: _raw_listing(
+            provider.raw_remote,
+            config.process_environment,
+            recorder,
+            timeout_seconds=args.timeout_seconds,
+        )
         for provider in config.providers
     }
     key = f"phase0-rclone/{run_id}/qualification-payload.bin"
     source_filename = key.rsplit("/", 1)[-1]
     verification = ArchiveAutomation(tuple(observed.values())).archive(key=key, payload=payload)
     raw_after = {
-        provider.name: _raw_listing(provider.raw_remote, config.process_environment, recorder)
+        provider.name: _raw_listing(
+            provider.raw_remote,
+            config.process_environment,
+            recorder,
+            timeout_seconds=args.timeout_seconds,
+        )
         for provider in config.providers
     }
     provider_results = {

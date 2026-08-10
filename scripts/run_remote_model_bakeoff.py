@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -545,7 +546,9 @@ def _write_roster(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--secrets", type=Path, default=Path("/home/maaro/.config/advisorai-v3/secrets.env")
+        "--secrets",
+        type=Path,
+        default=Path(os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")),
     )
     parser.add_argument(
         "--output-root", type=Path, default=Path("artifacts/phase0/remote-model-bakeoff")

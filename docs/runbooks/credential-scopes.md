@@ -10,7 +10,7 @@ from pathlib import Path
 
 from advisorai.config import CredentialResolver, CredentialScope
 
-resolver = CredentialResolver.from_env_file(Path("/home/maaro/.config/advisorai-v3/secrets.env"))
+resolver = CredentialResolver.from_env_file(Path("/mnt/c/projects/advisorai-v3/secrets.env"))
 llm_env = resolver.resolve_for_process(CredentialScope.DIRECT_LLM)
 ```
 

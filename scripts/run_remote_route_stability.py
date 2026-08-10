@@ -261,7 +261,9 @@ def _inventory_and_candidate(
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--secrets", type=Path, default=Path("/home/maaro/.config/advisorai-v3/secrets.env")
+        "--secrets",
+        type=Path,
+        default=Path(os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")),
     )
     parser.add_argument(
         "--roster", type=Path, default=Path("configs/models/phase0_remote_roster.json")
