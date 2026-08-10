@@ -15,6 +15,7 @@ import asyncio
 import contextlib
 import importlib.metadata
 import json
+import math
 import os
 import tempfile
 import time
@@ -47,6 +48,7 @@ MAX_CONNECTION_SECONDS = 120
 DEFAULT_CONNECTIONS = 2
 MAX_CONNECTIONS = 4
 MAX_EVENT_AGE_SECONDS = 30.0
+MAX_CLOCK_OFFSET_SECONDS = 5.0
 
 
 def _sha256(payload: bytes) -> str:
@@ -242,11 +244,20 @@ def _process_records(
     records: Sequence[tuple[int, datetime, bytes]],
     *,
     symbol: str,
+    clock_offset_seconds: float = 0.0,
 ) -> dict[str, object]:
+    if (
+        isinstance(clock_offset_seconds, bool)
+        or not isinstance(clock_offset_seconds, (int, float))
+        or not math.isfinite(clock_offset_seconds)
+        or abs(clock_offset_seconds) > MAX_CLOCK_OFFSET_SECONDS
+    ):
+        raise ValueError("Binance clock offset is outside the bounded qualification limit")
     started = time.perf_counter()
     counts: Counter[str] = Counter()
     ages: list[float] = []
     future_events = 0
+    raw_future_events = 0
     validation_error: str | None = None
     synced = False
     event_count = 0
@@ -267,7 +278,10 @@ def _process_records(
             event_time = datetime.fromtimestamp(
                 _positive_int(payload["E"], "event time") / 1000, tz=UTC
             )
-            age = (received_at.astimezone(UTC) - event_time).total_seconds()
+            raw_age = (received_at.astimezone(UTC) - event_time).total_seconds()
+            if raw_age < 0:
+                raw_future_events += 1
+            age = raw_age + clock_offset_seconds
             if age < 0:
                 future_events += 1
             else:
@@ -314,6 +328,8 @@ def _process_records(
         "discarded_before_sync_count": discarded_before_sync,
         "repeated_or_old_count": repeated_or_old,
         "future_event_count": future_events,
+        "raw_future_event_count": raw_future_events,
+        "clock_offset_seconds": round(clock_offset_seconds, 3),
         "event_age_seconds_max": max_age,
         "max_event_age_limit_seconds": MAX_EVENT_AGE_SECONDS,
         "validation_error": validation_error,
@@ -347,6 +363,42 @@ def _fetch_snapshot(
     if response.status_code != 200:
         raise HttpTransportError("Binance depth snapshot returned a non-success status")
     return _snapshot_from_spool(http_spool)
+
+
+def _fetch_server_time(client: SafeHttpClient, http_spool: RawHttpSpool) -> dict[str, object]:
+    """Measure provider-vs-local clock offset before interpreting depth events."""
+
+    local_before = datetime.now(UTC)
+    response = client.request(
+        "GET",
+        f"{BINANCE_SPOT_TESTNET_BASE_URL}/api/v3/time",
+        acceptable_statuses=frozenset({200}),
+        max_retries=1,
+    )
+    local_after = datetime.now(UTC)
+    http_spool.append(response)
+    try:
+        payload = json.loads(response.body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("Binance server-time response is not valid JSON") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError("Binance server-time response is not an object")
+    server_time_milliseconds = _positive_int(payload.get("serverTime"), "server time")
+    try:
+        server_time = datetime.fromtimestamp(server_time_milliseconds / 1000, tz=UTC)
+    except (OverflowError, OSError, ValueError) as exc:
+        raise ValueError("Binance server-time response has malformed server time") from exc
+    midpoint = local_before + (local_after - local_before) / 2
+    offset_seconds = (server_time - midpoint).total_seconds()
+    if abs(offset_seconds) > MAX_CLOCK_OFFSET_SECONDS:
+        raise ValueError("Binance provider/local clock offset is outside the safety bound")
+    return {
+        "provider_server_time": server_time.isoformat(),
+        "local_before": local_before.isoformat(),
+        "local_after": local_after.isoformat(),
+        "round_trip_ms": round((local_after - local_before).total_seconds() * 1000, 3),
+        "clock_offset_seconds": round(offset_seconds, 3),
+    }
 
 
 async def _collect_connection(
@@ -392,6 +444,7 @@ async def _collect_connection(
     task = asyncio.create_task(pump())
     live_records: list[tuple[int, datetime, bytes]] = []
     snapshot: Mapping[str, object] | None = None
+    clock_sample: dict[str, object] | None = None
     collection_error: str | None = None
     started_at = datetime.now(UTC)
     try:
@@ -407,6 +460,7 @@ async def _collect_connection(
                 continue
             live_records.append((len(live_records) + 1, datetime.now(UTC), raw))
             try:
+                clock_sample = await asyncio.to_thread(_fetch_server_time, client, http_spool)
                 snapshot = await asyncio.to_thread(_fetch_snapshot, client, http_spool, symbol)
             except (HttpTransportError, OSError, TimeoutError, ValueError) as exc:
                 collection_error = type(exc).__name__
@@ -437,8 +491,19 @@ async def _collect_connection(
     replay_equivalent = False
     if snapshot is not None:
         replay_snapshot = _snapshot_from_spool(http_spool)
-        live_result = _process_records(snapshot, live_records, symbol=symbol)
-        replay_result = _process_records(replay_snapshot, ws_spool.read_records(), symbol=symbol)
+        clock_offset_seconds = float(clock_sample["clock_offset_seconds"])
+        live_result = _process_records(
+            snapshot,
+            live_records,
+            symbol=symbol,
+            clock_offset_seconds=clock_offset_seconds,
+        )
+        replay_result = _process_records(
+            replay_snapshot,
+            ws_spool.read_records(),
+            symbol=symbol,
+            clock_offset_seconds=clock_offset_seconds,
+        )
         live_book = live_result.get("book") or {}
         replay_book = replay_result.get("book") or {}
         replay_equivalent = live_book.get("book_state_sha256") == replay_book.get(
@@ -458,6 +523,7 @@ async def _collect_connection(
         "raw_http_record_count": len(http_spool.read()),
         "collection_error_class": collection_error,
         "transport_error_class": pump_error.get("error_class"),
+        "clock_sample": clock_sample,
         "snapshot_last_update_id": (
             _positive_int(snapshot.get("lastUpdateId"), "snapshot update ID")
             if snapshot is not None and snapshot.get("lastUpdateId") is not None

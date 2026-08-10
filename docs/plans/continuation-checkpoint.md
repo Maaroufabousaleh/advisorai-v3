@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `567 passed`, acceptance suites
-  `128/152/118/51/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `570 passed`, acceptance suites
+  `128/152/118/54/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -152,6 +152,11 @@ Checkpoint captured 2026-08-10 on `main`
   drills passed. This remains partial external source evidence; synchronized
   freshness, recovery, longer operation, and independent source disagreement
   are not admitted.
+- Added bounded provider/local clock-offset measurement to the Binance depth
+  qualifier. It spools `/api/v3/time`, keeps raw future-event counts, applies
+  only the measured midpoint offset to freshness, and fails closed for invalid
+  or excessive offsets. Focused source tests pass; the two real reports above
+  predate this implementation and do not claim offset-aware evidence.
 - Attempted the missing 120-second Binance BTC/ETH depth window in a fresh
   immutable root. All four public WSS connections failed closed before their
   first message with the sanitized `WebSocketTransportError` class, so no REST
@@ -164,7 +169,7 @@ Checkpoint captured 2026-08-10 on `main`
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
-  verification now pass with 567 tests.
+  verification now pass with 570 tests.
 - Discovered and fixed the selected-model stability runner's missing terminal
   sample at the 24-hour boundary. The fresh post-format root
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`
@@ -190,7 +195,7 @@ Checkpoint captured 2026-08-10 on `main`
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, four cycles passed, last record SHA-256 `b7487fc70ff80022a947c213fdd15f59d582f439fef12ab82ced954cd6fa8c8c`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, six cycles passed, last record SHA-256 `f1667543abb3955b5611ec500bb758fc98248a6f489ec255a18e2cccb1ef4220`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -213,7 +218,7 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root; four cycles have
+  `70598` with a new immutable runtime-admission root; six cycles have
   passed and the 24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected

@@ -222,9 +222,9 @@ under PID `70598` at
 `phase0-selected-24h-terminal-sample-20260810-r3` using the new immutable
 runtime-admission root.
 
-As of the latest checkpoint, r3 has completed four passing cycles. Its last
+As of the latest checkpoint, r3 has completed six passing cycles. Its last
 record SHA-256 is
-`b7487fc70ff80022a947c213fdd15f59d582f439fef12ab82ced954cd6fa8c8c`.
+`f1667543abb3955b5611ec500bb758fc98248a6f489ec255a18e2cccb1ef4220`.
 The 24-hour result does not yet exist; preserve the process and do not
 concatenate predecessor roots.
 

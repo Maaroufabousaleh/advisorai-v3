@@ -142,7 +142,11 @@ It uses only the reviewed public Spot Testnet REST host
 Each fresh BTCUSDT/ETHUSDT connection writes raw WebSocket bytes before
 interpretation, captures a REST depth snapshot, validates Binance `U/u`
 sequence continuity and an uncrossed book, and compares live processing with
-raw-spool replay. It never loads credentials and never submits an order.
+raw-spool replay. Before interpreting the depth events it also spools the
+provider `/api/v3/time` response and records a bounded midpoint provider/local
+clock offset. Freshness retains both raw future-event counts and the adjusted
+fail-closed result; an invalid or excessive offset aborts the connection. It
+never loads credentials and never submits an order.
 
 Run it only in the locked transition environment with explicit public-network
 opt-in:
@@ -170,6 +174,11 @@ sequence-gap, stale-data, and snapshot-disagreement drills passed. This is
 real partial source evidence, not Phase-3 admission. Clock-synchronized
 freshness, recovery/resubscription, longer unattended operation, and
 independent source-disagreement evidence remain pending.
+
+The clock-offset measurement was added after the bounded report above. That
+older report remains immutable evidence from the pre-offset runner; no real
+post-change freshness claim exists until a new provider-available run passes
+the complete raw-spool, clock, recovery, and replay checks.
 
 A fresh requested 120-second run on 2026-08-10 was preserved separately at
 `artifacts/phase3/binance-spot-testnet-depth/20260810T182011.404029Z/phase3-binance-spot-testnet-depth.json`
