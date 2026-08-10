@@ -97,7 +97,7 @@ and sends only the structured synthetic probe. It does not use `openrouter/free`
 or any fallback route.
 
 ```bash
-setsid nohup ./.venv/bin/python scripts/run_remote_route_stability.py \
+setsid --fork ./.venv/bin/python scripts/run_remote_route_stability.py \
   --secrets /home/maaro/.config/advisorai-v3/secrets.env \
   --roster configs/models/phase0_remote_roster.json \
   --run-directory artifacts/phase0/remote-route-stability/<run-id> \
@@ -107,13 +107,19 @@ setsid nohup ./.venv/bin/python scripts/run_remote_route_stability.py \
   > artifacts/phase0/remote-route-stability/<run-id>/runner.nohup.log 2>&1 < /dev/null &
 ```
 
+`setsid --fork` is required on the WSL host when the invoking terminal wrapper
+cleans up ordinary background process groups. Capture the returned PID and
+verify that the runner has its own session plus a live `status.json` heartbeat;
+the evidence root and status PID are authoritative for resumption.
+
 Each run contains `config.json`, its write-once `config.sha256` sidecar,
 `inventory.json`, hash-chained `cycles.jsonl`, `status.json`, `summary.json`,
 and a PID in `runner.lock`. The first sample binds the config hash; the config
 also records the implementation hash and exact command. `status.json` is a
 heartbeat, not an admission record. A route can become
 `failed` from one provider identity/rate-limit failure; preserve that run and
-start another immutable root for a different already-reviewed route.
+start another immutable root only when the reviewed route is expected to be
+available again. Never concatenate failed samples into the new root.
 
 The Novita trial at
 `artifacts/phase0/remote-route-stability/20260809T162800Z` recorded one valid
@@ -130,11 +136,14 @@ quarantined because its config metadata retained the old schema label. Their
 incident records have SHA-256 values
 `302220c0b2be692de953848d7cf2b8058baceb271581a776f52f82c3d13f8677` and
 `a3f8a51aeb5a437b1dd5c570cf86ce2cc4eb47b86e108055fcbf0b0ae34a9f8e`. The
-current detached 24-hour window is
-`artifacts/phase0/remote-route-stability/20260809T173237.710604Z` under PID
-`33057`; its v2 config, code hash, config sidecar, and hash-chained samples
-are aligned. It remains `PENDING_STABILITY` until the full duration and all
-route/quality checks pass.
+the 20260809T173237.710604Z DigitalOcean window recorded three upstream
+shared-pool HTTP 429 gateway abstentions and is quarantined. Its incident
+report SHA-256 is
+`f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
+The replacement root is
+`artifacts/phase0/remote-route-stability/20260810T034500Z`; its initial exact
+route smoke passed and its durable 24-hour runner is active. It remains
+`PENDING_STABILITY` until the full duration and all route/quality checks pass.
 
 ## Admission and selection
 

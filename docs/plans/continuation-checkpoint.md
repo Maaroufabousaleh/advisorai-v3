@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`c55afcd4ed168fe798f54841ac090c234b99783a` after PR #50 merged.
+`4edf5f2756388b2ff331e8f5009525a4f9f08722` after PR #51 merged.
 
 ## Completed in this continuation
 
@@ -33,6 +33,11 @@ Checkpoint captured 2026-08-10 on `main`
   `artifacts/phase0/remote-route-stability/20260809T173237.710604Z/incident.json`
   with SHA-256
   `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
+- Started replacement root
+  `artifacts/phase0/remote-route-stability/20260810T034500Z` after a bounded
+  exact-route smoke passed. Its durable runner is active under PID `13831` with
+  two passing samples; the 24-hour gate remains pending and failed roots are
+  not concatenated.
 - Implemented and locally tested the Coinbase Exchange Sandbox-specific
   `CB-ACCESS-*` signer, exact sandbox REST/WS host guard, provider account/
   product/order/fill schema mapping, scoped `PAPER_VENUE` factory, and
@@ -63,24 +68,24 @@ Checkpoint captured 2026-08-10 on `main`
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
 | Selected local model stability | 9456 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809` | `PENDING_STABILITY`; inspect status/heartbeat before action |
-| DigitalOcean exact remote route stability | stopped after PID 33057 | `artifacts/phase0/remote-route-stability/20260809T173237.710604Z` | `QUARANTINED`; three upstream shared-pool HTTP 429 gateway abstentions; fresh 24-hour root required |
+| DigitalOcean exact remote route stability | 13831 | `artifacts/phase0/remote-route-stability/20260810T034500Z` | `PENDING_STABILITY`; two passing samples; inspect heartbeat and do not concatenate the quarantined root |
 
-The local process remains detached with its exact command recorded by the
-runbook. The failed remote route process was stopped after its immutable failure
-evidence was preserved; its run used only `DIRECT_LLM`, a synthetic structured
-probe, no fallbacks, and no tool execution. Failed samples must not be
-concatenated with a future root.
+Both current processes are detached with exact commands recorded by their
+runbooks. The failed remote route process was stopped after its immutable
+failure evidence was preserved; the replacement uses only `DIRECT_LLM`, a
+synthetic structured probe, no fallbacks, and no tool execution. Failed samples
+must not be concatenated with the replacement root.
 
 ## Remaining gates and blockers
 
-- Phase-0 local model stability remains in its 24-hour duration gate. The
-  DigitalOcean route root failed closed on three upstream shared-pool HTTP 429
-  gateway abstentions and must be replaced by a fresh immutable 24-hour root;
-  no failed samples may be concatenated.
+- Phase-0 local model stability and the replacement DigitalOcean route root
+  remain in their 24-hour duration gates. The prior DigitalOcean root failed
+  closed on three upstream shared-pool HTTP 429 gateway abstentions and is
+  quarantined; no failed samples may be concatenated.
 - The earlier DigitalOcean roots were preserved and quarantined for runner
-  integrity defects. The latest root is also quarantined by the incident above;
-  only a future fresh root with immutable config/code attestation is eligible
-  for continued evidence.
+  integrity defects, and the 20260809T173237.710604Z root is quarantined by the
+  incident above. The active replacement root is the only eligible current
+  route evidence and has immutable config/code attestation.
 - Their incident records are immutable at
   `artifacts/phase0/remote-route-stability/20260809T171000Z/incident.json`
   (SHA-256
@@ -108,11 +113,10 @@ concatenated with a future root.
   namespace network denial alone is not formal admission evidence.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.
 
-Next legal work is to preserve the healthy local stability worker, complete the
-remaining unblocked Phase-0 checks, and start a fresh exact-route window only
-when the reviewed DigitalOcean route is expected to be available. Rerun the
-Coinbase-specific read-only smoke only after the reviewed sandbox catalogue
-genuinely exposes both required products. No model, Hermes runtime, or remote
-route has trading authority.
+Next legal work is to preserve both healthy stability workers, complete the
+remaining unblocked Phase-0 checks, and inspect their durable evidence without
+restarting or concatenating runs. Rerun the Coinbase-specific read-only smoke
+only after the reviewed sandbox catalogue genuinely exposes both required
+products. No model, Hermes runtime, or remote route has trading authority.
 
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`
