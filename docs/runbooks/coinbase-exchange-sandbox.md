@@ -54,6 +54,13 @@ is:
 
 Do not print, source, copy, or paste any credential value.
 
+The scoped resolver is fail-closed on unknown inventory names. If a later
+configuration check rejects the populated inventory because it contains a
+non-allowlisted variable, remove or review that entry locally against the
+repository template before rerunning this smoke. Do not disclose its value in
+chat; this prerequisite is separate from Coinbase authentication and does not
+authorize a production fallback.
+
 ## Read-only smoke gate
 
 The generic venue smoke must not be used for this connector. The Coinbase smoke
@@ -118,9 +125,10 @@ the deterministic order-level `RiskKernel` check, reconcile venue state, and
 cancel or ingest a fill through the OMS. No agent, model, Hermes task, browser
 task, dashboard, or LLM route can invoke this write path.
 
-The current next action is operator/provider-side: use a Coinbase Exchange
-Sandbox profile/catalogue that genuinely exposes both `BTC-USD` and `ETH-USD`
-and grants the scoped key the documented fills read permission, then rerun the
-read-only smoke. Do not paste or disclose credentials in chat.
+The current next actions are operator/provider-side: ensure the local inventory
+passes the strict scoped resolver, use a Coinbase Exchange Sandbox
+profile/catalogue that genuinely exposes both `BTC-USD` and `ETH-USD`, and grant
+the scoped key the documented fills read permission; then rerun the read-only
+smoke. Do not paste or disclose credentials in chat.
 
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`
