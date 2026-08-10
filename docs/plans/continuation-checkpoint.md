@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`6ef2cff53e2b2aedb6700517884ef145a5025062` after PR #76 merged.
+`2c8cbf3b559a20272a52aaf93963504dfab85516` after PR #77 merged.
 
 ## Completed in this continuation
 
@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `566 passed`, acceptance suites
-  `127/152/118/51/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `567 passed`, acceptance suites
+  `128/152/118/51/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -152,10 +152,19 @@ Checkpoint captured 2026-08-10 on `main`
   drills passed. This remains partial external source evidence; synchronized
   freshness, recovery, longer operation, and independent source disagreement
   are not admitted.
+- Attempted the missing 120-second Binance BTC/ETH depth window in a fresh
+  immutable root. All four public WSS connections failed closed before their
+  first message with the sanitized `WebSocketTransportError` class, so no REST
+  snapshot was attempted and no write occurred. The preserved report is
+  `artifacts/phase3/binance-spot-testnet-depth/20260810T182011.404029Z/phase3-binance-spot-testnet-depth.json`
+  with SHA-256
+  `7b249a125c78e346c7b9d028850e2b7cbf004c890e005bad6f6f8d70b92ddd08`;
+  deterministic fault drills still passed. This is a provider/runtime
+  availability failure, not a successful longer-operation qualification.
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
-  verification now pass with 566 tests.
+  verification now pass with 567 tests.
 - Discovered and fixed the selected-model stability runner's missing terminal
   sample at the 24-hour boundary. The fresh post-format root
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`
@@ -181,7 +190,7 @@ Checkpoint captured 2026-08-10 on `main`
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, cycle 1 passed, last record SHA-256 `00948aa2e2ee50cc9a80fe30b90c76659c16f29d1595fca7a98bacceda9077ca`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, four cycles passed, last record SHA-256 `b7487fc70ff80022a947c213fdd15f59d582f439fef12ab82ced954cd6fa8c8c`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -204,7 +213,8 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root. All
+  `70598` with a new immutable runtime-admission root; four cycles have
+  passed and the 24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected
   20260810T053600Z root stopped after a deadline-exhausted first probe. No
@@ -240,10 +250,14 @@ must not be concatenated with the replacement root.
   inspect its immutable sanitized result. No credential value may be printed,
   copied into a second file, or persisted in evidence.
 - Phase 3–7 real source/paper operation and the 60-day soak cannot start until
+  the selected venue, source, model, risk, OMS, reconciliation, and recovery
+  prerequisites are genuinely admitted.
 - Phase 3 now has partial real source evidence, but its complete gate remains
   closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and the bounded
-  WSS probe observed provider sequence gaps. Continuous freshness/recovery and
-  cross-source disagreement soak remain pending.
+  WSS probe observed provider sequence gaps; the fresh 120-second Binance
+  attempt failed closed before its first message with a sanitized transport
+  failure. Continuous freshness/recovery and cross-source disagreement soak
+  remain pending.
 - Phase 8 now has real local Docker boundary evidence for network denial,
   read-only-root denial, capability dropping, and bounded process controls, but
   native-syscall/C-extension, credential, production-tree, and real-capability
