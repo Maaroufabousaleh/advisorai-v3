@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint regenerated 2026-08-10 from `main` at
-`ba1319e5d9653a4fdd10fc9fe026bfe66a522e62` after PR #68 merged.
+`1d352a1c6a5dbb00b4c74a5d0f2a2ef2f42a6a83` after PR #71 merged.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -9,7 +9,7 @@ an external, timed, or human gate.
 | Stage / requirement | Authoritative source | Implementation present? | Automated tests? | Local deterministic evidence? | Real external evidence? | Timed evidence? | Human action? | Current gate state | Blocker | Next admissible action |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | Phase 0 contracts, ports, policy gateway, model/runtime harness | architecture §11; phase-00 plan | yes | yes | yes | no | no | no | TESTED / LOCALLY MEASURED | none for local boundary | Preserve accepted local records; do not treat them as admission |
-| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix | yes | partial | no | pending | no | PENDING_STABILITY | root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles because no sample was recorded at/after the target boundary; summary SHA-256 `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661` | Preserve the incomplete root; run a fresh immutable 24-hour root with the fixed runner; never concatenate cycles |
+| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix | yes | partial | no | pending | no | PENDING_STABILITY | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; summary SHA-256 `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`; fresh root `phase0-selected-24h-terminal-sample-20260810` is active under PID `12973` with cycle 1 passing | Preserve both immutable roots; inspect the fresh heartbeat and wait for a real terminal sample; never concatenate cycles |
 | Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner with stop-on-failure | yes | short live route evidence plus preserved hash-chained failures | yes, exact provider/model/endpoint identity on earlier successful samples; current retries failed closed | pending 24-hour window | provider availability/time-dependent | EXTERNALLY MEASURED / QUARANTINED | Novita and DigitalOcean roots are quarantined after shared-pool HTTP 429, deadline exhaustion, and earlier runner-integrity incidents; corrected root `artifacts/phase0/remote-route-stability/20260810T053600Z` stopped after its first failed probe and has no eligible duration evidence | Preserve incident roots; retry the reviewed exact route only after provider availability returns, using a fresh systemd-backed root; never concatenate failed samples |
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
@@ -71,8 +71,10 @@ an external, timed, or human gate.
   ended `short_smoke_complete` at 23.96857 hours after 273 passing cycles; its
   summary SHA-256 is
   `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`. The
-  runner now requires a real terminal sample at/after the duration boundary;
-  start a fresh root after the fix and do not concatenate the old cycles.
+  runner now requires a real terminal sample at/after the duration boundary.
+  Fresh root
+  `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810`
+  is active under PID `12973`, with cycle 1 passing; do not concatenate roots.
 - DuckLake comparison is complete and rejected with measured evidence at
   `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`.
 - The pinned upstream Hermes review is complete as partial external-runtime

@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`ba1319e5d9653a4fdd10fc9fe026bfe66a522e62` after PR #68 merged.
+`1d352a1c6a5dbb00b4c74a5d0f2a2ef2f42a6a83` after PR #71 merged.
 
 ## Completed in this continuation
 
@@ -143,7 +143,7 @@ Checkpoint captured 2026-08-10 on `main`
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | — | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809` (incomplete) | `PENDING_STABILITY`; preserve the short-smoke root and start a fresh root with the terminal-sample fix |
+| Selected local model stability | 12973 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810` | `PENDING_STABILITY`; cycle 1 passed, inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 Both current processes are detached with exact commands recorded by their

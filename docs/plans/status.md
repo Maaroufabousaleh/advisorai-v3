@@ -144,9 +144,12 @@ three pending role candidates. The supervised replacement run at
 completed with 273 passing cycles but only `23.968570833055555` elapsed hours;
 its summary status is `short_smoke_complete`, not a 24-hour pass. Its summary
 SHA-256 is `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
-The terminal-sample runner defect is fixed and a fresh immutable root is
-required. The prior 20260808 run remains preserved as interrupted evidence and
-has not been concatenated.
+The terminal-sample runner defect is fixed and a fresh immutable root is active
+at
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810`
+under PID `12973`, started `2026-08-10T16:16:02.536518Z`, with cycle 1 passing.
+The prior 20260808 run remains preserved as interrupted evidence and no cycles
+from either predecessor have been concatenated.
 
 The Phase-1 local operational report has SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and

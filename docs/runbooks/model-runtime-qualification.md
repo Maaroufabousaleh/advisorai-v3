@@ -201,15 +201,16 @@ setsid nohup ./.venv/bin/python scripts/run_model_stability.py \
   --sentiment-snapshot ~/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
   --report artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json \
   --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260808 \
-  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809 \
-  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809.nohup.log 2>&1 < /dev/null &
+  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810 \
+  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810.nohup.log 2>&1 < /dev/null &
 ```
 
-The 2026-08-09 detached run used PID `9456` and is now complete as an
-incomplete short smoke. Inspect the process command, `status.json`,
+The 2026-08-10 fresh detached run is active under PID `12973`. Inspect the
+process command, `status.json`,
 `cycles.jsonl`, `runner.lock`, and the append-only log before taking any action.
 A healthy active run must not be restarted; a completed short smoke requires a
-fresh immutable root after a runner defect is fixed.
+fresh immutable root after a runner defect is fixed. The predecessor root is
+preserved and must not be resumed or concatenated.
 
 The 24-hour result must exist and pass before changing roster entries from
 `pending_stability` to `selected`. It does not approve paper execution or live
@@ -227,9 +228,11 @@ all 273 cycles passed, but its terminal summary ended at
 `23.968570833055555` hours because the runner did not sample at/after the
 duration boundary. Its summary SHA-256 is
 `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
-The runner now requires a real terminal sample at/after the target; start a
-new immutable root after this fix. The prior 20260808 root remains preserved as
-an interrupted run and must not be concatenated with either root.
+The runner now requires a real terminal sample at/after the target. The active
+fresh root is
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810`
+under PID `12973`, with its first cycle passing. The prior 20260808 root remains
+preserved as an interrupted run and must not be concatenated with either root.
 
 The pre-merge two-cycle smoke completed with all three candidates passing. Its
 append-only log is
