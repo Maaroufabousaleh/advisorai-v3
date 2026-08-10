@@ -189,3 +189,15 @@ sanitized `WebSocketTransportError` class; no REST snapshot or write was
 attempted. The deterministic drills still passed. This is a provider/runtime
 availability failure, not a longer-operation pass; preserve it and do not
 concatenate it with the earlier bounded root.
+
+A fresh post-clock-offset sample on 2026-08-10 used one BTCUSDT and one ETHUSDT
+connection for the bounded 20-second window. Both connections failed closed
+before the first message with the sanitized `WebSocketTransportError` class;
+the run made zero REST calls, captured zero raw messages, and still passed all
+deterministic fault drills. Its immutable report is
+`artifacts/phase3/binance-spot-testnet-depth/20260810T185425.534127Z/phase3-binance-spot-testnet-depth.json`
+with SHA-256
+`daee289fd1373477c5c22f4b792ff4e07b452c93e4544e21f757dde7080e9831`.
+This is preserved as a post-change provider/runtime availability failure; it
+does not create clock-synchronized freshness, reconnect, or Phase-3 admission
+evidence.

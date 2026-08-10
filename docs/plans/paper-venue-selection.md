@@ -28,7 +28,21 @@ artifacts/phase2/binance-spot-testnet/public-truth/20260810T165904.357047Z/binan
 sha256: 34af4ef5649c0d0b92635507b422d7217c8a83f72156a6e2d99561e6da6d56e6
 ```
 
-This is public external measurement only. It is not authenticated read-only
+The ordered Binance/Bybit credential-free bake-off subsequently queried the
+actual non-production APIs for server time, both product records, provider
+filters, BTC/ETH order books, and BTC/ETH public trades. Both candidates passed
+that public gate; the machine-generated comparison is at:
+
+```text
+artifacts/phase2/paper-venue-bakeoff/20260810T190539.057729Z/paper-venue-candidate-bakeoff.json
+sha256: 78d8034c56a1b651da968129e463d73d23745a95565e1d9e80092a0bbd569b3a
+```
+
+The comparison also records the official private-operation contracts. Binance
+is selected because it was the first preferred candidate to pass and already
+has the smallest provider-specific AdvisorAI adapter. Bybit remains a measured
+alternative, not an additional runtime dependency or authority path. This is
+still public external measurement only: it is not authenticated read-only
 qualification, paper lifecycle evidence, or venue admission.
 
 ## Alternatives and rejection reasons
@@ -55,6 +69,19 @@ credential inventory was added.
 No generic exchange abstraction, CCXT authority path, or production endpoint
 was introduced. Binance is a candidate behind the existing `NativeTransport`
 boundary only.
+
+### Bybit Spot Testnet — measured, not selected
+
+The official [Bybit integration guidance](https://bybit-exchange.github.io/docs/v5/guide)
+identifies `https://api-testnet.bybit.com`, and the [Spot public WebSocket
+endpoint](https://bybit-exchange.github.io/docs/v5/ws/connect) identifies
+`wss://stream-testnet.bybit.com/v5/public/spot`. The live public comparison
+found `BTCUSDT` and `ETHUSDT` in `Trading` status, with tick size, base
+precision, minimum quantity/notional, order books, and public trades. Bybit
+also documents `orderLinkId` for client-controlled order identity and private
+wallet/open-order/order-history/execution reads. It is not selected because
+Binance passed the ordered first-candidate rule and its adapter is already
+implemented and tested. No Bybit credentials, writes, or adapter were added.
 
 ## Current state and next gate
 
