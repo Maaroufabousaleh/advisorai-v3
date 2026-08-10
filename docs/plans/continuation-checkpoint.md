@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`89ecdff9826cd78908872817c847bbcaa91f974b` after PR #56 merged.
+`4e7c1f3c3f9252a349b74eda2122d540b064720f` after PR #58 merged.
 
 ## Completed in this continuation
 
@@ -67,9 +67,9 @@ Checkpoint captured 2026-08-10 on `main`
   real run used seven public calls and recorded successful raw-spool replay for
   Coinbase BTC-USD ticker, Deribit BTC index, and SEC official RSS. Coinbase
   ETH-USD returned HTTP 404 and GDELT returned HTTP 429, so the evidence at
-  `artifacts/phase3/source-qualification/20260810T041104.946822Z/` remains
+  `artifacts/phase3/source-qualification/20260810T044558.818461Z/` remains
   `EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE`; its evidence SHA-256 is
-  `875ba39c05cdbb11e9fd4dcaded48f43bf2701a753bfcf20fb5d53a065470962`.
+  `d435e99b59d815700ccfc5d75e309632ecc91fa1aea3cd3b6c7157a02df272bf`.
 - Added the bounded public Coinbase Sandbox WSS qualifier in
   `scripts/qualify_phase3_coinbase_wss.py` with host pinning, raw-first
   per-connection spools, typed ticker replay, reconnect measurement, and

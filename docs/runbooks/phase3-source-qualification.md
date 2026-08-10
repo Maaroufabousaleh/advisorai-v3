@@ -38,8 +38,8 @@ headers, credentials, or account state.
 The latest run is:
 
 ```text
-artifacts/phase3/source-qualification/20260810T041104.946822Z/phase3-v3-core-source-qualification.json
-evidence SHA-256: 875ba39c05cdbb11e9fd4dcaded48f43bf2701a753bfcf20fb5d53a065470962
+artifacts/phase3/source-qualification/20260810T044558.818461Z/phase3-v3-core-source-qualification.json
+evidence SHA-256: d435e99b59d815700ccfc5d75e309632ecc91fa1aea3cd3b6c7157a02df272bf
 ```
 
 BTC-USD native ticker, Deribit BTC index, and SEC RSS passed the bounded
