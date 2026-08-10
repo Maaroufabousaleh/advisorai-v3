@@ -46,6 +46,10 @@ The credential-free Phase-0 component evidence drill and its quarantine
 interpretation are recorded in
 [`docs/runbooks/phase0-component-bakeoff.md`](../runbooks/phase0-component-bakeoff.md).
 
+The real two-provider rclone-crypt qualification boundary and its scoped
+operator procedure are recorded in
+[`docs/runbooks/rclone-archive-qualification.md`](../runbooks/rclone-archive-qualification.md).
+
 The pinned external Hermes runtime review, synthetic-task evidence, and OS
 namespace limitations are recorded in
 [`docs/runbooks/external-hermes-review.md`](../runbooks/external-hermes-review.md).

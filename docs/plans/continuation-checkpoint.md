@@ -38,6 +38,17 @@ Checkpoint captured 2026-08-10 on `main`
   order/cancel/transfer/withdrawal was attempted. Evidence:
   `artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`,
   SHA-256 `79c359996cb8d330739495117730924c13ff29f909359e0c189dfea02498fdc7`.
+- Implemented the scoped two-provider rclone-crypt boundary with backward-
+  compatible singular settings, explicit provider A/B raw and crypt aliases,
+  sanitized command failures, and the controlled qualification runner. The
+  first explicit real-run attempt generated a fresh source artifact but found
+  no populated `ARCHIVE_RCLONE` values and made zero network calls. Its
+  immutable evidence is at
+  `artifacts/phase0/rclone-crypt-qualification/20260810T003430.872217Z/rclone-crypt-qualification.json`
+  with manifest SHA-256
+  `fde44ab7ed3e0572c999b6a749f6eeeb718e39251e070939e71ad045ccfe7aed` and
+  canonical evidence SHA-256
+  `fb044389dbcb9bbe52a469c9993bf8cc45d1c11c83dcdcf259e2d6d4bc5bd67b`.
 
 ## Durable processes
 
@@ -65,8 +76,13 @@ tool execution.
   `artifacts/phase0/remote-route-stability/20260809T173059.039176Z/incident.json`
   (SHA-256
   `a3f8a51aeb5a437b1dd5c570cf86ce2cc4eb47b86e108055fcbf0b0ae34a9f8e`).
-- Phase-0 real `rclone crypt` upload/verify/restore requires operator-configured
-  archive remotes; the two-provider restore is unavailable.
+- Phase-0 real `rclone crypt` upload/verify/restore remains
+  `PENDING_OPERATOR_ACTION`: configure `RCLONE_CONFIG`,
+  `RCLONE_CONFIG_PASS`, `RCLONE_REMOTE_A`, `RCLONE_CRYPT_REMOTE_A`,
+  `RCLONE_REMOTE_B`, and `RCLONE_CRYPT_REMOTE_B` through the reviewed scoped
+  secrets boundary, then rerun the command in the rclone archive runbook. Do
+  not paste any values into chat. The manual provider copy statement is not
+  admission evidence.
 - Coinbase Sandbox identity, reviewed REST host, and scoped credentials are
   configured. The remaining provider blockers are that the actual sandbox
   product catalogue did not expose `ETH-USD` and the product-filtered fills

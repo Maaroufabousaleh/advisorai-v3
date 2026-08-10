@@ -103,6 +103,25 @@ def test_credential_scopes_are_explicit_and_return_only_the_requested_subset():
     assert "direct-secret" not in repr(resolver)
 
 
+def test_archive_scope_includes_independent_provider_aliases_without_leaking_other_scopes():
+    resolver = CredentialResolver.from_mapping(
+        {
+            "RCLONE_REMOTE_A": "advisor_raw_a:",
+            "RCLONE_CRYPT_REMOTE_A": "advisor_archive_a:",
+            "RCLONE_REMOTE_B": "advisor_raw_b:",
+            "RCLONE_CRYPT_REMOTE_B": "advisor_archive_b:",
+            "ADVISORAI_VENUE_API_SECRET": "venue-secret",
+        }
+    )
+
+    assert resolver.resolve(CredentialScope.ARCHIVE_RCLONE) == {
+        "RCLONE_CRYPT_REMOTE_A": "advisor_archive_a:",
+        "RCLONE_CRYPT_REMOTE_B": "advisor_archive_b:",
+        "RCLONE_REMOTE_A": "advisor_raw_a:",
+        "RCLONE_REMOTE_B": "advisor_raw_b:",
+    }
+
+
 def test_credential_alias_is_process_local_and_supports_direct_to_litellm_mapping():
     values = {"ADVISORAI_LLM_API_KEY": "direct-secret", "OPENROUTER_API_KEY": ""}
     resolver = CredentialResolver.from_mapping(values)
