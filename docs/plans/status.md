@@ -14,7 +14,7 @@ or 60-day operational gate.
 | 5 | Router, typed roles, bounded adaptive waves, evidence graph, independence gates, DecisionBundle and expiry/cutoff binding | `tests/agents`, `tests/api` | Correlated-evidence and target-only boundaries pass |
 | 6 | Portfolio comparisons, risk analytics/stress, validation, attribution incidents | `tests/institutional` | Deterministic controls pass |
 | 7 | Soak records/gate, incident-ledger rebuild, and immutable recovery rebuild | `tests/recovery/test_soak.py` | Requires actual 60-day paper operation and restore drills |
-| 8 | Hermes policy, bounded isolation runner, enforced child socket/DNS, read-only filesystem, conventional sensitive-path and process-environment metadata policies, common process-spawn denial, sensitive-environment scrubbing, artifact/capability lifecycle and broker | `tests/capabilities`, immutable active-read capability evidence, and a disposable pinned upstream runtime review | Local Hermes-to-active-read collector lifecycle passed in `artifacts/phase8/capability-evidence/20260808T050150.878842Z/phase8-capability-evidence.json`; the pinned upstream runtime completed a synthetic loopback coordinator/subagent probe, but filesystem/native-syscall containment and a real provider route remain unattested; formal Phase-8 admission remains pending behind earlier gates |
+| 8 | Hermes policy, bounded isolation runner, enforced child socket/DNS, read-only filesystem, conventional sensitive-path and process-environment metadata policies, common process-spawn denial, sensitive-environment scrubbing, artifact/capability lifecycle and broker, and disposable Docker OS-boundary probe | `tests/capabilities`, `tests/capabilities/test_os_sandbox_probe.py`, immutable active-read capability evidence, and a disposable pinned upstream runtime review | Local Hermes-to-active-read collector lifecycle passed; a real local Docker boundary measured network denial, read-only root denial, zero effective capabilities, and bounded process controls at `artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json` with SHA-256 `04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`; native syscall/C-extension containment, credential/production-tree isolation, and a real provider route remain unattested; formal Phase-8 admission remains pending behind earlier gates |
 | 9 | Vintaged official releases, equity corporate-action/daily-council boundary, challenger registry, browser ladder, archive verification | `tests/expansion` | Requires one-at-a-time live data/challenger evidence |
 | 10 | Human approval, bounded live readiness, AI-offline invariant, order guard | `tests/live` | Must remain closed until Phase 7 and explicit human approval pass |
 | 0–7 bridge | Typed secret loader/redaction, reviewed connector cards, HTTPS/WSS transport guards, direct typed LLM adapter, durable gateway-call records, generic paper/testnet HMAC venue transport, Coinbase Exchange Sandbox transport with exact host guard and scoped credential binding, signed open-order reconciliation and provider-specific account/fill/position/balance projection, raw-first native market normalization/replay, cadence-gated closed-cutoff `PaperRuntime` with durable kill-switch/dashboard control hydration and terminal per-order risk rejection, durable resource measurements/leases, refreshing/deduplicated ledger-backed dashboard/config projection, incident/replay/post-horizon scorecards | `tests/config/test_secrets.py`, `tests/integrations`, `tests/runtime`, `tests/learning`, `tests/resources`, `tests/data/test_market_events.py`, `tests/api/test_dashboard.py` | Local contracts pass. Coinbase evidence is partial/external: `/time`, `/products`, authenticated `/accounts` projections, `/orders`, and product-filtered `/fills` were attempted; account/balance/position/open-order reads passed, but `ETH-USD` was absent and fills returned HTTP 401. No order was sent. Continuous operation, Phase 0 stability, Phase 7 soak, and human decisions remain external |
@@ -97,10 +97,10 @@ execution authority.
 Latest local verification (2026-08-10):
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 124/152/107/38/19/34/10/7/25/18/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 124/152/107/38/19/34/10/7/27/18/5. Suite totals
 overlap a few shared contract tests. A single-process
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python -m pytest -q`
-passes all 537 tests with every declared optional extra active in the isolated
+passes all 539 tests with every declared optional extra active in the isolated
 locked verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
@@ -109,7 +109,7 @@ availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
 diff hygiene, tracked secret/model-weight checks, and the dashboard TypeScript/Vite
 build. The recent scoped code changes are formatted. A repository-wide Ruff
-format check passes with all 247 Python files formatted.
+format check passes with all 251 Python files formatted.
 The dashboard build passes with `npm run build` from `dashboard/`. The complete
 verification environment was isolated under `/tmp` so the two durable Phase-0
 stability workers continued using their original environment unchanged.
@@ -223,3 +223,14 @@ network calls, credentials, and paper orders. The formal Phase-8 gate remains
 pending and no capability is globally admitted.
 The local process policy does not attest direct native syscalls or C-extension
 escapes; OS-level sandbox evidence remains an external requirement.
+
+The real local OS-boundary probe is recorded at
+`artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`
+with SHA-256
+`04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`. The
+probe used a pre-existing pinned local image with Docker network disabled,
+read-only root, a constrained writable tmpfs, dropped capabilities,
+no-new-privileges, CPU/memory/PID ceilings, and no repository or credential
+mounts. The report's formal-admission flag is false: direct native syscall and
+C-extension containment, production-tree isolation, credential isolation, and
+a real Hermes capability task are still not attested.

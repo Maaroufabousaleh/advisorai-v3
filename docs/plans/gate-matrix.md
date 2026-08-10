@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint regenerated 2026-08-10 from `main` at
-`8f38bddd1420b8130340ff9d897eb6515d9a23b5` after PR #54 merged.
+`8ebcf2e4884469f9aaf318a766662527429d8148` after PR #59 merged.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -23,7 +23,7 @@ an external, timed, or human gate.
 | Phase 5 typed evidence council | phase-05 plan | yes | yes | independence/authority fixtures | no real V3-Core scored council | no | no | TESTED / PENDING_EXTERNAL_EVIDENCE | real source/model/provider route and data are absent | Exercise with admitted real V3-Core data after earlier gates |
 | Phase 6 institutional controls and attribution | phase-06 plan | yes | yes | deterministic risk/attribution fixtures | no real paper order sample | no | no | TESTED / PENDING_EXTERNAL_EVIDENCE | real paper fills and residual incidents are absent | Run the complete paper chain and reconcile exact attribution |
 | Phase 7 unattended paper soak and recovery | phase-07 plan | yes | yes | local soak/recovery fixtures | no | 60 calendar days required | operator supervision | PENDING_TIME_GATE | Phase 0–6 real prerequisites and venue operation are not ready | Prepare durable runner; launch only after prerequisites are real |
-| Phase 8 Hermes capability lifecycle | phase-08 plan | yes | yes | immutable fixture active-read report plus external runtime review | partial: external runtime/synthetic task; no real model route | no | review required for active-write only | QUARANTINED / PENDING_EXTERNAL_EVIDENCE | native syscall/C-extension/filesystem containment not attested; earlier gates closed | Evaluate a complete host boundary only when admission permits; never admit the synthetic route |
+| Phase 8 Hermes capability lifecycle | phase-08 plan | yes, including disposable Docker boundary probe | yes, including `tests/capabilities/test_os_sandbox_probe.py` | immutable fixture active-read report plus real local Docker boundary measurement | partial: pinned external runtime/synthetic task; no real model route or real Hermes capability task | no | review required for active-write only | EXTERNALLY MEASURED / QUARANTINED | Docker measured network denial, read-only root denial, zero effective capabilities, and bounded process controls, but native syscall/C-extension containment and credential/production-tree isolation are not attested; earlier gates remain closed | Preserve the OS-boundary report; evaluate a real isolated Hermes capability only after earlier phase gates and stronger containment evidence permit it |
 | Phase 9 controlled expansion | phase-09 plan | yes | yes | challenger/source boundaries | no marginal-value challenger evidence | no | no | QUARANTINED | Phase 0–7 and E0 are not satisfied | Keep additions quarantined; reject challengers with evidence when evaluated |
 | Phase 10 bounded-live readiness guards | phase-10 plan | yes | yes | readiness/AI-offline fixtures | no live validation | no | explicit human approval required | PENDING_OPERATOR_ACTION | Phase 7 and all prerequisites incomplete; no human authorization | Keep live closed; do not create approval or enable production |
 | Real API/paper transition bridge | real-api-paper-transition.md; coinbase-exchange-sandbox runbook | yes | yes | offline config/adapter evidence and Coinbase contract tests | partial: exact sandbox endpoint reached; authenticated account/balance/position/open-order reads passed, but required ETH-USD mapping and fills read failed | no | provider catalogue/profile and fills-permission review | EXTERNALLY MEASURED / PENDING_OPERATOR_ACTION | Coinbase Sandbox returned no `ETH-USD` product and `/fills?product_id=BTC-USD` returned HTTP 401; paper lifecycle is prohibited until the complete read-only gate passes | Rerun `scripts/smoke_coinbase_exchange_sandbox.py` after the reviewed sandbox product set exposes both BTC-USD and ETH-USD and the scoped key can read fills |
@@ -76,6 +76,16 @@ an external, timed, or human gate.
   evidence at
   `artifacts/phase0/external-hermes-review/20260809T162031Z/external-hermes-review.json`;
   it used a synthetic loopback provider and does not open Phase 8.
+- A disposable Docker boundary probe was measured on 2026-08-10 at
+  `artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`
+  with SHA-256
+  `04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`.
+  It recorded zero external network calls, a read-only root filesystem, a
+  constrained writable tmpfs, zero effective capabilities, and bounded process
+  controls using the local Docker runtime. It did not mount the repository,
+  credentials, broker, order, or production paths. Native syscall and
+  C-extension containment remain `not_attested`, so this evidence is not
+  formal Hermes or Phase-8 admission.
 - The exact Novita route stability trial is preserved as a failed/quarantined
   run after an upstream shared-pool HTTP 429. Earlier DigitalOcean roots were
   quarantined for runner-integrity defects, and the later root at
