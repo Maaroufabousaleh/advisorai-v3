@@ -140,10 +140,20 @@ the 20260809T173237.710604Z DigitalOcean window recorded three upstream
 shared-pool HTTP 429 gateway abstentions and is quarantined. Its incident
 report SHA-256 is
 `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
-The replacement root is
-`artifacts/phase0/remote-route-stability/20260810T034500Z`; its initial exact
-route smoke passed and its durable 24-hour runner is active. It remains
-`PENDING_STABILITY` until the full duration and all route/quality checks pass.
+The replacement root
+`artifacts/phase0/remote-route-stability/20260810T034500Z` recorded 11 passing
+cycles before an upstream shared-pool HTTP 429 and is quarantined. Its
+incident SHA-256 is
+`805d763d69841515f7beb676ec2a0dea2e2043106dbb4dbc43b292bff4350e9f`.
+The runner now stops immediately after a failed sample; the corrected
+systemd-backed root
+`artifacts/phase0/remote-route-stability/20260810T053600Z` stopped after its
+first sanitized `deadline_exhausted` gateway abstention and is quarantined.
+Its incident SHA-256 is
+`5b6d5ffe9133811a664f24151b95fcd850f130cff718bc6ed1eae9289178cff1`.
+No route window is currently active. Retry only when the reviewed provider
+route is available again, using a fresh root; never concatenate failed
+samples.
 
 ## Admission and selection
 

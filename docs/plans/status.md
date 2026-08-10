@@ -6,10 +6,10 @@ or 60-day operational gate.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
-| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the prior DigitalOcean exact-route root is quarantined after three upstream shared-pool HTTP 429 gateway abstentions and replacement root `artifacts/phase0/remote-route-stability/20260810T034500Z` is active with 11 passing cycles; selected local roles still require 24-hour stability; the controlled archive runner is implemented and fixture-tested but the first real attempt found no populated scoped archive values, made zero network calls, and remains pending |
+| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; DigitalOcean replacement roots `20260810T034500Z` and corrected `20260810T053600Z` are quarantined after immutable external route failures (HTTP 429/shared-pool capacity and deadline exhaustion); selected local roles still require 24-hour stability; the controlled archive runner is implemented and fixture-tested but the first real attempt found no populated scoped archive values, made zero network calls, and remains pending |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission, and Coinbase Exchange Sandbox-specific CB-ACCESS signer/schema transport | `tests/execution`, `tests/integrations`, `tests/runtime`, `tests/integrations/test_coinbase_exchange.py` | Local Coinbase signer/product/OMS boundary tests pass. Real smoke reached the reviewed sandbox `/time` and `/products`; the returned catalogue omitted required `ETH-USD`, while authenticated account/balance/position/open-order reads passed and the product-filtered fills read returned sanitized HTTP 401. The read-only gate and paper lifecycle remain pending. Nautilus remains Phase 0 governed despite being installed and locally tested |
-| 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor, and bounded real-source qualification runners with freshness measurement | `tests/data`, `tests/phase3/test_source_qualification.py`, `tests/phase3/test_coinbase_wss_qualification.py`, `scripts/qualify_phase3_sources.py`, `scripts/qualify_phase3_coinbase_wss.py` | Real source evidence is partial: REST replay passed for Coinbase BTC-USD ticker, Deribit BTC index, and SEC official RSS; Coinbase ETH-USD returned 404 and GDELT returned 429. Two real Coinbase Sandbox WSS connections replayed 29 ticker events and 23 heartbeats with freshness passing, but both observed provider sequence gaps. Continuous freshness soak/recovery/disagreement evidence remains pending and no Phase-3 admission is claimed |
+| 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor, and bounded real-source qualification runners with freshness measurement | `tests/data`, `tests/phase3/test_source_qualification.py`, `tests/phase3/test_coinbase_wss_qualification.py`, `tests/phase3/test_coinbase_level2_qualification.py`, `scripts/qualify_phase3_sources.py`, `scripts/qualify_phase3_coinbase_wss.py`, `scripts/qualify_phase3_coinbase_level2.py` | Real source evidence is partial: REST replay passed for Coinbase BTC-USD ticker, Deribit BTC index, and SEC official RSS; Coinbase ETH-USD returned 404 and GDELT returned 429. Two real Coinbase Sandbox WSS connections replayed 29 ticker events and 23 heartbeats with freshness passing, but both observed provider sequence gaps. The public `level2_batch` path then delivered one BTC-USD snapshot, 79 updates, and 12 heartbeats; book-state replay matched, validation passed, and freshness passed. Continuous freshness soak/recovery/disagreement evidence remains pending and no Phase-3 admission is claimed |
 | 4 | Naive/statistical/LightGBM boundary, isolated ModernFinBERT/MiniLM/DeBERTa and TTM-R2/R3/TSPulse/Chronos/Kronos runtimes, calibration, GPU lease, public walk-forward/finance-sentiment measurements, and evidence-bound roster | `tests/models`, `tests/phase0`, measured local roster | Role winners are pending stability; point-in-time paper utility remains a later admission gate |
 | 5 | Router, typed roles, bounded adaptive waves, evidence graph, independence gates, DecisionBundle and expiry/cutoff binding | `tests/agents`, `tests/api` | Correlated-evidence and target-only boundaries pass |
 | 6 | Portfolio comparisons, risk analytics/stress, validation, attribution incidents | `tests/institutional` | Deterministic controls pass |
@@ -94,13 +94,30 @@ connections, so this is real partial measurement, not WSS qualification or
 Phase-3 admission. The WSS runner does not load credentials or create
 execution authority.
 
+The delivery-guaranteeing level-2 qualification is implemented in
+[`scripts/qualify_phase3_coinbase_level2.py`](../../scripts/qualify_phase3_coinbase_level2.py)
+with focused coverage in
+[`tests/phase3/test_coinbase_level2_qualification.py`](../../tests/phase3/test_coinbase_level2_qualification.py).
+The direct `level2` channel delivered heartbeats but no snapshot during its
+bounded run and remains incomplete. The public `level2_batch` channel produced
+the measured evidence at
+`artifacts/phase3/coinbase-level2-qualification/20260810T052805.696329Z/phase3-coinbase-level2-qualification.json`
+with SHA-256
+`dc620a8fa41458fa4f89396e33687b13750461a3cd643be1b18d0588092e23de`.
+It recorded one snapshot, 79 updates, 12 heartbeats, zero validation failures,
+matching live/replay book-state SHA-256
+`170a4fb548279355bb307404013cb10cc8e421d465b59a552dc65b5a8c1231b9`, maximum
+event age 0.576 seconds, and maximum heartbeat interval 1.081 seconds. This is
+bounded external source evidence only; continuous recovery, source
+disagreement, and Phase-3 admission remain pending.
+
 Latest local verification (2026-08-10):
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 124/152/107/38/19/34/10/7/27/18/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 125/152/107/44/19/34/10/7/27/18/5. Suite totals
 overlap a few shared contract tests. A single-process
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-full-verify-20260809/bin/python -m pytest -q`
-passes all 539 tests with every declared optional extra active in the isolated
+passes all 546 tests with every declared optional extra active in the isolated
 locked verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
@@ -202,10 +219,17 @@ cycles, including three immutable upstream shared-pool HTTP 429 gateway
 abstentions, and was stopped and quarantined. Its incident report SHA-256 is
 `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
 The replacement root
-`artifacts/phase0/remote-route-stability/20260810T034500Z` is active under PID
-`13831`, has 11 passing cycles, and remains `PENDING_STABILITY` until the
-24-hour duration and all route/quality checks pass. Failed samples are not
-concatenated.
+`artifacts/phase0/remote-route-stability/20260810T034500Z` was active under PID
+`13831`, recorded 11 passing cycles and then an immutable HTTP 429 gateway
+abstention, and is quarantined with incident SHA-256
+`805d763d69841515f7beb676ec2a0dea2e2043106dbb4dbc43b292bff4350e9f`. The
+corrected runner was then started under user systemd at
+`artifacts/phase0/remote-route-stability/20260810T053600Z`; its first bounded
+probe ended in a sanitized `deadline_exhausted` gateway abstention, and the
+root is quarantined with incident SHA-256
+`5b6d5ffe9133811a664f24151b95fcd850f130cff718bc6ed1eae9289178cff1`. No
+DigitalOcean route window is currently active; failed samples are not
+concatenated. A future retry remains provider-availability/time-dependent.
 The superseded pre-attestation roots remain preserved: the 20260809T171000Z
 root is quarantined by incident SHA-256
 `302220c0b2be692de953848d7cf2b8058baceb271581a776f52f82c3d13f8677`, and the

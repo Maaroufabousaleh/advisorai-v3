@@ -112,3 +112,27 @@ def test_remote_summary_fails_identity_drift():
 
     assert summary["identity_stable"] is False
     assert summary["status"] == "failed"
+
+
+def test_remote_summary_fails_on_any_failed_sample():
+    started = datetime(2026, 8, 9, 16, tzinfo=UTC)
+    failed = make_record(
+        run_id="remote-test",
+        sequence=0,
+        sampled_at=started,
+        identity_key="openrouter:digitalocean:deepseek/deepseek-v4-flash-20260423",
+        passed=False,
+        probe={"status": "failed", "failure_reason": "gateway_abstention"},
+        previous_record_hash=None,
+        config_sha256="a" * 64,
+    )
+    summary = summarize_records(
+        run_id="remote-test",
+        started_at=started,
+        duration_hours=24,
+        records=(failed,),
+        now=started + timedelta(minutes=10),
+    )
+
+    assert summary["all_cycles_passed"] is False
+    assert summary["status"] == "failed"

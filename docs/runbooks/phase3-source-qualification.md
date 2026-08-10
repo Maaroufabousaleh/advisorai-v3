@@ -100,3 +100,35 @@ the first and 25 gaps/177 on the second), so the report is
 `EXTERNALLY_MEASURED / PENDING_EXTERNAL_EVIDENCE`; no WSS qualification or
 Phase-3 admission is claimed. A longer freshness soak, level-2 recovery
 strategy, and source-disagreement evidence remain separate requirements.
+
+## Coinbase Sandbox level-2 book qualification
+
+The delivery-guaranteeing public book path is qualified separately by
+[`scripts/qualify_phase3_coinbase_level2.py`](../../scripts/qualify_phase3_coinbase_level2.py).
+It is pinned to the same reviewed Sandbox WebSocket host, accepts only the
+reviewed `level2` and `level2_batch` channels, and uses the existing raw-first
+spool. The reducer requires one snapshot before updates, validates positive
+prices, non-negative sizes, valid sides, and an uncrossed best bid/ask, then
+replays the raw bytes and compares the final book-state hash. The summary
+contains hashes and counts only; it does not copy provider payloads.
+
+Run with the locked transition environment and explicit public-read opt-in:
+
+```bash
+PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
+  scripts/qualify_phase3_coinbase_level2.py \
+  --real --channel level2_batch \
+  --evidence-dir artifacts/phase3/coinbase-level2-qualification
+```
+
+The direct `level2` channel delivered heartbeats but no snapshot in its
+bounded run. The public `level2_batch` run produced one BTC-USD snapshot, 79
+updates, and 12 heartbeats with zero validation failures, matching live/replay
+book-state SHA-256, maximum event age 0.576 seconds, and maximum heartbeat
+interval 1.081 seconds. Its immutable report is
+`artifacts/phase3/coinbase-level2-qualification/20260810T052805.696329Z/phase3-coinbase-level2-qualification.json`
+with SHA-256
+`dc620a8fa41458fa4f89396e33687b13750461a3cd643be1b18d0588092e23de`.
+This closes only the bounded level-2 source-smoke subcheck. Longer freshness,
+reconnect/recovery, source disagreement, and the Phase-3 admission gate remain
+pending.

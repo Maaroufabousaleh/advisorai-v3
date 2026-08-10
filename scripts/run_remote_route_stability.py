@@ -441,6 +441,10 @@ def main() -> int:
             )
             if not passed:
                 state = "failed"
+                # A failed sample invalidates this immutable duration window.
+                # Stop before another paid probe can be appended; the operator
+                # must preserve this root and start a fresh one after review.
+                break
             remaining = (target_end - datetime.now(UTC)).total_seconds()
             if remaining <= 0 or (args.max_cycles is not None and len(cycles) >= args.max_cycles):
                 break
