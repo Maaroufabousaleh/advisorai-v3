@@ -63,6 +63,25 @@ Checkpoint captured 2026-08-10 on `main`
   order/cancel/transfer/withdrawal was attempted. Evidence:
   `artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`,
   SHA-256 `79c359996cb8d330739495117730924c13ff29f909359e0c189dfea02498fdc7`.
+- Selected Binance Spot Testnet as the single BTC/ETH replacement candidate
+  after reviewing the official Spot Testnet API contract and rejecting OKX
+  Demo for its production-host simulated-trading boundary. Implemented and
+  fixture-tested the provider-specific Binance HMAC signer, exact testnet
+  host/path guard, product/filter mapper, account/balance/position/order/fill
+  projections, restart-safe symbol query, scoped private smoke, and public
+  product qualifier. The public qualifier measured both `BTCUSDT` and
+  `ETHUSDT` at
+  `artifacts/phase2/binance-spot-testnet/public-truth/20260810T165904.357047Z/binance-spot-testnet-public-truth.json`
+  with SHA-256
+  `34af4ef5649c0d0b92635507b422d7217c8a83f72156a6e2d99561e6da6d56e6`.
+  Authenticated Binance reads and the paper lifecycle remain pending the
+  operator's review of the single canonical `PAPER_VENUE` profile; no order
+  was sent.
+- Added the Binance venue-selection decision and runbook. The private smoke
+  accepts an explicit `--secrets /mnt/c/projects/advisorai-v3/secrets.env`
+  path, resolves only `PAPER_VENUE`, persists reference names and sanitized
+  schema/count results, and cannot fall back to production. The Coinbase
+  adapter/evidence remains preserved and is not weakened to BTC-only.
 - Implemented the scoped two-provider rclone-crypt boundary with backward-
   compatible singular settings, explicit provider A/B raw and crypt aliases,
   sanitized command failures, repo-local explicit secrets plumbing, and the
@@ -143,18 +162,28 @@ Checkpoint captured 2026-08-10 on `main`
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 12973 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810` | `PENDING_STABILITY`; cycle 1 passed, inspect heartbeat and preserve the process |
+| Selected local model stability | 40130 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2` | `PENDING_STABILITY`; cycle 1 passed after the prior root's cwd interruption; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 Both current processes are detached with exact commands recorded by their
-runbooks. The failed remote route process was stopped after its immutable
+runbooks. The selected-model predecessor root
+`phase0-selected-24h-terminal-sample-20260810` is preserved as interrupted
+after seven passing cycles and a sanitized `FileNotFoundError` caused by an
+unavailable worker cwd; its interruption record and stderr hash remain
+immutable. The replacement uses a fresh admission root and an explicit stable
+workspace cwd. The failed remote route process was stopped after its immutable
 failure evidence was preserved; the replacement uses only `DIRECT_LLM`, a
 synthetic structured probe, no fallbacks, and no tool execution. Failed samples
 must not be concatenated with the replacement root.
 
 ## Remaining gates and blockers
 
-- Phase-0 local model stability remains in its 24-hour duration gate. All
+- Phase-0 local model stability remains in its 24-hour duration gate. The
+  fresh `phase0-selected-24h-terminal-sample-20260810` root is interrupted
+  after seven passing cycles by a `FileNotFoundError` at cycle execution; it
+  is preserved and cannot be resumed or concatenated. Replacement root
+  `phase0-selected-24h-terminal-sample-20260810-r2` is active under PID
+  `40130` with a new immutable runtime-admission root. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected
   20260810T053600Z root stopped after a deadline-exhausted first probe. No
@@ -183,6 +212,12 @@ must not be concatenated with the replacement root.
   catalogue did not expose `ETH-USD` and the product-filtered fills read
   returned HTTP 401. The required read-only gate and paper lifecycle remain
   closed. Secret values must not be sent in chat.
+- Binance Spot Testnet public truth passes for the required BTC/ETH symbols,
+  but the authenticated gate is not yet measured. The operator must review
+  the existing single `PAPER_VENUE` profile for the exact testnet host and
+  restricted fake-funds credentials, run the explicit Binance smoke, and
+  inspect its immutable sanitized result. No credential value may be printed,
+  copied into a second file, or persisted in evidence.
 - Phase 3–7 real source/paper operation and the 60-day soak cannot start until
 - Phase 3 now has partial real source evidence, but its complete gate remains
   closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and the bounded
@@ -194,11 +229,10 @@ must not be concatenated with the replacement root.
   attestation remain incomplete. Formal admission is still closed.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.
 
-Next legal work is to preserve the healthy model stability worker, resolve or
-reproduce the Provider B raw-layer listing failure, complete the remaining
-unblocked Phase-0 checks, and inspect durable evidence without restarting or
-concatenating runs. Rerun the Coinbase-specific read-only smoke only after the
-reviewed sandbox catalogue genuinely exposes both required products. No model,
-Hermes runtime, or remote route has trading authority.
+Next legal work is to preserve the healthy model stability worker, continue
+credential-free Binance/Phase-3 source evidence, and wait for the reviewed
+Binance `PAPER_VENUE` profile before running authenticated reads. The archive
+gate is externally deferred and must not be touched in this continuation. No
+model, Hermes runtime, or remote route has trading authority.
 
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`
