@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`308f1d92b5dbae4a34554b3c38a34672418c65d4` after PR #80 merged.
+`35cb46be4bc1a9d8ec8b102dea24c40857c7f0db` after PR #81 merged.
 
 ## Completed in this continuation
 
@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `570 passed`, acceptance suites
-  `128/152/118/54/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `575 passed`, acceptance suites
+  `128/152/123/54/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -86,6 +86,18 @@ Checkpoint captured 2026-08-10 on `main`
   path, resolves only `PAPER_VENUE`, persists reference names and sanitized
   schema/count results, and cannot fall back to production. The Coinbase
   adapter/evidence remains preserved and is not weakened to BTC-only.
+- Implemented the credential-free ordered Binance/Bybit paper-venue bake-off in
+  `scripts/qualify_paper_venue_candidates.py`. The final real comparison
+  queried both non-production APIs for server time, BTC/ETH product truth and
+  filters, order books, and public trades. Both candidates passed; Binance was
+  selected by the preferred-first rule. No credentials were resolved and no
+  write endpoint was called. Evidence:
+  `artifacts/phase2/paper-venue-bakeoff/20260810T190539.057729Z/paper-venue-candidate-bakeoff.json`,
+  SHA-256
+  `78d8034c56a1b651da968129e463d73d23745a95565e1d9e80092a0bbd569b3a`.
+  Added five offline regression tests, including exact production-host
+  rejection metadata and provider-status collision protection. Bybit remains
+  measured but unselected; no second adapter or ledger was added.
 - Implemented the scoped two-provider rclone-crypt boundary with backward-
   compatible singular settings, explicit provider A/B raw and crypt aliases,
   sanitized command failures, repo-local explicit secrets plumbing, and the
@@ -166,6 +178,15 @@ Checkpoint captured 2026-08-10 on `main`
   `7b249a125c78e346c7b9d028850e2b7cbf004c890e005bad6f6f8d70b92ddd08`;
   deterministic fault drills still passed. This is a provider/runtime
   availability failure, not a successful longer-operation qualification.
+- Re-ran the Binance depth qualifier after the clock-offset implementation in
+  a fresh 20-second BTCUSDT/ETHUSDT root. Both WSS connections failed closed
+  before their first message with `WebSocketTransportError`, made zero REST
+  calls, and passed deterministic fault drills. Evidence:
+  `artifacts/phase3/binance-spot-testnet-depth/20260810T185425.534127Z/phase3-binance-spot-testnet-depth.json`,
+  SHA-256
+  `daee289fd1373477c5c22f4b792ff4e07b452c93e4544e21f757dde7080e9831`.
+  This is preserved as a post-change provider/runtime availability failure,
+  not clock-synchronized freshness evidence.
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
@@ -195,7 +216,7 @@ Checkpoint captured 2026-08-10 on `main`
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, seven cycles passed, last record SHA-256 `2daa086e41031e93a2ac268056beb54dbd655f66ac85b68e939e3b938d8b69b9`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, ten cycles passed, last record SHA-256 `5d18e59a927a40f39377402533da3651eeedae8e5f8ccadf449e3d1e20b30875`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -218,7 +239,7 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root; seven cycles have
+  `70598` with a new immutable runtime-admission root; ten cycles have
   passed and the 24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected
@@ -261,8 +282,9 @@ must not be concatenated with the replacement root.
   closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and the bounded
   WSS probe observed provider sequence gaps; the fresh 120-second Binance
   attempt failed closed before its first message with a sanitized transport
-  failure. Continuous freshness/recovery and cross-source disagreement soak
-  remain pending.
+  failure; the post-offset 20-second attempt also failed before its first
+  message and made zero REST calls. Continuous freshness/recovery and
+  cross-source disagreement soak remain pending.
 - Phase 8 now has real local Docker boundary evidence for network denial,
   read-only-root denial, capability dropping, and bounded process controls, but
   native-syscall/C-extension, credential, production-tree, and real-capability
@@ -270,8 +292,9 @@ must not be concatenated with the replacement root.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.
 
 Next legal work is to preserve the healthy model stability worker, continue
-credential-free Binance/Phase-3 source evidence, and wait for the reviewed
-Binance `PAPER_VENUE` profile before running authenticated reads. The archive
+credential-free Phase-3 source evidence only when the reviewed provider is
+available, and wait for the reviewed Binance `PAPER_VENUE` profile before
+running authenticated reads. The archive
 gate is externally deferred and must not be touched in this continuation. No
 model, Hermes runtime, or remote route has trading authority.
 
