@@ -299,7 +299,11 @@ def _version_for_command(command_name: str) -> str | None:
             capture_output=True,
             check=False,
             text=True,
-            timeout=2,
+            # Some reviewed command-line tools initialize encrypted/configured
+            # state before reporting their version; keep the probe bounded but
+            # do not quarantine a healthy binary solely on a two-second WSL
+            # startup variance.
+            timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
         return None

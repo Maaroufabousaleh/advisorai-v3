@@ -30,6 +30,7 @@ from .venue import VenueTransportError
 BINANCE_SPOT_TESTNET_HOST = "testnet.binance.vision"
 BINANCE_SPOT_TESTNET_BASE_URL = f"https://{BINANCE_SPOT_TESTNET_HOST}"
 BINANCE_SPOT_TESTNET_WS_API_URL = "wss://ws-api.testnet.binance.vision/ws-api/v3"
+BINANCE_SPOT_TESTNET_STREAM_HOST = "stream.testnet.binance.vision"
 BINANCE_SPOT_TESTNET_STREAM_URL = "wss://stream.testnet.binance.vision/ws"
 BINANCE_SPOT_TESTNET_ADAPTER_VERSION = "binance-spot-testnet-v1"
 
@@ -667,6 +668,7 @@ __all__ = [
     "BINANCE_SPOT_TESTNET_ADAPTER_VERSION",
     "BINANCE_SPOT_TESTNET_BASE_URL",
     "BINANCE_SPOT_TESTNET_HOST",
+    "BINANCE_SPOT_TESTNET_STREAM_HOST",
     "BINANCE_SPOT_TESTNET_STREAM_URL",
     "BINANCE_SPOT_TESTNET_WS_API_URL",
     "BinanceSpotSigner",
