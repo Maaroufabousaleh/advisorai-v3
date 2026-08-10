@@ -4,6 +4,29 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — durable Phase-3 source qualification
+
+The Phase-3 source-health package is implemented on branch
+`phase3-durable-source-health` at `6efa78d991947e125ae27d6d25ac9ab0812b04db`.
+It adds the restartable append-only runner
+[`scripts/run_phase3_public_data_qualification.py`](../../scripts/run_phase3_public_data_qualification.py),
+typed deterministic source-health and failover controls under
+[`src/advisorai/collectors`](../../src/advisorai/collectors), snapshot/sequence
+recovery, versioned source disagreement thresholds, and a sanitized read-only
+dashboard/API projection. The package is fixture-tested; it does not add order
+authority or credentials to public connectors.
+
+A real two-hour qualification is currently running at
+`artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`
+under PID `62977`. Its config records code SHA-256
+`030bca24e1844a04277e5c33afe028e9eddf0638279fefdf18f4523d129b3558`,
+`credentials_loaded=false`, and `order_writes_attempted=false`; the start is
+`2026-08-10T23:13:21.437160Z` and the target end is
+`2026-08-11T01:13:21.437160Z`. Heartbeat and append-only logs are advancing.
+This is `IMPLEMENTED / TESTED / EXTERNALLY MEASURED / RUNNING`, not Phase-3
+admission. Completion must be independently validated, and any stale,
+disconnected, quarantined, or disagreement state remains fail-closed.
+
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
 | 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py`, `tests/phase0/test_rclone_qualification.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; DigitalOcean replacement roots `20260810T034500Z` and corrected `20260810T053600Z` are quarantined after immutable external route failures (HTTP 429/shared-pool capacity and deadline exhaustion); selected local roles still require 24-hour stability; the latest real archive root measured independent A/B crypt restores and equal hashes, but Provider B raw recursive enumeration failed, so archive admission remains closed |
@@ -231,10 +254,10 @@ Latest local verification (2026-08-10, after the Phase-3 public-source changes) 
 created with the repository's declared optional extras:
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 128/152/126/55/19/34/10/7/27/18/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 128/152/126/63/19/34/10/7/27/18/5. Suite totals
 overlap a few shared contract tests. A single-process
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python -m pytest -q`
-passes all 590 tests with every declared optional extra active in the isolated
+passes all 598 tests with every declared optional extra active in the isolated
 locked verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
@@ -243,7 +266,7 @@ availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
 diff hygiene, tracked secret/model-weight checks, and the dashboard TypeScript/Vite
 build. The recent scoped code changes are formatted. A repository-wide Ruff
-format check passes with all 271 Python files formatted.
+format check passes with all 277 Python files formatted.
 The dashboard build passes with `npm run build` from `dashboard/`. The complete
 verification environment was isolated under `/tmp` so the active selected-model
 stability worker continued using its original environment unchanged; no remote

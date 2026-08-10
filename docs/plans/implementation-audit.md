@@ -22,6 +22,26 @@ human gate into a unit-test claim.
 | 10 | Explicit human authorization artifact; fixed loss/notional budget; policy/state-hash-bound final order guard; AI-offline safety check; automatic paper-rollback readiness | [`tests/live`](../../tests/live) | Phase 7 completion, explicit human approval, and supervised bounded live validation |
 | Alpha Team extension | Integrated plan and conformance boundary only; no Research Brain, DSL, candidate, experiment, validation, or promotion implementation is claimed by this row | None; future evidence must be tied to the E0-E7 gate in [`alpha-team-extension.md`](alpha-team-extension.md) | E0 is not yet satisfied; no Alpha Team runtime, paper candidate, or admission evidence is claimed |
 
+## Phase-3 durable source qualification implementation
+
+The current Phase-3 package adds a restartable append-only public-data runner,
+typed deterministic source-health transitions and hash-chain ledger,
+provider-truth snapshot/sequence recovery, versioned cross-source disagreement
+policy, explicit failover/fail-closed selection, and a sanitized read-only
+dashboard/API projection. The implementation is in
+[`scripts/run_phase3_public_data_qualification.py`](../../scripts/run_phase3_public_data_qualification.py)
+and the typed collectors under
+[`src/advisorai/collectors`](../../src/advisorai/collectors), with focused
+coverage in [`tests/phase3/test_source_health_controls.py`](../../tests/phase3/test_source_health_controls.py).
+
+The real qualification root
+`artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2` is
+active under PID `62977`. Its config records code SHA-256
+`030bca24e1844a04277e5c33afe028e9eddf0638279fefdf18f4523d129b3558`, no
+credentials, and no order writes. This is implementation plus active external
+measurement; the result, append-only integrity, source-health outcomes, and
+Phase-3 admission remain pending. No execution authority was added.
+
 ## Latest Phase-3 Binance availability evidence
 
 A further bounded 20-second retry at
@@ -49,11 +69,11 @@ This remains provider/runtime availability evidence, not a Phase-3 pass.
 
 The pre-qualification local run on 2026-08-10 passed all 570 tests in one process with every
 declared optional extra active in an isolated locked verification environment, and
-all eleven isolated phase suites. The post-qualification rerun passed 590 tests
-and phase suites `128/152/126/55/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
+all eleven isolated phase suites. The post-qualification rerun passed 598 tests
+and phase suites `128/152/126/63/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
-format checking passes with all 271 Python files formatted. The Phase-1 local
+format checking passes with all 277 Python files formatted. The Phase-1 local
 rollback/Bronze rebuild report is immutable evidence with SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and does
 not open any external or human gate. The Phase-0 component evidence report is

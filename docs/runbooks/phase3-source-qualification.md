@@ -267,3 +267,49 @@ The execution chain remains
 RiskKernel -> OMS -> Binance Spot Testnet transport`. The public source does
 not receive the paper venue credentials, and the execution adapter retains its
 testnet-only host guard.
+
+## Durable source-health qualification
+
+The longer Phase-3 qualification runner is
+[`scripts/run_phase3_public_data_qualification.py`](../../scripts/run_phase3_public_data_qualification.py).
+It is credential-free and read-only: its immutable config records
+`credentials_loaded=false` and `order_writes_attempted=false`. It writes an
+atomic heartbeat/status projection plus append-only hash-chained
+`samples.jsonl`, `observations.jsonl`, `source-selection.jsonl`,
+`disagreement.jsonl`, and `health-transitions.jsonl`; a run root is resumed only
+when its immutable code/policy/config identity matches.
+
+Start a fresh bounded engineering window with an explicit run root:
+
+```bash
+PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
+  scripts/run_phase3_public_data_qualification.py \
+  --real \
+  --run-directory artifacts/phase3/public-market-data-durable/<immutable-run-id> \
+  --duration-hours 2 \
+  --cycle-seconds 90 \
+  --window-seconds 10
+```
+
+For a detached run, use a durable host-supported supervisor such as
+`systemd --user` or `setsid nohup`; retain the exact command, PID/service
+identity, evidence root, code hash, config hash, heartbeat, and stop/restart
+procedure. Resume the same root with the same command only after confirming the
+prior process is absent and the lock is recoverable. Never concatenate roots or
+backdate elapsed time.
+
+Each cycle records source/symbol provider and endpoint identity, provider and
+local timestamps, offset/drift, freshness percentiles, connection and recovery
+counters, sequence/duplicate/order findings, snapshot/replay hashes, health
+transitions, source disagreement, failover decisions, downtime, and sanitized
+failure classes. A gap invalidates the local incremental book; recovery requires
+a provider-truth snapshot and a proven continuation boundary. Severe source
+disagreement abstains; if no independent candidate satisfies the minimum
+contract, selection fails closed. A source cannot silently become another
+provider.
+
+The runner's completion is evidence for review only. It does not open Phase-3
+admission; stale, disconnected, recovering, quarantined, or severe-disagreement
+outcomes remain fail-closed. The read-only dashboard/API may project the latest
+sanitized `latest-health.json` through `ADVISORAI_PHASE3_HEALTH_SNAPSHOT`; it
+does not expose transport write methods or execution authority.
