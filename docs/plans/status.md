@@ -10,7 +10,8 @@ or 60-day operational gate.
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission, Coinbase Exchange Sandbox-specific CB-ACCESS signer/schema transport, and Binance Spot Testnet-specific HMAC/schema transport | `tests/execution`, `tests/integrations`, `tests/runtime`, `tests/integrations/test_coinbase_exchange.py`, `tests/integrations/test_binance_spot.py`, `tests/integrations/test_binance_spot_lifecycle.py`, `tests/integrations/test_paper_venue_bakeoff.py`, `scripts/qualify_paper_venue_candidates.py`, `scripts/qualify_binance_spot_testnet_lifecycle.py` | Coinbase real smoke remains partial: `ETH-USD` was absent and fills returned sanitized HTTP 401. Binance authenticated read-only evidence passed all required operations and one supervised fake-funds `LIMIT_MAKER` lifecycle passed through RiskKernel → OMS → provider transport → reconciliation. The real path observed no fill, so fill ingestion is fixture-tested and the measured lifecycle is qualified for the no-fill/cancel path; Phase 0 stability, longer source operation, and later paper/soak gates remain open. Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor, and bounded real-source qualification runners with freshness measurement | `tests/data`, `tests/phase3/test_source_qualification.py`, `tests/phase3/test_coinbase_wss_qualification.py`, `tests/phase3/test_coinbase_level2_qualification.py`, `scripts/qualify_phase3_sources.py`, `scripts/qualify_phase3_coinbase_wss.py`, `scripts/qualify_phase3_coinbase_level2.py` | Real source evidence is partial: REST replay passed for Coinbase BTC-USD ticker, Deribit BTC index, and SEC official RSS; Coinbase ETH-USD returned 404 and GDELT returned 429. Two real Coinbase Sandbox WSS connections replayed 29 ticker events and 23 heartbeats with freshness passing, but both observed provider sequence gaps. The public `level2_batch` path then delivered one BTC-USD snapshot, 79 updates, and 12 heartbeats; book-state replay matched, validation passed, and freshness passed. Continuous freshness soak/recovery/disagreement evidence remains pending and no Phase-3 admission is claimed |
-| 3 current evidence addendum | Binance Spot Testnet raw depth snapshot/update qualifier and reconnect observations | `tests/phase3/test_binance_depth_qualification.py`, `scripts/qualify_phase3_binance_spot_testnet_depth.py` | The qualifier now has fixture-tested bounded provider/local clock-offset measurement and retains raw future-event counts. Bounded root `artifacts/phase3/binance-spot-testnet-depth/20260810T173135.489992Z/phase3-binance-spot-testnet-depth.json` (SHA-256 `b794c7fd2c014c89928c7bf2ad4b73fde253a615818dddd27a4da53a025c76c0`) captured four BTC/ETH snapshots and 289 updates with live/replay book equality; all four fresh connections completed, but provider event timestamps were ahead of local receipt. A fresh requested 120-second root `artifacts/phase3/binance-spot-testnet-depth/20260810T182011.404029Z/phase3-binance-spot-testnet-depth.json` (SHA-256 `7b249a125c78e346c7b9d028850e2b7cbf004c890e005bad6f6f8d70b92ddd08`) failed closed before the first message on all four WSS attempts with `WebSocketTransportError`; no REST snapshot or write was attempted. Both real roots predate the offset implementation. Injected drills passed; Phase-3 remains pending an offset-aware clock-synchronized freshness run, provider recovery, longer operation, and independent source disagreement |
+| 3 current evidence addendum | Binance Spot Testnet raw depth snapshot/update qualifier, WSS layer diagnosis, and reconnect observations | `tests/phase3/test_binance_depth_qualification.py`, `tests/phase3/test_binance_wss_diagnostic.py`, `scripts/qualify_phase3_binance_spot_testnet_depth.py`, `scripts/qualify_phase3_binance_wss_diagnostic.py` | The qualifier now has fixture-tested bounded provider/local clock-offset measurement and retains raw future-event counts. The latest root `artifacts/phase3/binance-spot-testnet-depth/20260810T211531.293435Z/phase3-binance-spot-testnet-depth.json` (SHA-256 `f75f4e25ba48d923df4cba4e29d7ccf4b45e7382a05b5f63bb3a500b8b59fcde`) captured ETH events with live/replay equality, while BTC and other streams failed closed on WSS/runtime or adjusted-future freshness. The layer diagnostic `artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json` (SHA-256 `8690b776e6e4237de9f4fe5ff775eb4da1cb7e16efbd11e2c3bd1fd5f2789e1b`) separately proved DNS/TCP/TLS and classified the remaining issue as intermittent connection timeout; it is not labeled provider-unavailable. Phase-3 remains pending longer freshness, recovery, and independent source disagreement |
+| 3 public market-data separation | Credential-free public source cards and raw-first source-selection runner | `src/advisorai/collectors/public_market_data.py`, `tests/data/test_public_market_data.py`, `scripts/qualify_phase3_public_market_data.py` | v2 public Binance primary candidate selected from real product/book/trade/server-time/WSS evidence for BTCUSDT and ETHUSDT at `artifacts/phase3/public-market-data-qualification/20260810T211233.301638Z/phase3-public-market-data-qualification.json` (SHA-256 `14df66c9cb142598c0cca98d653af2896bb08c6faea2dc6c7221ed71d5a51c41`). It completed four full read-only windows, two reconnects per symbol, adjusted freshness after clock-offset correction, and real Coinbase-vs-Binance BTC/ETH top-of-book observations. The connector is read-only, credential-free, and separate from execution; Coinbase remains unselected due incomplete product minimum-quantity fields and one adjusted-future session, while Deribit is context-only | EXTERNALLY MEASURED / PARTIAL / PENDING_EXTERNAL_EVIDENCE; no continuous source admission is claimed |
 | 3 current availability addendum | Post-change Binance Spot Testnet depth qualifier | `scripts/qualify_phase3_binance_spot_testnet_depth.py` and existing depth tests | The clock-offset and fault-drill code remains fixture-tested | Post-offset root `artifacts/phase3/binance-spot-testnet-depth/20260810T185425.534127Z/phase3-binance-spot-testnet-depth.json` (SHA-256 `daee289fd1373477c5c22f4b792ff4e07b452c93e4544e21f757dde7080e9831`) used one BTCUSDT and one ETHUSDT connection, failed closed before first message with `WebSocketTransportError`, made zero REST calls, and captured no raw messages; deterministic drills passed | no | provider/runtime WSS availability and longer recovery window remain unmeasured | EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE | no post-offset live WSS message has been obtained; no freshness or reconnect claim is made | Preserve this root; retry only after availability is reviewed and keep any new run independent |
 | 4 | Naive/statistical/LightGBM boundary, isolated ModernFinBERT/MiniLM/DeBERTa and TTM-R2/R3/TSPulse/Chronos/Kronos runtimes, calibration, GPU lease, public walk-forward/finance-sentiment measurements, and evidence-bound roster | `tests/models`, `tests/phase0`, measured local roster | Role winners are pending stability; point-in-time paper utility remains a later admission gate |
 | 5 | Router, typed roles, bounded adaptive waves, evidence graph, independence gates, DecisionBundle and expiry/cutoff binding | `tests/agents`, `tests/api` | Correlated-evidence and target-only boundaries pass |
@@ -36,6 +37,39 @@ SHA-256 is
 `ce402b7bdd67513c90b1cc5bf744d0a8d455a6f1b7f927610a84f997699b8415`.
 This confirms provider/runtime unavailability remains the blocker; it is not a
 freshness, reconnect, or Phase-3 admission pass.
+
+## Phase-3 WSS layer diagnosis and public market-data separation
+
+The credential-free Binance Testnet layer diagnostic is preserved at
+`artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json`
+with SHA-256
+`8690b776e6e4237de9f4fe5ff775eb4da1cb7e16efbd11e2c3bd1fd5f2789e1b`.
+DNS, TCP, and TLS passed in the locked transition runtime. Successful direct
+BTC/ETH attempts received public messages and valid subscriptions were
+acknowledged; BTC reconnect passed, while one ETH connection timed out. The
+sanitized classification is `websocket_connection_timeout`, not a generic
+provider-unavailable claim. The earlier `.venv` missing-library diagnostic is
+separate and immutable.
+
+The corrected depth evidence at
+`artifacts/phase3/binance-spot-testnet-depth/20260810T211531.293435Z/phase3-binance-spot-testnet-depth.json`
+has SHA-256
+`f75f4e25ba48d923df4cba4e29d7ccf4b45e7382a05b5f63bb3a500b8b59fcde`.
+An ETH stream was replay-equivalent; BTC and other streams include preserved
+WSS/runtime or adjusted-future fail-closed results. This is partial source
+evidence only.
+
+The credential-free public market-data bake-off selected Binance public
+BTCUSDT/ETHUSDT as the current primary candidate at
+`artifacts/phase3/public-market-data-qualification/20260810T211233.301638Z/phase3-public-market-data-qualification.json`
+with SHA-256
+`14df66c9cb142598c0cca98d653af2896bb08c6faea2dc6c7221ed71d5a51c41`.
+It passed public product/filter, book, trade, server-time, four full WSS
+windows, two reconnects per symbol, adjusted freshness, and cross-source
+top-of-book checks without credentials or write methods. The source card is separate from
+Binance Spot Testnet execution. Coinbase public data remains unselected due
+incomplete minimum-quantity fields; Deribit remains context-only. Continuous
+freshness, recovery, disagreement, and explicit failover evidence remain open.
 
 ## Coinbase Exchange Sandbox evidence
 
@@ -237,8 +271,9 @@ failure; its immutable interruption record SHA-256 is
 root is resumed or concatenated. A fresh immutable runtime-admission root was
 attested, the one-cycle cwd-fix smoke passed with all candidates and status
 `short_smoke_complete`, and replacement r3 is active under PID `70598` from
-`2026-08-10T18:07:25.593600Z`; 26 cycles have passed, the latest record hash
-is `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`, and no
+`2026-08-10T18:07:25.593600Z`; 32 cycles had passed at
+`2026-08-10T20:53:45.796700Z`, the latest record hash was
+`e8a0b6caf34955a98d0d80d40566d50858a4fcd753126de0f36141ab026fd2fe`, and no
 24-hour result exists yet.
 
 The Phase-1 local operational report has SHA-256

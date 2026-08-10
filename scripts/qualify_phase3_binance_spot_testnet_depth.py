@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from advisorai.collectors.sources import RawHttpSpool
 from advisorai.integrations import (
@@ -338,11 +338,19 @@ def _process_records(
     }
 
 
-def _snapshot_from_spool(http_spool: RawHttpSpool) -> Mapping[str, object]:
+def _snapshot_from_spool(
+    http_spool: RawHttpSpool, *, symbol: str | None = None
+) -> Mapping[str, object]:
     records = http_spool.read()
-    successful = tuple(record for record in records if record.status_code == 200)
+    successful = tuple(
+        record
+        for record in records
+        if record.status_code == 200
+        and urlsplit(record.url).path == "/api/v3/depth"
+        and (symbol is None or parse_qs(urlsplit(record.url).query).get("symbol") == [symbol])
+    )
     if len(successful) != 1:
-        raise ValueError("Binance depth snapshot response is missing or non-unique")
+        raise ValueError("Binance depth snapshot response is missing or non-unique by symbol")
     payload = json.loads(successful[0].payload)
     if not isinstance(payload, Mapping):
         raise ValueError("Binance depth snapshot is not an object")
@@ -362,7 +370,7 @@ def _fetch_snapshot(
     http_spool.append(response)
     if response.status_code != 200:
         raise HttpTransportError("Binance depth snapshot returned a non-success status")
-    return _snapshot_from_spool(http_spool)
+    return _snapshot_from_spool(http_spool, symbol=symbol)
 
 
 def _fetch_server_time(client: SafeHttpClient, http_spool: RawHttpSpool) -> dict[str, object]:
@@ -490,7 +498,7 @@ async def _collect_connection(
     live_result: dict[str, object] | None = None
     replay_equivalent = False
     if snapshot is not None:
-        replay_snapshot = _snapshot_from_spool(http_spool)
+        replay_snapshot = _snapshot_from_spool(http_spool, symbol=symbol)
         clock_offset_seconds = float(clock_sample["clock_offset_seconds"])
         live_result = _process_records(
             snapshot,

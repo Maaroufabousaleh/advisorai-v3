@@ -201,3 +201,69 @@ with SHA-256
 This is preserved as a post-change provider/runtime availability failure; it
 does not create clock-synchronized freshness, reconnect, or Phase-3 admission
 evidence.
+
+## Binance Spot Testnet WebSocket layer diagnosis
+
+Use the credential-free diagnostic before interpreting a WSS failure as a
+provider outage:
+
+```bash
+PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
+  scripts/qualify_phase3_binance_wss_diagnostic.py \
+  --real \
+  --evidence-dir artifacts/phase3/binance-wss-diagnostic
+```
+
+The diagnostic checks DNS, TCP, TLS, direct public streams, valid subscription
+acknowledgements, first-message timing, close/error classes, and bounded
+reconnect behavior. It does not send malformed subscriptions, load
+credentials, or call an order endpoint. The `.venv` may lack the transition
+WebSocket dependency; use the locked transition environment and preserve that
+local-runtime result separately rather than installing into the active model
+worker environment.
+
+The latest locked-runtime evidence is
+`artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json`
+with SHA-256
+`8690b776e6e4237de9f4fe5ff775eb4da1cb7e16efbd11e2c3bd1fd5f2789e1b`.
+DNS/TCP/TLS passed; successful BTC/ETH attempts received public messages and
+valid subscriptions were acknowledged, while one ETH attempt timed out. The
+classification is intermittent `websocket_connection_timeout`, not a generic
+provider-unavailable result. The earlier local missing-library report is
+`bc08d878e70193368bea67981a24ba3033704314e61626f7c796951caa13da9f`.
+
+## Separate public market-data plane
+
+The V3-Core public-data connector is intentionally separate from execution. It
+uses reviewed, credential-free HTTPS/WSS cards and exposes no account, order,
+cancel, transfer, or withdrawal operation. The selection runner is:
+
+```bash
+PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
+  scripts/qualify_phase3_public_market_data.py \
+  --real \
+  --duration-seconds 15 \
+  --connection-rounds 2 \
+  --evidence-dir artifacts/phase3/public-market-data-qualification
+```
+
+The current selected primary is Binance public market data for BTCUSDT and
+ETHUSDT. Its immutable selection evidence is
+`artifacts/phase3/public-market-data-qualification/20260810T211233.301638Z/phase3-public-market-data-qualification.json`
+with SHA-256
+`14df66c9cb142598c0cca98d653af2896bb08c6faea2dc6c7221ed71d5a51c41`.
+That report proves four full public BTC/ETH WSS windows, two reconnects per
+symbol, adjusted freshness after provider/local clock correction, and
+cross-source top-of-book observations in addition to product/filter, book,
+trade, and server-time truth. It does not admit unattended source operation.
+Longer
+freshness, reconnect/resubscription, sequence-gap and snapshot recovery,
+stale-feed fail-closed, REST/WSS outage recovery, duplicate/out-of-order
+handling, independent-source disagreement, and explicit failover without
+silent substitution remain required.
+
+The execution chain remains
+`public read-only source -> normalized V3-Core data -> models/council/target ->
+RiskKernel -> OMS -> Binance Spot Testnet transport`. The public source does
+not receive the paper venue credentials, and the execution adapter retains its
+testnet-only host guard.
