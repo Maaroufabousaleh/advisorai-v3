@@ -348,6 +348,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .health-number strong { color: var(--cyan); font: 20px var(--font-data); }
 .health-number span { color: var(--dim); font: 9px var(--font-data); }
 .quality-table .data-table-row { grid-template-columns: 1.1fr .8fr .7fr .9fr 1.1fr 2fr; }
+.source-health-heading-meta { display: flex; align-items: center; gap: 12px; }
+.source-health-note { display: flex; align-items: center; gap: 9px; padding: 12px 21px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 11px; line-height: 1.4; }
+.source-health-note svg { flex: 0 0 auto; color: var(--cyan-dim); }
+.source-health-table { overflow-x: auto; }
+.source-health-row { min-width: 1160px; display: grid; grid-template-columns: 1.55fr .55fr 1.05fr .65fr .8fr .55fr 1.05fr 1.2fr .85fr; align-items: center; min-height: 59px; gap: 14px; padding: 0 21px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font: 10px var(--font-data); }
+.source-health-row:last-child { border-bottom: 0; }
+.source-health-row:not(.source-health-head):hover { background: rgba(255,255,255,.025); }
+.source-health-row > span:first-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.source-health-row strong { overflow: hidden; color: var(--ink); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.source-health-row small { overflow: hidden; color: var(--dim); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.source-health-head { min-height: 36px; color: var(--dim); font-size: 8px; letter-spacing: .11em; }
+.source-decision { font: 600 9px var(--font-data); letter-spacing: .04em; }
+.source-health-empty { display: flex; align-items: center; gap: 9px; min-height: 72px; padding: 0 21px; color: var(--muted); font: 10px var(--font-data); }
 .model-lanes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .model-lane { display: flex; align-items: center; gap: 10px; min-height: 73px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .lane-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line-bright); color: var(--cyan); }
