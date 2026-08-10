@@ -58,10 +58,10 @@ The complete checkpoint matrix is maintained in
 Latest local verification (2026-08-10):
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-verify.VM2tnK/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 123/151/107/22/19/34/10/7/25/11/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 124/151/107/22/19/34/10/7/25/11/5. Suite totals
 overlap a few shared contract tests. A single-process
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-verify.VM2tnK/bin/python -m pytest -q`
-passes all 512 tests with the optional runtimes active in the isolated locked
+passes all 513 tests with the optional runtimes active in the isolated locked
 verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
