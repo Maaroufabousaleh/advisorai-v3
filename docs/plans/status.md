@@ -127,10 +127,11 @@ availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
 diff hygiene, tracked secret/model-weight checks, and the dashboard TypeScript/Vite
 build. The recent scoped code changes are formatted. A repository-wide Ruff
-format check passes with all 251 Python files formatted.
+format check passes with all 254 Python files formatted.
 The dashboard build passes with `npm run build` from `dashboard/`. The complete
-verification environment was isolated under `/tmp` so the two durable Phase-0
-stability workers continued using their original environment unchanged.
+verification environment was isolated under `/tmp` so the active selected-model
+stability worker continued using its original environment unchanged; no remote
+route retry was started.
 
 Model stability evidence is still external and pending. On 2026-08-08, a
 pre-format 24-hour attempt was interrupted after the pinned worker hashes
