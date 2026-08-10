@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`7bf4daa8fb3b38d25068beaa14dd39f5636132d0` after PR #60 merged.
+`f372a8c69c162c8ec3f8e924300816e0b31d5fd1` after PR #61 merged.
 
 ## Completed in this continuation
 
@@ -36,7 +36,7 @@ Checkpoint captured 2026-08-10 on `main`
 - Started replacement root
   `artifacts/phase0/remote-route-stability/20260810T034500Z` after a bounded
   exact-route smoke passed. Its durable runner is active under PID `13831` with
-  two passing samples; the 24-hour gate remains pending and failed roots are
+  11 passing cycles; the 24-hour gate remains pending and failed roots are
   not concatenated.
 - Implemented and locally tested the Coinbase Exchange Sandbox-specific
   `CB-ACCESS-*` signer, exact sandbox REST/WS host guard, provider account/
@@ -105,7 +105,7 @@ Checkpoint captured 2026-08-10 on `main`
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
 | Selected local model stability | 9456 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809` | `PENDING_STABILITY`; inspect status/heartbeat before action |
-| DigitalOcean exact remote route stability | 13831 | `artifacts/phase0/remote-route-stability/20260810T034500Z` | `PENDING_STABILITY`; two passing samples; inspect heartbeat and do not concatenate the quarantined root |
+| DigitalOcean exact remote route stability | 13831 | `artifacts/phase0/remote-route-stability/20260810T034500Z` | `PENDING_STABILITY`; 11 passing cycles; inspect heartbeat and do not concatenate the quarantined root |
 
 Both current processes are detached with exact commands recorded by their
 runbooks. The failed remote route process was stopped after its immutable
