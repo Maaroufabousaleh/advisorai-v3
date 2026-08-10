@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`9f25d77e9a2f9cef186e28a523e1b000dbf0a7e2` after PR #65 merged.
+`0c499af95ef6072b71577f350d15315ee6a48c09` after PR #66 merged.
 
 ## Completed in this continuation
 
