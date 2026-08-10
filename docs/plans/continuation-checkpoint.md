@@ -1,7 +1,8 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`4edf5f2756388b2ff331e8f5009525a4f9f08722` after PR #51 merged.
+`d9d07d28a1e170666b136ac4fba5df24014e6ef1` after PR #52 merged; the current
+working tree contains the unmerged Phase-3 source qualification package.
 
 ## Completed in this continuation
 
@@ -21,7 +22,7 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `521 passed`, acceptance suites
+  environment: full pytest `528 passed`, acceptance suites
   `124/152/107/22/19/34/10/7/25/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
@@ -62,6 +63,14 @@ Checkpoint captured 2026-08-10 on `main`
   `fde44ab7ed3e0572c999b6a749f6eeeb718e39251e070939e71ad045ccfe7aed` and
   canonical evidence SHA-256
   `fb044389dbcb9bbe52a469c9993bf8cc45d1c11c83dcdcf259e2d6d4bc5bd67b`.
+- Added native provider event-time normalization and the bounded real-source
+  qualification runner in `scripts/qualify_phase3_sources.py`. The latest
+  real run used seven public calls and recorded successful raw-spool replay for
+  Coinbase BTC-USD ticker, Deribit BTC index, and SEC official RSS. Coinbase
+  ETH-USD returned HTTP 404 and GDELT returned HTTP 429, so the evidence at
+  `artifacts/phase3/source-qualification/20260810T041104.946822Z/` remains
+  `EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE`; its evidence SHA-256 is
+  `875ba39c05cdbb11e9fd4dcaded48f43bf2701a753bfcf20fb5d53a065470962`.
 
 ## Durable processes
 
@@ -108,7 +117,10 @@ must not be concatenated with the replacement root.
   no value was logged or persisted. The required read-only gate and paper
   lifecycle remain closed. Secret values must not be sent in chat.
 - Phase 3–7 real source/paper operation and the 60-day soak cannot start until
-  earlier gates and venue prerequisites are real.
+- Phase 3 now has partial real source evidence, but its complete gate remains
+  closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and REST bootstrap
+  does not prove WebSocket sequence/reconnect, continuous freshness, or
+  cross-source disagreement soak.
 - Phase 8 OS filesystem/native-syscall/C-extension attestation is incomplete;
   namespace network denial alone is not formal admission evidence.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.

@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from hashlib import sha256
+from numbers import Real
 from pathlib import Path
 from typing import Protocol
 from xml.etree import ElementTree
@@ -229,6 +230,55 @@ def _raw_hash(body: bytes) -> str:
     return sha256(body).hexdigest()
 
 
+def _record_event_time(record: Mapping[str, object], available_at: datetime) -> datetime:
+    """Extract a provider event time without weakening the PIT contract.
+
+    Native REST/bootstrap payloads use several conventions for timestamps.  A
+    missing timestamp is allowed and uses receipt time, but a present,
+    malformed, timezone-naive, or future timestamp is rejected by the normal
+    ``PointInTimeObservation`` validation path.  That distinction keeps schema
+    drift and clock skew visible instead of silently relabelling source data.
+    """
+
+    raw: object | None = None
+    for key in ("timestamp_ms", "ts", "timestamp", "time", "created_at"):
+        if key in record and record[key] is not None:
+            raw = record[key]
+            break
+    if raw is None:
+        return available_at
+    if isinstance(raw, bool):
+        raise ValueError("native venue event timestamp cannot be boolean")
+    if isinstance(raw, Real):
+        numeric = float(raw)
+        if not numeric == numeric or numeric in {float("inf"), float("-inf")}:
+            raise ValueError("native venue event timestamp must be finite")
+        if abs(numeric) >= 100_000_000_000_000:
+            numeric /= 1_000_000
+        elif abs(numeric) >= 100_000_000_000:
+            numeric /= 1_000
+        return datetime.fromtimestamp(numeric, tz=UTC)
+    if isinstance(raw, str):
+        value = raw.strip()
+        if not value:
+            raise ValueError("native venue event timestamp cannot be blank")
+        try:
+            numeric = float(value)
+        except ValueError:
+            try:
+                return _aware(datetime.fromisoformat(value.replace("Z", "+00:00")))
+            except ValueError as exc:
+                raise ValueError("native venue event timestamp is malformed") from exc
+        if not numeric == numeric or numeric in {float("inf"), float("-inf")}:
+            raise ValueError("native venue event timestamp must be finite")
+        if abs(numeric) >= 100_000_000_000_000:
+            numeric /= 1_000_000
+        elif abs(numeric) >= 100_000_000_000:
+            numeric /= 1_000
+        return datetime.fromtimestamp(numeric, tz=UTC)
+    raise ValueError("native venue event timestamp has an unsupported type")
+
+
 def _strip_untrusted_markup(text: str) -> str:
     without_active = re.sub(
         r"<\s*(script|style|iframe|object|embed)[^>]*>.*?<\s*/\s*\1\s*>",
@@ -300,12 +350,7 @@ class NativeVenueCollector:
         for record in records:
             if not isinstance(record, Mapping):
                 raise ValueError("native venue record must be an object")
-            event_ms = record.get("timestamp_ms", record.get("ts"))
-            event_time = (
-                datetime.fromtimestamp(int(event_ms) / 1000, tz=UTC)
-                if event_ms is not None
-                else available_at
-            )
+            event_time = _record_event_time(record, available_at)
             value = json.dumps(record, sort_keys=True, separators=(",", ":"))
             observations.append(
                 PointInTimeObservation(

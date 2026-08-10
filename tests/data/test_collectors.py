@@ -61,6 +61,44 @@ def test_native_collector_accepts_single_record_bootstrap_payload(btc_usdt, time
     assert len(observations) == 1
 
 
+def test_native_parser_normalizes_iso_provider_event_time(btc_usdt, timestamp):
+    collector = NativeVenueCollector(_descriptor("native", "market", "venue"))
+    observations = collector.parse(
+        json.dumps(
+            {
+                "symbol": "BTC-USD",
+                "price": "100",
+                "time": timestamp.isoformat().replace("+00:00", "Z"),
+            }
+        ).encode(),
+        instrument=btc_usdt,
+        available_at=timestamp + timedelta(seconds=1),
+    )
+    assert observations[0].event_time == timestamp
+    assert observations[0].source_published_at == timestamp
+
+
+def test_native_parser_rejects_malformed_or_future_provider_event_time(btc_usdt, timestamp):
+    collector = NativeVenueCollector(_descriptor("native", "market", "venue"))
+    with pytest.raises(ValueError, match="timestamp is malformed"):
+        collector.parse(
+            b'{"symbol":"BTC-USD","time":"not-a-timestamp"}',
+            instrument=btc_usdt,
+            available_at=timestamp,
+        )
+    with pytest.raises(ValueError, match="first_available_at cannot precede source_published_at"):
+        collector.parse(
+            json.dumps(
+                {
+                    "symbol": "BTC-USD",
+                    "time": (timestamp + timedelta(seconds=1)).isoformat(),
+                }
+            ).encode(),
+            instrument=btc_usdt,
+            available_at=timestamp,
+        )
+
+
 def test_native_fetch_spools_exact_response_before_status_or_parse(tmp_path, btc_usdt, timestamp):
     body = b"provider-error-without-credentials"
 
