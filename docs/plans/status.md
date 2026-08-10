@@ -70,9 +70,9 @@ does not load credentials, call a production Coinbase host, substitute another
 venue, or open any trading authority.
 
 The latest machine-generated evidence is at
-`artifacts/phase3/source-qualification/20260810T041104.946822Z/phase3-v3-core-source-qualification.json`
+`artifacts/phase3/source-qualification/20260810T044558.818461Z/phase3-v3-core-source-qualification.json`
 with evidence SHA-256
-`875ba39c05cdbb11e9fd4dcaded48f43bf2701a753bfcf20fb5d53a065470962`.
+`d435e99b59d815700ccfc5d75e309632ecc91fa1aea3cd3b6c7157a02df272bf`.
 Seven bounded public calls were made. The native BTC-USD ticker, Deribit BTC
 index, and SEC official RSS operations passed raw-spool replay and quality
 checks. The native ETH-USD operation failed with HTTP 404 because the current
