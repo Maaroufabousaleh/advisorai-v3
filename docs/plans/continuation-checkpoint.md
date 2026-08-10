@@ -1,8 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`d9d07d28a1e170666b136ac4fba5df24014e6ef1` after PR #52 merged; the current
-working tree contains the unmerged Phase-3 source qualification package.
+`de573ba22ccf10b8b705d7de5a5243045e59dd1b` after PR #53 merged.
 
 ## Completed in this continuation
 
