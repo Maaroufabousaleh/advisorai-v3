@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-10 from clean `main`
-`687597bdbb59514a6f35d099ce49195401412e95` after PR #85 merged.
+`b52ba086ab6bd19bfe6768c7e244dedf4b180193` after PR #86 merged.
 
 ## Current continuation update — Phase-3 source spine
 
