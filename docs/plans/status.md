@@ -271,9 +271,9 @@ failure; its immutable interruption record SHA-256 is
 root is resumed or concatenated. A fresh immutable runtime-admission root was
 attested, the one-cycle cwd-fix smoke passed with all candidates and status
 `short_smoke_complete`, and replacement r3 is active under PID `70598` from
-`2026-08-10T18:07:25.593600Z`; 32 cycles had passed at
-`2026-08-10T20:53:45.796700Z`, the latest record hash was
-`e8a0b6caf34955a98d0d80d40566d50858a4fcd753126de0f36141ab026fd2fe`, and no
+`2026-08-10T18:07:25.593600Z`; 37 cycles had passed at
+`2026-08-10T21:20:29.661771Z`, the latest record hash was
+`39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`, and no
 24-hour result exists yet.
 
 The Phase-1 local operational report has SHA-256

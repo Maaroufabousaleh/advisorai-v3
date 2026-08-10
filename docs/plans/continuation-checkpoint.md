@@ -7,9 +7,9 @@ Checkpoint refreshed 2026-08-10 from clean `main`
 
 - PID `70598` remains untouched and active under
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
-  Its latest read-only heartbeat at `2026-08-10T20:53:45.796700Z` recorded 32
+  Its latest read-only heartbeat at `2026-08-10T21:20:29.661771Z` recorded 37
   passing cycles with last record SHA-256
-  `e8a0b6caf34955a98d0d80d40566d50858a4fcd753126de0f36141ab026fd2fe`.
+  `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`.
   The 24-hour gate remains pending; no earlier root was concatenated.
 - The layered Binance Testnet WSS diagnostic at
   `artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json`
@@ -306,7 +306,7 @@ The following supersedes the earlier pending-operator Binance bullets below.
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 32 cycles had passed at `2026-08-10T20:53:45.796700Z`, last record SHA-256 `e8a0b6caf34955a98d0d80d40566d50858a4fcd753126de0f36141ab026fd2fe`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 37 cycles had passed at `2026-08-10T21:20:29.661771Z`, last record SHA-256 `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -329,9 +329,9 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root; 32 cycles had passed at
-  `2026-08-10T20:53:45.796700Z`, and the latest record hash was
-  `e8a0b6caf34955a98d0d80d40566d50858a4fcd753126de0f36141ab026fd2fe`, and the
+  `70598` with a new immutable runtime-admission root; 37 cycles had passed at
+  `2026-08-10T21:20:29.661771Z`, and the latest record hash was
+  `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`, and the
   24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected
