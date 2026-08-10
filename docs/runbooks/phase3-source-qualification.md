@@ -57,3 +57,44 @@ closed; it must not be hidden behind a fallback source.
 
 Earlier failed runner attempts are preserved with incident records under their
 immutable evidence roots and are not concatenated into the current evidence.
+
+## Coinbase Sandbox WebSocket qualification
+
+The bounded WSS probe is
+[`scripts/qualify_phase3_coinbase_wss.py`](../../scripts/qualify_phase3_coinbase_wss.py).
+It is pinned to the reviewed public sandbox feed
+`wss://ws-feed-public.sandbox.exchange.coinbase.com`, subscribes only to the
+public `BTC-USD` `ticker` and `heartbeat` channels, and uses the existing
+`RawWebSocketFeed`/`RawMessageSpool` boundary. It does not load credentials or
+open an execution path. Production WSS hosts, paths, queries, and credentials
+are rejected before any network call.
+
+Run it only with the transition extra installed:
+
+```bash
+PYTHONPATH=. ./.venv/bin/python scripts/qualify_phase3_coinbase_wss.py \
+  --real \
+  --evidence-dir artifacts/phase3/coinbase-wss-qualification
+```
+
+The runner makes two bounded connections by default. Each connection has its
+own append-only raw spool, records subscription acknowledgement and provider
+sequence metadata, parses/replays only typed ticker events, and records
+control-message/error classes without copying provider payloads into the
+summary. Provider sequence gaps or reordering fail the bounded probe.
+
+The latest real evidence is:
+
+```text
+artifacts/phase3/coinbase-wss-qualification/20260810T042758.896119Z/phase3-coinbase-wss-qualification.json
+evidence SHA-256: 1d9d8a45cf2d68772104c0fd51550fb2d8bf5dcc0473fdbb8b0134d5322b4f6a
+```
+
+Both connections completed their 12-second windows, received subscription
+acknowledgements, 20 ticker messages and 24 heartbeats in total, and replayed
+all 20 ticker events deterministically. The provider reported non-consecutive
+sequence values on both connections (25 gaps/129 missing sequence values on
+the first and 13 gaps/55 on the second), so the report is
+`EXTERNALLY_MEASURED / PENDING_EXTERNAL_EVIDENCE`; no WSS qualification or
+Phase-3 admission is claimed. A longer freshness soak, level-2 recovery
+strategy, and source-disagreement evidence remain separate requirements.

@@ -36,6 +36,7 @@ COINBASE_EXCHANGE_SANDBOX_BASE_URL = f"https://{COINBASE_EXCHANGE_SANDBOX_HOST}"
 COINBASE_EXCHANGE_SANDBOX_WS_HOST = "ws-feed-public.sandbox.exchange.coinbase.com"
 COINBASE_EXCHANGE_SANDBOX_WS_URL = f"wss://{COINBASE_EXCHANGE_SANDBOX_WS_HOST}"
 COINBASE_EXCHANGE_PRODUCTION_HOST = "api.exchange.coinbase.com"
+COINBASE_EXCHANGE_PRODUCTION_WS_HOST = "ws-feed.exchange.coinbase.com"
 COINBASE_EXCHANGE_SANDBOX_ADAPTER_VERSION = "coinbase-exchange-sandbox-v1"
 
 _TERMINAL_ORDER_STATES = frozenset(
@@ -658,6 +659,7 @@ __all__ = [
     "COINBASE_EXCHANGE_SANDBOX_HOST",
     "COINBASE_EXCHANGE_SANDBOX_WS_HOST",
     "COINBASE_EXCHANGE_SANDBOX_WS_URL",
+    "COINBASE_EXCHANGE_PRODUCTION_WS_HOST",
     "CoinbaseExchangeSandboxTransport",
     "CoinbaseExchangeSigner",
     "CoinbaseProductSpec",
