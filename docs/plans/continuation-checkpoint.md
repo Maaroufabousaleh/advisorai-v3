@@ -1,7 +1,8 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint captured 2026-08-10 on `main`
-`f372a8c69c162c8ec3f8e924300816e0b31d5fd1` after PR #61 merged.
+Checkpoint captured 2026-08-10 from `main`
+`dfde626ac592bcdbf055d7a6074f98aff939a2cb` after PR #62 merged; this branch
+contains the subsequent level-2 qualification and route-failure remediation.
 
 ## Completed in this continuation
 
@@ -21,8 +22,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `539 passed`, acceptance suites
-  `124/152/107/38/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `546 passed`, acceptance suites
+  `125/152/107/44/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -35,9 +36,17 @@ Checkpoint captured 2026-08-10 on `main`
   `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
 - Started replacement root
   `artifacts/phase0/remote-route-stability/20260810T034500Z` after a bounded
-  exact-route smoke passed. Its durable runner is active under PID `13831` with
-  11 passing cycles; the 24-hour gate remains pending and failed roots are
-  not concatenated.
+  exact-route smoke passed. It recorded 11 passing cycles before an immutable
+  upstream HTTP 429 gateway abstention and was quarantined with incident SHA
+  `805d763d69841515f7beb676ec2a0dea2e2043106dbb4dbc43b292bff4350e9f`.
+- Fixed the exact-route stability runner to stop immediately after a failed
+  sample and added regression coverage. A systemd-backed corrected root at
+  `artifacts/phase0/remote-route-stability/20260810T053600Z` stopped after its
+  first sanitized `deadline_exhausted` gateway abstention and was quarantined
+  with incident SHA
+  `5b6d5ffe9133811a664f24151b95fcd850f130cff718bc6ed1eae9289178cff1`.
+  No failed route samples are concatenated and no route window is currently
+  active; another exact-route attempt is provider-availability/time-dependent.
 - Implemented and locally tested the Coinbase Exchange Sandbox-specific
   `CB-ACCESS-*` signer, exact sandbox REST/WS host guard, provider account/
   product/order/fill schema mapping, scoped `PAPER_VENUE` factory, and
@@ -81,12 +90,24 @@ Checkpoint captured 2026-08-10 on `main`
   SHA-256 `a41fa2367a7f940e8197d5f8e0188765f9c522086091f93df988e0b2abbde702`;
   the Phase-3 gate remains pending.
 - Added the Phase-3 REST/WSS qualification tests to the eleven-phase
-  acceptance runner. The Phase-3 acceptance suite now executes 38 tests,
+  acceptance runner. The Phase-3 acceptance suite now executes 44 tests,
   including freshness and future-timestamp fail-closed coverage.
+- Added the isolated Coinbase Sandbox level-2/level2-batch qualifier and
+  reducer at `scripts/qualify_phase3_coinbase_level2.py` with six focused
+  tests. The direct `level2` channel delivered heartbeats but no snapshot in
+  its bounded run. The public `level2_batch` run delivered one BTC-USD
+  snapshot, 79 updates, and 12 heartbeats; validation had zero failures,
+  live/replay book-state hashes matched, maximum event age was 0.576 seconds,
+  and maximum heartbeat interval was 1.081 seconds. Evidence is at
+  `artifacts/phase3/coinbase-level2-qualification/20260810T052805.696329Z/phase3-coinbase-level2-qualification.json`
+  with SHA-256
+  `dc620a8fa41458fa4f89396e33687b13750461a3cd643be1b18d0588092e23de`.
+  This is bounded source evidence only; continuous recovery and Phase-3
+  admission remain pending.
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
-  verification now pass with 539 tests.
+  verification now pass with 546 tests.
 - Measured and hardened the disposable local Docker OS boundary for Phase 8.
   The probe used the explicit local Docker socket, no repository, credential,
   broker, order, or production mounts, and recorded zero external network calls,
@@ -105,7 +126,7 @@ Checkpoint captured 2026-08-10 on `main`
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
 | Selected local model stability | 9456 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809` | `PENDING_STABILITY`; inspect status/heartbeat before action |
-| DigitalOcean exact remote route stability | 13831 | `artifacts/phase0/remote-route-stability/20260810T034500Z` | `PENDING_STABILITY`; 11 passing cycles; inspect heartbeat and do not concatenate the quarantined root |
+| DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 Both current processes are detached with exact commands recorded by their
 runbooks. The failed remote route process was stopped after its immutable
@@ -115,14 +136,12 @@ must not be concatenated with the replacement root.
 
 ## Remaining gates and blockers
 
-- Phase-0 local model stability and the replacement DigitalOcean route root
-  remain in their 24-hour duration gates. The prior DigitalOcean root failed
-  closed on three upstream shared-pool HTTP 429 gateway abstentions and is
-  quarantined; no failed samples may be concatenated.
-- The earlier DigitalOcean roots were preserved and quarantined for runner
-  integrity defects, and the 20260809T173237.710604Z root is quarantined by the
-  incident above. The active replacement root is the only eligible current
-  route evidence and has immutable config/code attestation.
+- Phase-0 local model stability remains in its 24-hour duration gate. All
+  current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
+  root has three upstream shared-pool HTTP 429 abstentions; the corrected
+  20260810T053600Z root stopped after a deadline-exhausted first probe. No
+  failed samples may be concatenated. A new exact-route attempt is blocked by
+  provider availability/time, not by an unreviewed fallback.
 - Their incident records are immutable at
   `artifacts/phase0/remote-route-stability/20260809T171000Z/incident.json`
   (SHA-256

@@ -70,6 +70,7 @@ PHASE_SUITES: tuple[PhaseSuite, ...] = (
             "tests/data/test_acquisition.py",
             "tests/phase3/test_source_qualification.py",
             "tests/phase3/test_coinbase_wss_qualification.py",
+            "tests/phase3/test_coinbase_level2_qualification.py",
         ),
     ),
     PhaseSuite(4, "quantitative baseline council", ("tests/models",)),
