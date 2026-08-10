@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `528 passed`, acceptance suites
-  `124/152/107/22/19/34/10/7/25/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `535 passed`, acceptance suites
+  `124/152/107/36/19/34/10/7/25/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -70,6 +70,18 @@ Checkpoint captured 2026-08-10 on `main`
   `artifacts/phase3/source-qualification/20260810T041104.946822Z/` remains
   `EXTERNALLY MEASURED / PENDING_EXTERNAL_EVIDENCE`; its evidence SHA-256 is
   `875ba39c05cdbb11e9fd4dcaded48f43bf2701a753bfcf20fb5d53a065470962`.
+- Added the bounded public Coinbase Sandbox WSS qualifier in
+  `scripts/qualify_phase3_coinbase_wss.py` with host pinning, raw-first
+  per-connection spools, typed ticker replay, reconnect measurement, and
+  provider sequence-gap detection. Its two real 12-second connections
+  completed and replayed 20 ticker events/24 heartbeats, but both observed
+  provider sequence gaps. Evidence is at
+  `artifacts/phase3/coinbase-wss-qualification/20260810T042758.896119Z/` with
+  SHA-256 `1d9d8a45cf2d68772104c0fd51550fb2d8bf5dcc0473fdbb8b0134d5322b4f6a`;
+  the Phase-3 gate remains pending.
+- Added the Phase-3 REST/WSS qualification tests to the eleven-phase
+  acceptance runner. The Phase-3 acceptance suite now executes 36 tests rather
+  than omitting the qualification package.
 
 ## Durable processes
 
@@ -117,9 +129,9 @@ must not be concatenated with the replacement root.
   lifecycle remain closed. Secret values must not be sent in chat.
 - Phase 3–7 real source/paper operation and the 60-day soak cannot start until
 - Phase 3 now has partial real source evidence, but its complete gate remains
-  closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and REST bootstrap
-  does not prove WebSocket sequence/reconnect, continuous freshness, or
-  cross-source disagreement soak.
+  closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and the bounded
+  WSS probe observed provider sequence gaps. Continuous freshness/recovery and
+  cross-source disagreement soak remain pending.
 - Phase 8 OS filesystem/native-syscall/C-extension attestation is incomplete;
   namespace network denial alone is not formal admission evidence.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.
