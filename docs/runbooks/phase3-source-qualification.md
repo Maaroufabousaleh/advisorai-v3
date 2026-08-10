@@ -132,3 +132,41 @@ with SHA-256
 This closes only the bounded level-2 source-smoke subcheck. Longer freshness,
 reconnect/recovery, source disagreement, and the Phase-3 admission gate remain
 pending.
+
+## Binance Spot Testnet depth qualification
+
+The credential-free Binance depth qualifier is
+[`scripts/qualify_phase3_binance_spot_testnet_depth.py`](../../scripts/qualify_phase3_binance_spot_testnet_depth.py).
+It uses only the reviewed public Spot Testnet REST host
+`testnet.binance.vision` and stream host `stream.testnet.binance.vision`.
+Each fresh BTCUSDT/ETHUSDT connection writes raw WebSocket bytes before
+interpretation, captures a REST depth snapshot, validates Binance `U/u`
+sequence continuity and an uncrossed book, and compares live processing with
+raw-spool replay. It never loads credentials and never submits an order.
+
+Run it only in the locked transition environment with explicit public-network
+opt-in:
+
+```bash
+PYTHONPATH=. uv run --extra transition python \
+  scripts/qualify_phase3_binance_spot_testnet_depth.py \
+  --real \
+  --duration-seconds 20 \
+  --connections 2 \
+  --evidence-dir artifacts/phase3/binance-spot-testnet-depth
+```
+
+The latest immutable run is
+`artifacts/phase3/binance-spot-testnet-depth/20260810T173135.489992Z/phase3-binance-spot-testnet-depth.json`
+with SHA-256
+`b794c7fd2c014c89928c7bf2ad4b73fde253a615818dddd27a4da53a025c76c0`.
+Four connections (two BTCUSDT and two ETHUSDT) captured four REST snapshots
+and 289 depth updates with matching live/replay final-book hashes. All four
+fresh connections completed. All received Binance event
+timestamps were ahead of local receipt, so the freshness result failed closed;
+the report records the provider/runtime hashes, WebSocket dependency version,
+and sanitized failure classes. The deterministic injected REST-outage,
+sequence-gap, stale-data, and snapshot-disagreement drills passed. This is
+real partial source evidence, not Phase-3 admission. Clock-synchronized
+freshness, recovery/resubscription, longer unattended operation, and
+independent source-disagreement evidence remain pending.

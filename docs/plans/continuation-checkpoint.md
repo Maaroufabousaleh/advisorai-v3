@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint captured 2026-08-10 on `main`
-`1d352a1c6a5dbb00b4c74a5d0f2a2ef2f42a6a83` after PR #71 merged.
+Checkpoint captured 2026-08-10 on the current Phase-3 qualification branch;
+the merge SHA will be recorded after the branch is accepted.
 
 ## Completed in this continuation
 
@@ -21,11 +21,15 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `548 passed`, acceptance suites
-  `127/152/107/44/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `566 passed`, acceptance suites
+  `127/152/118/51/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
+- Hardened the generic Phase-0 command-version availability probe with a
+  bounded five-second timeout after the local `rclone --version` probe exceeded
+  its previous two-second WSL startup budget. This only stabilizes dependency
+  inventory classification; it does not run or close the deferred archive gate.
 - Preserved and classified the DigitalOcean exact-route stability failure: the
   fresh root recorded 62 cycles with three upstream shared-pool HTTP 429
   gateway abstentions. The failed runner was stopped without altering its
@@ -119,8 +123,9 @@ Checkpoint captured 2026-08-10 on `main`
   SHA-256 `a41fa2367a7f940e8197d5f8e0188765f9c522086091f93df988e0b2abbde702`;
   the Phase-3 gate remains pending.
 - Added the Phase-3 REST/WSS qualification tests to the eleven-phase
-  acceptance runner. The Phase-3 acceptance suite now executes 44 tests,
-  including freshness and future-timestamp fail-closed coverage.
+  acceptance runner. The Phase-3 acceptance suite now executes 51 tests,
+  including freshness, future-timestamp, Binance depth replay, and
+  fail-closed coverage.
 - Added the isolated Coinbase Sandbox level-2/level2-batch qualifier and
   reducer at `scripts/qualify_phase3_coinbase_level2.py` with six focused
   tests. The direct `level2` channel delivered heartbeats but no snapshot in
@@ -133,10 +138,24 @@ Checkpoint captured 2026-08-10 on `main`
   `dc620a8fa41458fa4f89396e33687b13750461a3cd643be1b18d0588092e23de`.
   This is bounded source evidence only; continuous recovery and Phase-3
   admission remain pending.
+- Added the credential-free Binance Spot Testnet depth qualifier and Phase-3
+  acceptance coverage. It pins the reviewed REST host
+  `testnet.binance.vision` and stream host `stream.testnet.binance.vision`,
+  persists raw depth/snapshot inputs, validates `U/u` continuity and uncrossed
+  books, and compares live processing with raw replay. The real run at
+  `artifacts/phase3/binance-spot-testnet-depth/20260810T173135.489992Z/`
+  captured four BTC/ETH snapshots and 289 updates with matching final-book
+  hashes; all four fresh connections completed, but provider event timestamps
+  were ahead of local receipt. Its report SHA-256 is
+  `b794c7fd2c014c89928c7bf2ad4b73fde253a615818dddd27a4da53a025c76c0`.
+  Injected REST-outage, sequence-gap, stale-data, and snapshot-disagreement
+  drills passed. This remains partial external source evidence; synchronized
+  freshness, recovery, longer operation, and independent source disagreement
+  are not admitted.
 - Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
   quality cutoff rather than wall-clock time; this prevents the test from
   becoming stale as the calendar advances. The focused suite and full locked
-  verification now pass with 548 tests.
+  verification now pass with 566 tests.
 - Discovered and fixed the selected-model stability runner's missing terminal
   sample at the 24-hour boundary. The fresh post-format root
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-post-format-final-20260809`
