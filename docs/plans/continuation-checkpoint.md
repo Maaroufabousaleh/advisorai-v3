@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`4e7c1f3c3f9252a349b74eda2122d540b064720f` after PR #58 merged.
+`8ebcf2e4884469f9aaf318a766662527429d8148` after PR #59 merged.
 
 ## Completed in this continuation
 
@@ -21,8 +21,8 @@ Checkpoint captured 2026-08-10 on `main`
   quarantined incident. Incident SHA-256:
   `825e78c3cf416df52ddd1e7b51b4df7801c6bde3adee08149158602ff183a9d6`.
 - Re-ran the repository verification pass in the complete locked optional-extra
-  environment: full pytest `537 passed`, acceptance suites
-  `124/152/107/38/19/34/10/7/25/18/5`, Ruff, format, lock, compilation,
+  environment: full pytest `539 passed`, acceptance suites
+  `124/152/107/38/19/34/10/7/27/18/5`, Ruff, format, lock, compilation,
   dashboard build, diff hygiene, ignored-secret, and tracked-model-weight checks.
   The isolated verification environment left the durable worker environment
   unchanged.
@@ -83,6 +83,20 @@ Checkpoint captured 2026-08-10 on `main`
 - Added the Phase-3 REST/WSS qualification tests to the eleven-phase
   acceptance runner. The Phase-3 acceptance suite now executes 38 tests,
   including freshness and future-timestamp fail-closed coverage.
+- Fixed the Phase-3 raw-spool replay fixture to use its explicit historical
+  quality cutoff rather than wall-clock time; this prevents the test from
+  becoming stale as the calendar advances. The focused suite and full locked
+  verification now pass with 539 tests.
+- Measured a disposable local Docker OS boundary for Phase 8. The probe used
+  no repository, credential, broker, order, or production mounts and recorded
+  zero external network calls, read-only root denial, constrained tmpfs write,
+  zero effective capabilities, and bounded process controls. Evidence is at
+  `artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`
+  with SHA-256
+  `04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`.
+  Native syscall/C-extension containment, credential/production-tree isolation,
+  and a real Hermes capability task remain unattested; formal Phase-8 admission
+  stays closed.
 
 ## Durable processes
 
@@ -133,8 +147,10 @@ must not be concatenated with the replacement root.
   closed: Coinbase ETH-USD is absent, GDELT is rate-limited, and the bounded
   WSS probe observed provider sequence gaps. Continuous freshness/recovery and
   cross-source disagreement soak remain pending.
-- Phase 8 OS filesystem/native-syscall/C-extension attestation is incomplete;
-  namespace network denial alone is not formal admission evidence.
+- Phase 8 now has real local Docker boundary evidence for network denial,
+  read-only-root denial, capability dropping, and bounded process controls, but
+  native-syscall/C-extension, credential, production-tree, and real-capability
+  attestation remain incomplete. Formal admission is still closed.
 - Alpha E0–E7 remains plan-only and blocked. Phase 10 remains human-controlled.
 
 Next legal work is to preserve both healthy stability workers, complete the

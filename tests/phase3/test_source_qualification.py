@@ -75,6 +75,7 @@ def test_source_operation_replays_raw_bytes_and_rejects_duplicate_append(tmp_pat
         ),
         collector,
         monitor=DataQualityMonitor(),
+        as_of=available_at,
     )
     assert result["passed"] is True
     assert result["replay_match"] is True

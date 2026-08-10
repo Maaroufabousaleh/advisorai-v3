@@ -15,7 +15,7 @@ human gate into a unit-test claim.
 | 5 | Policy Mission Router; bounded adaptive council waves; typed role results; snapshot/mission-bound runs; ancestry-aware evidence graph; dissent/expiry/cutoff handling; target-only DecisionBundle and RiskKernel hand-off | [`tests/agents`](../../tests/agents), [`tests/api`](../../tests/api) | Real provider route selection and scored multi-factor evidence from live V3-Core data |
 | 6 | Benchmark portfolio comparisons; robust covariance/factors/capacity/margin/stress; purged walk-forward, multiple-testing, sensitivity/regime checks; TCA/P&L attribution; incident/postmortem reconciliation; model challenge evidence | [`tests/institutional`](../../tests/institutional), [`tests/data/test_observability.py`](../../tests/data/test_observability.py) | Production paper-order sample proving exact attribution and unresolved-incident handling |
 | 7 | Durable soak samples/gate; data/model/agent/risk/execution scorecard fields; measured headroom and no-trade/benchmark net-utility checks; all required adverse scenarios; ledger-backed sample rebuild; recovery report and archive-restore boundary | [`tests/recovery/test_soak.py`](../../tests/recovery/test_soak.py) | At least 60 calendar days, meaningful adverse sample, stable resources, clean reconciliation, and positive net utility |
-| 8 | Hermes isolation policy and concrete bounded process runner with enforced child socket/DNS, read-only filesystem, conventional sensitive-path and process-environment metadata policies, and common process-spawn denial; sensitive-environment scrubbing; typed research/strategy/collector/model/runbook/capability artifacts; permission-filtered capability registry/broker; lifecycle through active-read; explicit human approval for active-write-limited | [`tests/capabilities`](../../tests/capabilities), [`scripts/run_phase8_capability_evidence.py`](../../scripts/run_phase8_capability_evidence.py), `artifacts/phase8/capability-evidence/20260808T050150.878842Z/phase8-capability-evidence.json`, external review runbook | Local Hermes-to-active-read evidence passed with SHA-256 `d6e44c90574c5209bd658319637605a00269fe49fe9cad7120766ecdc2cd79e5`; pinned external Hermes package completed a synthetic loopback task inside WSL2 namespaces with report SHA-256 `2fcfe86c151bffe2f4c59af0f7e0e029005a4ad94675c47fc3c18348a151b51c`; formal Phase-8 admission remains pending because filesystem/native-syscall/C-extension isolation and a real provider route are not attested |
+| 8 | Hermes isolation policy and concrete bounded process runner with enforced child socket/DNS, read-only filesystem, conventional sensitive-path and process-environment metadata policies, and common process-spawn denial; sensitive-environment scrubbing; typed research/strategy/collector/model/runbook/capability artifacts; permission-filtered capability registry/broker; lifecycle through active-read; disposable Docker OS-boundary probe; explicit human approval for active-write-limited | [`tests/capabilities`](../../tests/capabilities), [`scripts/run_phase8_capability_evidence.py`](../../scripts/run_phase8_capability_evidence.py), [`scripts/probe_phase8_os_sandbox.py`](../../scripts/probe_phase8_os_sandbox.py), `artifacts/phase8/capability-evidence/20260808T050150.878842Z/phase8-capability-evidence.json`, `artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`, external review runbook | Local Hermes-to-active-read evidence passed with SHA-256 `d6e44c90574c5209bd658319637605a00269fe49fe9cad7120766ecdc2cd79e5`; pinned external Hermes package completed a synthetic loopback task inside WSL2 namespaces with report SHA-256 `2fcfe86c151bffe2f4c59af0f7e0e029005a4ad94675c47fc3c18348a151b51c`; the Docker boundary measured network/read-only-root/capability/process controls with report SHA-256 `04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`; formal Phase-8 admission remains pending because native syscall/C-extension containment, credential/production-tree isolation, and a real provider route are not attested |
 | 9 | Vintaged SEC/ALFRED boundary; equity corporate-action/daily-council boundary; compliant browser ladder; one-at-a-time challenger registry; duplicate-provider rejection, safe archive keys, and two-provider archive verification/rclone boundary | [`tests/expansion`](../../tests/expansion), [`tests/data/test_official.py`](../../tests/data/test_official.py) | Marginal-value and headroom evidence for each real source/model/framework addition |
 | 10 | Explicit human authorization artifact; fixed loss/notional budget; policy/state-hash-bound final order guard; AI-offline safety check; automatic paper-rollback readiness | [`tests/live`](../../tests/live) | Phase 7 completion, explicit human approval, and supervised bounded live validation |
 | Alpha Team extension | Integrated plan and conformance boundary only; no Research Brain, DSL, candidate, experiment, validation, or promotion implementation is claimed by this row | None; future evidence must be tied to the E0-E7 gate in [`alpha-team-extension.md`](alpha-team-extension.md) | E0 is not yet satisfied; no Alpha Team runtime, paper candidate, or admission evidence is claimed |
@@ -36,12 +36,12 @@ human gate into a unit-test claim.
 
 ## Verification record
 
-The latest local run on 2026-08-10 passed all 528 tests in one process with every
+The latest local run on 2026-08-10 passed all 539 tests in one process with every
 declared optional extra active in an isolated locked verification environment, and
 all eleven isolated phase suites. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
-format checking passes with all 247 Python files formatted. The Phase-1 local
+format checking passes with all 251 Python files formatted. The Phase-1 local
 rollback/Bronze rebuild report is immutable evidence with SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and does
 not open any external or human gate. The Phase-0 component evidence report is
@@ -54,7 +54,13 @@ records enforced child socket/DNS, read-only filesystem, conventional
 sensitive-path and process-environment metadata policies, common process-spawn
 denial, and does not create a formal gate record or global capability admission.
 Direct native syscalls/C-extension escapes are outside this in-process evidence
-and require separate OS-level sandbox attestation.
+and require separate OS-level sandbox attestation. A real local Docker
+boundary probe subsequently measured network denial, read-only-root denial,
+zero effective capabilities, and bounded process controls at
+`artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`
+with SHA-256
+`04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`; it did
+not attest native syscall/C-extension containment or open formal admission.
 
 The current requirement-to-evidence matrix is
 [`gate-matrix.md`](gate-matrix.md). It records the fresh detached Phase-0

@@ -55,4 +55,30 @@ evidence and not formal Hermes or Phase-8 admission. A future formal admission
 requires the earlier phase gates and a host boundary that attests the required
 native/process/filesystem/credential restrictions.
 
+## Local Docker boundary measurement
+
+On 2026-08-10, the host-supported Docker runtime was measured independently of
+the pinned Hermes review with:
+
+```text
+scripts/probe_phase8_os_sandbox.py --evidence-dir artifacts/phase8/os-sandbox-probe
+```
+
+The immutable report is
+`artifacts/phase8/os-sandbox-probe/20260810T045715.439524Z/phase8-os-sandbox-probe.json`
+with SHA-256
+`04401542d50e8f8161f27766560907d794bf620aaad4287d44103245b718c7ce`.
+The probe used a pre-existing local Alpine image with no pull, no repository or
+credential mounts, Docker `--network none`, a read-only root, a constrained
+writable tmpfs, all capabilities dropped, `no-new-privileges`, and CPU/memory/
+PID ceilings. It measured zero external network calls, denied root filesystem
+writes, allowed only the declared tmpfs write, reported zero effective
+capabilities, and allowed a bounded child shell.
+
+This is real host-boundary evidence, but not formal Hermes admission. The
+report explicitly leaves native syscall containment, C-extension containment,
+credential isolation, production-tree isolation, and a real Hermes capability
+task as `not_attested`; the sandbox remains quarantined until the earlier phase
+gates and the remaining admission evidence are complete.
+
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`
