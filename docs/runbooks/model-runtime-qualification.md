@@ -196,21 +196,23 @@ new run directory. Never edit an old admission manifest or append new samples
 to a run whose source hash no longer matches.
 
 ```bash
-setsid nohup ./.venv/bin/python scripts/run_model_stability.py \
+setsid nohup bash -c 'cd /mnt/c/projects/advisorai-v3 && exec ./.venv/bin/python scripts/run_model_stability.py \
   --forecast-snapshot ~/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
   --sentiment-snapshot ~/.cache/advisorai-v3/benchmark-data/phrasebank-4a48c245f5260c96/sentiment-snapshot.json \
   --report artifacts/phase0/model-runtime-qualification/local-bakeoff/20260807T223542.052232Z/local-model-bakeoff.json \
-  --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260808 \
-  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810 \
-  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810.nohup.log 2>&1 < /dev/null &
+  --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260810 \
+  --run-directory artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2' \
+  > artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2.nohup.log 2>&1 < /dev/null &
 ```
 
-The 2026-08-10 fresh detached run is active under PID `12973`. Inspect the
-process command, `status.json`,
-`cycles.jsonl`, `runner.lock`, and the append-only log before taking any action.
-A healthy active run must not be restarted; a completed short smoke requires a
-fresh immutable root after a runner defect is fixed. The predecessor root is
-preserved and must not be resumed or concatenated.
+The replacement 2026-08-10 detached run is active under PID `40130`. Inspect
+the process command, `status.json`, `cycles.jsonl`, `runner.lock`, and the
+append-only log before taking any action. The prior root
+`phase0-selected-24h-terminal-sample-20260810` recorded seven passing cycles
+but exited at cycle execution with a sanitized `FileNotFoundError` because its
+worker cwd was unavailable. Its cycles, interruption record, and stderr log
+hash are preserved; do not resume, repair, or concatenate it. The r2 process
+uses an explicit stable workspace cwd and a fresh runtime-admission root.
 
 The 24-hour result must exist and pass before changing roster entries from
 `pending_stability` to `selected`. It does not approve paper execution or live
@@ -228,11 +230,12 @@ all 273 cycles passed, but its terminal summary ended at
 `23.968570833055555` hours because the runner did not sample at/after the
 duration boundary. Its summary SHA-256 is
 `ec8208a4419aef1f1a85dc0d43e984feb6bb6f45b92a65fd67b1be956bad1661`.
-The runner now requires a real terminal sample at/after the target. The active
-fresh root is
-`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810`
-under PID `12973`, with its first cycle passing. The prior 20260808 root remains
-preserved as an interrupted run and must not be concatenated with either root.
+The runner now requires a real terminal sample at/after the target. The
+interrupted root and its failed-process log remain separate from the active
+fresh root
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2`
+under PID `40130`. The prior 20260808 root and both 20260810 roots must not be
+concatenated.
 
 The pre-merge two-cycle smoke completed with all three candidates passing. Its
 append-only log is
