@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint regenerated 2026-08-10 from `main` at
-`7bf4daa8fb3b38d25068beaa14dd39f5636132d0` after PR #60 merged.
+`f372a8c69c162c8ec3f8e924300816e0b31d5fd1` after PR #61 merged.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -10,7 +10,7 @@ an external, timed, or human gate.
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | Phase 0 contracts, ports, policy gateway, model/runtime harness | architecture §11; phase-00 plan | yes | yes | yes | no | no | no | TESTED / LOCALLY MEASURED | none for local boundary | Preserve accepted local records; do not treat them as admission |
 | Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes | yes | partial | no | pending | no | PENDING_STABILITY | the prior run was interrupted after 31 passing cycles; the fresh 20260809 run is healthy but has not reached 24 hours | Inspect PID 9456 and its append-only evidence; do not restart or concatenate runs |
-| Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner | yes | short live route evidence plus two passing samples in the fresh DigitalOcean root | yes, exact provider/model/endpoint identity | pending 24-hour window | no | EXTERNALLY MEASURED / PENDING_STABILITY | Novita and the prior DigitalOcean root were quarantined after upstream shared-pool HTTP 429 gateway abstentions; replacement root `artifacts/phase0/remote-route-stability/20260810T034500Z` is active under PID `13831` with two passing samples | Inspect PID `13831` and its immutable hash chain; do not concatenate the quarantined root or promote before the full duration passes |
+| Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner | yes | short live route evidence plus 11 passing cycles in the fresh DigitalOcean root | yes, exact provider/model/endpoint identity | pending 24-hour window | no | EXTERNALLY MEASURED / PENDING_STABILITY | Novita and the prior DigitalOcean root were quarantined after upstream shared-pool HTTP 429 gateway abstentions; replacement root `artifacts/phase0/remote-route-stability/20260810T034500Z` is active under PID `13831` with 11 passing cycles | Inspect PID `13831` and its immutable hash chain; do not concatenate the quarantined root or promote before the full duration passes |
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
 | Phase 0 external Hermes coordinator/subagent review | architecture §8; phase-00 plan | repository harness and pinned external runtime reviewed | local security tests yes | yes | yes, synthetic loopback route only | no | no | EXTERNALLY MEASURED / QUARANTINED | real provider/model route and complete native/filesystem OS attestation remain absent | Preserve the pinned review; formal admission remains closed and no runtime enters AdvisorAI core |
@@ -96,7 +96,7 @@ an external, timed, or human gate.
   `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`.
   The replacement root at
   `artifacts/phase0/remote-route-stability/20260810T034500Z` is active under
-  PID `13831` with two passing samples and requires a fresh 24-hour duration;
+  PID `13831` with 11 passing cycles and requires a fresh 24-hour duration;
   failed samples are not concatenated.
 - Phase 7 requires real paper/testnet operation plus an actual 60-day duration.
 - Phase 10 requires explicit human approval and remains closed.
