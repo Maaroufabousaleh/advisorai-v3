@@ -7,9 +7,9 @@ human gate into a unit-test claim.
 
 | Phase | Local implementation boundary | Automated evidence | Remaining admission evidence |
 |---|---|---|---|
-| 0 | Typed gateway/archive/event ports; trading-authority denylist; policy-enforced three-tier gateway; exact model acquisition; isolated runtime attestation; real frozen-data local bake-off; strict role roster; append-only stability records; durable Phase-0 gate and redacted gateway-call records; local component evidence drill; exact-route stability runner | [`tests/phase0`](../../tests/phase0), [`tests/contracts`](../../tests/contracts), [`scripts/run_phase0_component_bakeoff.py`](../../scripts/run_phase0_component_bakeoff.py), [`tests/phase0/test_remote_stability.py`](../../tests/phase0/test_remote_stability.py) | 24-hour selected-model stability, DigitalOcean route stability, and real two-provider rclone restore remain; Novita exact-route trial was preserved as a failed/quarantined 429 incident; DuckLake was measured and rejected at `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`; pinned upstream Hermes runtime review is at `artifacts/phase0/external-hermes-review/20260809T162031Z/external-hermes-review.json`; local report `artifacts/phase0/component-bakeoff/20260808T031144.840248Z/phase0-component-bakeoff.json` passed without opening admission |
+| 0 | Typed gateway/archive/event ports; trading-authority denylist; policy-enforced three-tier gateway; exact model acquisition; isolated runtime attestation; real frozen-data local bake-off; strict role roster; append-only stability records; durable Phase-0 gate and redacted gateway-call records; local component evidence drill; exact-route stability runner | [`tests/phase0`](../../tests/phase0), [`tests/contracts`](../../tests/contracts), [`scripts/run_phase0_component_bakeoff.py`](../../scripts/run_phase0_component_bakeoff.py), [`tests/phase0/test_remote_stability.py`](../../tests/phase0/test_remote_stability.py) | 24-hour selected-model stability, DigitalOcean route stability, and real two-provider rclone restore remain; Novita exact-route trial was preserved as a failed/quarantined 429 incident; DuckLake was measured and rejected at `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`; pinned upstream Hermes runtime review is at `artifacts/phase0/external-hermes-review/20260809T162031Z/external-hermes-review.json`; latest local report `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` has SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7` and passed without opening admission |
 | 1 | Immutable contracts; PIT snapshot/lake/query boundaries; Parquet manifests; SQLite WAL ledgers/outbox; identity registry; config bundles/rollback; measured resource leases; traces, FTS5-first memory, optional deterministic hashing recall, durable flows, and service ownership | [`tests/contracts`](../../tests/contracts), [`tests/data`](../../tests/data), [`tests/point_in_time`](../../tests/point_in_time), [`tests/resources`](../../tests/resources), [`tests/recovery/test_config_bundles.py`](../../tests/recovery/test_config_bundles.py), [`tests/recovery/test_phase1_local_rebuild.py`](../../tests/recovery/test_phase1_local_rebuild.py), [`tests/memory`](../../tests/memory), [`tests/services`](../../tests/services) | Local rollback/Bronze rebuild report passed at `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback and long-lived restore evidence remain external |
-| 2 | Native paper/testnet adapter with optional strict venue identity; raw event spool/replay; typed native trade/book/bar/funding/open-interest normalization; account/cash/margin/funding/borrow/FX/corporate-action ledger; cost-aware target builder; authoritative RiskKernel/kill switch; policy-bound order-level risk evidence; durable OMS; ambiguous/reconnect/partial-fill handling; changed-payload idempotency rejection; venue/account/open-order reconciliation; TCA; cadence-gated runtime admission | [`tests/execution`](../../tests/execution), [`tests/integrations`](../../tests/integrations), [`tests/runtime`](../../tests/runtime) | Phase-0 admission of the real Nautilus runtime and one approved venue transport |
+| 2 | Native paper/testnet adapter with optional strict venue identity; Coinbase Exchange Sandbox-specific CB-ACCESS signer and exact host guard; provider schema mapping for products/accounts/orders/fills; raw event spool/replay; typed native trade/book/bar/funding/open-interest normalization; account/cash/margin/funding/borrow/FX/corporate-action ledger; cost-aware target builder; authoritative RiskKernel/kill switch; policy-bound order-level risk evidence; durable OMS; ambiguous/reconnect/partial-fill handling; changed-payload idempotency rejection; venue/account/open-order reconciliation; TCA; cadence-gated runtime admission | [`tests/execution`](../../tests/execution), [`tests/integrations`](../../tests/integrations), [`tests/integrations/test_coinbase_exchange.py`](../../tests/integrations/test_coinbase_exchange.py), [`tests/runtime`](../../tests/runtime) | Coinbase real read-only smoke is not admitted: the sandbox product catalogue returned `BTC-USD` but not required `ETH-USD`; authenticated account/balance/position/open-order reads passed, but the product-filtered fills read returned HTTP 401. No order write was attempted. Phase-0 admission of the real Nautilus runtime, complete Coinbase smoke, and one approved venue lifecycle remain pending |
 | 3 | Native/CCXT/Deribit/LSE-context parsers; raw-first REST/WSS replay; typed native market events; RSS/GDELT and official source parsers; untrusted-content stripping; PIT availability/revision/origin metadata; quality findings and cutoff dashboard | [`tests/data/test_collectors.py`](../../tests/data/test_collectors.py), [`tests/data/test_market_events.py`](../../tests/data/test_market_events.py), [`tests/data/test_official.py`](../../tests/data/test_official.py), [`tests/data/test_acquisition.py`](../../tests/data/test_acquisition.py) | Live source availability, freshness, gap, and disagreement soak |
 | 4 | Mandatory naive/drift/seasonal/linear/LightGBM boundaries; real isolated ModernFinBERT/MiniLM/DeBERTa, TTM-R2/R3, TSPulse, Chronos and Kronos workers; frozen public walk-forward and sentiment evaluation; one-family GPU lease; evidence-bound role roster | [`tests/models`](../../tests/models), [`tests/phase0`](../../tests/phase0) | Selected-role 24-hour stability and later paper net-utility evidence; TabPFN-TS waits on gated terms |
 | 5 | Policy Mission Router; bounded adaptive council waves; typed role results; snapshot/mission-bound runs; ancestry-aware evidence graph; dissent/expiry/cutoff handling; target-only DecisionBundle and RiskKernel hand-off | [`tests/agents`](../../tests/agents), [`tests/api`](../../tests/api) | Real provider route selection and scored multi-factor evidence from live V3-Core data |
@@ -36,17 +36,17 @@ human gate into a unit-test claim.
 
 ## Verification record
 
-The latest local run on 2026-08-08 passed all 496 tests in one process with the
-optional Nautilus runtime active, and all eleven isolated phase suites. The exact
-phase distribution and static checks are kept in
+The latest local run on 2026-08-10 passed all 512 tests in one process with the
+optional runtimes active in an isolated locked verification environment, and all
+eleven isolated phase suites. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
-format checking passes with all 232 Python files formatted. The Phase-1 local
+format checking passes with all 242 Python files formatted. The Phase-1 local
 rollback/Bronze rebuild report is immutable evidence with SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and does
 not open any external or human gate. The Phase-0 component evidence report is
 immutable evidence with SHA-256
-`2a5c9d07be845b7222a065edc4d20a4a8d272bf7780918d3f27ad42abbb0523c`; it also
+`6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; it also
 does not open any external or human gate. The Phase-8 capability report is
 immutable evidence with SHA-256
 `d6e44c90574c5209bd658319637605a00269fe49fe9cad7120766ecdc2cd79e5`; it also
@@ -61,3 +61,15 @@ The current requirement-to-evidence matrix is
 stability run, the DuckLake challenger rejection, the pinned upstream Hermes
 review, and the remaining operator/time-dependent gates without promoting any
 of them to formal admission.
+
+The Coinbase Exchange Sandbox adapter is implemented in
+[`src/advisorai/integrations/coinbase_exchange.py`](../../src/advisorai/integrations/coinbase_exchange.py)
+and bound through the `PAPER_VENUE` resolver scope only. Its sanitized real
+smoke evidence is
+`artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`
+with SHA-256
+`79c359996cb8d330739495117730924c13ff29f909359e0c189dfea02498fdc7`. The
+adapter and local schema/signing tests are implemented/tested; the external
+read-only gate is `PENDING_OPERATOR_ACTION` because `ETH-USD` was absent from
+the actual sandbox catalogue and the fills read returned HTTP 401. No Coinbase
+order was submitted.

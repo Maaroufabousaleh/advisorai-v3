@@ -6,9 +6,9 @@ or 60-day operational gate.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
-| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, and durable Phase-0 gate records | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, and exact-route stability runner | Local component probes passed in `artifacts/phase0/component-bakeoff/20260808T031144.840248Z/phase0-component-bakeoff.json`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the DigitalOcean exact route has a durable 24-hour window with passing samples; selected local roles still require 24-hour stability and real rclone-provider restore |
+| 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, and durable Phase-0 gate records | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, and exact-route stability runner | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; the DigitalOcean exact route has a durable 24-hour window with passing samples; selected local roles still require 24-hour stability and real rclone-provider restore |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
-| 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission | `tests/execution`, `tests/integrations`, `tests/runtime` | Paper failure fixtures pass; Nautilus remains Phase 0 governed despite being installed and locally tested |
+| 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission, and Coinbase Exchange Sandbox-specific CB-ACCESS signer/schema transport | `tests/execution`, `tests/integrations`, `tests/runtime`, `tests/integrations/test_coinbase_exchange.py` | Local Coinbase signer/product/OMS boundary tests pass. Real smoke reached the reviewed sandbox `/time` and `/products`; the returned catalogue omitted required `ETH-USD`, while authenticated account/balance/position/open-order reads passed and the product-filtered fills read returned sanitized HTTP 401. The read-only gate and paper lifecycle remain pending. Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor | `tests/data` | Parser/lineage fixtures pass; source availability dashboards need live soak |
 | 4 | Naive/statistical/LightGBM boundary, isolated ModernFinBERT/MiniLM/DeBERTa and TTM-R2/R3/TSPulse/Chronos/Kronos runtimes, calibration, GPU lease, public walk-forward/finance-sentiment measurements, and evidence-bound roster | `tests/models`, `tests/phase0`, measured local roster | Role winners are pending stability; point-in-time paper utility remains a later admission gate |
 | 5 | Router, typed roles, bounded adaptive waves, evidence graph, independence gates, DecisionBundle and expiry/cutoff binding | `tests/agents`, `tests/api` | Correlated-evidence and target-only boundaries pass |
@@ -17,33 +17,60 @@ or 60-day operational gate.
 | 8 | Hermes policy, bounded isolation runner, enforced child socket/DNS, read-only filesystem, conventional sensitive-path and process-environment metadata policies, common process-spawn denial, sensitive-environment scrubbing, artifact/capability lifecycle and broker | `tests/capabilities`, immutable active-read capability evidence, and a disposable pinned upstream runtime review | Local Hermes-to-active-read collector lifecycle passed in `artifacts/phase8/capability-evidence/20260808T050150.878842Z/phase8-capability-evidence.json`; the pinned upstream runtime completed a synthetic loopback coordinator/subagent probe, but filesystem/native-syscall containment and a real provider route remain unattested; formal Phase-8 admission remains pending behind earlier gates |
 | 9 | Vintaged official releases, equity corporate-action/daily-council boundary, challenger registry, browser ladder, archive verification | `tests/expansion` | Requires one-at-a-time live data/challenger evidence |
 | 10 | Human approval, bounded live readiness, AI-offline invariant, order guard | `tests/live` | Must remain closed until Phase 7 and explicit human approval pass |
-| 0–7 bridge | Typed secret loader/redaction, reviewed connector cards, HTTPS/WSS transport guards, direct typed LLM adapter, durable gateway-call records, paper/testnet HMAC venue transport with signed open-order reconciliation and read-only account/fill/position/balance projection, raw-first native market normalization/replay, cadence-gated closed-cutoff `PaperRuntime` with durable kill-switch/dashboard control hydration and terminal per-order risk rejection, durable resource measurements/leases, refreshing/deduplicated ledger-backed dashboard/config projection, incident/replay/post-horizon scorecards | `tests/config/test_secrets.py`, `tests/integrations`, `tests/runtime`, `tests/learning`, `tests/resources`, `tests/data/test_market_events.py`, `tests/api/test_dashboard.py` | Local contracts pass; provider-specific endpoint smoke, continuous operation, Phase 0 stability, Phase 7 soak, and human decisions remain external |
+| 0–7 bridge | Typed secret loader/redaction, reviewed connector cards, HTTPS/WSS transport guards, direct typed LLM adapter, durable gateway-call records, generic paper/testnet HMAC venue transport, Coinbase Exchange Sandbox transport with exact host guard and scoped credential binding, signed open-order reconciliation and provider-specific account/fill/position/balance projection, raw-first native market normalization/replay, cadence-gated closed-cutoff `PaperRuntime` with durable kill-switch/dashboard control hydration and terminal per-order risk rejection, durable resource measurements/leases, refreshing/deduplicated ledger-backed dashboard/config projection, incident/replay/post-horizon scorecards | `tests/config/test_secrets.py`, `tests/integrations`, `tests/runtime`, `tests/learning`, `tests/resources`, `tests/data/test_market_events.py`, `tests/api/test_dashboard.py` | Local contracts pass. Coinbase evidence is partial/external: `/time` and `/products` succeeded, but missing `ETH-USD` stopped the smoke before private reads; no order was sent. Continuous operation, Phase 0 stability, Phase 7 soak, and human decisions remain external |
 | Alpha Team extension | Plan-only integration for optional E0-E7 research work | None | E0 and all later gates remain closed; no Alpha Team implementation or admission evidence is claimed |
 
 The current repository therefore has broad executable coverage, but does not claim
 Phase 0, Phase 7, or Phase 10 gates without the external evidence explicitly named
 above.
 
+## Coinbase Exchange Sandbox evidence
+
+The zero-network transition configuration check passed for
+`coinbase_exchange_sandbox` at
+`https://api-public.sandbox.exchange.coinbase.com` with reviewed host
+`api-public.sandbox.exchange.coinbase.com`, configuration hash
+`138042cd88c96e9d3079493beee740ba1e96def1ea748c361e51bd8ea88094cf`, and only
+the `PAPER_VENUE` credential references bound to the adapter. The real,
+provider-specific smoke runner is
+[`scripts/smoke_coinbase_exchange_sandbox.py`](../../scripts/smoke_coinbase_exchange_sandbox.py).
+
+Its latest immutable 2026-08-09 attempt is at
+`artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`
+with SHA-256
+`79c359996cb8d330739495117730924c13ff29f909359e0c189dfea02498fdc7`. Seven
+bounded network calls reached the reviewed host: `/time`, `/products`,
+authenticated `/accounts` projections, `/orders`, and a product-filtered
+`/fills` read. The returned 13-product catalogue contained `BTC-USD` but not
+`ETH-USD`; account, balance, position, and open-order reads passed, while the
+BTC-USD fills read returned sanitized HTTP 401. The required symbol and complete
+read-only gates therefore failed closed, and no order, cancel, transfer, or
+withdrawal was attempted. This is `EXTERNALLY MEASURED /
+PENDING_OPERATOR_ACTION`, not venue admission. See the
+[`Coinbase Exchange Sandbox runbook`](../runbooks/coinbase-exchange-sandbox.md)
+for the exact rerun and next action.
+
 The complete checkpoint matrix is maintained in
 [`gate-matrix.md`](gate-matrix.md). It preserves the distinction between
 `TESTED`, `LOCALLY MEASURED`, `EXTERNALLY MEASURED`, `QUALIFIED`,
 `QUARANTINED`, `PENDING_STABILITY`, and `PENDING_OPERATOR_ACTION`.
 
-Latest local verification (2026-08-09):
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python scripts/verify_acceptance.py`
+Latest local verification (2026-08-10):
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-verify.VM2tnK/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 123/151/96/22/19/34/10/7/25/11/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 123/151/107/22/19/34/10/7/25/11/5. Suite totals
 overlap a few shared contract tests. A single-process
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python -m pytest -q` passes all 501
-collected tests with the optional Nautilus runtime active. The acceptance runner
-stops at the first failed phase, so later suites are never counted as evidence
-after an earlier gate failure. The Phase 0 inventory was regenerated at
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 /tmp/advisorai-v3-verify.VM2tnK/bin/python -m pytest -q`
+passes all 512 tests with the optional runtimes active in the isolated locked
+verification environment. The acceptance runner stops at the first failed
+phase, so later suites are never counted as evidence after an earlier gate
+failure. The Phase 0 inventory was regenerated at
 `artifacts/phase0/availability.json` (ignored runtime output), and remains an
 availability record rather than an admission decision. The local static and
 reproducibility checks pass for Ruff lint, dependency locking, bytecode compilation,
 diff hygiene, tracked secret/model-weight checks, and the dashboard TypeScript/Vite
-build. The recent scoped code changes are formatted. A repository-wide
-`./.venv/bin/ruff format --check .` passes with all 238 Python files formatted.
+build. The recent scoped code changes are formatted. A repository-wide Ruff
+format check passes with all 242 Python files formatted.
 The test collection check reports 499 collected tests. The dashboard build passes
 with `npm run build`
 from `dashboard/`.
@@ -66,8 +93,8 @@ records zero network calls, three auditable configuration activations with
 restart-persistent rollback, and byte/row-identical Bronze rebuild output. It
 does not satisfy the real venue, Phase-7, or Phase-10 gates.
 
-The Phase-0 component evidence report has SHA-256
-`2a5c9d07be845b7222a065edc4d20a4a8d272bf7780918d3f27ad42abbb0523c` and
+The latest Phase-0 component evidence report has SHA-256
+`6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7` and
 records passing local probes for the guarded Nautilus replay seam, installed
 PydanticAI/Prefect/Hamilton runtime seams, deterministic Parquet manifest plus
 DuckDB reads, the repository Hermes isolation boundary, and two in-memory

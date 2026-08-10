@@ -11,6 +11,7 @@ from advisorai.gateway import GatewayPolicyConfig, PolicyGateway, RouteProfile
 from advisorai.gateway.core import GatewayRecorder
 from advisorai.ports import GatewayRoute, ModelGatewayPort
 
+from .coinbase_exchange import build_coinbase_exchange_sandbox_transport
 from .http import HttpClientConfig, SafeHttpClient
 from .llm import OpenAICompatibleGatewayAdapter
 from .venue import HmacVenueSigner, PaperTestnetVenueTransport
@@ -136,6 +137,7 @@ def build_policy_gateway(
 
 
 __all__ = [
+    "build_coinbase_exchange_sandbox_transport",
     "build_direct_gateway",
     "build_paper_venue_transport",
     "build_policy_gateway",
