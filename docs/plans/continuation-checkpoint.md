@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint captured 2026-08-10 on `main`
-`9851e699f7d8d16dd5c1d844bfc87baaa4bd216a` after PR #63 merged.
+`9f25d77e9a2f9cef186e28a523e1b000dbf0a7e2` after PR #65 merged.
 
 ## Completed in this continuation
 
@@ -46,6 +46,10 @@ Checkpoint captured 2026-08-10 on `main`
   `5b6d5ffe9133811a664f24151b95fcd850f130cff718bc6ed1eae9289178cff1`.
   No failed route samples are concatenated and no route window is currently
   active; another exact-route attempt is provider-availability/time-dependent.
+- Updated `configs/models/phase0_remote_roster.json` so the DigitalOcean
+  candidate remains eligible for a future reviewed retry while its current
+  stability evidence is explicitly `failed_quarantined`, linked to the latest
+  hash chain and sanitized incident record.
 - Implemented and locally tested the Coinbase Exchange Sandbox-specific
   `CB-ACCESS-*` signer, exact sandbox REST/WS host guard, provider account/
   product/order/fill schema mapping, scoped `PAPER_VENUE` factory, and
