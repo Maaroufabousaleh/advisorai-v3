@@ -5,6 +5,7 @@ import pytest
 
 from advisorai.integrations import RawMessageSpool
 from scripts.qualify_phase3_coinbase_wss import (
+    _freshness_summary,
     _message_metadata,
     _replay_ticker_events,
     _sequence_summary,
@@ -61,6 +62,63 @@ def test_coinbase_wss_replays_only_supported_ticker_events(tmp_path):
 
     assert _message_metadata(ticker, product_id="BTC-USD")["type"] == "ticker"
     assert len(_replay_ticker_events(spool, product_id="BTC-USD")) == 1
+
+
+def test_coinbase_wss_freshness_summary_measures_event_age_and_heartbeats(tmp_path):
+    spool = RawMessageSpool(tmp_path / "fresh-ws.jsonl")
+    received = datetime(2026, 8, 10, 4, 0, 2, tzinfo=UTC)
+    for sequence, payload in enumerate(
+        (
+            {
+                "type": "heartbeat",
+                "product_id": "BTC-USD",
+                "sequence": 1,
+                "time": "2026-08-10T04:00:00Z",
+            },
+            {
+                "type": "heartbeat",
+                "product_id": "BTC-USD",
+                "sequence": 2,
+                "time": "2026-08-10T04:00:01Z",
+            },
+            {
+                "type": "ticker",
+                "product_id": "BTC-USD",
+                "sequence": 3,
+                "price": "100",
+                "time": "2026-08-10T04:00:01Z",
+            },
+        ),
+        start=1,
+    ):
+        spool.append(
+            json.dumps(payload, separators=(",", ":")).encode(),
+            received_at=received,
+            sequence=sequence,
+        )
+
+    summary = _freshness_summary(spool, product_id="BTC-USD")
+    assert summary["state"] == "pass"
+    assert summary["event_time_present_count"] == 3
+    assert summary["heartbeat_count"] == 2
+    assert summary["event_age_seconds_max"] == 2.0
+
+
+def test_coinbase_wss_freshness_summary_rejects_future_timestamp(tmp_path):
+    spool = RawMessageSpool(tmp_path / "future-ws.jsonl")
+    received = datetime(2026, 8, 10, 4, 0, tzinfo=UTC)
+    payload = {
+        "type": "heartbeat",
+        "product_id": "BTC-USD",
+        "sequence": 1,
+        "time": "2026-08-10T04:00:01Z",
+    }
+    spool.append(
+        json.dumps(payload, separators=(",", ":")).encode(), received_at=received, sequence=1
+    )
+    spool.append(json.dumps({**payload, "sequence": 2}).encode(), received_at=received, sequence=2)
+
+    assert _freshness_summary(spool, product_id="BTC-USD")["state"] == "stale_or_malformed"
 
 
 def test_coinbase_wss_metadata_does_not_copy_provider_payload():

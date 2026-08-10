@@ -38,6 +38,8 @@ DEFAULT_CONNECTION_SECONDS = 12
 DEFAULT_CONNECTIONS = 2
 MAX_CONNECTION_SECONDS = 120
 MAX_CONNECTIONS = 4
+MAX_EVENT_AGE_SECONDS = 30.0
+MAX_HEARTBEAT_INTERVAL_SECONDS = 2.5
 SUBSCRIPTION = {
     "type": "subscribe",
     "product_ids": [DEFAULT_PRODUCT_ID],
@@ -168,6 +170,84 @@ def _sequence_summary(metadata: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def _provider_time(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _freshness_summary(spool: RawMessageSpool, *, product_id: str) -> dict[str, object]:
+    ages: list[float] = []
+    heartbeat_receipts: list[datetime] = []
+    event_time_present = 0
+    malformed_event_times = 0
+    future_event_times = 0
+    for _sequence, received_at, raw in spool.read_records():
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict) or payload.get("product_id") != product_id:
+            continue
+        if payload.get("type") == "heartbeat":
+            heartbeat_receipts.append(received_at)
+        if "time" not in payload:
+            continue
+        event_time_present += 1
+        event_time = _provider_time(payload.get("time"))
+        if event_time is None:
+            malformed_event_times += 1
+            continue
+        age_seconds = (received_at - event_time).total_seconds()
+        if age_seconds < 0:
+            future_event_times += 1
+            continue
+        ages.append(age_seconds)
+
+    heartbeat_intervals = [
+        (current - prior).total_seconds()
+        for prior, current in zip(heartbeat_receipts, heartbeat_receipts[1:], strict=False)
+    ]
+    max_age = round(max(ages), 3) if ages else None
+    max_heartbeat_interval = round(max(heartbeat_intervals), 3) if heartbeat_intervals else None
+    sufficient = len(heartbeat_receipts) >= 2 and (
+        bool(ages) or malformed_event_times > 0 or future_event_times > 0
+    )
+    state = (
+        "pass"
+        if sufficient
+        and malformed_event_times == 0
+        and future_event_times == 0
+        and max_age is not None
+        and max_age <= MAX_EVENT_AGE_SECONDS
+        and (
+            max_heartbeat_interval is None
+            or max_heartbeat_interval <= MAX_HEARTBEAT_INTERVAL_SECONDS
+        )
+        else "insufficient_observations"
+        if not sufficient
+        else "stale_or_malformed"
+    )
+    return {
+        "event_time_present_count": event_time_present,
+        "malformed_event_time_count": malformed_event_times,
+        "future_event_time_count": future_event_times,
+        "event_age_seconds_max": max_age,
+        "heartbeat_count": len(heartbeat_receipts),
+        "heartbeat_interval_count": len(heartbeat_intervals),
+        "heartbeat_interval_seconds_max": max_heartbeat_interval,
+        "max_event_age_limit_seconds": MAX_EVENT_AGE_SECONDS,
+        "max_heartbeat_interval_limit_seconds": MAX_HEARTBEAT_INTERVAL_SECONDS,
+        "state": state,
+    }
+
+
 def _event_digest(event: MarketEvent) -> str:
     encoded = json.dumps(
         event.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -244,6 +324,7 @@ async def _collect_connection(
     type_counts = Counter(item["type"] for item in metadata if isinstance(item.get("type"), str))
     unexpected_products = sum(bool(item.get("unexpected_product")) for item in metadata)
     sequence = _sequence_summary(metadata)
+    freshness = _freshness_summary(spool, product_id=product_id)
     replay_match = tuple(ticker_event_digests) == replay_digests and replay_error is None
     passed = (
         termination == "duration_elapsed"
@@ -253,6 +334,7 @@ async def _collect_connection(
         and unexpected_products == 0
         and replay_match
         and sequence["state"] == "pass"
+        and freshness["state"] == "pass"
     )
     result: dict[str, object] = {
         "connection_number": connection_number,
@@ -271,6 +353,7 @@ async def _collect_connection(
         "replay_event_count": len(replay_digests),
         "replay_match": replay_match,
         "sequence": sequence,
+        "freshness": freshness,
         "event_time_present_count": sum(bool(item["event_time_present"]) for item in metadata),
         "raw_spool": str(spool_path.name),
     }
@@ -401,6 +484,7 @@ def run_evidence(
         "notes": (
             "Public unauthenticated market-data feed only; no order, account, or execution authority.",
             "Provider sequence gaps and out-of-order messages are recorded and fail this bounded probe.",
+            "Freshness is measured from provider event time versus raw-spool receipt time; stale or malformed timestamps fail closed.",
             "A short probe is not a freshness soak or Phase-3 admission decision.",
         ),
     }
