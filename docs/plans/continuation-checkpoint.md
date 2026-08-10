@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint continuation started 2026-08-10 from clean `main`
-`645554f550fb6485af1e0f6e0d8be25f52b4e621` after PR #82 merged.
+Checkpoint refreshed 2026-08-10 from clean `main`
+`738c1057a86d40961768ac539397caf103f8c862` after PR #84 merged.
 
 ## Current continuation update — Binance Spot Testnet qualification
 
@@ -268,7 +268,7 @@ The following supersedes the earlier pending-operator Binance bullets below.
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 25 cycles passed, last record SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 26 cycles passed, last record SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -291,9 +291,9 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root; 25 cycles have passed,
+  `70598` with a new immutable runtime-admission root; 26 cycles have passed,
   the latest record hash is
-  `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`, and the
+  `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`, and the
   24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected
