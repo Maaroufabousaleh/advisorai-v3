@@ -70,8 +70,10 @@ tool execution.
 - Coinbase Sandbox identity, reviewed REST host, and scoped credentials are
   configured. The remaining provider blockers are that the actual sandbox
   product catalogue did not expose `ETH-USD` and the product-filtered fills
-  read returned HTTP 401; the required read-only gate and paper lifecycle
-  remain closed. Secret values must not be sent in chat.
+  read returned HTTP 401. A later strict local resolver check also rejected a
+  non-allowlisted inventory variable before constructing the scoped resolver;
+  no value was logged or persisted. The required read-only gate and paper
+  lifecycle remain closed. Secret values must not be sent in chat.
 - Phase 3–7 real source/paper operation and the 60-day soak cannot start until
   earlier gates and venue prerequisites are real.
 - Phase 8 OS filesystem/native-syscall/C-extension attestation is incomplete;

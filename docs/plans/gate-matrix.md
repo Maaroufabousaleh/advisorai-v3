@@ -51,6 +51,10 @@ an external, timed, or human gate.
   `artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`
   with SHA-256 `79c359996cb8d330739495117730924c13ff29f909359e0c189dfea02498fdc7`.
   No order, cancel, transfer, or withdrawal was attempted.
+- A later strict local resolver check rejected the populated inventory on a
+  non-allowlisted variable before the scoped venue resolver was constructed.
+  The value was not logged or persisted; the operator must correct that local
+  inventory entry before rerunning the smoke.
 - No real archive remote is configured for `rclone crypt`; the two-provider
   restore remains unavailable until the operator configures providers.
 - The previous Phase-0 24-hour worker was interrupted by the laptop shutdown;

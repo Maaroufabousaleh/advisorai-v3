@@ -34,6 +34,10 @@ The zero-network transition configuration check passed for
 the `PAPER_VENUE` credential references bound to the adapter. The real,
 provider-specific smoke runner is
 [`scripts/smoke_coinbase_exchange_sandbox.py`](../../scripts/smoke_coinbase_exchange_sandbox.py).
+The later strict resolver recheck failed closed on a non-allowlisted inventory
+variable before constructing the scoped resolver; no value was logged or
+persisted. That local configuration prerequisite must be corrected before a
+future smoke rerun.
 
 Its latest immutable 2026-08-09 attempt is at
 `artifacts/phase2/coinbase-exchange-sandbox/read-only-smoke/20260809T235254.999504Z/coinbase-read-only-smoke.json`
