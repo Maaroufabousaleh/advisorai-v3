@@ -1,8 +1,9 @@
 # AdvisorAI V3 gate matrix
 
-Checkpoint regenerated 2026-08-10 from the clean `main` baseline
-`645554f550fb6485af1e0f6e0d8be25f52b4e621` before the supervised Binance
-qualification continuation.
+Checkpoint refreshed 2026-08-10 from `main`
+`738c1057a86d40961768ac539397caf103f8c862` after PR #84 merged; the
+checkpoint includes the supervised Binance qualification and the current
+stability heartbeat.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -14,8 +15,8 @@ interruption record SHA-256 is
 `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. The
 absolute-path runner fix is implemented and regression-tested; a one-cycle
 cwd-fix smoke passed with all three candidates, while fresh r3 is active under
-PID `70598` from `2026-08-10T18:07:25.593600Z` with 25 passing cycles and
-last record SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`. State remains
+PID `70598` from `2026-08-10T18:07:25.593600Z` with 26 passing cycles and
+last record SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`. State remains
 `PENDING_STABILITY`; no predecessor cycles are concatenated and no roster role
 is promoted. The prompt-named non-r3 root remains append-only and is not
 modified; its status file still names PID `12973`, while that PID is no longer
@@ -25,7 +26,7 @@ under PID `70598`.
 | Stage / requirement | Authoritative source | Implementation present? | Automated tests? | Local deterministic evidence? | Real external evidence? | Timed evidence? | Human action? | Current gate state | Blocker | Next admissible action |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | Phase 0 contracts, ports, policy gateway, model/runtime harness | architecture §11; phase-00 plan | yes | yes | yes | no | no | no | TESTED / LOCALLY MEASURED | none for local boundary | Preserve accepted local records; do not treat them as admission |
-| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with 25 passing cycles and last record SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
+| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with 26 passing cycles and last record SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
 | Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner with stop-on-failure | yes | short live route evidence plus preserved hash-chained failures | yes, exact provider/model/endpoint identity on earlier successful samples; current retries failed closed | pending 24-hour window | provider availability/time-dependent | EXTERNALLY MEASURED / QUARANTINED | Novita and DigitalOcean roots are quarantined after shared-pool HTTP 429, deadline exhaustion, and earlier runner-integrity incidents; corrected root `artifacts/phase0/remote-route-stability/20260810T053600Z` stopped after its first failed probe and has no eligible duration evidence | Preserve incident roots; retry the reviewed exact route only after provider availability returns, using a fresh systemd-backed root; never concatenate failed samples |
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
@@ -139,8 +140,8 @@ freshness, reconnect, or Phase-3 admission pass.
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2`
   is preserved as interrupted after eight passing cycles; its interruption
   record SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`.
-  Fresh r3 is active under PID `70598` with 25 passing cycles and last record
-  SHA-256 `e2cfcd4a5b01b7b4bce31e8f88098b24d2f02fab8e9bd7320510c362eb2568ba`;
+  Fresh r3 is active under PID `70598` with 26 passing cycles and last record
+  SHA-256 `48f1b275d239d5e4d6be84c25d00cf2160940ddc44947b65e7c0f27c2f7376ab`;
   do not concatenate roots.
 - DuckLake comparison is complete and rejected with measured evidence at
   `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`.
