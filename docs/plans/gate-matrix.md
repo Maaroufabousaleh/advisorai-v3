@@ -1,15 +1,17 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`7d68304320107c9f9382a48173193988387707f8` (PRs #86–#105 merged; PRs #95–#96
+`c14287ba4b84becf0356a9a36dc79c8c683791f0` (PRs #86–#108 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
-PR #103 adds the offline Phase-3 qualification validator and PR #105 records
-the independent Phase-3 availability recheck).
+PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
+independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
+runner boundary).
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
-and offline validation are merged. The completed corrected real qualification
-root is recorded below and is not an admission record.
+offline validation, and separate offline admission evaluator are merged. The
+completed corrected real qualification root is recorded below and is not an
+admission record.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -126,6 +128,36 @@ still pending.
 |---|---|---|---|
 | Restartable unattended qualification | `scripts/run_phase3_public_data_qualification.py`; `src/advisorai/collectors/source_health.py`, `market_recovery.py`, `source_disagreement.py`, and `source_failover.py`; `scripts/validate_phase3_public_data_qualification.py`; `scripts/monitor_phase3_process_resources.py`; `tests/phase3/test_source_health_controls.py`, `test_phase3_qualification_validation.py`, and `test_phase3_resource_monitor.py` | Completed root `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3` reached its target at `2026-08-11T03:14:39.940009Z` with 63 cycles/378 samples, summary SHA-256 `eb33cb5939feb5126bef3eff210c3710a95d6fbf3d85b3433bc2ad024a191ed7`, config SHA-256 `eb09ac0aa008c5a42c7e318178c79421bdf4d471b5649ddf65baa50a59f12398`, status SHA-256 `df8a7aa57aa95205636ce0e800882f6ccca0647b386a29488c83b7bba97ed5da`, and heartbeat SHA-256 `5d44ef77d3bf459f75c8141c53dbb45e6275489399d42616a1ad20ddd1fcb66`. The offline validation report at `artifacts/phase3/public-market-data-validation/20260811T011500Z-two-hour-r3-v2/phase3-qualification-validation.json` has SHA-256 `efa926a1f5264caf5fb5bdcfd8ca268d77f6d98aeb2d5504cbe5a90484a3b7ca`, state `PASS_FOR_REVIEW`, `phase3_admission=false`, and no validation issues. The corrected v2 resource sidecar reached `deadline_reached` with 32 observations and no resource errors; summary SHA-256 `42203ff04e875b3e1bc13a0c35dae9daa9a72e1c8be3e85892d1ccb3eeed7bbd` | IMPLEMENTED / TESTED / EXTERNALLY MEASURED / QUALIFIED FOR REVIEW / NOT ADMITTED. The root is no longer running. Final Binance sources were stale, Coinbase sources quarantined, and Deribit sources degraded; all 126 selections failed closed, silent substitution was zero, three replay failures and 22 severe disagreements were preserved. Keep admission closed and proceed only after Phase-0 stability and remaining Phase-3 criteria are satisfied. |
 | Deterministic health and failover | Typed HEALTHY, DEGRADED, STALE, DISCONNECTED, RECOVERING, and QUARANTINED transitions; hash-chained transition ledger; explicit severe-disagreement abstention and fail-closed selection; sanitized read-only dashboard/API | Completed r3 validation reloaded 78 health transitions and 126 source selections. Final Binance states were `STALE`, Coinbase states `QUARANTINED`, and Deribit states `DEGRADED`; 126/126 selections failed closed, silent substitution was zero, disagreement was severe 22 times, and the root preserved three replay failures | No Phase-3 admission yet. The measured state machine is externally qualified for review; preserve source identity and fail closed until the remaining admission criteria and Phase-0 stability gate pass. |
+
+The offline admission evaluator at
+`scripts/evaluate_phase3_admission.py` is a separate, read-only review boundary;
+it validates the requested duration from immutable timestamps, requires a real
+terminal sample, checks public/write separation, source-card endpoint identity,
+all-cycle primary-source continuity, fail-closed disagreement and selection
+behavior, and a completed error-free resource sidecar. It cannot represent a
+formal Phase-3 admission or write a `PhaseGateRecord`. Its focused tests are in
+`tests/phase3/test_phase3_admission.py`.
+
+Evaluation of the completed r3 root produced
+`artifacts/phase3/public-market-data-admission/20260811T043711Z-two-hour-r3-v2/phase3-admission-evaluation.json`
+with SHA-256
+`cbb8ec53d793887f17ebeccab8db33a52051082cdd989ff780b7a5f854cf0c1b` and
+recommendation `PENDING_EXTERNAL_EVIDENCE`. The exact blockers are
+`qualification_window_incomplete` (the last sample preceded the target even
+though the process finalized after it),
+`no_healthy_primary_source_for_btc_eth`, and
+`primary_snapshot_sequence_or_replay_failure`. This is a stricter review of
+the existing evidence, not a policy relaxation.
+
+A fresh four-hour root is currently running independently at
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+under PID `87421`, with resource sidecar PID `88019` at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T042355Z-four-hour-r4-fixed-v2`.
+Its target is `2026-08-11T08:24:40.271709Z`, code SHA-256 is
+`c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`, and the
+public connectors are credential-free and write-free. Both processes are
+durable evidence only; neither is an admission record and neither may be
+restarted or concatenated.
 
 An independent one-cycle recheck at
 `artifacts/phase3/public-market-data-durable/20260811T034114Z-one-cycle-recheck`

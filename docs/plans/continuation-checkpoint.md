@@ -1,10 +1,43 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`7d68304320107c9f9382a48173193988387707f8` (PRs #86–#105 merged; PRs #95–#96
+`c14287ba4b84becf0356a9a36dc79c8c683791f0` (PRs #86–#108 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
-PR #103 adds the offline Phase-3 qualification validator and PR #105 records
-the independent Phase-3 availability recheck).
+PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
+independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
+runner boundary).
+
+## Current continuation update — Phase-3 admission evaluator and active window
+
+- Added the offline, non-admitting
+  [`scripts/evaluate_phase3_admission.py`](../../scripts/evaluate_phase3_admission.py)
+  boundary with focused tests in
+  [`tests/phase3/test_phase3_admission.py`](../../tests/phase3/test_phase3_admission.py).
+  It validates timestamp-derived qualification duration and terminal-sample
+  presence, append-only public/read-only invariants, reviewed endpoint identity,
+  all-cycle primary continuity, fail-closed disagreement and source selection,
+  and a completed error-free OS resource sidecar. It performs no network I/O,
+  does not mutate qualification roots, and cannot represent formal admission.
+- Evaluation of the completed r3 root is preserved at
+  `artifacts/phase3/public-market-data-admission/20260811T043711Z-two-hour-r3-v2/phase3-admission-evaluation.json`
+  with SHA-256
+  `cbb8ec53d793887f17ebeccab8db33a52051082cdd989ff780b7a5f854cf0c1b`.
+  Recommendation is `PENDING_EXTERNAL_EVIDENCE`; blockers are
+  `qualification_window_incomplete`, `no_healthy_primary_source_for_btc_eth`,
+  and `primary_snapshot_sequence_or_replay_failure`. The final r3 sample
+  preceded its target despite process finalization after the target; no policy
+  was relaxed and no admission was opened.
+- A fresh four-hour public-data qualification is active under PID `87421` at
+  `artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+  until `2026-08-11T08:24:40.271709Z`; its separate read-only resource sidecar
+  is PID `88019` at
+  `artifacts/phase3/public-market-data-resource-monitor/20260811T042355Z-four-hour-r4-fixed-v2`.
+  Preserve both roots, do not restart or concatenate them, and evaluate only
+  after the runner reaches a terminal state.
+- Selected-model stability PID `70598` remains untouched. Archive/rclone is
+  externally deferred and was not touched. Phase 0 stability, Phase 3
+  admission, Phases 4–7, Phase 8 formal admission, Alpha E0–E7, and Phase 10
+  human approval remain open.
 
 ## Current continuation update — durable Phase-7 runner boundary
 
