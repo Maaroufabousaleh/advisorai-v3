@@ -26,6 +26,7 @@ from advisorai.collectors import (
     transition_source_health,
 )
 from advisorai.collectors.public_market_data import reviewed_public_market_data_sources
+from advisorai.integrations import RawMessageSpool
 from scripts import run_phase3_public_data_qualification as phase3_qualification
 from scripts.run_phase3_public_data_qualification import (
     BINANCE_DEPTH_SNAPSHOT_LIMIT,
@@ -445,6 +446,55 @@ def test_source_sample_preserves_only_sanitized_failure_labels(tmp_path: Path):
     ]
     assert result["failure_layers"] == ["first_message_timeout"]
     assert all("secret" not in value.lower() for value in result["failure_classes"])
+
+
+def test_source_sample_projects_provider_and_local_receipt_timestamps(tmp_path: Path):
+    source = next(
+        item
+        for item in reviewed_public_market_data_sources()
+        if item.source_id == "coinbase_exchange_public_market_data"
+    )
+    raw_spool = tmp_path / "raw-ws.jsonl"
+    RawMessageSpool(raw_spool).append(
+        json.dumps(
+            {
+                "type": "ticker",
+                "product_id": "BTC-USD",
+                "time": "2026-08-10T21:59:59Z",
+            },
+            sort_keys=True,
+        ).encode(),
+        received_at=NOW,
+        sequence=1,
+    )
+    result = _source_symbol_result(
+        source,
+        tmp_path,
+        {
+            "required_read_state": "pass",
+            "server_time": {"status": "pass", "clock_offset_seconds": 0},
+            "markets": {},
+        },
+        {
+            "state": "pass",
+            "connections": [
+                {
+                    "expected_symbols": ["BTC-USD"],
+                    "status": "pass",
+                    "raw_spool": str(raw_spool),
+                }
+            ],
+            "resubscription": {"subscription_acknowledgements": 1},
+        },
+        symbol="BTC-USD",
+        asset="BTC",
+        now=NOW,
+        previous_connected=None,
+    )
+
+    assert result["last_provider_event_at"] == "2026-08-10T21:59:59+00:00"
+    assert result["last_event_received_at"] == NOW.isoformat()
+    assert result["provider_event_timestamp_count"] == 1
 
 
 def test_fault_drills_are_injected_and_pass():

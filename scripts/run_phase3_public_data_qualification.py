@@ -833,7 +833,10 @@ def _source_symbol_result(
         )
         if isinstance(websocket.get("resubscription"), Mapping)
         else 0,
+        "last_provider_event_at": metrics.get("last_provider_event_at"),
         "last_valid_event_at": metrics.get("last_valid_event_at"),
+        "last_event_received_at": metrics.get("last_valid_event_at"),
+        "provider_event_timestamp_count": metrics.get("provider_event_count", 0),
         "measurement_ended_at": (
             measurement_ended_at.isoformat() if measurement_ended_at is not None else None
         ),
