@@ -198,15 +198,21 @@ def _evaluate_checks(
         requested_duration = float(config.get("duration_hours", 0.0)) * 3600.0
         measured_duration = (target_timestamp - start_timestamp).total_seconds()
         last_sample_timestamp = max((_sample_end(row) for row in samples), default=None)
+        terminal_sample_count = summary.get("terminal_sample_count")
+        terminal_marker_present = (
+            isinstance(terminal_sample_count, int) and terminal_sample_count > 0
+        )
         terminal_sample_reached = (
             measured_duration >= requested_duration
             and updated_timestamp >= target_timestamp
             and last_sample_timestamp is not None
             and last_sample_timestamp >= target_timestamp
+            and terminal_marker_present
         )
     except (TypeError, ValueError):
         measured_duration = 0.0
         requested_duration = 0.0
+        terminal_marker_present = False
         terminal_sample_reached = False
     complete = (
         status.get("state") == "multi_hour_window_complete"
@@ -221,6 +227,7 @@ def _evaluate_checks(
             f"{status.get('state')!r}, summary state={summary.get('state')!r}, "
             f"measured_duration_seconds={measured_duration:.3f}, "
             f"requested_duration_seconds={requested_duration:.3f}, "
+            f"terminal_marker_present={terminal_marker_present}, "
             f"terminal_sample_reached={terminal_sample_reached}",
             "qualification_window_incomplete",
         )
