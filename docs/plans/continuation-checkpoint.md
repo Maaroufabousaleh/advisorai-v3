@@ -3,14 +3,29 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
-  `85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`, aligned with `origin/main` after
-  PR #156.
+  `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with `origin/main` after
+  PR #158.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
   the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
   and resource sidecar PID `47392`; none has been stopped, restarted, or
   modified.
 - Archive/rclone remains externally deferred. No Phase-3 admission or later
   phase gate is opened by this metadata correction.
+
+## Current continuation update — PR #158 validator hardening
+
+- PR #158 merged at `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`. Future projected
+  Phase-3 roots must contain complete provider/local timestamp fields and a
+  consistent provider timestamp count; older roots are classified as
+  `legacy_unprojected` without rewriting. Full pytest passed 653 tests and all
+  eleven acceptance suites passed; no gate was opened.
+- At `2026-08-11T11:33:35Z`, PID `70598` remained untouched at 193 cycles with
+  terminal target `2026-08-11T18:07:25.593600Z`. Preserved r5 PID `46864` and
+  sidecar PID `47392` remained untouched at 564 samples with no terminal sample
+  and target `2026-08-11T12:35:59.156509Z`. Corrected r6 has not started.
+- Archive/rclone remains externally deferred and unchanged. Phase-0 and
+  Phase-3 admission remain closed; next legal work is review of the r5 terminal
+  artifacts and then the corrected r6 root.
 
 ## Current continuation update — PR #156 timestamp projection
 

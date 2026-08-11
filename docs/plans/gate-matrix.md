@@ -2,8 +2,8 @@
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`, aligned with
-`origin/main`, after PR #156. The attachment checkpoint’s PID `13339` and
+Clean `main` is `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with
+`origin/main`, after PR #158. The attachment checkpoint’s PID `13339` and
 two-hour r3 root are stale; the live protected Phase-0 model process is PID
 `70598`, and the live Phase-3 r5 process/sidecar are PIDs `46864`/`47392`.
 All immutable roots remain unchanged.
@@ -23,6 +23,21 @@ with zero terminal samples and target `2026-08-11T12:35:59.156509Z`; model PID
 `70598` remained `running` at 191 cycles with terminal target
 `2026-08-11T18:07:25.593600Z`. The corrected r6 root has not started.
 Archive/rclone remains externally deferred and untouched.
+
+## Current continuation update — PR #158 validator hardening
+
+PR #158 merged offline validation for the Phase-3 provider/local timestamp
+projection at `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`. Future projected roots
+must contain complete timezone-aware provider and receipt timestamps with a
+consistent provider-timestamp count; old roots are classified explicitly as
+`legacy_unprojected` and are not rewritten. Full pytest passed 653 tests and
+all eleven acceptance suites passed; no gate was opened.
+
+At `2026-08-11T11:33:35Z`, r5 PID `46864` remained `running` at 564 samples
+with zero terminal samples and target `2026-08-11T12:35:59.156509Z`; model PID
+`70598` remained `running` at 193 cycles with terminal target
+`2026-08-11T18:07:25.593600Z`. Corrected r6 has not started. Archive/rclone
+remains externally deferred and untouched.
 
 ## Current continuation update — PR #154 provider freshness evidence
 
