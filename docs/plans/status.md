@@ -4,6 +4,38 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
+
+Clean `main` is `1193753c6b2000a24ffed34dab5b1d7fa557cf44` after merged PR #169.
+The PR corrects Phase-3 source-selection validation semantics and adds positive
+and negative regression coverage. It does not modify prior evidence.
+
+The protected Phase-0 r3 terminal review completed at least 24 hours with
+`269` cycles and `24.003634` elapsed hours. Its immutable review report is
+`PASS_FOR_REVIEW` (SHA-256
+`1a6ab92c4f28d456776eac0c89ab099b0c1ef579c729fa8e458e4d5192b06949`) and
+qualifies each requested role independently: `ttm-r2`,
+`finsentiment-deberta-v3`, and `finbert-minilm` are all `QUALIFIED`. This is
+model-runtime evidence only; overall Phase 0 remains pending because the
+private route and archive prerequisites are not admitted. PID `70598` was not
+restarted or changed.
+
+The protected Phase-3 r6 terminal evidence remains preserved and non-admitted.
+The corrected validator audit is `PASS_FOR_REVIEW` (SHA-256
+`3ac2d22f3629ff97f08e8172d1fb4aa1a3044251f32b3f0419c7fb1d1feca6d8`), while
+the admission evaluator remains `phase3_admission=false` (SHA-256
+`e72d0bba6ad8ec9eb204ea5f0892c6972d06362db6ceeaf8b99f6b93436d510b`) because
+real Binance BTC/ETH stale intervals caused the continuity blocker. The
+original r6 validator failure is preserved as a validator-defect incident;
+PR #169 fixes the semantics for future roots rather than rewriting r6.
+
+The fresh four-hour r7 qualification is active at
+`artifacts/phase3/public-market-data-durable/20260811T182252Z-four-hour-r7-validator-fix`
+(PID `32321`) with resource sidecar PID `32574`. It is public read-only,
+credential-free, and write-free; its terminal result is pending. Phase 3 is
+therefore still `PENDING_EXTERNAL_EVIDENCE`, and Phase 4–7 have not been
+started or admitted. Archive/rclone remains explicitly deferred.
+
 ## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
 Clean `main` is `48d913d1ac1c78549b9d1c6115550308cacced19` after PR #167, a

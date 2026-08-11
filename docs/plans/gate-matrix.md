@@ -1,5 +1,54 @@
 # AdvisorAI V3 gate matrix
 
+## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
+
+Clean `main` is `1193753c6b2000a24ffed34dab5b1d7fa557cf44`, aligned with
+`origin/main` after PR #169. PR #169 fixes a validator defect that treated
+valid successful source selections (`fail_closed=false` with an identity bound
+to the actual provider) as invalid. The fix is implemented and focused-tested;
+it does not rewrite any immutable evidence root.
+
+The Phase-0 selected-model r3 terminal review is
+`PASS_FOR_REVIEW` with `269` continuous cycles and `24.003634` elapsed hours.
+The separate immutable review report
+`artifacts/phase0/model-runtime-qualification/stability-validation/phase0-selected-24h-terminal-sample-20260810-r3-review-codex-postrun/phase0-model-stability-validation.json`
+has SHA-256
+`1a6ab92c4f28d456776eac0c89ab099b0c1ef579c729fa8e458e4d5192b06949`. Its
+per-role results are `QUALIFIED` for `ttm-r2`, `finsentiment-deberta-v3`, and
+`finbert-minilm`; the overall Phase-0 gate remains closed because other
+Phase-0 prerequisites, including the deferred archive and unavailable private
+route, are not admitted. PID `70598` is terminal and was not modified.
+
+The immutable Phase-3 r6 root remains non-admitted. Its corrected offline
+structural review is `PASS_FOR_REVIEW` at
+`artifacts/phase3/public-market-data-validation/20260811T124600Z-four-hour-r6-clock-confidence-setsid-postfix-audit/phase3-qualification-validation.json`
+with SHA-256
+`3ac2d22f3629ff97f08e8172d1fb4aa1a3044251f32b3f0419c7fb1d1feca6d8`. The
+separate admission review is `phase3_admission=false` at
+`artifacts/phase3/public-market-data-admission/20260811T124600Z-four-hour-r6-clock-confidence-setsid-postfix-audit/phase3-admission-evaluation.json`
+with SHA-256
+`e72d0bba6ad8ec9eb204ea5f0892c6972d06362db6ceeaf8b99f6b93436d510b`; its
+blocker is `primary_snapshot_sequence_or_replay_failure` because real stale
+intervals occurred in the primary Binance BTC/ETH history. Provider
+degradation was preserved and handled fail-closed; it was not rewritten as an
+implementation failure.
+
+A fresh independent r7 root is now running from the merged validator fix at
+`artifacts/phase3/public-market-data-durable/20260811T182252Z-four-hour-r7-validator-fix`
+under PID `32321`, with a separate resource sidecar PID `32574` at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T182252Z-four-hour-r7-validator-fix`.
+The runner started at `2026-08-11T18:23:11.356614Z` and targets
+`2026-08-11T22:23:11.356614Z`; its config SHA-256 is
+`87abe16e4f16c24bd34e49381915005e0c73f826239c0412c3a81922debaf4c6`.
+The root is not yet terminal and cannot open Phase-3 admission. It records
+`credentials_loaded=false` and `order_writes_attempted=false`.
+
+Phase 4–7 remain pending: no real Phase-4 utility, Phase-5 council, Phase-6
+fill/attribution, or Phase-7 soak evidence is being claimed. Coinbase and
+Binance execution evidence, the deferred archive gate, Hermes quarantine,
+Phase 9/Alpha plan-only status, and Phase-10 human authorization remain
+unchanged.
+
 ## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
 Clean `main` is `48d913d1ac1c78549b9d1c6115550308cacced19`, aligned with

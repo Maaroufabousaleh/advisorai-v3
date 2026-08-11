@@ -5,6 +5,30 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
+
+The verified clean executable anchor is
+`1193753c6b2000a24ffed34dab5b1d7fa557cf44` after PR #169. The Phase-3
+source-selection validator now accepts only identity-preserving successful
+selection or a fully identity-null fail-closed selection. Focused regression
+tests pass; this is `IMPLEMENTED / TESTED`, not admission.
+
+The immutable Phase-0 r3 terminal review passed its genuine 24-hour boundary
+with `269` cycles and no validation issues. The review report SHA-256 is
+`1a6ab92c4f28d456776eac0c89ab099b0c1ef579c729fa8e458e4d5192b06949`; all
+three requested model roles are independently `QUALIFIED`. This does not
+qualify the entire Phase 0, whose external route/archive prerequisites remain
+pending.
+
+The immutable r6 Phase-3 structural review is now correctly
+`PASS_FOR_REVIEW` after the validator fix, but the separate admission review
+remains closed (`phase3_admission=false`) because the real root recorded stale
+primary Binance intervals. This is external operational evidence insufficiency,
+not a reason to rewrite r6. A fresh independent r7 root is running under PID
+`32321`, with sidecar PID `32574`; both are outside the model root and use
+credential-free public connectors. No Phase-3, Phase-4, Phase-5, Phase-6, or
+Phase-7 admission is claimed.
+
 ## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
 The verified clean executable anchor is
