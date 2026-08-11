@@ -19,6 +19,7 @@ import json
 import os
 import shlex
 import signal
+import sys
 import time
 from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +28,12 @@ from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+
+if __package__ in {None, ""}:
+    # A durable supervisor invokes this file directly.  Keep that documented
+    # entrypoint equivalent to package execution so a fresh root cannot fail
+    # before writing its immutable configuration/evidence boundary.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from advisorai.collectors import (
     ClockConfidence,

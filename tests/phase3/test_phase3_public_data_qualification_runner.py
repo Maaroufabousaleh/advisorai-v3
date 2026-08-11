@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -15,6 +18,24 @@ from scripts.run_phase3_public_data_qualification import (
 )
 
 TARGET = datetime(2026, 8, 11, 8, 0, tzinfo=UTC)
+
+
+def test_direct_entrypoint_help_resolves_repository_imports_without_pythonpath():
+    repository_root = Path(__file__).resolve().parents[2]
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    completed = subprocess.run(
+        [sys.executable, "scripts/run_phase3_public_data_qualification.py", "--help"],
+        cwd=repository_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "Run durable, append-only public-data qualification" in completed.stdout
+    assert completed.stderr == ""
 
 
 def test_terminal_sample_is_not_marked_before_window_boundary():
