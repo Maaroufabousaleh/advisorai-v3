@@ -1,5 +1,34 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current source-scope checkpoint — 2026-08-11T23:33:32Z
+
+- Clean `main` is
+  `27f4783171c03cf2cc606231689f7a4d22b7ca9b` after merged PR #177.
+- The bounded source qualifier now distinguishes provider product absence,
+  provider availability/rate limiting, stale/clock-uncertain data, and
+  replay/data-integrity failures. Failed source paths remain explicitly
+  fail-closed.
+- Fresh report:
+  `artifacts/phase3/source-qualification/20260811T233228.867449Z/phase3-v3-core-source-qualification.json`
+  with SHA-256
+  `d6d1bbde354df87b8e4f3407e91839b5cf6dc9e10d432a2ed7557d7fd061ca73`;
+  manifest SHA-256 is
+  `c3c3afd53c7bfb18c282fc2e1b0bfd3f6f331631a3d2e2b1f305973938a110a8`.
+  BTC/Deribit/SEC RSS passed; Coinbase Sandbox ETH-USD returned 404 and GDELT
+  returned 429. These are external provider/quarantine outcomes, not
+  implementation or data-integrity failures, and no substitution occurred.
+- Phase-3 r7 remains an immutable `QUALIFIED_FOR_REVIEW` public BTC/ETH
+  component. Full Phase 3 remains `PENDING_EXTERNAL_EVIDENCE` pending the
+  broader source-scope/formal `PhaseGateRecord` boundary. Do not launch r8 for
+  the correctly handled stale intervals and do not start Phase 4 without a
+  passed Phase-3 gate.
+- Full pytest after PR #177: `665 passed, 28 warnings`; acceptance suites:
+  `134/152/126/113/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
+  dashboard build, diff hygiene, and tracked-secret/weight checks passed.
+- Phase-0 selected-model stability remains terminal and untouched; archive/
+  rclone remains deferred. No production calls, additional Binance orders,
+  or model/LLM/Hermes/browser/dashboard trading authority were introduced.
+
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
 - Current executable main anchor is

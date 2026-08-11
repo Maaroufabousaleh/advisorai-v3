@@ -5,6 +5,33 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current source-scope checkpoint — 2026-08-11T23:33:32Z
+
+PR #177 is merged on `main` at
+`27f4783171c03cf2cc606231689f7a4d22b7ca9b`. It adds deterministic failure
+classification to `scripts/qualify_phase3_sources.py` and regression coverage:
+HTTP 404 product absence, provider availability/rate limiting, stale or clock
+uncertainty, and replay/data-integrity failures are distinct evidence classes;
+failed operations are explicitly marked safe-fail-closed. The classifier does
+not convert provider degradation into an implementation defect or a phase pass.
+
+The fresh real source report is
+`artifacts/phase3/source-qualification/20260811T233228.867449Z/phase3-v3-core-source-qualification.json`
+(SHA-256
+`d6d1bbde354df87b8e4f3407e91839b5cf6dc9e10d432a2ed7557d7fd061ca73`),
+generated with runner code SHA-256
+`d5f6eb35ac24ed4cacbf5ce9c2382dc7db9d334755825be9903469ea3e4521d7`.
+The result is `EXTERNALLY_MEASURED / PENDING_EXTERNAL_EVIDENCE`: BTC/Deribit/
+SEC RSS passed; Coinbase Sandbox ETH-USD is unavailable in the provider
+catalogue; GDELT was rate-limited. Both external failures were sanitized and
+fail-closed. No response-body, credential, order, or production evidence was
+introduced.
+
+This closes the classification/observability defect only. It does not close
+the broader Phase-3 source-scope or formal gate-record requirement. The r7
+terminal root and its review artifacts remain immutable; Phase 4–7 remain
+unadmitted and no additional r7/r8 run was launched.
+
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
 Current executable main anchor is `d5bfde76ed3cacaba365f3d7981db5a756eaf314`

@@ -1,5 +1,28 @@
 # AdvisorAI V3 gate matrix
 
+## Current source-scope checkpoint — 2026-08-11T23:33:32Z
+
+Current `main` is `27f4783171c03cf2cc606231689f7a4d22b7ca9b` after PR #177.
+The Phase-3 bounded source qualifier now classifies external HTTP/product
+failures and stale/clock-uncertain provider data separately from replay or
+data-integrity findings; every failed operation remains fail-closed.
+
+Fresh source evidence is
+`artifacts/phase3/source-qualification/20260811T233228.867449Z/phase3-v3-core-source-qualification.json`
+with SHA-256
+`d6d1bbde354df87b8e4f3407e91839b5cf6dc9e10d432a2ed7557d7fd061ca73` and
+manifest SHA-256
+`c3c3afd53c7bfb18c282fc2e1b0bfd3f6f331631a3d2e2b1f305973938a110a8`.
+BTC/Deribit/SEC RSS passed; Coinbase Sandbox ETH-USD was absent by provider
+truth (404), and GDELT was rate-limited (429). Those are external/quarantined
+states, not implementation failures, and no source substitution occurred.
+
+The r7 public BTC/ETH component remains qualified for formal review only.
+Full Phase 3 remains `PENDING_EXTERNAL_EVIDENCE` because the broader source
+scope and formal `PhaseGateRecord` are not yet satisfied. Phase 4 remains
+unstarted; archive/rclone, private-route, Phase 8, Phase 9/Alpha, and Phase 10
+states are unchanged.
+
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
 Current executable main anchor is `d5bfde76ed3cacaba365f3d7981db5a756eaf314`

@@ -4,6 +4,37 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current source-scope checkpoint — 2026-08-11T23:33:32Z
+
+Clean `main` is `27f4783171c03cf2cc606231689f7a4d22b7ca9b` after PR #177. The
+Phase-3 bounded source qualifier now records whether a failed operation is an
+external provider/product failure, stale or clock-uncertain provider data, or
+replay/data-integrity evidence, while marking every failed path fail-closed.
+It does not infer an implementation defect from an HTTP availability failure,
+and it does not open a phase gate.
+
+The fresh seven-call public source pass is at
+`artifacts/phase3/source-qualification/20260811T233228.867449Z/phase3-v3-core-source-qualification.json`
+with evidence SHA-256
+`d6d1bbde354df87b8e4f3407e91839b5cf6dc9e10d432a2ed7557d7fd061ca73`; its
+manifest carries the same evidence digest and has SHA-256
+`c3c3afd53c7bfb18c282fc2e1b0bfd3f6f331631a3d2e2b1f305973938a110a8`.
+Coinbase Sandbox BTC-USD, Deribit BTC index, and SEC official RSS passed
+raw-spool replay and quality checks. Coinbase Sandbox ETH-USD returned
+provider-truth HTTP 404 (`external_provider_product_unavailable`), while GDELT
+returned HTTP 429 (`external_provider_unavailable_or_rate_limited`); both were
+explicitly safe-fail-closed, with no silent substitution and no implementation
+or data-integrity failure claimed. The report remains
+`EXTERNALLY_MEASURED / PENDING_EXTERNAL_EVIDENCE`.
+
+The immutable r7 public BTC/ETH source-health component remains
+`QUALIFIED_FOR_REVIEW`, but the broader Phase-3 source spine still has no
+passed formal `PhaseGateRecord`; therefore Phase 3 is not admitted and no real
+Phase-4 utility evidence has been run. Phase-0 selected-model roles remain
+qualified independently, while global Phase 0, the deferred archive gate, and
+the private route remain separate. No r8 root, Binance order, production call,
+or model/LLM execution authority was introduced.
+
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
 Current executable main anchor is `d5bfde76ed3cacaba365f3d7981db5a756eaf314`
