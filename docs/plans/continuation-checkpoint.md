@@ -1,5 +1,17 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current repository anchor — 2026-08-11
+
+- Clean `main` is
+  `ce17e5d95f4d335850d297979e317d2ea4e37878`, aligned with `origin/main` after
+  PR #141.
+- The attachment’s PID `13339` / two-hour r3 reference is stale relative to
+  the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
+  and resource sidecar PID `47392`; none has been stopped, restarted, or
+  modified.
+- Archive/rclone remains externally deferred. No Phase-3 admission or later
+  phase gate is opened by this metadata correction.
+
 ## Current continuation update — Phase-3 measurement boundary
 
 - PR #140 merged into main at

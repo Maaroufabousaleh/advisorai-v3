@@ -4,6 +4,15 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current repository anchor — 2026-08-11
+
+Clean `main` is `ce17e5d95f4d335850d297979e317d2ea4e37878`, aligned with
+`origin/main`, after PR #141 merged the status/checkpoint documentation for
+PR #140. The attachment checkpoint naming PID `13339` and the two-hour r3 root
+is stale relative to the live host; the currently protected processes are model
+stability PID `70598` and Phase-3 r5 PID `46864` with resource sidecar PID
+`47392`. No process was restarted or modified.
+
 ## Current continuation update — Phase-3 measurement boundary
 
 PR #140 merged into main at `335114ba73156cb75e44465a4d21ff27f86299e1` with
