@@ -31,6 +31,7 @@ from scripts.run_phase3_public_data_qualification import (
     BINANCE_DEPTH_SNAPSHOT_LIMIT,
     _AppendOnlyLog,
     _binance_depth_snapshot_url,
+    _connection_disconnected,
     _fault_drills,
 )
 
@@ -217,6 +218,20 @@ def test_binance_symbol_windows_are_collected_concurrently(tmp_path: Path, monke
     assert maximum_in_flight == len(source.symbols)
     assert result["state"] == "pass"
     assert [item["symbol"] for item in result["connections"]] == list(source.symbols)
+
+
+def test_connection_metrics_distinguish_window_close_from_disconnect():
+    assert _connection_disconnected({"status": "pass", "timed_window_completed": True}) is False
+    assert (
+        _connection_disconnected({"status": "failed", "collection_error_class": "TimeoutError"})
+        is True
+    )
+    assert (
+        _connection_disconnected(
+            {"status": "pass", "transport_error_class": "WebSocketTransportError"}
+        )
+        is True
+    )
 
 
 def test_fault_drills_are_injected_and_pass():
