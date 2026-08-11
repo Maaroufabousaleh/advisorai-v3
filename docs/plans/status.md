@@ -15,6 +15,16 @@ its resource sidecar (PID `88019`), and selected-model stability process (PID
 `70598`) were read-only inspected and not changed. No external or timed gate was
 opened; Phase-3 remains pending terminal operational evidence.
 
+## Current continuation update — post-PR #125 anchor
+
+Clean `main` is now `3d3242cd07d55b2099b247b1d593a1701685f829` after PR #125.
+The source-health identity/state-chain enforcement is merged and verified; it
+does not alter the in-flight evidence roots. At the latest read-only check,
+selected-model r3 PID `70598` remained running at cycle `137`, while Phase-3 r4
+PID `87421` remained running at cycle `73` with `438` samples toward its
+`2026-08-11T08:24:40.271709Z` terminal sample. Resource sidecar PID `88019`
+remained active. No summary, terminal marker, or admission record exists yet.
+
 ## Current continuation update — post-PR #120 Phase-3 review evidence
 
 Current clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6` after PR #122;

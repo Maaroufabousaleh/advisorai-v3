@@ -16,6 +16,15 @@ with one dependency-only skip; all nine existing Phase-3 health ledgers reopen
 under the new checks. The active r4 process and Phase-0 stability process remain
 untouched, and no admission state changed.
 
+## Current continuation update — post-PR #125 anchor
+
+PR #125 is merged into clean main
+`3d3242cd07d55b2099b247b1d593a1701685f829`. The source-health ledger identity
+binding and predecessor-state checks are therefore part of the current
+executable base. The active model and Phase-3 evidence processes remain
+independent of this code change; at the latest inspection they were still
+pre-terminal and no external gate was promoted.
+
 ## Current continuation update — post-PR #120 Phase-3 review
 
 Current clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6`. PR #120
