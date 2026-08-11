@@ -2,8 +2,8 @@
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `3f7bfa26f0db1f15680576d09e0246525f3db8fd`, aligned with
-`origin/main`, after PR #148. The attachment checkpoint’s PID `13339` and
+Clean `main` is `ee0b092492ae11b0c04ace22ee64348cd4baf581`, aligned with
+`origin/main`, after PR #150. The attachment checkpoint’s PID `13339` and
 two-hour r3 root are stale; the live protected Phase-0 model process is PID
 `70598`, and the live Phase-3 r5 process/sidecar are PIDs `46864`/`47392`.
 All immutable roots remain unchanged.

@@ -6,8 +6,8 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `3f7bfa26f0db1f15680576d09e0246525f3db8fd`, aligned with
-`origin/main`, after PR #148. The attachment checkpoint naming PID `13339` and
+Clean `main` is `ee0b092492ae11b0c04ace22ee64348cd4baf581`, aligned with
+`origin/main`, after PR #150. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently
 protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
 with resource sidecar PID `47392`. No process was restarted or modified.
