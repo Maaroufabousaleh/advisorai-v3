@@ -36,6 +36,27 @@ sidecar PID `88019`; the selected-model stability process remains PID `70598`.
 Both are untouched and must be evaluated only from their own immutable terminal
 evidence. Archive/rclone remains externally deferred.
 
+## Current continuation update — active Phase-3 r4 window
+
+Read-only observation at `2026-08-11T06:11:35Z` confirms that the active
+four-hour root
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+is still running under PID `87421`, with target end
+`2026-08-11T08:24:40.271709Z`. Its recorded code identity is
+`c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`.
+It has 384 samples, 384 connection attempts and disconnects, 128 snapshot
+recovery attempts, zero successful connections, zero valid events, and all six
+BTC/ETH source pairs are fail-closed (`DISCONNECTED` or `QUARANTINED`). This is
+an in-flight operational failure observation, not a terminal qualification or
+Phase-3 admission.
+
+The separate sidecar
+`artifacts/phase3/public-market-data-resource-monitor/20260811T042355Z-four-hour-r4-fixed-v2`
+is still running under PID `88019`; its latest observation at
+`2026-08-11T06:11:27.619492Z` recorded 239.37890625 MiB RSS, 1.8% CPU, four
+file descriptors, zero internet connections, and no resource error. Neither
+process has been restarted or modified.
+
 ## Current continuation update — Phase-4 utility preparation boundary
 
 The Phase-4 preparation work in PR #114 is based on clean-main anchor
