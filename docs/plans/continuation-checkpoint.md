@@ -1,5 +1,38 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
+
+- Clean `main` is
+  `1193753c6b2000a24ffed34dab5b1d7fa557cf44`, aligned with `origin/main` after
+  PR #169. The merged fix corrects Phase-3 source-selection validation and
+  adds positive/negative regression tests; no prior evidence root was changed.
+- Phase-0 selected-model r3 terminal review is `PASS_FOR_REVIEW` after
+  `24.003634` hours and `269` cycles. The immutable report SHA-256 is
+  `1a6ab92c4f28d456776eac0c89ab099b0c1ef579c729fa8e458e4d5192b06949`.
+  `ttm-r2`, `finsentiment-deberta-v3`, and `finbert-minilm` are each
+  `QUALIFIED`. PID `70598` is terminal and remains untouched. Overall Phase 0
+  is still pending its other external prerequisites.
+- Preserve Phase-3 r6 unchanged. Its corrected structural review is
+  `PASS_FOR_REVIEW` with report SHA-256
+  `3ac2d22f3629ff97f08e8172d1fb4aa1a3044251f32b3f0419c7fb1d1feca6d8`.
+  Admission remains `phase3_admission=false` with blocker
+  `primary_snapshot_sequence_or_replay_failure` and report SHA-256
+  `e72d0bba6ad8ec9eb204ea5f0892c6972d06362db6ceeaf8b99f6b93436d510b`.
+  Real Binance stale intervals were preserved as external evidence; no
+  concatenation or backdating occurred.
+- Fresh independent r7 is running at
+  `artifacts/phase3/public-market-data-durable/20260811T182252Z-four-hour-r7-validator-fix`
+  under PID `32321`, started `2026-08-11T18:23:11.356614Z`, targeting
+  `2026-08-11T22:23:11.356614Z`. Its separate resource sidecar is PID `32574`
+  at `artifacts/phase3/public-market-data-resource-monitor/20260811T182252Z-four-hour-r7-validator-fix`.
+  The r7 root is credential-free and order-write-free, and is not yet a
+  terminal or admission result.
+- Next legal work: preserve r7 and its sidecar, then perform fresh offline
+  validation and admission evaluation after both complete. Do not start
+  Phase 4 until Phase 3 is actually admitted. Archive/rclone remains deferred;
+  Phase 8 remains quarantined, Phase 9/Alpha remain plan-only, and Phase 10
+  still requires explicit human authorization.
+
 ## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
 - Clean `main` is
