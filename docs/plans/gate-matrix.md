@@ -1,5 +1,13 @@
 # AdvisorAI V3 gate matrix
 
+## Current repository anchor — 2026-08-11
+
+Clean `main` is `ce17e5d95f4d335850d297979e317d2ea4e37878`, aligned with
+`origin/main`, after PR #141. The attachment checkpoint’s PID `13339` and
+two-hour r3 root are stale; the live protected Phase-0 model process is PID
+`70598`, and the live Phase-3 r5 process/sidecar are PIDs `46864`/`47392`.
+This is a metadata correction only; all immutable roots remain unchanged.
+
 ## Current continuation update — Phase-3 measurement boundary
 
 PR #140 merged into main at `335114ba73156cb75e44465a4d21ff27f86299e1`.
