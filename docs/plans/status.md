@@ -6,12 +6,24 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `ce17e5d95f4d335850d297979e317d2ea4e37878`, aligned with
-`origin/main`, after PR #141 merged the status/checkpoint documentation for
-PR #140. The attachment checkpoint naming PID `13339` and the two-hour r3 root
-is stale relative to the live host; the currently protected processes are model
-stability PID `70598` and Phase-3 r5 PID `46864` with resource sidecar PID
-`47392`. No process was restarted or modified.
+Clean `main` is `3404a0b649eeff960de0dced95efe5f7c1593bea`, aligned with
+`origin/main`, after PR #143. The attachment checkpoint naming PID `13339` and
+the two-hour r3 root is stale relative to the live host; the currently
+protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
+with resource sidecar PID `47392`. No process was restarted or modified.
+
+## Current continuation update — Phase-3 non-negative age metrics
+
+PR #143 merged the Phase-3 reporting fix at
+`3404a0b649eeff960de0dced95efe5f7c1593bea`. Future durable roots use code
+identity
+`30d9fb147e6ce4a7204aaa0f2867d8c8e8e5200ec2d7a34ff2c3e037100d36eb`; signed
+future-event counts remain visible as degraded clock evidence, while persisted
+age durations are never negative. The active r5 root remains immutable under
+its earlier code identity and needs a fresh corrected-code window after
+terminal review. This is tested implementation evidence only; no gate state
+changed. Full pytest passed `640` tests and the focused Phase-3 suite passed
+`72`.
 
 ## Current continuation update — Phase-3 measurement boundary
 

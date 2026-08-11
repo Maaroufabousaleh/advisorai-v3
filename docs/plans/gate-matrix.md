@@ -2,11 +2,25 @@
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `ce17e5d95f4d335850d297979e317d2ea4e37878`, aligned with
-`origin/main`, after PR #141. The attachment checkpoint’s PID `13339` and
+Clean `main` is `3404a0b649eeff960de0dced95efe5f7c1593bea`, aligned with
+`origin/main`, after PR #143. The attachment checkpoint’s PID `13339` and
 two-hour r3 root are stale; the live protected Phase-0 model process is PID
 `70598`, and the live Phase-3 r5 process/sidecar are PIDs `46864`/`47392`.
-This is a metadata correction only; all immutable roots remain unchanged.
+All immutable roots remain unchanged.
+
+## Current continuation update — Phase-3 non-negative age metrics
+
+PR #143 merged the reporting-boundary fix at
+`3404a0b649eeff960de0dced95efe5f7c1593bea`. Future durable Phase-3 roots use
+runner code identity
+`30d9fb147e6ce4a7204aaa0f2867d8c8e8e5200ec2d7a34ff2c3e037100d36eb` and clamp
+clock-corrected event-age distributions at zero while retaining signed future
+event counts as an explicit degraded-clock, fail-closed diagnostic. The active
+r5 root remains under its earlier code identity and is not retroactively
+credited with this fix; a fresh corrected-code root is required after r5
+terminal review. Full pytest passed `640` tests with 28 warnings, the Phase-3
+suite passed `72`, and repository quality checks passed. This is
+`IMPLEMENTED / TESTED`, not Phase-3 admission.
 
 ## Current continuation update — Phase-3 measurement boundary
 

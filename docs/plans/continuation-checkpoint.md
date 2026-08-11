@@ -3,14 +3,30 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
-  `ce17e5d95f4d335850d297979e317d2ea4e37878`, aligned with `origin/main` after
-  PR #141.
+  `3404a0b649eeff960de0dced95efe5f7c1593bea`, aligned with `origin/main` after
+  PR #143.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
   the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
   and resource sidecar PID `47392`; none has been stopped, restarted, or
   modified.
 - Archive/rclone remains externally deferred. No Phase-3 admission or later
   phase gate is opened by this metadata correction.
+
+## Current continuation update — Phase-3 non-negative age metrics
+
+- PR #143 merged a reporting-boundary fix at
+  `3404a0b649eeff960de0dced95efe5f7c1593bea`. Future durable roots use code
+  identity
+  `30d9fb147e6ce4a7204aaa0f2867d8c8e8e5200ec2d7a34ff2c3e037100d36eb`.
+- Clock-corrected future events remain an explicit degraded-clock diagnostic
+  and fail closed; persisted event-age distributions no longer contain
+  negative durations. Full pytest passed `640`, Phase-3 passed `72`, and the
+  quality suite passed.
+- The active r5 root remains under its earlier code identity and is untouched.
+  After its genuine terminal sample is reviewed, launch one fresh corrected-code
+  multi-hour root if the evidence still requires it. Phase-3 admission remains
+  closed; selected-model PID `70598` remains untouched; archive/rclone remains
+  externally deferred.
 
 ## Current continuation update — Phase-3 measurement boundary
 
