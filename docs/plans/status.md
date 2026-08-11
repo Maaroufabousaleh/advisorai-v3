@@ -6,11 +6,31 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `2c2d266d7483ef157d15dd22a361bc1879d933c1`, aligned with
-`origin/main`, after PR #152. The attachment checkpoint naming PID `13339` and
+Clean `main` is `c1444364148be231585a96ced91ace223a8f989a`, aligned with
+`origin/main`, after PR #154. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently
 protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
 with resource sidecar PID `47392`. No process was restarted or modified.
+
+## Current continuation update — PR #154 provider freshness evidence
+
+PR #154 merged the Phase-3 provider-event freshness propagation fix at
+`c1444364148be231585a96ced91ace223a8f989a`. Future durable source roots use
+code identity
+`55562365731ff8e079d3b28cdb283464134c164b54c48a35351bbea2ef3a4d47` and record
+the freshness-age difference between independent sources when both provide
+usable event timestamps. Missing timestamps remain unmeasured rather than
+being replaced by local time. The change is `IMPLEMENTED / TESTED`; focused
+Phase-3 coverage passed 33 tests, full pytest passed 650 tests, and no Phase-3
+or later admission gate changed.
+
+Read-only inspection at `2026-08-11T11:09:45Z` found r5 PID `46864` and its
+sidecar PID `47392` still running with exact prior identities; the r5 root had
+486 samples, no terminal sample, and target
+`2026-08-11T12:35:59.156509Z`. Model stability PID `70598` remained untouched
+at 188 cycles, with latest sample `2026-08-11T11:04:52.237058Z` and terminal
+target `2026-08-11T18:07:25.593600Z`. Corrected-code r6 has not started.
+Archive/rclone remains externally deferred and untouched.
 
 ## Current continuation update — Phase-4 offline measurement boundary
 

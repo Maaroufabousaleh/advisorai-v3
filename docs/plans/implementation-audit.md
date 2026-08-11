@@ -8,11 +8,27 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
-`2c2d266d7483ef157d15dd22a361bc1879d933c1`, aligned with `origin/main` after
-PR #152. The attachment’s PID `13339` reference is not the live process: the
+`c1444364148be231585a96ced91ace223a8f989a`, aligned with `origin/main` after
+PR #154. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and
 resource sidecar PID `47392`. This audit preserves the live roots and does not
 rewrite historical evidence.
+
+## Current continuation update — PR #154 provider freshness evidence
+
+PR #154 adds measured provider-event timestamp propagation to the durable
+Phase-3 disagreement boundary. Future roots use runner code identity
+`55562365731ff8e079d3b28cdb283464134c164b54c48a35351bbea2ef3a4d47`; source
+freshness-age differences are recorded only when both public streams expose
+usable event timestamps, and missing values remain explicitly unmeasured. The
+change is `IMPLEMENTED / TESTED`, with 33 focused Phase-3 tests and 650 full
+tests passing. It does not alter source identity, fail-closed policy, execution
+authority, or any existing evidence root; Phase-3 admission remains closed.
+
+The `2026-08-11T11:09:45Z` read-only snapshot found the protected r5 root at
+486 samples with no terminal sample and the selected-model stability PID at 188
+cycles. The corrected r6 root has not started, and archive/rclone remains
+externally deferred.
 
 ## Current continuation update — Phase-4 offline measurement boundary
 

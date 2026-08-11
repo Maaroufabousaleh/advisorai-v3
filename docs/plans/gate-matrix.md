@@ -2,11 +2,34 @@
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `2c2d266d7483ef157d15dd22a361bc1879d933c1`, aligned with
-`origin/main`, after PR #152. The attachment checkpoint’s PID `13339` and
+Clean `main` is `c1444364148be231585a96ced91ace223a8f989a`, aligned with
+`origin/main`, after PR #154. The attachment checkpoint’s PID `13339` and
 two-hour r3 root are stale; the live protected Phase-0 model process is PID
 `70598`, and the live Phase-3 r5 process/sidecar are PIDs `46864`/`47392`.
 All immutable roots remain unchanged.
+
+## Current continuation update — PR #154 provider freshness evidence
+
+PR #154 merged the Phase-3 implementation fix at
+`c1444364148be231585a96ced91ace223a8f989a`. Future durable roots use runner
+code identity
+`55562365731ff8e079d3b28cdb283464134c164b54c48a35351bbea2ef3a4d47` and pass
+the latest timestamped public-stream event per source/symbol into the
+cross-source disagreement calculation. When available, the immutable
+disagreement record now contains the measured freshness-age difference;
+missing provider timestamps remain explicitly unmeasured. The policy remains
+fail-closed for severe disagreement or untrusted clock evidence. Focused Phase-3
+tests passed 33 tests, full pytest passed 650 tests, and no external gate was
+opened by this implementation.
+
+At `2026-08-11T11:09:45Z`, the preserved Phase-3 r5 root remained `running` at
+486 samples with zero terminal samples and target
+`2026-08-11T12:35:59.156509Z`; its exact process and sidecar identities remain
+unchanged. The selected-model r3 process PID `70598` remained `running` at 188
+cycles with latest sample `2026-08-11T11:04:52.237058Z`; its genuine terminal
+target remains `2026-08-11T18:07:25.593600Z`. The corrected-code r6 root has not
+started. Archive/rclone remains externally deferred and untouched; Phase-0 and
+Phase-3 admission remain closed.
 
 ## Current continuation update — Phase-4 offline measurement boundary
 
