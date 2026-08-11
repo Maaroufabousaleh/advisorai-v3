@@ -9,6 +9,7 @@ import pytest
 from scripts.validate_phase3_public_data_qualification import (
     _load_chain,
     _validate_failure_details,
+    _validate_timestamp_projection,
 )
 
 
@@ -76,3 +77,38 @@ def test_failure_detail_validation_rejects_unsafe_or_duplicate_labels():
     assert "sample_1_failure_classes_contains_duplicates" in result["issues"]
     assert "sample_1_failure_classes_contains_unsafe_label" in result["issues"]
     assert result["label_counts"]["failure_classes"] == {"TimeoutError": 2}
+
+
+def test_timestamp_projection_validates_new_fields_and_preserves_old_roots():
+    result = _validate_timestamp_projection(
+        [
+            {"source_id": "old-root"},
+            {
+                "last_provider_event_at": "2026-08-11T11:00:00Z",
+                "last_event_received_at": "2026-08-11T11:00:01Z",
+                "last_valid_event_at": "2026-08-11T11:00:01Z",
+                "provider_event_timestamp_count": 1,
+            },
+        ]
+    )
+
+    assert result["state"] == "mixed"
+    assert result["projected_rows"] == 1
+    assert result["legacy_rows"] == 1
+    assert result["issues"] == ["timestamp_projection_schema_mixed"]
+
+
+def test_timestamp_projection_rejects_inconsistent_count_and_receipt():
+    result = _validate_timestamp_projection(
+        [
+            {
+                "last_provider_event_at": None,
+                "last_event_received_at": "2026-08-11T11:00:01Z",
+                "last_valid_event_at": "2026-08-11T11:00:02Z",
+                "provider_event_timestamp_count": 1,
+            }
+        ]
+    )
+
+    assert "sample_1_receipt_timestamp_mismatch" in result["issues"]
+    assert "sample_1_provider_timestamp_count_mismatch" in result["issues"]
