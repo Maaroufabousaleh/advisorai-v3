@@ -7,7 +7,7 @@ or 60-day operational gate.
 ## Current continuation update — terminal Phase-3 sample boundary
 
 Clean `main` is now
-`e089337585da7ff4fffbfdbd8571820dc560cf13e` after PRs #109 and #110. PR #110
+`647cb3a65b19ed088fda9ff1e86d6a25ae6139aa` after PRs #109, #110, and #112. PR #110
 fixes the durable Phase-3 runner boundary exposed by the r3 review: future
 windows collect one explicit cycle starting at or after the configured target,
 mark its records `terminal_sample=true`, and publish
@@ -15,7 +15,10 @@ mark its records `terminal_sample=true`, and publish
 before this fix with its recorded code hash and remains untouched; its evidence
 will be judged as recorded, not retroactively upgraded.
 
-The post-PR #110 verification passed full pytest `616 passed` and all eleven
+PR #112 makes the offline evaluator require that explicit terminal marker, so
+timestamp proximity alone cannot qualify a pre-fix root.
+
+The post-PR #112 verification passed full pytest `617 passed` and all eleven
 acceptance suites with results
 `128/152/126/68/19/34/10/11/27/18/5`. Ruff, repository format, `uv lock
 --check`, compilation, dashboard build, diff hygiene, tracked-secret, and
