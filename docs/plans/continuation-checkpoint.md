@@ -38,6 +38,31 @@
   pending terminal review under its earlier runner identity; archive/rclone
   remains externally deferred.
 
+## Durable continuation services — 2026-08-11T10:22:12Z
+
+- Selected-model stability: PID `70598`, exact start ticks `9449148`, root
+  `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`,
+  state `running`, 179 passing cycles, target
+  `2026-08-11T18:07:25.593600Z`. Read-only terminal validator watcher is PID
+  `3458`; it writes only to
+  `artifacts/phase0/model-runtime-qualification/stability-validation/phase0-selected-24h-terminal-sample-20260810-r3-review`.
+- Preserved Phase-3 r5: PID `46864`, exact start ticks `14470830`, sidecar PID
+  `47392`, root
+  `artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`,
+  state `running`, 330 samples, terminal marker count `0`, target
+  `2026-08-11T12:35:59.156509Z`. Its post-run validator/evaluator watcher is
+  PID `91664` and writes only to fresh review roots.
+- Corrected-code Phase-3 launcher/controller is PID `2404`. It waits for the
+  exact r5 PID/start-tick pair, then launches one fresh four-hour root at
+  `artifacts/phase3/public-market-data-durable/20260811T-after-r5-four-hour-r6-clock-confidence`,
+  a separate resource sidecar, and offline validation/admission review roots.
+  It has not launched r6 yet.
+- Next legal work item: review the preserved r5 terminal artifacts, then review
+  the fresh corrected-code r6 evidence; when PID `70598` reaches its genuine
+  terminal sample, run the read-only model validator and update roster status
+  only from its report. Phase 0/3 admission, real Phase-4–6 evidence, and the
+  Phase-7 clock remain closed.
+
 ## Current continuation update — offline model-stability validator
 
 - PR #145 merged the read-only
