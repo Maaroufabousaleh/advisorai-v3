@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`45a29b59985873a165abb7de3678c335810edd33` (PRs #86–#96 merged; PRs #95–#96
+`fdb35c3f5f6f9f61e8dfe4b835783dedc3fb9dd4` (PRs #86–#98 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor).
 The Phase-3
 durable source-health implementation, bounded snapshot fix, concurrent symbol
@@ -31,6 +31,14 @@ are merged. The active corrected external evidence is listed below.
   Heartbeat, status, raw spool, observation, selection, disagreement, and
   health-transition logs are append-only; the result is not an admission
   record.
+- A separate systemd user sidecar
+  `advisorai-phase3-resource-monitor-20260811T023624Z.service` observes PID
+  `13339` without writing to the qualification root. Its separate evidence
+  root is
+  `artifacts/phase3/public-market-data-resource-monitor/20260811T023624Z-pid13339-systemd`
+  with config SHA-256
+  `26ff511166cd41c8f3782d779a5fccf22cbd93bd5e6888a827df0bd1373d21bb`.
+  It records sanitized OS resource and target-root growth metrics only.
 - The implementation supplies deterministic HEALTHY/DEGRADED/STALE/
   DISCONNECTED/RECOVERING/QUARANTINED transitions, provider-truth snapshot and
   sequence recovery, severe-disagreement abstention, and explicit failover or

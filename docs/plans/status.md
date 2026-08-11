@@ -6,13 +6,14 @@ or 60-day operational gate.
 
 ## Current continuation update — durable Phase-3 source qualification
 
-PRs #89–#96 are merged on clean main
-`45a29b59985873a165abb7de3678c335810edd33`. PRs #89–#94 add the restartable
+PRs #89–#98 are merged on clean main
+`fdb35c3f5f6f9f61e8dfe4b835783dedc3fb9dd4`. PRs #89–#94 add the restartable
 append-only runner, deterministic source-health/failover/recovery controls, a
 read-only dashboard projection, bounded Binance recovery snapshots, concurrent
 BTC/ETH collection, and accurate disconnect/reconnect accounting. Public
 connectors load no credentials and have no order/write method; PRs #95–#96
-refresh the checkpoint and verification records only.
+refresh the checkpoint and verification records only, and PR #98 adds the
+separate OS-resource evidence monitor.
 
 The original two-hour root
 `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`
@@ -34,6 +35,15 @@ and targets `2026-08-11T03:14:37.205719Z`. Its first concurrent Binance sample
 records zero disconnects but remains fail-closed on measured stale age and
 degraded clock confidence. This is `IMPLEMENTED / TESTED / EXTERNALLY MEASURED
 / RUNNING`, not Phase-3 admission.
+
+An independent systemd user sidecar observes PID `13339` without modifying the
+qualification root. Its evidence is at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T023624Z-pid13339-systemd`
+with config SHA-256 `26ff511166cd41c8f3782d779a5fccf22cbd93bd5e6888a827df0bd1373d21bb`;
+the service is `advisorai-phase3-resource-monitor-20260811T023624Z.service`.
+It records sanitized RSS/CPU/thread/fd/socket and target-root growth metrics;
+credentials and order writes remain false. This is resource evidence, not an
+admission record.
 
 PID `70598` remains the untouched selected-model stability process. Its latest
 read-only sample was sequence 81 at `2026-08-11T01:26:03.661578Z`, record
