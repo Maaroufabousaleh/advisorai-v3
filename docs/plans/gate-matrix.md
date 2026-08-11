@@ -1,12 +1,12 @@
 # AdvisorAI V3 gate matrix
 
-## Current recovery checkpoint — 2026-08-11T13:30:41Z
+## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
-Clean `main` is `de9e7c997d3a435aa4b8aa5e73c355cf695d81fe`, aligned with
-`origin/main`, after PR #166. Full pytest passed `657` tests with 28 warnings;
-all eleven acceptance suites passed `133/152/126/106/27/34/10/11/27/18/5`. Ruff,
-format, lock, compilation, dashboard build, diff hygiene, and tracked
-secret/weight checks also passed.
+Clean `main` is `48d913d1ac1c78549b9d1c6115550308cacced19`, aligned with
+`origin/main`, after PR #167, a docs-only live Phase-3 checkpoint. Full pytest
+passed `657` tests with 28 warnings; all eleven acceptance suites passed
+`133/152/126/106/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
+dashboard build, diff hygiene, and tracked secret/weight checks also passed.
 
 The preserved r5 root
 `artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`
@@ -38,12 +38,14 @@ under PID `2943`, runner code SHA-256
 `2026-08-11T16:46:26.507901Z`. Its v3 resource sidecar is PID `4807` at
 `artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`;
 the v1 precreation failure and v2 command-hash mismatch are preserved as
-separate sidecar attempts. At this checkpoint r6 has produced `144` samples
-and no terminal sample. The latest cycle records Binance BTC/ETH and Deribit
-BTC/ETH healthy and replay-equivalent, with Coinbase explicitly quarantined.
-PID `28569` is a separate post-run watcher that will write only fresh
-read-only validation/evaluation roots after both protected processes finish.
-PID `70598` remains untouched at cycle `215` with terminal target
+separate sidecar attempts. At this checkpoint r6 has produced `192` samples
+and no terminal sample. All observed Binance BTC/ETH rows are
+replay-equivalent and sequence-continuous; Coinbase remains explicitly
+quarantined, while Deribit disconnect/recovery events and severe cross-source
+disagreement remain preserved as measured fail-closed states. PID `28569` is a
+separate post-run watcher that will write only fresh read-only
+validation/evaluation roots after both protected processes finish. PID `70598`
+remains untouched at cycle `218` with terminal target
 `2026-08-11T18:07:25.593600Z`; neither timed gate is admitted. Archive/rclone
 remains externally deferred.
 

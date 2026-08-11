@@ -5,10 +5,11 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current recovery checkpoint — 2026-08-11T13:30:41Z
+## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
 The verified clean executable anchor is
-`de9e7c997d3a435aa4b8aa5e73c355cf695d81fe`, after PR #166. The direct
+`48d913d1ac1c78549b9d1c6115550308cacced19`, after PR #167, a docs-only live
+Phase-3 checkpoint. The direct
 Phase-3 runner self-bootstraps repository imports for detached execution; the
 regression test covers a no-`PYTHONPATH` `--help` invocation. Full pytest
 passed `657` tests with 28 warnings and all eleven acceptance suites passed
@@ -21,11 +22,13 @@ terminal primary BTC/ETH health and replay/continuity checks failed. Its
 summary, validation, and admission report hashes are recorded in the gate
 matrix. Two failed corrected-r6/supervisor attempts are preserved as incident
 evidence; the current fresh r6 root is active under PID `2943` with sidecar
-PID `4807`, at `144` samples with no terminal sample. The latest cycle records
-Binance BTC/ETH and Deribit BTC/ETH healthy and replay-equivalent, with
-Coinbase explicitly quarantined. Post-run review watcher PID `28569` is
-separate and writes only fresh review roots. No Phase-0/3 gate was promoted by
-elapsed time alone, and PID `70598` remains untouched at cycle `215`.
+PID `4807`, at `192` samples with no terminal sample. All observed Binance
+BTC/ETH rows are replay-equivalent and sequence-continuous; Coinbase remains
+explicitly quarantined, while Deribit disconnect/recovery events and severe
+cross-source disagreement remain preserved as measured fail-closed states.
+Post-run review watcher PID `28569` is separate and writes only fresh review
+roots. No Phase-0/3 gate was promoted by elapsed time alone, and PID `70598`
+remains untouched at cycle `218`.
 
 ## Current repository anchor — 2026-08-11
 
