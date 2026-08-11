@@ -1,5 +1,22 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current continuation update — bounded Binance public-data reconnect
+
+- PR #136 merged at `350d6b55ac36251750e0459dc4e24b3507ca865c`. Future
+  qualification roots use runner code identity
+  `f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`.
+- The durable Binance public WSS collector now allows one bounded reconnect
+  after a failed first-message or snapshot window. Both attempts remain
+  separately evidenced; snapshot/sequence recovery is based only on the latest
+  successful provider snapshot and its updates. No credentials, order writes,
+  OMS methods, execution transport, or production trading authority were added.
+- Full locked pytest passed `636` tests with 28 warnings; acceptance passed
+  `129/152/92/24/34/10/11/27/18/5`. Ruff, format, lock, compilation,
+  dashboard build, diff, tracked-secret, and tracked-weight checks passed.
+- The active Phase-3 r4 root remains under PID `87421` with sidecar PID
+  `88019` and its earlier code identity; selected-model stability PID `70598`
+  remains untouched. No timed or Phase-3 admission gate changed.
+
 ## Current continuation update — Binance provider read-only recovery
 
 - PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; PR #133 is the
