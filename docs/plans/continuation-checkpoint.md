@@ -3,9 +3,14 @@
 ## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
 
 - Clean `main` is
-  `1193753c6b2000a24ffed34dab5b1d7fa557cf44`, aligned with `origin/main` after
-  PR #169. The merged fix corrects Phase-3 source-selection validation and
-  adds positive/negative regression tests; no prior evidence root was changed.
+  `ced5d9301a816d89428616d1eb6ce0de48318cf7`, aligned with `origin/main` after
+  PR #171. PR #169 corrects Phase-3 source-selection validation and adds
+  positive/negative regression tests; PR #171 binds the terminal model review
+  to both machine-readable rosters. No prior evidence root was changed.
+- Full pytest passes `660` tests with 28 warnings; all eleven acceptance suites
+  pass `133/152/126/108/27/34/10/11/27/18/5`. Ruff, format, lock,
+  compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+  also pass.
 - Phase-0 selected-model r3 terminal review is `PASS_FOR_REVIEW` after
   `24.003634` hours and `269` cycles. The immutable report SHA-256 is
   `1a6ab92c4f28d456776eac0c89ab099b0c1ef579c729fa8e458e4d5192b06949`.

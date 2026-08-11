@@ -2,11 +2,16 @@
 
 ## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
 
-Clean `main` is `1193753c6b2000a24ffed34dab5b1d7fa557cf44`, aligned with
-`origin/main` after PR #169. PR #169 fixes a validator defect that treated
+Clean `main` is `ced5d9301a816d89428616d1eb6ce0de48318cf7`, aligned with
+`origin/main` after PR #171. PR #169 fixes a validator defect that treated
 valid successful source selections (`fail_closed=false` with an identity bound
 to the actual provider) as invalid. The fix is implemented and focused-tested;
-it does not rewrite any immutable evidence root.
+it does not rewrite any immutable evidence root. PR #171 updates both
+machine-readable model rosters to bind the terminal per-role results without
+promoting the overall Phase-0 gate. Full pytest now passes `660` tests with 28
+warnings; all eleven acceptance suites pass
+`133/152/126/108/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
+dashboard build, diff hygiene, and tracked secret/weight checks pass.
 
 The Phase-0 selected-model r3 terminal review is
 `PASS_FOR_REVIEW` with `269` continuous cycles and `24.003634` elapsed hours.
