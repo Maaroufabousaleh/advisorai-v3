@@ -77,8 +77,8 @@ This remains provider/runtime availability evidence, not a Phase-3 pass.
 
 The pre-qualification local run on 2026-08-10 passed all 570 tests in one process with every
 declared optional extra active in an isolated locked verification environment, and
-all eleven isolated phase suites. The latest merged-main rerun passed 600 tests
-and phase suites `128/152/126/65/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
+all eleven isolated phase suites. The latest merged-main rerun passed 601 tests
+and phase suites `128/152/126/66/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
 format checking passes with all 277 Python files formatted. The Phase-1 local
