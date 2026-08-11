@@ -1,5 +1,29 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current continuation update — Binance provider read-only recovery
+
+- PR #128 is merged into clean `main`
+  `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`.
+- The provider-specific recovery qualification uses the existing scoped
+  `PAPER_VENUE` resolver and Binance Spot Testnet transport. It activated a
+  non-secret immutable configuration revision, rolled back to the original
+  bundle, reopened that pointer in a fresh child process, and repeated only
+  authenticated reads. No order, cancel, transfer, withdrawal, OMS, or
+  production operation was attempted.
+- Real evidence is
+  `artifacts/phase1/binance-spot-testnet/recovery/20260811T064829.840702Z/binance-spot-testnet-recovery.json`
+  with SHA-256
+  `acf025287f717277552e3744b059dab3b2c1e35bda16f7c3db8d9eafcbe62e83`.
+  It passed with 18 read-only calls, provider-truth `BTCUSDT`/`ETHUSDT`,
+  matching initial/restored bundle hash
+  `0a44fe86c6cd7a65c316886f93848147aa3b75fd3a1eb3c31ae2579eaf7dc691`, and
+  `writes_attempted=false`. State is externally measured partial and
+  `NOT_ADMITTED`; full provider deployment rollback, open-order recovery,
+  Bronze rebuild, and archive restore remain pending.
+- Selected-model stability PID `70598`, active Phase-3 PID `87421`, and its
+  resource sidecar PID `88019` remain untouched. Archive/rclone remains
+  externally deferred.
+
 ## Current continuation update — Phase-3 source identity integrity
 
 - Candidate commit `4abf2ce` adds provider/endpoint identity binding and
@@ -57,7 +81,7 @@ remain pending.
   be retrofitted.
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`a4e127a6e95ae7bdadeed91cc9e19ecf22388c45` (PRs #86–#121 merged; PRs #95–#96
+`aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c` (PRs #86–#128 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
