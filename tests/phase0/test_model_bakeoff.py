@@ -207,7 +207,8 @@ def test_committed_local_model_roster_is_role_oriented_and_keeps_live_closed():
     roster = load_local_model_roster(Path("configs/models/phase0_local_roster.json"))
 
     assert roster.forecast_primary.candidate == "ttm-r2"
-    assert roster.forecast_primary.state == RosterState.PENDING_STABILITY
+    assert roster.forecast_primary.state == RosterState.QUALIFIED
+    assert roster.forecast_primary.stability == StabilityState.PASSED
     assert roster.finance_sentiment_primary.candidate == "finsentiment-deberta-v3"
     assert roster.finance_sentiment_fast.candidate == "finbert-minilm"
     assert roster.feature_regime_model.candidate == "tspulse"
