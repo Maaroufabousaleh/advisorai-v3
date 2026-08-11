@@ -3,8 +3,8 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
-  `1d16a59aee2c9260511bddb157a20a346d23ebae`, aligned with `origin/main` after
-  PR #146.
+  `3f7bfa26f0db1f15680576d09e0246525f3db8fd`, aligned with `origin/main` after
+  PR #148.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
   the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
   and resource sidecar PID `47392`; none has been stopped, restarted, or
@@ -18,12 +18,25 @@
   passing cycles. Its latest sample was `2026-08-11T09:54:45.558492Z`; the
   genuine terminal target is `2026-08-11T18:07:25.593600Z`. No terminal
   summary or Phase-0 admission exists yet.
-- At `2026-08-11T09:54:04Z`, the preserved Phase-3 r5 root had 246 samples and
-  34 health transitions, remained `running`, and had no terminal summary. Its
+- At `2026-08-11T10:13:34Z`, the preserved Phase-3 r5 root had 306 samples and
+  48 health transitions, remained `running`, and had no terminal summary. Its
   target is `2026-08-11T12:35:59.156509Z`. It remains immutable under its
   earlier runner identity; Phase-3 admission remains closed.
 - No timed process, evidence root, credential, execution adapter, or archive
   configuration was modified in this continuation.
+
+## Current continuation update — provider-clock confidence hardening
+
+- PR #148 merged the Phase-3 public-data clock-confidence fix at
+  `3f7bfa26f0db1f15680576d09e0246525f3db8fd`. Future roots use runner identity
+  `9fc1875357437df27dfe3d0ae3a64c7e6ec957c6ba770c0569197281322ee684`.
+- Cross-source quote confidence now requires a passing, in-bound provider
+  server-time probe. Missing or out-of-policy clock evidence is severe,
+  abstaining, and fail-closed. Phase-3 acceptance passed `98` tests and full
+  pytest passed `646` tests with 28 warnings; this did not open Phase-3.
+- The active r5 root and PID `70598` remain untouched. The r5 root is still
+  pending terminal review under its earlier runner identity; archive/rclone
+  remains externally deferred.
 
 ## Current continuation update — offline model-stability validator
 
