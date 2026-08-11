@@ -209,6 +209,58 @@ def _validate_timestamp_projection(samples: list[dict[str, Any]]) -> dict[str, A
     }
 
 
+def _validate_source_selection(selection: list[dict[str, Any]]) -> dict[str, Any]:
+    """Validate explicit selection identity and fail-closed semantics.
+
+    A successful selection is intentionally recorded with ``fail_closed`` set
+    to ``False``.  The fail-closed invariant applies when no eligible source
+    exists; healthy selections must instead bind the selected source and
+    provider identity to the actual source.  Treating every successful
+    selection as a failure would make the offline validator disagree with the
+    source-selection contract and with the admission evaluator.
+    """
+
+    issues: list[str] = []
+    fail_closed_count = 0
+    silent_substitution_count = 0
+    for index, row in enumerate(selection, 1):
+        fail_closed = row.get("fail_closed")
+        if fail_closed is True:
+            fail_closed_count += 1
+        elif fail_closed is not False:
+            issues.append(f"selection_{index}_fail_closed_invalid")
+
+        if row.get("silent_substitution") is True:
+            silent_substitution_count += 1
+            issues.append(f"selection_{index}_silent_substitution")
+
+        if fail_closed is True:
+            if any(
+                row.get(field) is not None
+                for field in (
+                    "selected_source_id",
+                    "selected_provider_identity",
+                    "actual_source_identity",
+                )
+            ):
+                issues.append(f"selection_{index}_fail_closed_identity_present")
+            continue
+
+        if not (
+            row.get("selected_source_id") is not None
+            and row.get("selected_source_id") == row.get("actual_source_identity")
+            and row.get("selected_provider_identity") == row.get("actual_source_identity")
+        ):
+            issues.append(f"selection_{index}_identity_mismatch")
+
+    return {
+        "issues": issues,
+        "selection_count": len(selection),
+        "selection_fail_closed_count": fail_closed_count,
+        "silent_substitution_count": silent_substitution_count,
+    }
+
+
 def _validate_health_snapshot(
     path: Path,
     samples: list[dict[str, Any]],
@@ -394,6 +446,8 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
     issues.extend(failure_details["issues"])
     timestamp_projection = _validate_timestamp_projection(samples)
     issues.extend(timestamp_projection["issues"])
+    source_selection = _validate_source_selection(selection)
+    issues.extend(source_selection["issues"])
     health_snapshot = _validate_health_snapshot(
         run_directory / "latest-health.json",
         samples,
@@ -417,10 +471,6 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
         issues.append("sample_credential_invariant_failed")
     if any(row.get("order_writes_attempted") is not False for row in samples):
         issues.append("sample_write_invariant_failed")
-    if any(row.get("silent_substitution") is True for row in selection):
-        issues.append("silent_source_substitution_observed")
-    if any(row.get("fail_closed") is not True for row in selection):
-        issues.append("source_selection_not_fail_closed")
     if summary.get("state") != status.get("state"):
         issues.append("summary_status_state_mismatch")
 
@@ -455,11 +505,9 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
             "health_states": dict(Counter(row["health_state"] for row in samples)),
             "disagreement_states": dict(Counter(row["state"] for row in disagreement)),
             "health_transition_count": len(health),
-            "selection_count": len(selection),
-            "selection_fail_closed_count": sum(row.get("fail_closed") is True for row in selection),
-            "silent_substitution_count": sum(
-                row.get("silent_substitution") is True for row in selection
-            ),
+            "selection_count": source_selection["selection_count"],
+            "selection_fail_closed_count": source_selection["selection_fail_closed_count"],
+            "silent_substitution_count": source_selection["silent_substitution_count"],
             "replay_failure_count": sum(not row.get("replay_equivalent", False) for row in samples),
             "sequence_gap_count": sum(int(row.get("sequence_gap_count", 0)) for row in samples),
             "duplicate_count": sum(int(row.get("duplicate_count", 0)) for row in samples),

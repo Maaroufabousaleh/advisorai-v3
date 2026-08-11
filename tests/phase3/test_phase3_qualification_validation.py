@@ -10,6 +10,7 @@ from scripts.validate_phase3_public_data_qualification import (
     _load_chain,
     _validate_failure_details,
     _validate_health_snapshot,
+    _validate_source_selection,
     _validate_timestamp_projection,
 )
 
@@ -113,6 +114,55 @@ def test_timestamp_projection_rejects_inconsistent_count_and_receipt():
 
     assert "sample_1_receipt_timestamp_mismatch" in result["issues"]
     assert "sample_1_provider_timestamp_count_mismatch" in result["issues"]
+
+
+def test_source_selection_accepts_bound_healthy_selection_and_fail_closed_rows():
+    result = _validate_source_selection(
+        [
+            {
+                "fail_closed": False,
+                "silent_substitution": False,
+                "selected_source_id": "binance_spot_public_market_data",
+                "selected_provider_identity": "binance_spot_public_market_data",
+                "actual_source_identity": "binance_spot_public_market_data",
+            },
+            {
+                "fail_closed": True,
+                "silent_substitution": False,
+                "selected_source_id": None,
+                "selected_provider_identity": None,
+                "actual_source_identity": None,
+            },
+        ]
+    )
+
+    assert result["issues"] == []
+    assert result["selection_fail_closed_count"] == 1
+    assert result["silent_substitution_count"] == 0
+
+
+def test_source_selection_rejects_identity_drift_and_unsafe_fail_closed_row():
+    result = _validate_source_selection(
+        [
+            {
+                "fail_closed": False,
+                "silent_substitution": False,
+                "selected_source_id": "binance_spot_public_market_data",
+                "selected_provider_identity": "coinbase_exchange_public_market_data",
+                "actual_source_identity": "binance_spot_public_market_data",
+            },
+            {
+                "fail_closed": True,
+                "silent_substitution": False,
+                "selected_source_id": "coinbase_exchange_public_market_data",
+                "selected_provider_identity": "coinbase_exchange_public_market_data",
+                "actual_source_identity": "coinbase_exchange_public_market_data",
+            },
+        ]
+    )
+
+    assert "selection_1_identity_mismatch" in result["issues"]
+    assert "selection_2_fail_closed_identity_present" in result["issues"]
 
 
 def _health_sample() -> dict[str, object]:
