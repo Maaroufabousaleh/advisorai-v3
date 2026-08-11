@@ -1,7 +1,7 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`2d5691315b0dcaca79291dfa621221f430484b7c` (PRs #86–#93 merged). The Phase-3
+`15f9e74d78eb2d7d37ec03bc216c09038a7b9b72` (PRs #86–#94 merged). The Phase-3
 durable source-health implementation, bounded snapshot fix, concurrent symbol
 collection, accurate connection metrics, and read-only dashboard projection
 are merged. The active corrected external evidence is listed below.

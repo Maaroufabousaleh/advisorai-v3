@@ -1,8 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`2d5691315b0dcaca79291dfa621221f430484b7c` (PRs #86–#93 merged; the exact
-current SHA is refreshed again when this documentation branch merges). The
+`15f9e74d78eb2d7d37ec03bc216c09038a7b9b72` (PRs #86–#94 merged). The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, and accurate connection accounting are merged;
 the active corrected real qualification root is recorded below and is not an
