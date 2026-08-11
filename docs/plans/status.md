@@ -50,6 +50,8 @@ passed` with 28 warnings and all eleven acceptance suites with results
 --check`, compilation, dashboard build, diff hygiene, tracked-secret, and
 tracked-weight checks also passed. These are implementation checks only; the
 active timed Phase-0 root and Phase-3 external admission remain pending.
+The machine-readable model roster now points to the active r3 evidence root;
+this metadata correction did not touch PID `70598` or its append-only files.
 
 ## Historical continuation update — terminal Phase-3 sample boundary
 
