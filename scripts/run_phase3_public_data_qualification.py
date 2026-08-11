@@ -382,16 +382,22 @@ def _run_binance_public_ws(
     source: PublicMarketDataSource, run_directory: Path, duration_seconds: int
 ) -> dict[str, object]:
     async def collect() -> dict[str, object]:
-        connections = [
-            await _collect_binance_public_connection(
-                source,
-                symbol=symbol,
-                output_directory=run_directory,
-                connection_number=1,
-                duration_seconds=duration_seconds,
+        # Collect required symbols concurrently.  Sequential symbol windows
+        # make the first symbol appear stale while the later symbol is being
+        # measured, which is a local observation-order artifact rather than
+        # provider freshness.
+        connections = await asyncio.gather(
+            *(
+                _collect_binance_public_connection(
+                    source,
+                    symbol=symbol,
+                    output_directory=run_directory,
+                    connection_number=1,
+                    duration_seconds=duration_seconds,
+                )
+                for symbol in source.symbols
             )
-            for symbol in source.symbols
-        ]
+        )
         return {
             "state": "pass" if all(item["status"] == "pass" for item in connections) else "failed",
             "connections": connections,

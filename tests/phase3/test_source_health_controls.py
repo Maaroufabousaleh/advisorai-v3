@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -25,6 +26,7 @@ from advisorai.collectors import (
     transition_source_health,
 )
 from advisorai.collectors.public_market_data import reviewed_public_market_data_sources
+from scripts import run_phase3_public_data_qualification as phase3_qualification
 from scripts.run_phase3_public_data_qualification import (
     BINANCE_DEPTH_SNAPSHOT_LIMIT,
     _AppendOnlyLog,
@@ -181,6 +183,40 @@ def test_durable_public_recovery_uses_bounded_provider_snapshot():
 
     assert BINANCE_DEPTH_SNAPSHOT_LIMIT == 100
     assert parse_qs(urlsplit(url).query) == {"limit": ["100"], "symbol": ["BTCUSDT"]}
+
+
+def test_binance_symbol_windows_are_collected_concurrently(tmp_path: Path, monkeypatch):
+    source = next(
+        item
+        for item in reviewed_public_market_data_sources()
+        if item.source_id == "binance_spot_public_market_data"
+    )
+    in_flight = 0
+    maximum_in_flight = 0
+
+    async def fake_collect(*_args, symbol: str, **_kwargs):
+        nonlocal in_flight, maximum_in_flight
+        in_flight += 1
+        maximum_in_flight = max(maximum_in_flight, in_flight)
+        await asyncio.sleep(0)
+        in_flight -= 1
+        return {
+            "symbol": symbol,
+            "status": "pass",
+            "snapshot_payload": {"lastUpdateId": 1},
+        }
+
+    monkeypatch.setattr(
+        phase3_qualification,
+        "_collect_binance_public_connection",
+        fake_collect,
+    )
+
+    result = phase3_qualification._run_binance_public_ws(source, tmp_path, 1)
+
+    assert maximum_in_flight == len(source.symbols)
+    assert result["state"] == "pass"
+    assert [item["symbol"] for item in result["connections"]] == list(source.symbols)
 
 
 def test_fault_drills_are_injected_and_pass():
