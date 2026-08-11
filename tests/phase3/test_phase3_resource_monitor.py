@@ -12,6 +12,7 @@ import psutil
 from scripts.monitor_phase3_process_resources import (
     _command_hash,
     _process_sample,
+    _process_start_ticks,
     _root_size,
     monitor,
 )
@@ -33,7 +34,7 @@ def test_process_sample_records_metrics_and_hash_chain(tmp_path: Path):
     record = _process_sample(
         process,
         pid=os.getpid(),
-        expected_start_time=process.create_time(),
+        expected_start_ticks=_process_start_ticks(os.getpid()),
         expected_command_sha256=_command_hash(process),
         target_root=tmp_path,
         previous_record_hash=None,
@@ -50,7 +51,7 @@ def test_process_sample_fails_closed_on_identity_mismatch(tmp_path: Path):
     record = _process_sample(
         process,
         pid=os.getpid(),
-        expected_start_time=process.create_time() + 1,
+        expected_start_ticks=_process_start_ticks(os.getpid()) + 1,
         expected_command_sha256=_command_hash(process),
         target_root=tmp_path,
         previous_record_hash=None,
@@ -69,7 +70,7 @@ def test_monitor_writes_separate_append_only_evidence(tmp_path: Path):
     (target / "raw.jsonl").write_text("sanitized\n", encoding="utf-8")
     args = Namespace(
         pid=os.getpid(),
-        expected_start_time=process.create_time(),
+        expected_start_ticks=_process_start_ticks(os.getpid()),
         expected_command_sha256=_command_hash(process),
         target_root=target,
         evidence_dir=evidence,

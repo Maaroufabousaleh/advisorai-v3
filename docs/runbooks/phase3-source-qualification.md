@@ -320,14 +320,16 @@ The source runner's source observations are supplemented by the separate
 read-only [`scripts/monitor_phase3_process_resources.py`](../../scripts/monitor_phase3_process_resources.py)
 sidecar. It must write to a separate evidence root and never append to or
 rewrite the qualification root. Before starting it, capture the target PID's
-OS start time and SHA-256 of its complete command line, then pass both values
-explicitly:
+stable Linux `/proc/<pid>/stat` start-tick field and SHA-256 of its complete
+command line, then pass both values explicitly. Start ticks are used instead
+of `psutil.create_time()` because WSL boot-time reporting is not stable on all
+hosts:
 
 ```bash
 PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
   scripts/monitor_phase3_process_resources.py \
   --pid <qualification-pid> \
-  --expected-start-time <psutil-create-time> \
+  --expected-start-ticks <proc-stat-start-ticks> \
   --expected-command-sha256 <command-line-sha256> \
   --target-root artifacts/phase3/public-market-data-durable/<immutable-run-id> \
   --evidence-dir artifacts/phase3/public-market-data-resource-monitor/<monitor-run-id> \

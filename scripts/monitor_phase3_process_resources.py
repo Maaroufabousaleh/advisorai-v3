@@ -22,7 +22,7 @@ from typing import Any
 import psutil
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SCHEMA = "advisorai.phase3.resource-monitor.v1"
+SCHEMA = "advisorai.phase3.resource-monitor.v2"
 
 
 class ResourceObservation(BaseModel):
@@ -34,8 +34,7 @@ class ResourceObservation(BaseModel):
     sampled_at: datetime
     pid: int = Field(gt=0)
     process_status: str
-    process_start_time: float | None = Field(default=None, ge=0)
-    process_elapsed_seconds: float | None = Field(default=None, ge=0)
+    process_start_ticks: int | None = Field(default=None, ge=0)
     command_sha256: str | None = None
     rss_mib: float | None = Field(default=None, ge=0)
     vms_mib: float | None = Field(default=None, ge=0)
@@ -65,7 +64,7 @@ class ResourceObservation(BaseModel):
             raise ValueError("resource evidence hashes must be lowercase SHA-256 digests")
         return value
 
-    @field_validator("rss_mib", "vms_mib", "cpu_percent", "process_elapsed_seconds")
+    @field_validator("rss_mib", "vms_mib", "cpu_percent")
     @classmethod
     def validate_finite(cls, value: float | None) -> float | None:
         if value is not None and not isfinite(value):
@@ -112,6 +111,19 @@ def _command_hash(process: psutil.Process) -> str | None:
         return None
 
 
+def _process_start_ticks(pid: int) -> int:
+    """Read the stable Linux process start-tick field without boot-time math."""
+
+    stat = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+    closing_parenthesis = stat.rfind(")")
+    if closing_parenthesis < 0:
+        raise RuntimeError("process stat has no command terminator")
+    fields_after_command = stat[closing_parenthesis + 2 :].split()
+    if len(fields_after_command) <= 19:
+        raise RuntimeError("process stat has no start-tick field")
+    return int(fields_after_command[19])
+
+
 def _root_size(root: Path) -> tuple[int, int, tuple[str, ...]]:
     file_count = 0
     total_bytes = 0
@@ -137,7 +149,7 @@ def _process_sample(
     process: psutil.Process,
     *,
     pid: int,
-    expected_start_time: float,
+    expected_start_ticks: int,
     expected_command_sha256: str,
     target_root: Path,
     previous_record_hash: str | None,
@@ -147,18 +159,17 @@ def _process_sample(
     file_count, root_bytes, root_errors = _root_size(target_root)
     errors.extend(root_errors)
     try:
-        start_time = process.create_time()
+        start_ticks = _process_start_ticks(pid)
         command_hash = _command_hash(process)
         identity_matches = (
-            abs(start_time - expected_start_time) < 0.001
-            and command_hash == expected_command_sha256
+            start_ticks == expected_start_ticks and command_hash == expected_command_sha256
         )
         if not identity_matches:
             return _observation(
                 sampled_at=sampled_at,
                 pid=pid,
                 process_status="identity_mismatch",
-                process_start_time=start_time,
+                process_start_ticks=start_ticks,
                 command_sha256=command_hash,
                 target_root_file_count=file_count,
                 target_root_bytes=root_bytes,
@@ -185,8 +196,7 @@ def _process_sample(
             sampled_at=sampled_at,
             pid=pid,
             process_status="running",
-            process_start_time=start_time,
-            process_elapsed_seconds=max(0.0, time.time() - start_time),
+            process_start_ticks=start_ticks,
             command_sha256=command_hash,
             rss_mib=memory.rss / (1024**2),
             vms_mib=memory.vms / (1024**2),
@@ -269,18 +279,18 @@ def monitor(args: argparse.Namespace) -> int:
     target_root = args.target_root.resolve()
     evidence_dir.mkdir(parents=True, exist_ok=False)
     process = psutil.Process(args.pid)
-    process_start_time = process.create_time()
+    process_start_ticks = _process_start_ticks(args.pid)
     command_hash = _command_hash(process)
     if (
         command_hash != args.expected_command_sha256
-        or abs(process_start_time - args.expected_start_time) >= 0.001
+        or process_start_ticks != args.expected_start_ticks
     ):
         raise SystemExit("target process identity does not match supplied expectations")
     config = {
         "schema": f"{SCHEMA}.config",
         "run_id": evidence_dir.name,
         "pid": args.pid,
-        "expected_process_start_time": args.expected_start_time,
+        "expected_process_start_ticks": args.expected_start_ticks,
         "expected_command_sha256": args.expected_command_sha256,
         "target_root": str(target_root),
         "interval_seconds": args.interval_seconds,
@@ -303,7 +313,7 @@ def monitor(args: argparse.Namespace) -> int:
         record = _process_sample(
             process,
             pid=args.pid,
-            expected_start_time=args.expected_start_time,
+            expected_start_ticks=args.expected_start_ticks,
             expected_command_sha256=args.expected_command_sha256,
             target_root=target_root,
             previous_record_hash=records[-1].record_hash if records else None,
@@ -342,7 +352,7 @@ def monitor(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pid", type=int, required=True)
-    parser.add_argument("--expected-start-time", type=float, required=True)
+    parser.add_argument("--expected-start-ticks", type=int, required=True)
     parser.add_argument("--expected-command-sha256", required=True)
     parser.add_argument("--target-root", type=Path, required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
