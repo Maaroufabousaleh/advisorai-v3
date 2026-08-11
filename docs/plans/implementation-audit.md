@@ -5,6 +5,17 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current continuation update — bounded Binance public-data reconnect
+
+PR #136 merged into main at `350d6b55ac36251750e0459dc4e24b3507ca865c`.
+The durable public-data runner now binds future roots to code identity
+`f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`, preserves
+each bounded Binance WSS attempt, and retries once after a failed first-message
+or snapshot window. Snapshot/sequence recovery deliberately uses the latest
+successful attempt only, so reconnect evidence cannot fabricate continuity.
+The change passed the full locked suite and all acceptance suites; it remains
+an implementation/test result until a fresh real terminal root is reviewed.
+
 ## Current continuation update — Binance provider read-only recovery
 
 PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; PR #133 is the

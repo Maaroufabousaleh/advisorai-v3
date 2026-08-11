@@ -1,5 +1,19 @@
 # AdvisorAI V3 gate matrix
 
+## Current continuation update — bounded Binance public-data reconnect
+
+PR #136 merged into clean main at `350d6b55ac36251750e0459dc4e24b3507ca865c`.
+Future durable Phase-3 roots use code identity
+`f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8` and make
+one bounded second Binance public WSS attempt after a failed first-message or
+snapshot window. Each attempt remains separately spooled and counted, and
+provider-truth snapshot recovery uses only the latest successful attempt's
+updates; a failed attempt is not silently merged into a later continuity
+chain. The change is credential-free, read-only, and adds no execution or OMS
+authority. The active r4 root retains its earlier immutable code identity and
+is not retroactively upgraded; Phase-3 admission remains pending until a
+fresh terminal root satisfies the existing continuity and health policy.
+
 ## Current continuation update — Binance provider read-only recovery
 
 PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; PR #133 is the
