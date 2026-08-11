@@ -7,8 +7,8 @@ human gate into a unit-test claim.
 
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
-Current merged `main` is `d5bfde76ed3cacaba365f3d7981db5a756eaf314` after PR
-#174; the review began from clean main
+Current executable main anchor is `d5bfde76ed3cacaba365f3d7981db5a756eaf314`
+after PR #174; the review began from clean main
 `6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`. Phase-0 selected-model stability
 is terminal and independently qualified for TTM-R2, Finance DeBERTa-v3, and
 FinBERT-MiniLM; the global Phase-0 gate remains separate and pending. PID
