@@ -2,9 +2,9 @@
 
 ## Current continuation update — Binance provider read-only recovery
 
-PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`. The executable
-and evidence anchor for this checkpoint is `7eef93e55fecbf387385683437e1c30abb5b5d43`;
-current main adds only documentation follow-ups in PRs #129–#130.
+PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; PR #133 is the
+current executable anchor `083798403323e18f2cc6577103d7b81c36454279`.
+Subsequent main changes are documentation-only follow-ups.
 The new provider-specific recovery qualification uses only the scoped
 `PAPER_VENUE` resolver and the existing Binance Spot Testnet transport. It
 activates an immutable non-secret configuration revision, rolls back to the
@@ -27,6 +27,16 @@ and restored bundle hash
 admission remains `NOT_ADMITTED`. Full paper deployment rollback, open-order
 recovery, Bronze rebuild, and archive restore remain separate evidence.
 
+## Current continuation update — Phase-3 admission evaluator entrypoint
+
+PR #133 merged the direct-entrypoint fix into executable main
+`083798403323e18f2cc6577103d7b81c36454279`; subsequent documentation-only
+follow-ups do not change this executable anchor. Direct
+`scripts/evaluate_phase3_admission.py --help` now works from the repository
+root without `PYTHONPATH`, and a subprocess regression proves the command is
+offline. No admission logic or gate state changed. Locked verification passed
+full pytest `635 passed` with 28 warnings and Phase-3 acceptance `91`.
+
 ## Current continuation update — post-PR #125 Phase-3 source identity integrity
 
 The Phase-3 source-health ledger now binds each `(source_id, symbol)` stream to
@@ -48,8 +58,8 @@ The focused Phase-3 suite passes `66 tests`; this is local implementation and
 test evidence only. The active r4 root predates the change and remains
 untouched, and Phase-3 admission remains closed.
 
-Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`7eef93e55fecbf387385683437e1c30abb5b5d43` (PRs #86–#128 carry the executable
+Checkpoint refreshed 2026-08-11 from the clean executable `main` anchor
+`083798403323e18f2cc6577103d7b81c36454279` (PRs #86–#128 and #133 carry the executable
 implementation/evidence; subsequent PRs are documentation-only follow-ups; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the

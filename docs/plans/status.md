@@ -6,9 +6,9 @@ or 60-day operational gate.
 
 ## Current continuation update — Binance provider read-only recovery
 
-PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; the executable
-and evidence anchor for this checkpoint is `7eef93e55fecbf387385683437e1c30abb5b5d43`,
-with subsequent documentation-only follow-ups. The provider-specific Binance
+PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; PR #133 is the
+current executable anchor `083798403323e18f2cc6577103d7b81c36454279`, with
+subsequent documentation-only follow-ups. The provider-specific Binance
 recovery qualification uses only the scoped `PAPER_VENUE` resolver and the
 existing Binance Spot Testnet transport. It activated a non-secret immutable
 configuration revision, rolled back to the original bundle, reopened the
@@ -32,6 +32,13 @@ Locked verification for the merged runtime work passed full pytest `634 passed`
 with 28 warnings and all eleven acceptance suites
 `129/152/126/90/24/34/10/11/27/18/5`; Ruff, format, lock, compilation,
 dashboard build, diff, tracked-secret, and tracked-weight checks also passed.
+
+PR #133 then fixed direct execution of the offline Phase-3 admission evaluator
+and added a zero-network subprocess help regression. The executable main
+anchor is now `083798403323e18f2cc6577103d7b81c36454279`; no admission logic or
+evidence root changed. Locked verification passed full pytest `635 passed`
+with 28 warnings and acceptance suites
+`129/152/126/91/24/34/10/11/27/18/5`; all repository quality checks passed.
 
 ## Current active timed roots
 

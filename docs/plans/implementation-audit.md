@@ -7,9 +7,9 @@ human gate into a unit-test claim.
 
 ## Current continuation update — Binance provider read-only recovery
 
-PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; the executable
-and evidence anchor for this checkpoint is `7eef93e55fecbf387385683437e1c30abb5b5d43`,
-with subsequent documentation-only follow-ups. The new
+PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; PR #133 is the
+current executable anchor `083798403323e18f2cc6577103d7b81c36454279`, with
+subsequent documentation-only follow-ups. The new
 `scripts/qualify_binance_spot_testnet_recovery.py` qualification uses the
 existing `ConfigBundleStore`, scoped `PAPER_VENUE` resolver, and
 `BinanceSpotTestnetTransport` to measure configuration rollback and a fresh
@@ -28,6 +28,15 @@ initial/restored bundle hash
 `EXTERNALLY MEASURED / PROVIDER_READ_ONLY_RESTART_AND_CONFIG_ROLLBACK_MEASURED`
 only; full provider deployment rollback, open-order recovery, Bronze rebuild,
 and archive restore are not claimed.
+
+## Current continuation update — Phase-3 admission evaluator entrypoint
+
+PR #133 fixed direct repository-root execution of
+`scripts/evaluate_phase3_admission.py` by adding a package-safe path bootstrap
+and a zero-network `--help` subprocess regression. The executable main anchor
+is `083798403323e18f2cc6577103d7b81c36454279`; admission logic and evidence
+roots were unchanged. Locked full pytest passed `635` tests and the complete
+Phase-3 acceptance suite passed `91` tests.
 
 ## Current continuation update — Phase-3 source identity integrity
 
