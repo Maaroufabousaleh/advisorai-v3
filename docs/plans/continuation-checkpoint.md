@@ -1,6 +1,6 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
+## Current terminal-review checkpoint — 2026-08-11T18:46:29Z
 
 - Clean `main` is
   `ced5d9301a816d89428616d1eb6ce0de48318cf7`, aligned with `origin/main` after
