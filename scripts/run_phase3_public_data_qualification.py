@@ -881,8 +881,28 @@ def _source_symbol_result(
     }
 
 
+def _clock_confident(rest: Mapping[str, object]) -> bool:
+    """Return whether a REST quote has a trustworthy provider-clock sample."""
+
+    server_time = rest.get("server_time")
+    if not isinstance(server_time, Mapping) or server_time.get("status") != "pass":
+        return False
+    offset = server_time.get("clock_offset_seconds")
+    return (
+        isinstance(offset, (int, float))
+        and not isinstance(offset, bool)
+        and abs(float(offset)) <= SourceHealthPolicy().maximum_clock_offset_seconds
+    )
+
+
 def _top_quote(
-    source_id: str, provider_identity: str, asset: str, market: Mapping[str, object], now: datetime
+    source_id: str,
+    provider_identity: str,
+    asset: str,
+    market: Mapping[str, object],
+    now: datetime,
+    *,
+    clock_confident: bool,
 ) -> SourceQuote | None:
     book = market.get("order_book") if isinstance(market, Mapping) else None
     if not isinstance(book, Mapping):
@@ -899,7 +919,7 @@ def _top_quote(
             bid=Decimal(str(bid["price"])),
             ask=Decimal(str(ask["price"])),
             received_at=now,
-            clock_confident=True,
+            clock_confident=clock_confident,
         )
     except (KeyError, InvalidOperation, TypeError, ValueError):
         return None
@@ -948,7 +968,14 @@ def _build_disagreement(
             symbol = next((item for item, value in symbols.items() if value == asset), None)
             market = markets.get(symbol) if symbol else None
             quote = (
-                _top_quote(source_id, source_id, asset, market, now)
+                _top_quote(
+                    source_id,
+                    source_id,
+                    asset,
+                    market,
+                    now,
+                    clock_confident=_clock_confident(rest),
+                )
                 if isinstance(market, Mapping)
                 else None
             )
