@@ -1179,6 +1179,8 @@ def run_qualification(
             raise RuntimeError("qualification cycle interval cannot change on resume")
         if int(config["window_seconds"]) != window_seconds:
             raise RuntimeError("qualification sample window cannot change on resume")
+        if config.get("max_cycles") != max_cycles:
+            raise RuntimeError("qualification max_cycles cannot change on resume")
         run_id = str(config["run_id"])
         started_at = datetime.fromisoformat(str(config["started_at"])).astimezone(UTC)
     else:

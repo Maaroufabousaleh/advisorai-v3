@@ -12,6 +12,15 @@ health ledgers reopen successfully. This is an implementation and local-test
 result; it does not promote Phase-3 admission or alter the active r4 evidence
 root.
 
+## Current continuation update — Phase-3 resumable configuration bounds
+
+Candidate commit `49b3283` makes the durable qualification runner reject a
+resume that changes its persisted `max_cycles` bound, while same-configuration
+hydration is verified not to append duplicate samples or health transitions.
+The focused Phase-3 suite passes `66 tests`; this is local implementation and
+test evidence only. The active r4 root predates the change and remains
+untouched, and Phase-3 admission remains closed.
+
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
 `3d3242cd07d55b2099b247b1d593a1701685f829` (PRs #86–#125 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;

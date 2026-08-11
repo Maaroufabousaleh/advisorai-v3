@@ -25,6 +25,15 @@ PID `87421` remained running at cycle `73` with `438` samples toward its
 `2026-08-11T08:24:40.271709Z` terminal sample. Resource sidecar PID `88019`
 remained active. No summary, terminal marker, or admission record exists yet.
 
+## Current continuation update — Phase-3 resumable configuration bounds
+
+Candidate commit `49b3283` closes a restart-integrity gap: the durable runner
+now rejects a resumed root when its persisted `max_cycles` differs, and a
+no-network test proves same-configuration hydration does not duplicate
+append-only samples or health transitions. The focused Phase-3 suite passes
+`66` tests. This does not alter the active r4 root or open any external/timed
+gate.
+
 ## Current continuation update — post-PR #120 Phase-3 review evidence
 
 Current clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6` after PR #122;
