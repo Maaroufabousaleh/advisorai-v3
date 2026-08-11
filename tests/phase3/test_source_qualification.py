@@ -14,6 +14,7 @@ from advisorai.contracts import AssetClass, InstrumentIdentity, SourceGrade
 from scripts.qualify_phase3_sources import (
     Operation,
     _endpoint,
+    _failure_classification,
     _operation,
     _public_endpoint,
     run_evidence,
@@ -108,8 +109,50 @@ def test_source_operation_preserves_sanitized_http_failure(tmp_path):
     assert result["passed"] is False
     assert result["error"]["error_class"] == "RuntimeError"
     assert result["raw_responses"][0]["status_code"] == 503
+    assert result["failure_classification"] == {
+        "category": "external_provider_unavailable_or_rate_limited",
+        "status_code": 503,
+        "implementation_failure": False,
+        "data_integrity_failure": False,
+        "external_provider_availability": True,
+        "safe_fail_closed": True,
+    }
     assert "provider unavailable" not in json.dumps(result)
     assert observations == ()
+
+
+def test_source_failure_classification_uses_raw_status_when_fetch_returns_no_observation():
+    class Record:
+        status_code = 429
+
+    result = _failure_classification(None, (Record(),), observation_count=0)
+    assert result == {
+        "category": "external_provider_unavailable_or_rate_limited",
+        "status_code": 429,
+        "implementation_failure": False,
+        "data_integrity_failure": False,
+        "external_provider_availability": True,
+        "safe_fail_closed": True,
+    }
+
+
+def test_source_failure_classification_marks_stale_observations_external_and_fail_closed():
+    result = _failure_classification(
+        None,
+        (),
+        observation_count=1,
+        quality_passed=False,
+        quality_finding_codes=("stale",),
+        replay_match=True,
+        duplicate_append_rejected=True,
+    )
+    assert result == {
+        "category": "external_provider_stale_or_clock_uncertain",
+        "implementation_failure": False,
+        "data_integrity_failure": False,
+        "external_provider_availability": True,
+        "safe_fail_closed": True,
+    }
 
 
 def test_phase3_runner_rejects_coinbase_production_without_network(tmp_path):

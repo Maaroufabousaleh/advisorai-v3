@@ -135,6 +135,86 @@ def _safe_error(exc: Exception) -> dict[str, object]:
     }
 
 
+def _failure_classification(
+    error: dict[str, object] | None,
+    records: tuple[Any, ...],
+    *,
+    observation_count: int,
+    quality_passed: bool = True,
+    quality_finding_codes: tuple[str, ...] = (),
+    replay_match: bool | None = True,
+    duplicate_append_rejected: bool | None = True,
+) -> dict[str, object]:
+    """Classify a failed source pass without guessing at provider internals.
+
+    An HTTP response is external evidence.  A parser/quality failure after a
+    successful response is kept separate so provider availability is not
+    confused with an AdvisorAI implementation or data-integrity problem.  All
+    failed operations remain fail-closed because no observation is admitted.
+    """
+
+    if (
+        error is None
+        and observation_count > 0
+        and quality_passed
+        and replay_match is True
+        and duplicate_append_rejected is True
+    ):
+        return {
+            "category": "none",
+            "implementation_failure": False,
+            "data_integrity_failure": False,
+            "external_provider_availability": False,
+            "safe_fail_closed": False,
+        }
+
+    status_code = error.get("status_code") if error is not None else None
+    if not isinstance(status_code, int):
+        latest = records[-1] if records else None
+        status_code = getattr(latest, "status_code", None)
+
+    if isinstance(status_code, int):
+        if status_code == 404:
+            category = "external_provider_product_unavailable"
+            provider_availability = False
+        elif status_code in {408, 425, 429, 500, 502, 503, 504}:
+            category = "external_provider_unavailable_or_rate_limited"
+            provider_availability = True
+        else:
+            category = "external_provider_http_failure"
+            provider_availability = True
+        integrity_failure = False
+    elif any(
+        code in {"stale", "future_event", "clock_confidence"} for code in quality_finding_codes
+    ):
+        category = "external_provider_stale_or_clock_uncertain"
+        provider_availability = True
+        integrity_failure = False
+    elif replay_match is False or duplicate_append_rejected is False:
+        category = "data_integrity_or_replay_failure"
+        provider_availability = False
+        integrity_failure = True
+    elif records:
+        category = "data_integrity_or_schema_failure"
+        provider_availability = False
+        integrity_failure = True
+    else:
+        category = "no_observation_without_response"
+        provider_availability = False
+        integrity_failure = True
+
+    classification = {
+        "category": category,
+        "implementation_failure": False,
+        "data_integrity_failure": integrity_failure,
+        "external_provider_availability": provider_availability,
+        "safe_fail_closed": category != "none",
+    }
+    if isinstance(status_code, int):
+        classification["status_code"] = status_code
+    return classification
+
+
 def _matching_records(spool: RawHttpSpool, url: str):
     return tuple(record for record in spool.read() if record.url == url)
 
@@ -238,6 +318,15 @@ def _operation(
         "clock_drift_seconds_max_abs": clock_drift_seconds,
         "sequence_check": "not_observable_from_rest_bootstrap",
         "schema_check": "parser_accepted" if error is None else "parser_or_transport_rejected",
+        "failure_classification": _failure_classification(
+            error,
+            records,
+            observation_count=len(observations),
+            quality_passed=quality.passed,
+            quality_finding_codes=tuple(finding.code for finding in quality.findings),
+            replay_match=replay_match,
+            duplicate_append_rejected=duplicate_append_rejected,
+        ),
         "quality": quality.model_dump(mode="json"),
         "raw_responses": [
             {
