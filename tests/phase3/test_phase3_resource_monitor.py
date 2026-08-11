@@ -11,6 +11,7 @@ import psutil
 
 from scripts.monitor_phase3_process_resources import (
     _command_hash,
+    _observation,
     _process_sample,
     _process_start_ticks,
     _root_size,
@@ -60,6 +61,28 @@ def test_process_sample_fails_closed_on_identity_mismatch(tmp_path: Path):
     assert record.process_status == "identity_mismatch"
     assert "process_identity_mismatch" in record.resource_errors
     assert record.rss_mib is None
+
+
+def test_sparse_exit_observation_seals_all_default_fields_in_hash():
+    record = _observation(
+        sampled_at=datetime(2026, 8, 11, 8, 0, tzinfo=UTC),
+        pid=os.getpid(),
+        process_status="exited",
+        target_root_file_count=3,
+        target_root_bytes=12,
+        resource_errors=("process:FileNotFoundError",),
+        previous_record_hash="a" * 64,
+    )
+
+    unsigned = {
+        key: value
+        for key, value in record.model_dump(mode="json", by_alias=True).items()
+        if key != "record_hash"
+    }
+    expected = hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert record.record_hash == expected
 
 
 def test_monitor_writes_separate_append_only_evidence(tmp_path: Path):
