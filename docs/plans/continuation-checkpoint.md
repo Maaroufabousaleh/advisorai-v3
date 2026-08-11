@@ -3,14 +3,26 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
-  `3404a0b649eeff960de0dced95efe5f7c1593bea`, aligned with `origin/main` after
-  PR #143.
+  `f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`, aligned with `origin/main` after
+  PR #145.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
   the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
   and resource sidecar PID `47392`; none has been stopped, restarted, or
   modified.
 - Archive/rclone remains externally deferred. No Phase-3 admission or later
   phase gate is opened by this metadata correction.
+
+## Current continuation update — offline model-stability validator
+
+- PR #145 merged the read-only
+  `scripts/validate_model_stability.py` terminal review boundary at
+  `f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`.
+- It verifies the model cycle hash chain, exact 24-hour terminal sample,
+  recomputed summary, and approved checkpoint/runtime identities, then emits
+  per-role results in a separate immutable review root. It cannot mutate PID
+  `70598` or open Phase-0 admission.
+- Phase-0 remains `PENDING_STABILITY`; Phase-3 r5 remains active and untouched;
+  archive/rclone remains externally deferred. Phase-0 acceptance passed `133`.
 
 ## Current continuation update — Phase-3 non-negative age metrics
 

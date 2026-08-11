@@ -8,11 +8,21 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
-`3404a0b649eeff960de0dced95efe5f7c1593bea`, aligned with `origin/main` after
-PR #143. The attachment’s PID `13339` reference is not the live process: the
+`f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`, aligned with `origin/main` after
+PR #145. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and
 resource sidecar PID `47392`. This audit preserves the live roots and does not
 rewrite historical evidence.
+
+## Current continuation update — offline model-stability validator
+
+PR #145 adds the read-only
+`scripts/validate_model_stability.py` terminal review boundary. It verifies
+the append-only model cycle chain, real 24-hour terminal sample, recomputed
+summary, and exact checkpoint/runtime admission identities, with per-role
+qualification output but no admission authority. Phase-0 remains
+`PENDING_STABILITY` until PID `70598` exits with its genuine terminal sample;
+the validator has passed the Phase-0 acceptance suite (`133` tests).
 
 ## Current continuation update — Phase-3 non-negative age metrics
 
