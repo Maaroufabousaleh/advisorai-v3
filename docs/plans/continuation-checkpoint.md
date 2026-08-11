@@ -2,7 +2,7 @@
 
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
-- Current merged `main` is
+- Current executable main anchor is
   `d5bfde76ed3cacaba365f3d7981db5a756eaf314` after PR #174; review started
   from clean `main` `6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`.
   Selected-model stability PID
