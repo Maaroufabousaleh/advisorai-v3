@@ -2,8 +2,9 @@
 
 ## Current continuation update — Binance provider read-only recovery
 
-PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; this checkpoint
-is on clean `main` `7eef93e55fecbf387385683437e1c30abb5b5d43`.
+PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`. The executable
+and evidence anchor for this checkpoint is `7eef93e55fecbf387385683437e1c30abb5b5d43`;
+current main adds only documentation follow-ups in PRs #129–#130.
 The new provider-specific recovery qualification uses only the scoped
 `PAPER_VENUE` resolver and the existing Binance Spot Testnet transport. It
 activates an immutable non-secret configuration revision, rolls back to the
@@ -48,7 +49,8 @@ test evidence only. The active r4 root predates the change and remains
 untouched, and Phase-3 admission remains closed.
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`7eef93e55fecbf387385683437e1c30abb5b5d43` (PRs #86–#129 merged; PRs #95–#96
+`7eef93e55fecbf387385683437e1c30abb5b5d43` (PRs #86–#128 carry the executable
+implementation/evidence; PRs #129–#130 are documentation-only; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
