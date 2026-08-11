@@ -6,6 +6,22 @@ are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator and PR #105 records
 the independent Phase-3 availability recheck).
 
+## Current continuation update — durable Phase-7 runner boundary
+
+- Added the narrow `DurablePaperSoakRunner` boundary under
+  `src/advisorai/soak/durable.py`. It persists immutable run configuration,
+  fsync'd hash-chained interval records, atomic PID/heartbeat status, one-owner
+  locking, and restart hydration without resetting the start time.
+- A pre-terminal bounded run writes progress only; the immutable `summary.json`
+  is created only by a real sample at or beyond 60 calendar days. The summary
+  is permanently `evidence_for_review_only` and cannot open Phase 7.
+- Focused durable-soak, existing soak, lint, and format checks pass. No real
+  Phase-7 process was launched because Phase 0–6 admission prerequisites are
+  not satisfied. Archive/rclone remains externally deferred and untouched.
+- PID `70598` and the completed Phase-3 root remain preserved; the next legal
+  work is the genuine Phase-0 terminal sample and subsequent external gate
+  review.
+
 ## Current continuation update — completed Phase-3 qualification
 
 - The corrected durable root

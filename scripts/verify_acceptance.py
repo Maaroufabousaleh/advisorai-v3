@@ -81,7 +81,7 @@ PHASE_SUITES: tuple[PhaseSuite, ...] = (
     PhaseSuite(
         7,
         "unattended paper soak",
-        ("tests/recovery/test_soak.py", "tests/learning"),
+        ("tests/recovery/test_soak.py", "tests/recovery/test_durable_soak.py", "tests/learning"),
     ),
     PhaseSuite(8, "Hermes and Skill Foundry", ("tests/capabilities",)),
     PhaseSuite(9, "controlled expansion", ("tests/expansion",)),

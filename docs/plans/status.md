@@ -4,6 +4,19 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — durable Phase-7 runner boundary
+
+The Phase-7 implementation now includes
+[`src/advisorai/soak/durable.py`](../../src/advisorai/soak/durable.py), a
+restartable evidence runner that binds code/configuration/policy/model/source/
+venue hashes, serializes one owner, persists fsync'd hash-chained samples, and
+maintains an atomic PID/heartbeat status file. It refuses non-paper
+environments, requires a real terminal sample at or beyond the configured
+60-calendar-day boundary, and cannot represent Phase-7 admission. Bounded
+resume/tamper/failure tests pass in
+[`tests/recovery/test_durable_soak.py`](../../tests/recovery/test_durable_soak.py).
+No real soak root was launched; Phase 0–6 admission prerequisites remain open.
+
 ## Current continuation update — completed Phase-3 qualification validation
 
 PRs #86–#105 are merged on clean main
