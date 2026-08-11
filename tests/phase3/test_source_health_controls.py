@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -208,6 +208,42 @@ def test_disagreement_retains_normal_state_with_healthy_clock_probes():
     assert result.state.value == "normal"
     assert result.action is DisagreementAction.ALLOW
     assert result.fail_closed is False
+
+
+def test_disagreement_records_provider_event_freshness_difference():
+    market = {
+        "order_book": {
+            "top_bid": {"price": "100", "size": "1"},
+            "top_ask": {"price": "101", "size": "1"},
+        }
+    }
+    rest = {
+        "binance_spot_public_market_data": {
+            "server_time": {"status": "pass", "clock_offset_seconds": 0},
+            "markets": {"BTCUSDT": market},
+        },
+        "coinbase_exchange_public_market_data": {
+            "server_time": {"status": "pass", "clock_offset_seconds": 0},
+            "markets": {"BTC-USD": market},
+        },
+    }
+    result = _build_disagreement(
+        rest,
+        NOW,
+        provider_event_times={
+            ("binance_spot_public_market_data", "BTC"): NOW - timedelta(seconds=1),
+            ("coinbase_exchange_public_market_data", "BTC"): NOW - timedelta(seconds=4),
+        },
+        received_at_by_source={
+            "binance_spot_public_market_data": NOW,
+            "coinbase_exchange_public_market_data": NOW,
+        },
+    )["BTC"]
+
+    assert result.freshness_difference_seconds == 3
+    assert result.state.value == "degraded"
+    assert result.action is DisagreementAction.TIGHTER_CONFIDENCE
+    assert result.fail_closed is True
 
 
 def test_failover_records_identity_change_and_fails_closed_without_healthy_source():

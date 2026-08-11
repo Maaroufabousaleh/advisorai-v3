@@ -681,6 +681,7 @@ def _generic_sequence_metrics(
         "provider_event_age_seconds_p95": _percentile(ages, 0.95),
         "provider_event_age_seconds_min": round(min(ages), 6) if ages else None,
         "provider_event_age_samples": ages,
+        "last_provider_event_at": (max(provider_times).isoformat() if provider_times else None),
         "last_valid_event_at": max(received_times).isoformat() if received_times else None,
         "provider_event_count": len(provider_times),
         "sequence_state": (
@@ -903,6 +904,7 @@ def _top_quote(
     now: datetime,
     *,
     clock_confident: bool,
+    provider_event_at: datetime | None = None,
 ) -> SourceQuote | None:
     book = market.get("order_book") if isinstance(market, Mapping) else None
     if not isinstance(book, Mapping):
@@ -919,6 +921,7 @@ def _top_quote(
             bid=Decimal(str(bid["price"])),
             ask=Decimal(str(ask["price"])),
             received_at=now,
+            provider_event_at=provider_event_at,
             clock_confident=clock_confident,
         )
     except (KeyError, InvalidOperation, TypeError, ValueError):
@@ -951,8 +954,20 @@ def _fault_drills() -> dict[str, object]:
 
 
 def _build_disagreement(
-    rest_by_source: Mapping[str, Mapping[str, object]], now: datetime
+    rest_by_source: Mapping[str, Mapping[str, object]],
+    now: datetime,
+    *,
+    provider_event_times: Mapping[tuple[str, str], datetime | None] | None = None,
+    received_at_by_source: Mapping[str, datetime] | None = None,
 ) -> dict[str, SourceDisagreementObservation]:
+    """Compare independent quotes and include measured event freshness.
+
+    REST order-book responses do not consistently carry an event timestamp.
+    When the source window has a timestamped public stream, the caller passes
+    its latest provider event time here. Missing timestamps remain explicitly
+    unmeasured; they are never replaced with the local comparison timestamp.
+    """
+
     result: dict[str, SourceDisagreementObservation] = {}
     mapping = {
         "binance_spot_public_market_data": {"BTCUSDT": "BTC", "ETHUSDT": "ETH"},
@@ -967,14 +982,19 @@ def _build_disagreement(
                 continue
             symbol = next((item for item, value in symbols.items() if value == asset), None)
             market = markets.get(symbol) if symbol else None
+            received_at = (received_at_by_source or {}).get(source_id, now)
+            provider_event_at = (
+                (provider_event_times or {}).get((source_id, asset)) if symbol else None
+            )
             quote = (
                 _top_quote(
                     source_id,
                     source_id,
                     asset,
                     market,
-                    now,
+                    received_at,
                     clock_confident=_clock_confident(rest),
+                    provider_event_at=provider_event_at,
                 )
                 if isinstance(market, Mapping)
                 else None
@@ -1387,7 +1407,30 @@ def run_qualification(
                     observed_at_by_source[source.source_id] = observed_at
 
             now = datetime.now(UTC)
-            disagreements = _build_disagreement(rest_by_source, now)
+            provider_event_times: dict[tuple[str, str], datetime | None] = {}
+            for source in sources:
+                websocket = ws_by_source[source.source_id]
+                connections = tuple(
+                    item for item in websocket.get("connections", ()) if isinstance(item, Mapping)
+                )
+                for provider_symbol, asset in SOURCE_ASSETS[source.source_id].items():
+                    matching_connections = tuple(
+                        item
+                        for item in connections
+                        if provider_symbol in item.get("expected_symbols", ())
+                    )
+                    metrics = _generic_sequence_metrics(
+                        source, provider_symbol, matching_connections
+                    )
+                    provider_event_times[(source.source_id, asset)] = _parse_time(
+                        metrics.get("last_provider_event_at")
+                    )
+            disagreements = _build_disagreement(
+                rest_by_source,
+                now,
+                provider_event_times=provider_event_times,
+                received_at_by_source=observed_at_by_source,
+            )
             for _asset, observation in disagreements.items():
                 disagreement_log.append(
                     {

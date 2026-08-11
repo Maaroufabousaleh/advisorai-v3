@@ -15,6 +15,39 @@ It does not load `secrets.env`. Coinbase production hosts, transfer paths, and
 withdrawal paths are rejected. Native source failures remain failures; the
 runner never substitutes a different venue or symbol.
 
+## Durable multi-source qualification
+
+The restartable Phase-3 runner is
+[`scripts/run_phase3_public_data_qualification.py`](../../scripts/run_phase3_public_data_qualification.py).
+It is public/read-only, keeps each provider and symbol in its own raw spool,
+hash-chains samples and health transitions, and never calls the execution
+transport. A multi-hour run is started explicitly:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/run_phase3_public_data_qualification.py \
+  --real \
+  --run-directory artifacts/phase3/public-market-data-durable/<new-run-id> \
+  --duration-hours 4 \
+  --cycle-seconds 90 \
+  --window-seconds 10
+```
+
+Each cycle records provider/local timestamps, clock offset and drift, event
+age distributions, connection/reconnect/resubscription counts, sequence and
+snapshot recovery results, raw-spool hashes, replay equivalence, source-health
+transitions, and sanitized failure classes. When a source exposes event
+timestamps, the cross-source disagreement record also measures the difference
+between the two source freshness ages. If a source does not expose a usable
+event timestamp, freshness remains explicitly unmeasured; it is never replaced
+with a local timestamp. Severe disagreement or missing clock confidence stays
+fail-closed and triggers no-trade/tighter-confidence policy.
+
+Do not resume a root after changing its code identity or bounds. Review its
+immutable summary with the separate validator and admission evaluator; a
+completed window remains evidence for review until the gate record is
+independently passed.
+
 ## Run
 
 From the repository root:
