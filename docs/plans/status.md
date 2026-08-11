@@ -4,6 +4,39 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — Phase-3 admission review boundary
+
+Current clean-main anchor before this work package was
+`c14287ba4b84becf0356a9a36dc79c8c683791f0` after PR #108. The new offline
+[`scripts/evaluate_phase3_admission.py`](../../scripts/evaluate_phase3_admission.py)
+and focused
+[`tests/phase3/test_phase3_admission.py`](../../tests/phase3/test_phase3_admission.py)
+make the Phase-3 review boundary explicit without opening the gate. The
+evaluator performs no network calls, does not mutate qualification roots, and
+cannot represent a formal admission record. It checks timestamp-derived
+window duration and terminal-sample presence, public/read-only separation,
+reviewed source identity, all-cycle primary continuity, fail-closed source
+selection/disagreement behavior, and a completed error-free resource sidecar.
+
+The completed r3 root was evaluated at
+`artifacts/phase3/public-market-data-admission/20260811T043711Z-two-hour-r3-v2/phase3-admission-evaluation.json`
+with SHA-256
+`cbb8ec53d793887f17ebeccab8db33a52051082cdd989ff780b7a5f854cf0c1b`.
+Recommendation is `PENDING_EXTERNAL_EVIDENCE`; blockers are
+`qualification_window_incomplete`, `no_healthy_primary_source_for_btc_eth`,
+and `primary_snapshot_sequence_or_replay_failure`. The first blocker records
+that the final sample preceded the target despite post-target process
+finalization; no elapsed-time or health policy was relaxed.
+
+An independent four-hour public-data qualification remains active under PID
+`87421` at
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+until `2026-08-11T08:24:40.271709Z`; its read-only OS resource sidecar is PID
+`88019` at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T042355Z-four-hour-r4-fixed-v2`.
+The selected-model stability PID `70598` remains untouched. Archive/rclone is
+externally deferred and was not touched.
+
 ## Current continuation update — durable Phase-7 runner boundary
 
 The Phase-7 implementation now includes

@@ -7,7 +7,7 @@ human gate into a unit-test claim.
 
 ## Current Phase-3 evidence anchor
 
-Clean main is `7d68304320107c9f9382a48173193988387707f8` after PR #105. The
+Clean main is `c14287ba4b84becf0356a9a36dc79c8c683791f0` after PR #108. The
 completed durable root
 `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
 reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles
@@ -42,6 +42,28 @@ Its summary SHA-256 is
 Binance BTC/ETH again ended stale at `5.096588s`/`5.011760s` against the
 5-second policy; Coinbase remained quarantined and Deribit degraded. The
 recheck is external corroboration only and did not open Phase 3.
+
+The offline review boundary
+[`scripts/evaluate_phase3_admission.py`](../../scripts/evaluate_phase3_admission.py)
+and its focused tests
+[`tests/phase3/test_phase3_admission.py`](../../tests/phase3/test_phase3_admission.py)
+now validate timestamp-derived duration, terminal-sample presence, source-card
+identity, public/write separation, all-cycle primary continuity, fail-closed
+disagreement/selection behavior, and completed resource-sidecar evidence. It
+does not perform network I/O, mutate source roots, or represent formal
+admission. Evaluation of r3 is preserved at
+`artifacts/phase3/public-market-data-admission/20260811T043711Z-two-hour-r3-v2/phase3-admission-evaluation.json`
+with SHA-256
+`cbb8ec53d793887f17ebeccab8db33a52051082cdd989ff780b7a5f854cf0c1b`.
+The result is `PENDING_EXTERNAL_EVIDENCE` with blockers
+`qualification_window_incomplete`, `no_healthy_primary_source_for_btc_eth`,
+and `primary_snapshot_sequence_or_replay_failure`; the last r3 sample was
+before the requested target, and source health/replay also failed the review.
+
+The next independent four-hour root is active under PID `87421` at
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+with sidecar PID `88019`. Both are credential-free/read-only and are preserved
+as separate evidence; neither opens Phase 3.
 
 | Phase | Local implementation boundary | Automated evidence | Remaining admission evidence |
 |---|---|---|---|
