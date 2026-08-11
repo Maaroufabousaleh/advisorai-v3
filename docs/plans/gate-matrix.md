@@ -21,8 +21,8 @@ interruption record SHA-256 is
 `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. The
 absolute-path runner fix is implemented and regression-tested; a one-cycle
 cwd-fix smoke passed with all three candidates, while fresh r3 is active under
-PID `70598` from `2026-08-10T18:07:25.593600Z` with latest observed sequence
-107 at `2026-08-11T03:47:10.345140Z` and last record SHA-256
+PID `70598` from `2026-08-10T18:07:25.593600Z`; a read-only observation recorded
+sequence 107 at `2026-08-11T03:47:10.345140Z` with record SHA-256
 `c3e9e65afe59a78c80687ca19243e28cbf70f227131e4f207c1a05c8bd34b02f`. State remains
 `PENDING_STABILITY`; no predecessor cycles are concatenated and no roster role
 is promoted. The prompt-named non-r3 root remains append-only and is not
