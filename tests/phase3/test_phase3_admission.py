@@ -72,7 +72,10 @@ def _inputs(logs: dict[str, list[dict[str, object]]]) -> dict[str, object]:
             "target_end_at": NOW.isoformat(),
             "updated_at": NOW.isoformat(),
         },
-        "summary": {"state": "multi_hour_window_complete"},
+        "summary": {
+            "state": "multi_hour_window_complete",
+            "terminal_sample_count": 1,
+        },
         "logs": logs,
         "resource_monitor": {
             "state": "deadline_reached",
@@ -128,3 +131,15 @@ def test_admission_evaluator_normalizes_lowercase_severe_disagreement():
     )
     assert not disagreement_check.passed
     assert disagreement_check.blocker_code == "disagreement_policy_not_fail_closed"
+
+
+def test_admission_evaluator_requires_terminal_sample_marker():
+    logs = _logs(_sample("BTC"), _sample("ETH"))
+    inputs = _inputs(logs)
+    inputs["summary"] = {"state": "multi_hour_window_complete", "terminal_sample_count": 0}
+
+    checks = _evaluate_checks(**inputs)
+
+    window_check = next(check for check in checks if check.name == "multi_hour_window_complete")
+    assert not window_check.passed
+    assert window_check.blocker_code == "qualification_window_incomplete"
