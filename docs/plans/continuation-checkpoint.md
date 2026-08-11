@@ -2,8 +2,8 @@
 
 ## Current continuation update — Binance provider read-only recovery
 
-- PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; the executable
-  and evidence anchor for this checkpoint is `7eef93e55fecbf387385683437e1c30abb5b5d43`.
+- PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; PR #133 is the
+  current executable anchor `083798403323e18f2cc6577103d7b81c36454279`.
   Subsequent PRs are documentation-only follow-ups.
 - The provider-specific recovery qualification uses the existing scoped
   `PAPER_VENUE` resolver and Binance Spot Testnet transport. It activated a
@@ -21,6 +21,11 @@
   `writes_attempted=false`. State is externally measured partial and
   `NOT_ADMITTED`; full provider deployment rollback, open-order recovery,
   Bronze rebuild, and archive restore remain pending.
+- PR #133 fixed direct repository-root execution of the offline Phase-3
+  admission evaluator and added a zero-network subprocess help regression.
+  Its executable merge anchor is `083798403323e18f2cc6577103d7b81c36454279`;
+  no admission logic or evidence root changed. Full locked pytest is `635
+  passed`; Phase-3 acceptance is `91`.
 - Selected-model stability PID `70598`, active Phase-3 PID `87421`, and its
   resource sidecar PID `88019` remain untouched. Archive/rclone remains
   externally deferred.
@@ -82,7 +87,7 @@ remain pending.
   be retrofitted.
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`7eef93e55fecbf387385683437e1c30abb5b5d43` (PRs #86–#128 carry the executable
+`083798403323e18f2cc6577103d7b81c36454279` (PRs #86–#128 and #133 carry the executable
 implementation/evidence; subsequent PRs are documentation-only follow-ups; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
