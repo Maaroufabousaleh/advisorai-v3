@@ -2,11 +2,23 @@
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `3404a0b649eeff960de0dced95efe5f7c1593bea`, aligned with
-`origin/main`, after PR #143. The attachment checkpoint’s PID `13339` and
+Clean `main` is `f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`, aligned with
+`origin/main`, after PR #145. The attachment checkpoint’s PID `13339` and
 two-hour r3 root are stale; the live protected Phase-0 model process is PID
 `70598`, and the live Phase-3 r5 process/sidecar are PIDs `46864`/`47392`.
 All immutable roots remain unchanged.
+
+## Current continuation update — offline model-stability validator
+
+PR #145 merged the read-only terminal validator at
+`f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`. The new
+`scripts/validate_model_stability.py` replays the model cycle hash chain,
+requires a real sample at or beyond the 24-hour boundary, recomputes the
+summary, binds each role to its approved checkpoint/runtime admission bundle,
+and emits per-role `QUALIFIED` or `REJECTED / QUARANTINED` results in a
+separate immutable review root. It cannot mutate the runner or open Phase-0
+admission. Phase-0 remains `PENDING_STABILITY` while PID `70598` runs; Phase-0
+acceptance passed `133` tests for this change.
 
 ## Current continuation update — Phase-3 non-negative age metrics
 
