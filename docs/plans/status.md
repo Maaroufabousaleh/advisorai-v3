@@ -30,9 +30,9 @@ exist. Locked verification for this work package passed full pytest `622
 passed` with 28 warnings, the Phase-4/model suite `24 passed`, and the focused
 utility tests `5 passed`.
 
-## Current continuation update — terminal Phase-3 sample boundary
+## Historical continuation update — terminal Phase-3 sample boundary
 
-Clean `main` is now
+At the preceding checkpoint, clean `main` was
 `647cb3a65b19ed088fda9ff1e86d6a25ae6139aa` after PRs #109, #110, and #112. PR #110
 fixes the durable Phase-3 runner boundary exposed by the r3 review: future
 windows collect one explicit cycle starting at or after the configured target,

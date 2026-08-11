@@ -28,7 +28,7 @@ not promote any model.
 
 ## Current Phase-3 evidence anchor
 
-Clean main is `647cb3a65b19ed088fda9ff1e86d6a25ae6139aa` after PR #112. The
+Clean main is `f7d05ae646cb8ee6264e5cf38bedb4f8f17c08cf` after PR #114. The
 completed durable root
 `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
 reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles
