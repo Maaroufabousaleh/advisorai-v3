@@ -1,7 +1,9 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`15f9e74d78eb2d7d37ec03bc216c09038a7b9b72` (PRs #86–#94 merged). The Phase-3
+`45a29b59985873a165abb7de3678c335810edd33` (PRs #86–#96 merged; PRs #95–#96
+are documentation-only follow-ups to the #94 implementation/evidence anchor).
+The Phase-3
 durable source-health implementation, bounded snapshot fix, concurrent symbol
 collection, accurate connection metrics, and read-only dashboard projection
 are merged. The active corrected external evidence is listed below.
@@ -10,9 +12,9 @@ are merged. The active corrected external evidence is listed below.
 
 - PID `70598` remains untouched under
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
-  Its latest read-only sample is sequence 79 at `2026-08-11T01:15:16.975316Z`,
+  Its latest read-only sample is sequence 81 at `2026-08-11T01:26:03.661578Z`,
   record SHA-256
-  `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`; no
+  `cd5525a4c0fe993999708fa10d0736623045604765e025a43e169340610c89fe`; no
   root was restarted, concatenated, or modified.
 - The prior PID `62977` Phase-3 root completed its fixed two-hour target at
   `2026-08-11T01:13:21.437160Z` with summary SHA-256

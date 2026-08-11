@@ -6,11 +6,13 @@ or 60-day operational gate.
 
 ## Current continuation update — durable Phase-3 source qualification
 
-PRs #89–#93 are merged on clean main `2d56913`. They add the restartable
+PRs #89–#96 are merged on clean main
+`45a29b59985873a165abb7de3678c335810edd33`. PRs #89–#94 add the restartable
 append-only runner, deterministic source-health/failover/recovery controls, a
 read-only dashboard projection, bounded Binance recovery snapshots, concurrent
 BTC/ETH collection, and accurate disconnect/reconnect accounting. Public
-connectors load no credentials and have no order/write method.
+connectors load no credentials and have no order/write method; PRs #95–#96
+refresh the checkpoint and verification records only.
 
 The original two-hour root
 `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`
@@ -34,8 +36,8 @@ degraded clock confidence. This is `IMPLEMENTED / TESTED / EXTERNALLY MEASURED
 / RUNNING`, not Phase-3 admission.
 
 PID `70598` remains the untouched selected-model stability process. Its latest
-read-only sample was sequence 79 at `2026-08-11T01:15:16.975316Z`, record
-SHA-256 `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`;
+read-only sample was sequence 81 at `2026-08-11T01:26:03.661578Z`, record
+SHA-256 `cd5525a4c0fe993999708fa10d0736623045604765e025a43e169340610c89fe`;
 the 24-hour gate remains `PENDING_STABILITY`.
 
 | Phase | Implementation | Automated evidence | Gate status |

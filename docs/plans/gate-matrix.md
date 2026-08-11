@@ -1,7 +1,9 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`15f9e74d78eb2d7d37ec03bc216c09038a7b9b72` (PRs #86–#94 merged). The
+`45a29b59985873a165abb7de3678c335810edd33` (PRs #86–#96 merged; PRs #95–#96
+are documentation-only follow-ups to the #94 implementation/evidence anchor).
+The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, and accurate connection accounting are merged;
 the active corrected real qualification root is recorded below and is not an
@@ -17,9 +19,9 @@ interruption record SHA-256 is
 `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. The
 absolute-path runner fix is implemented and regression-tested; a one-cycle
 cwd-fix smoke passed with all three candidates, while fresh r3 is active under
-PID `70598` from `2026-08-10T18:07:25.593600Z` with 79 passing cycles as of
-`2026-08-11T01:15:16.975316Z` and last record SHA-256
-`1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`. State remains
+PID `70598` from `2026-08-10T18:07:25.593600Z` with 81 passing cycles as of
+`2026-08-11T01:26:03.661578Z` and last record SHA-256
+`cd5525a4c0fe993999708fa10d0736623045604765e025a43e169340610c89fe`. State remains
 `PENDING_STABILITY`; no predecessor cycles are concatenated and no roster role
 is promoted. The prompt-named non-r3 root remains append-only and is not
 modified; its status file still names PID `12973`, while that PID is no longer
