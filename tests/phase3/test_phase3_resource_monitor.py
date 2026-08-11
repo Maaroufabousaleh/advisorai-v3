@@ -91,6 +91,15 @@ def test_monitor_writes_separate_append_only_evidence(tmp_path: Path):
     assert rows
     assert rows[0]["previous_record_hash"] is None
     assert all(row["record_hash"] for row in rows)
+    previous = None
+    for row in rows:
+        assert row["previous_record_hash"] == previous
+        unsigned = {key: value for key, value in row.items() if key != "record_hash"}
+        expected = hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        assert row["record_hash"] == expected
+        previous = row["record_hash"]
     assert (
         hashlib.sha256((evidence / "summary.json").read_bytes()).hexdigest()
         == status["summary_sha256"]

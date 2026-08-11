@@ -79,7 +79,11 @@ def _canonical(value: Any) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=True,
-        default=lambda item: item.isoformat() if isinstance(item, datetime) else str(item),
+        default=lambda item: (
+            item.astimezone(UTC).isoformat().replace("+00:00", "Z")
+            if isinstance(item, datetime)
+            else str(item)
+        ),
     ).encode()
 
 
