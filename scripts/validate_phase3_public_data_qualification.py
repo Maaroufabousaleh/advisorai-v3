@@ -30,6 +30,24 @@ TIMESTAMP_PROJECTION_FIELDS = (
     "last_event_received_at",
     "provider_event_timestamp_count",
 )
+HEALTH_SNAPSHOT_SCHEMA = "advisorai.phase3.public-market-data-durable.v1.health-snapshot"
+HEALTH_SNAPSHOT_FIELDS = frozenset(
+    {
+        "source_id",
+        "symbol",
+        "state",
+        "last_event_age_seconds",
+        "freshness",
+        "reconnect_count",
+        "sequence_gap_count",
+        "disagreement_state",
+        "snapshot_recovery_state",
+        "failure_classes",
+        "failure_layers",
+        "actual_provider_identity",
+        "fail_closed",
+    }
+)
 
 
 def _canonical(payload: object) -> bytes:
@@ -191,6 +209,154 @@ def _validate_timestamp_projection(samples: list[dict[str, Any]]) -> dict[str, A
     }
 
 
+def _validate_health_snapshot(
+    path: Path,
+    samples: list[dict[str, Any]],
+    *,
+    expected_run_id: str,
+) -> dict[str, Any]:
+    """Validate the sanitized dashboard projection against terminal samples.
+
+    ``latest-health.json`` is intentionally a replaceable operator projection,
+    not a second evidence log.  It still must be a truthful projection of the
+    latest append-only sample for every source/symbol pair.  Keeping this check
+    in the offline validator prevents a stale or widened dashboard payload from
+    being mistaken for source-health evidence.
+    """
+
+    issues: list[str] = []
+    if not path.is_file():
+        return {
+            "issues": ["health_snapshot_missing"],
+            "state": "missing",
+            "source_count": 0,
+            "sha256": None,
+        }
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {
+            "issues": ["health_snapshot_invalid_json"],
+            "state": "invalid",
+            "source_count": 0,
+            "sha256": _sha256(path.read_bytes()),
+        }
+    if not isinstance(payload, dict):
+        return {
+            "issues": ["health_snapshot_not_an_object"],
+            "state": "invalid",
+            "source_count": 0,
+            "sha256": _sha256(path.read_bytes()),
+        }
+    if payload.get("schema") != HEALTH_SNAPSHOT_SCHEMA:
+        issues.append("health_snapshot_schema_invalid")
+    if payload.get("run_id") != expected_run_id:
+        issues.append("health_snapshot_run_id_mismatch")
+    try:
+        _timestamp(payload.get("updated_at"))
+    except (TypeError, ValueError):
+        issues.append("health_snapshot_updated_at_invalid")
+    if payload.get("phase3_admission_opened") is not False:
+        issues.append("health_snapshot_admission_invariant_failed")
+
+    latest_by_pair: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in samples:
+        source_id = row.get("source_id")
+        symbol = row.get("symbol")
+        if not isinstance(source_id, str) or not isinstance(symbol, str):
+            continue
+        try:
+            sampled_at = _timestamp(row.get("cycle_ended_at"))
+        except (TypeError, ValueError):
+            continue
+        key = (source_id, symbol)
+        previous = latest_by_pair.get(key)
+        if previous is None or sampled_at >= _timestamp(previous["cycle_ended_at"]):
+            latest_by_pair[key] = row
+
+    records = payload.get("sources")
+    if not isinstance(records, list):
+        issues.append("health_snapshot_sources_not_a_list")
+        records = []
+    seen: set[tuple[str, str]] = set()
+    for index, record in enumerate(records, 1):
+        if not isinstance(record, dict):
+            issues.append(f"health_snapshot_source_{index}_not_an_object")
+            continue
+        missing = HEALTH_SNAPSHOT_FIELDS.difference(record)
+        extra = set(record).difference(HEALTH_SNAPSHOT_FIELDS)
+        if missing:
+            issues.append(f"health_snapshot_source_{index}_missing_fields")
+        if extra:
+            issues.append(f"health_snapshot_source_{index}_contains_unexpected_fields")
+        source_id = record.get("source_id")
+        symbol = record.get("symbol")
+        if not isinstance(source_id, str) or not source_id.strip():
+            issues.append(f"health_snapshot_source_{index}_source_id_invalid")
+            continue
+        if not isinstance(symbol, str) or not symbol.strip():
+            issues.append(f"health_snapshot_source_{index}_symbol_invalid")
+            continue
+        key = (source_id, symbol)
+        if key in seen:
+            issues.append(f"health_snapshot_source_{index}_duplicate")
+        seen.add(key)
+        expected = latest_by_pair.get(key)
+        if expected is None:
+            issues.append(f"health_snapshot_source_{index}_not_in_samples")
+            continue
+
+        projections = {
+            "state": expected.get("health_state"),
+            "last_event_age_seconds": expected.get("last_valid_event_age_seconds"),
+            "reconnect_count": expected.get("reconnects", 0),
+            "sequence_gap_count": expected.get("sequence_gap_count", 0),
+            "disagreement_state": expected.get("disagreement_state", "unmeasured"),
+            "snapshot_recovery_state": expected.get("snapshot_recovery", "unmeasured"),
+            "failure_classes": expected.get("failure_classes", []),
+            "failure_layers": expected.get("failure_layers", []),
+            "actual_provider_identity": expected.get("provider_identity"),
+        }
+        for field, expected_value in projections.items():
+            if record.get(field) != expected_value:
+                issues.append(f"health_snapshot_source_{index}_{field}_mismatch")
+        state = record.get("state")
+        if record.get("freshness") != ("fresh" if state == "HEALTHY" else "fail_closed"):
+            issues.append(f"health_snapshot_source_{index}_freshness_invalid")
+        expected_fail_closed = state != "HEALTHY"
+        if record.get("fail_closed") is not expected_fail_closed:
+            issues.append(f"health_snapshot_source_{index}_fail_closed_invalid")
+        age = record.get("last_event_age_seconds")
+        if age is not None and (
+            isinstance(age, bool) or not isinstance(age, (int, float)) or age < 0
+        ):
+            issues.append(f"health_snapshot_source_{index}_age_invalid")
+        for field in ("reconnect_count", "sequence_gap_count"):
+            value = record.get(field)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                issues.append(f"health_snapshot_source_{index}_{field}_invalid")
+        for field in ("failure_classes", "failure_layers"):
+            values = record.get(field)
+            if not isinstance(values, list) or any(
+                not isinstance(value, str) or not value for value in values
+            ):
+                issues.append(f"health_snapshot_source_{index}_{field}_invalid")
+
+    expected_pairs = set(latest_by_pair)
+    missing_pairs = expected_pairs.difference(seen)
+    if missing_pairs:
+        issues.append("health_snapshot_missing_sample_pairs")
+    if len(records) != len(expected_pairs):
+        issues.append("health_snapshot_source_count_mismatch")
+    return {
+        "issues": issues,
+        "state": "validated" if not issues else "invalid",
+        "source_count": len(records),
+        "sample_pair_count": len(expected_pairs),
+        "sha256": _sha256(path.read_bytes()),
+    }
+
+
 def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> dict[str, Any]:
     run_directory = run_directory.resolve()
     config_path = run_directory / "config.json"
@@ -228,6 +394,12 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
     issues.extend(failure_details["issues"])
     timestamp_projection = _validate_timestamp_projection(samples)
     issues.extend(timestamp_projection["issues"])
+    health_snapshot = _validate_health_snapshot(
+        run_directory / "latest-health.json",
+        samples,
+        expected_run_id=str(config.get("run_id", run_directory.name)),
+    )
+    issues.extend(health_snapshot["issues"])
     if status.get("state") != "multi_hour_window_complete":
         issues.append("qualification_window_not_complete")
     if cycles != expected_cycles:
@@ -300,6 +472,9 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
             },
             "timestamp_projection": {
                 key: value for key, value in timestamp_projection.items() if key != "issues"
+            },
+            "health_snapshot": {
+                key: value for key, value in health_snapshot.items() if key != "issues"
             },
         },
         "fault_drills": json.loads(

@@ -9,6 +9,7 @@ import pytest
 from scripts.validate_phase3_public_data_qualification import (
     _load_chain,
     _validate_failure_details,
+    _validate_health_snapshot,
     _validate_timestamp_projection,
 )
 
@@ -112,3 +113,80 @@ def test_timestamp_projection_rejects_inconsistent_count_and_receipt():
 
     assert "sample_1_receipt_timestamp_mismatch" in result["issues"]
     assert "sample_1_provider_timestamp_count_mismatch" in result["issues"]
+
+
+def _health_sample() -> dict[str, object]:
+    return {
+        "source_id": "binance_spot_public_market_data",
+        "symbol": "BTC",
+        "provider_identity": "binance_spot_public_market_data",
+        "health_state": "HEALTHY",
+        "cycle_ended_at": "2026-08-11T11:00:00Z",
+        "last_valid_event_age_seconds": 0.4,
+        "reconnects": 2,
+        "sequence_gap_count": 0,
+        "disagreement_state": "normal",
+        "snapshot_recovery": "not_required",
+        "failure_classes": [],
+        "failure_layers": [],
+    }
+
+
+def _write_health_snapshot(path: Path, sample: dict[str, object]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "advisorai.phase3.public-market-data-durable.v1.health-snapshot",
+                "updated_at": "2026-08-11T11:00:01Z",
+                "run_id": "run-1",
+                "phase3_admission_opened": False,
+                "sources": [
+                    {
+                        "source_id": sample["source_id"],
+                        "symbol": sample["symbol"],
+                        "state": sample["health_state"],
+                        "last_event_age_seconds": sample["last_valid_event_age_seconds"],
+                        "freshness": "fresh",
+                        "reconnect_count": sample["reconnects"],
+                        "sequence_gap_count": sample["sequence_gap_count"],
+                        "disagreement_state": sample["disagreement_state"],
+                        "snapshot_recovery_state": sample["snapshot_recovery"],
+                        "failure_classes": sample["failure_classes"],
+                        "failure_layers": sample["failure_layers"],
+                        "actual_provider_identity": sample["provider_identity"],
+                        "fail_closed": False,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_health_snapshot_projection_matches_append_only_samples(tmp_path: Path):
+    sample = _health_sample()
+    path = tmp_path / "latest-health.json"
+    _write_health_snapshot(path, sample)
+
+    result = _validate_health_snapshot(path, [sample], expected_run_id="run-1")
+
+    assert result["state"] == "validated"
+    assert result["issues"] == []
+    assert result["source_count"] == 1
+    assert len(result["sha256"]) == 64
+
+
+def test_health_snapshot_rejects_identity_and_schema_widening(tmp_path: Path):
+    sample = _health_sample()
+    path = tmp_path / "latest-health.json"
+    _write_health_snapshot(path, sample)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["sources"][0]["actual_provider_identity"] = "coinbase-public"
+    payload["sources"][0]["secret_like_field"] = "must not enter the projection"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _validate_health_snapshot(path, [sample], expected_run_id="run-1")
+
+    assert result["state"] == "invalid"
+    assert "health_snapshot_source_1_actual_provider_identity_mismatch" in result["issues"]
+    assert "health_snapshot_source_1_contains_unexpected_fields" in result["issues"]
