@@ -6,11 +6,25 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`, aligned with
-`origin/main`, after PR #145. The attachment checkpoint naming PID `13339` and
+Clean `main` is `1d16a59aee2c9260511bddb157a20a346d23ebae`, aligned with
+`origin/main`, after PR #146. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently
 protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
 with resource sidecar PID `47392`. No process was restarted or modified.
+
+## Current continuation observation — protected timed roots
+
+At `2026-08-11T09:54:45Z`, PID `70598` remained `running` with 175 passing
+cycles and latest sample `2026-08-11T09:54:45.558492Z`; the 24-hour target is
+`2026-08-11T18:07:25.593600Z`. The terminal sample and summary do not yet
+exist, so Phase-0 remains `PENDING_STABILITY`.
+
+At `2026-08-11T09:54:04Z`, the preserved Phase-3 r5 root had 246 samples and
+34 health transitions, remained `running`, and had no terminal summary. Its
+target is `2026-08-11T12:35:59.156509Z`. It remains immutable under runner
+identity `f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`;
+Phase-3 admission remains closed pending terminal review and a fresh
+corrected-code measurement if required.
 
 ## Current continuation update — offline model-stability validator
 

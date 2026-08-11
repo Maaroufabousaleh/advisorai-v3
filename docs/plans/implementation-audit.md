@@ -8,11 +8,23 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
-`f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`, aligned with `origin/main` after
-PR #145. The attachment’s PID `13339` reference is not the live process: the
+`1d16a59aee2c9260511bddb157a20a346d23ebae`, aligned with `origin/main` after
+PR #146. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and
 resource sidecar PID `47392`. This audit preserves the live roots and does not
 rewrite historical evidence.
+
+## Current continuation observation — protected timed roots
+
+The model stability root remains pre-terminal: PID `70598` reported 175
+passing cycles at `2026-08-11T09:54:45.558492Z`, with target
+`2026-08-11T18:07:25.593600Z`. The Phase-0 validator therefore remains
+`PENDING_STABILITY` and no roster promotion is made.
+
+The Phase-3 r5 root remains in flight with 246 samples and 34 health
+transitions at `2026-08-11T09:54:04Z`, targeting
+`2026-08-11T12:35:59.156509Z`. It is preserved under its own earlier runner
+identity and is not credited with later fixes; no Phase-3 admission is claimed.
 
 ## Current continuation update — offline model-stability validator
 
