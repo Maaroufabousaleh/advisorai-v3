@@ -434,33 +434,59 @@ async def _collect_binance_public_connection(
 def _run_binance_public_ws(
     source: PublicMarketDataSource, run_directory: Path, duration_seconds: int
 ) -> dict[str, object]:
+    async def collect_attempts(
+        symbol: str,
+    ) -> dict[str, object]:
+        """Make one bounded reconnect attempt after a failed public stream.
+
+        Binance's direct public stream can fail before its first message even
+        when DNS, TCP, TLS, and a subsequent direct connection are healthy.
+        Keep the retry bounded and visible in the evidence rather than
+        treating a later cycle as an implicit recovery.
+        """
+
+        attempts: list[dict[str, object]] = []
+        for connection_number in (1, 2):
+            attempt = await _collect_binance_public_connection(
+                source,
+                symbol=symbol,
+                output_directory=run_directory,
+                connection_number=connection_number,
+                duration_seconds=duration_seconds,
+            )
+            attempts.append(attempt)
+            if attempt.get("status") == "pass":
+                break
+        successful = [item for item in attempts if item.get("status") == "pass"]
+        return {
+            "symbol": symbol,
+            "attempts": attempts,
+            "status": "pass" if successful else "failed",
+            "snapshot_payload": successful[-1].get("snapshot_payload") if successful else None,
+        }
+
     async def collect() -> dict[str, object]:
         # Collect required symbols concurrently.  Sequential symbol windows
         # make the first symbol appear stale while the later symbol is being
         # measured, which is a local observation-order artifact rather than
         # provider freshness.
-        connections = await asyncio.gather(
-            *(
-                _collect_binance_public_connection(
-                    source,
-                    symbol=symbol,
-                    output_directory=run_directory,
-                    connection_number=1,
-                    duration_seconds=duration_seconds,
-                )
-                for symbol in source.symbols
-            )
-        )
+        bundles = await asyncio.gather(*(collect_attempts(symbol) for symbol in source.symbols))
+        connections = tuple(attempt for bundle in bundles for attempt in bundle["attempts"])
+        by_symbol = {str(bundle["symbol"]): bundle for bundle in bundles}
         return {
-            "state": "pass" if all(item["status"] == "pass" for item in connections) else "failed",
+            "state": "pass" if all(item["status"] == "pass" for item in bundles) else "failed",
             "connections": connections,
             "reconnect": {
                 symbol: {
-                    "attempt_count": 1,
-                    "status": item["status"],
+                    "attempt_count": len(by_symbol[symbol]["attempts"]),
+                    "successful_connection_count": sum(
+                        item.get("status") == "pass" for item in by_symbol[symbol]["attempts"]
+                    ),
+                    "reconnect_count": max(0, len(by_symbol[symbol]["attempts"]) - 1),
+                    "status": by_symbol[symbol]["status"],
                     "evidence_type": "real_external",
                 }
-                for symbol, item in zip(source.symbols, connections, strict=True)
+                for symbol in source.symbols
             },
             "resubscription": {
                 "status": "not_applicable",
@@ -473,9 +499,9 @@ def _run_binance_public_ws(
                 else "failed_closed"
             },
             "snapshots": {
-                item["symbol"]: item["snapshot_payload"]
-                for item in connections
-                if isinstance(item.get("snapshot_payload"), Mapping)
+                symbol: bundle["snapshot_payload"]
+                for symbol, bundle in by_symbol.items()
+                if isinstance(bundle.get("snapshot_payload"), Mapping)
             },
         }
 
@@ -655,9 +681,14 @@ def _source_symbol_result(
     )
     if source.source_id == "binance_spot_public_market_data":
         metrics = _generic_sequence_metrics(source, symbol, connections)
+        recovery_connections = tuple(
+            item for item in reversed(connections) if item.get("status") == "pass"
+        )[:1]
+        if not recovery_connections:
+            recovery_connections = connections
         recovery = _binance_recovery(
             source_directory,
-            connections,
+            recovery_connections,
             symbol=symbol,
             snapshot_override=(
                 websocket.get("snapshots", {}).get(symbol)
@@ -719,6 +750,12 @@ def _source_symbol_result(
         if previous_connected is True
         else "failed"
     )
+    reconnect_evidence = websocket.get("reconnect")
+    reconnect_count = int(previous_connected is False and connected)
+    if isinstance(reconnect_evidence, Mapping):
+        reconnect_record = reconnect_evidence.get(symbol)
+        if isinstance(reconnect_record, Mapping):
+            reconnect_count += int(reconnect_record.get("reconnect_count", 0))
     raw_spool_paths = [
         Path(str(item["raw_spool"]))
         for item in connections
@@ -752,7 +789,7 @@ def _source_symbol_result(
         "successful_connections": successful_connections,
         "connection_attempts": attempts,
         "disconnects": sum(_connection_disconnected(item) for item in connections),
-        "reconnects": int(previous_connected is False and connected),
+        "reconnects": reconnect_count,
         "resubscriptions": int(
             websocket.get("resubscription", {}).get("subscription_acknowledgements", 0)
         )
@@ -790,6 +827,11 @@ def _source_symbol_result(
         "rest_state": rest.get("required_read_state"),
         "sequence_semantics": metrics.get("sequence_semantics", "continuous_provider_sequence"),
         "snapshot_recovery": metrics.get("snapshot_recovery"),
+        "recovery_connection_number": (
+            recovery_connections[0].get("connection_number")
+            if source.source_id == "binance_spot_public_market_data" and recovery_connections
+            else None
+        ),
         "snapshot_recovery_attempt_count": int(
             metrics.get("snapshot_recovery") not in {None, "not_required", "not_applicable"}
         ),

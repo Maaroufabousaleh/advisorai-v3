@@ -251,6 +251,48 @@ def test_binance_symbol_windows_are_collected_concurrently(tmp_path: Path, monke
     assert [item["symbol"] for item in result["connections"]] == list(source.symbols)
 
 
+def test_binance_public_window_records_one_bounded_reconnect_per_failed_symbol(
+    tmp_path: Path, monkeypatch
+):
+    source = next(
+        item
+        for item in reviewed_public_market_data_sources()
+        if item.source_id == "binance_spot_public_market_data"
+    )
+    attempts: dict[str, int] = {}
+
+    async def fake_collect(*_args, symbol: str, connection_number: int, **_kwargs):
+        attempts[symbol] = attempts.get(symbol, 0) + 1
+        if connection_number == 1:
+            return {
+                "symbol": symbol,
+                "connection_number": connection_number,
+                "status": "failed",
+                "snapshot_payload": None,
+            }
+        return {
+            "symbol": symbol,
+            "connection_number": connection_number,
+            "status": "pass",
+            "snapshot_payload": {"lastUpdateId": connection_number},
+        }
+
+    monkeypatch.setattr(
+        phase3_qualification,
+        "_collect_binance_public_connection",
+        fake_collect,
+    )
+
+    result = phase3_qualification._run_binance_public_ws(source, tmp_path, 1)
+
+    assert result["state"] == "pass"
+    assert attempts == {"BTCUSDT": 2, "ETHUSDT": 2}
+    assert len(result["connections"]) == 4
+    assert all(item["attempt_count"] == 2 for item in result["reconnect"].values())
+    assert all(item["reconnect_count"] == 1 for item in result["reconnect"].values())
+    assert set(result["snapshots"]) == {"BTCUSDT", "ETHUSDT"}
+
+
 def test_connection_metrics_distinguish_window_close_from_disconnect():
     assert _connection_disconnected({"status": "pass", "timed_window_completed": True}) is False
     assert (
