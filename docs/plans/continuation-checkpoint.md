@@ -3,8 +3,8 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
-  `3f7bfa26f0db1f15680576d09e0246525f3db8fd`, aligned with `origin/main` after
-  PR #148.
+  `ee0b092492ae11b0c04ace22ee64348cd4baf581`, aligned with `origin/main` after
+  PR #150.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
   the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
   and resource sidecar PID `47392`; none has been stopped, restarted, or
