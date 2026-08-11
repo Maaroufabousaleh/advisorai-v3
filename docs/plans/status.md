@@ -6,7 +6,8 @@ or 60-day operational gate.
 
 ## Current continuation update — post-PR #120 Phase-3 review evidence
 
-Clean `main` is now `98a62cd37d35f5f8aa6515daaa8daf22e15bfa40` after PR #120.
+Current clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6` after PR #122;
+the source implementation anchor remains PR #120.
 The complete Phase-3 acceptance coverage correction is merged; all eleven
 acceptance suites remain green at `129/152/126/87/24/34/10/11/27/18/5`, and
 locked full pytest remains `626 passed` with 28 warnings.

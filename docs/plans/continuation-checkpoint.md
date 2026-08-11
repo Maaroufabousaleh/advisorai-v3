@@ -2,7 +2,8 @@
 
 ## Current continuation update — post-PR #120 Phase-3 review
 
-- Clean `main` is `98a62cd37d35f5f8aa6515daaa8daf22e15bfa40`; PR #120 is merged.
+- Clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6`; PRs #120–#122 are
+  merged.
 - Full pytest remains `626 passed` with 28 warnings. Acceptance suites are
   `129/152/126/87/24/34/10/11/27/18/5`; the complete Phase-3 suite is covered.
 - Offline validation of immutable r3 produced
