@@ -31,6 +31,7 @@ from scripts.run_phase3_public_data_qualification import (
     BINANCE_DEPTH_SNAPSHOT_LIMIT,
     _AppendOnlyLog,
     _binance_depth_snapshot_url,
+    _build_disagreement,
     _connection_disconnected,
     _fault_drills,
     _source_symbol_result,
@@ -153,6 +154,60 @@ def test_disagreement_policy_abstains_without_averaging_sources():
     assert result.fail_closed is True
     assert result.left_source == "binance"
     assert result.right_source == "coinbase"
+
+
+def test_disagreement_downgrades_when_provider_clock_probe_failed():
+    market = {
+        "order_book": {
+            "top_bid": {"price": "100", "size": "1"},
+            "top_ask": {"price": "101", "size": "1"},
+        }
+    }
+    result = _build_disagreement(
+        {
+            "binance_spot_public_market_data": {
+                "server_time": {"status": "failed"},
+                "markets": {"BTCUSDT": market},
+            },
+            "coinbase_exchange_public_market_data": {
+                "server_time": {"status": "pass", "clock_offset_seconds": 0},
+                "markets": {"BTC-USD": market},
+            },
+        },
+        NOW,
+    )["BTC"]
+
+    assert result.timestamp_confident is False
+    assert result.state.value == "severe"
+    assert result.action is DisagreementAction.NO_TRADE_ABSTAIN
+    assert result.fail_closed is True
+
+
+def test_disagreement_retains_normal_state_with_healthy_clock_probes():
+    market = {
+        "order_book": {
+            "top_bid": {"price": "100", "size": "1"},
+            "top_ask": {"price": "101", "size": "1"},
+        }
+    }
+    result = _build_disagreement(
+        {
+            "binance_spot_public_market_data": {
+                "server_time": {"status": "pass", "clock_offset_seconds": 0},
+                "markets": {"BTCUSDT": market},
+            },
+            "coinbase_exchange_public_market_data": {
+                "server_time": {"status": "pass", "clock_offset_seconds": 0},
+                "markets": {"BTC-USD": market},
+            },
+        },
+        NOW,
+    )["BTC"]
+
+    assert result.timestamp_confident is True
+    assert result.state.value == "normal"
+    assert result.action is DisagreementAction.ALLOW
+    assert result.fail_closed is False
 
 
 def test_failover_records_identity_change_and_fails_closed_without_healthy_source():
