@@ -1,12 +1,13 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current recovery checkpoint — 2026-08-11T13:11:37Z
+## Current recovery checkpoint — 2026-08-11T13:30:41Z
 
 - Clean `main` is
-  `cfa13123a8320193c192592ae208c014a5bd493a` after PR #165. The direct
-  Phase-3 runner now resolves repository imports when launched directly by a
-  detached supervisor; full pytest passed `657` tests with 28 warnings and all
-  eleven acceptance suites passed `133/152/126/106/27/34/10/11/27/18/5`.
+  `de9e7c997d3a435aa4b8aa5e73c355cf695d81fe`, aligned with `origin/main` after
+  PR #166. Full pytest passed `657` tests with 28 warnings; all eleven
+  acceptance suites passed `133/152/126/106/27/34/10/11/27/18/5`. Ruff,
+  repository format, lock, compilation, dashboard build, diff hygiene, and
+  tracked-secret/weight checks also passed.
 - Preserve completed r5 at
   `artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`:
   `774` samples, `6` terminal samples, summary SHA-256
@@ -17,16 +18,24 @@
 - Preserve failed r6 launch roots
   `20260811T-after-r5-four-hour-r6-clock-confidence` and
   `20260811T124355Z-four-hour-r6-clock-confidence-retry`; do not reuse or
-  concatenate them. The first records the import failure; the second is an
-  incomplete detached-supervisor attempt. The one-cycle diagnostic is separate.
+  concatenate them. The one-cycle diagnostic remains separate evidence.
 - Protect fresh r6 runner PID `2943`, root
   `artifacts/phase3/public-market-data-durable/20260811T124600Z-four-hour-r6-clock-confidence-setsid`,
   and resource sidecar PID `4807`, v3 monitor root
   `artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`.
-  Target is `2026-08-11T16:46:26.507901Z`; it has reached 84 samples through
-  cycle 14 with current Binance BTC/ETH healthy and replay-equivalent. Do not
-  stop, restart, edit, or concatenate these roots. Also preserve selected-model
-  PID `70598`; archive/rclone remains externally deferred.
+  The immutable r6 configuration targets
+  `2026-08-11T16:46:26.507901Z`; at this checkpoint it is `running` with `144`
+  samples and `0` terminal samples under code SHA-256
+  `b928650c279502b1f759c1584769f881f6c9a7f015ba34896d18c0501463fd0b`.
+  The latest cycle records Binance BTC/ETH and Deribit BTC/ETH healthy and
+  replay-equivalent, with Coinbase explicitly quarantined. Do not stop,
+  restart, edit, or concatenate these roots.
+- A separate post-run watcher PID `28569` waits for the runner and resource
+  sidecar to finish, then writes only fresh read-only validation/evaluation
+  roots under the Phase-3 validation and admission directories. Selected-model
+  stability PID `70598` remains untouched and running at cycle `215`, with
+  genuine terminal target `2026-08-11T18:07:25.593600Z`; no Phase-0 terminal
+  result exists yet. Archive/rclone remains externally deferred.
 
 ## Current repository anchor — 2026-08-11
 

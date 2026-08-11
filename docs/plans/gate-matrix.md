@@ -1,13 +1,12 @@
 # AdvisorAI V3 gate matrix
 
-## Current recovery checkpoint — 2026-08-11T13:11:37Z
+## Current recovery checkpoint — 2026-08-11T13:30:41Z
 
-Clean `main` is `cfa13123a8320193c192592ae208c014a5bd493a`, aligned with
-`origin/main`, after PR #165. PR #163 fixes direct supervisor invocation of
-the durable Phase-3 runner by bootstrapping the repository import path and
-adds a no-`PYTHONPATH` entrypoint regression test. Full pytest passed `657`
-tests with 28 warnings and all eleven acceptance suites passed
-`133/152/126/106/27/34/10/11/27/18/5`.
+Clean `main` is `de9e7c997d3a435aa4b8aa5e73c355cf695d81fe`, aligned with
+`origin/main`, after PR #166. Full pytest passed `657` tests with 28 warnings;
+all eleven acceptance suites passed `133/152/126/106/27/34/10/11/27/18/5`. Ruff,
+format, lock, compilation, dashboard build, diff hygiene, and tracked
+secret/weight checks also passed.
 
 The preserved r5 root
 `artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`
@@ -32,21 +31,21 @@ was preserved incomplete after its non-detached supervisor exited; it was not
 reused. A one-cycle foreground diagnostic completed successfully and remains
 separate evidence.
 
-The fresh corrected r6 root is now active at
+The fresh corrected r6 root is active at
 `artifacts/phase3/public-market-data-durable/20260811T124600Z-four-hour-r6-clock-confidence-setsid`
 under PID `2943`, runner code SHA-256
 `b928650c279502b1f759c1584769f881f6c9a7f015ba34896d18c0501463fd0b`, target
 `2026-08-11T16:46:26.507901Z`. Its v3 resource sidecar is PID `4807` at
 `artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`;
 the v1 precreation failure and v2 command-hash mismatch are preserved as
-separate sidecar attempts. At this checkpoint r6 has produced `84` samples
-through cycle `14`; Binance BTC/ETH are currently healthy and replay-equivalent,
-Coinbase remains explicitly quarantined, and Deribit has a measured disconnected
-state with a sanitized `ValueError` failure class. The sidecar has produced
-`42` identity-matching observations with no resource errors. This is still a
-running timed qualification, not admission.
-PID `70598` selected-model stability remains untouched and running; archive/
-rclone remains externally deferred.
+separate sidecar attempts. At this checkpoint r6 has produced `144` samples
+and no terminal sample. The latest cycle records Binance BTC/ETH and Deribit
+BTC/ETH healthy and replay-equivalent, with Coinbase explicitly quarantined.
+PID `28569` is a separate post-run watcher that will write only fresh
+read-only validation/evaluation roots after both protected processes finish.
+PID `70598` remains untouched at cycle `215` with terminal target
+`2026-08-11T18:07:25.593600Z`; neither timed gate is admitted. Archive/rclone
+remains externally deferred.
 
 ## Current repository anchor — 2026-08-11
 
