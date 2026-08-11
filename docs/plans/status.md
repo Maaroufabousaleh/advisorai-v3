@@ -6,9 +6,13 @@ or 60-day operational gate.
 
 ## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
 
-Clean `main` is `1193753c6b2000a24ffed34dab5b1d7fa557cf44` after merged PR #169.
-The PR corrects Phase-3 source-selection validation semantics and adds positive
-and negative regression coverage. It does not modify prior evidence.
+Clean `main` is `ced5d9301a816d89428616d1eb6ce0de48318cf7` after merged PR #171.
+PR #169 corrects Phase-3 source-selection validation semantics and adds
+positive/negative regression coverage; PR #171 updates both model rosters to
+bind the terminal per-role results. Neither change modifies prior evidence.
+Full pytest passes `660` tests with 28 warnings; all eleven acceptance suites
+pass `133/152/126/108/27/34/10/11/27/18/5`, and repository quality checks
+remain green.
 
 The protected Phase-0 r3 terminal review completed at least 24 hours with
 `269` cycles and `24.003634` elapsed hours. Its immutable review report is

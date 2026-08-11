@@ -8,10 +8,13 @@ human gate into a unit-test claim.
 ## Current terminal-review checkpoint — 2026-08-11T18:24:43Z
 
 The verified clean executable anchor is
-`1193753c6b2000a24ffed34dab5b1d7fa557cf44` after PR #169. The Phase-3
-source-selection validator now accepts only identity-preserving successful
-selection or a fully identity-null fail-closed selection. Focused regression
-tests pass; this is `IMPLEMENTED / TESTED`, not admission.
+`ced5d9301a816d89428616d1eb6ce0de48318cf7` after PR #171. PR #169 fixes the
+Phase-3 source-selection validator, which now accepts only identity-preserving
+successful selection or a fully identity-null fail-closed selection. PR #171
+binds the terminal per-role model review to both machine-readable rosters while
+keeping overall Phase-0 admission false. Full pytest passes `660` tests and
+all eleven acceptance suites pass `133/152/126/108/27/34/10/11/27/18/5`;
+this is `IMPLEMENTED / TESTED`, not admission.
 
 The immutable Phase-0 r3 terminal review passed its genuine 24-hour boundary
 with `269` cycles and no validation issues. The review report SHA-256 is
