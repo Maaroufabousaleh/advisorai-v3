@@ -26,6 +26,11 @@
   Its executable merge anchor is `083798403323e18f2cc6577103d7b81c36454279`;
   no admission logic or evidence root changed. Full locked pytest is `635
   passed`; Phase-3 acceptance is `91`.
+- The corrected evaluator was exercised against immutable r3. Offline report
+  `artifacts/phase3/public-market-data-admission/20260811T072500Z-two-hour-r3-entrypoint-recheck/phase3-admission-evaluation.json`
+  has SHA-256
+  `8c308ec39497ef962ea9dcb8fbbea611797bb2f0a488d08585923ae2fe7d131f` and
+  remains `PENDING_EXTERNAL_EVIDENCE` with `phase3_admission=false`.
 - Selected-model stability PID `70598`, active Phase-3 PID `87421`, and its
   resource sidecar PID `88019` remain untouched. Archive/rclone remains
   externally deferred.

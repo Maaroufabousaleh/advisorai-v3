@@ -36,6 +36,14 @@ follow-ups do not change this executable anchor. Direct
 root without `PYTHONPATH`, and a subprocess regression proves the command is
 offline. No admission logic or gate state changed. Locked verification passed
 full pytest `635 passed` with 28 warnings and Phase-3 acceptance `91`.
+The fixed entrypoint was then exercised against the immutable two-hour r3 root;
+the fresh offline review is
+`artifacts/phase3/public-market-data-admission/20260811T072500Z-two-hour-r3-entrypoint-recheck/phase3-admission-evaluation.json`
+with SHA-256
+`8c308ec39497ef962ea9dcb8fbbea611797bb2f0a488d08585923ae2fe7d131f`.
+It remains `PENDING_EXTERNAL_EVIDENCE` with
+`qualification_window_incomplete`, `no_healthy_primary_source_for_btc_eth`,
+and `primary_snapshot_sequence_or_replay_failure`; `phase3_admission=false`.
 
 ## Current continuation update — post-PR #125 Phase-3 source identity integrity
 

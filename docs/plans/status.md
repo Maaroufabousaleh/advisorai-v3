@@ -39,6 +39,12 @@ anchor is now `083798403323e18f2cc6577103d7b81c36454279`; no admission logic or
 evidence root changed. Locked verification passed full pytest `635 passed`
 with 28 warnings and acceptance suites
 `129/152/126/91/24/34/10/11/27/18/5`; all repository quality checks passed.
+The fixed evaluator also produced the immutable offline recheck
+`artifacts/phase3/public-market-data-admission/20260811T072500Z-two-hour-r3-entrypoint-recheck/phase3-admission-evaluation.json`
+with SHA-256
+`8c308ec39497ef962ea9dcb8fbbea611797bb2f0a488d08585923ae2fe7d131f`;
+it remains pending with the existing three blockers and
+`phase3_admission=false`.
 
 ## Current active timed roots
 
