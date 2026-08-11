@@ -22,6 +22,20 @@
   PID `88019` (r4 resource sidecar) remain untouched. Archive/rclone remains
   externally deferred.
 
+## Current continuation update — in-flight Phase-3 r4 observation
+
+- The active root
+  `artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+  remains under PID `87421` with target
+  `2026-08-11T08:24:40.271709Z`.
+- At `2026-08-11T06:11:35Z`, it had 384 samples, 384 connection
+  attempts/disconnects, 128 snapshot-recovery attempts, zero successful
+  connections, zero valid events, and all six source/symbol pairs fail-closed.
+  This is not terminal evidence and does not open Phase 3.
+- Resource sidecar PID `88019` remains active with no observed resource error;
+  the active root predates the sanitized failure-label projection and will not
+  be retrofitted.
+
 Checkpoint refreshed 2026-08-11 from clean `main`
 `a4e127a6e95ae7bdadeed91cc9e19ecf22388c45` (PRs #86–#121 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;

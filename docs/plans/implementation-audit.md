@@ -26,6 +26,14 @@ has SHA-256
 establish a healthy BTC/ETH primary, and recorded primary snapshot/sequence/
 replay failure. No gate state was promoted.
 
+The active independent Phase-3 r4 window remains in flight at
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+under PID `87421`, with resource sidecar PID `88019`. The latest read-only
+observation recorded 384 samples, 384 disconnects, 128 snapshot-recovery
+attempts, zero valid events, and fail-closed states for every BTC/ETH pair.
+Its target is `2026-08-11T08:24:40.271709Z`; no terminal or admission claim is
+made, and the pre-projection root remains immutable.
+
 ## Current Phase-3 failure-class projection
 
 The current clean-main base for this work package is

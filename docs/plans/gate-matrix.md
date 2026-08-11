@@ -41,6 +41,19 @@ remains `PENDING_EXTERNAL_EVIDENCE` because the root predates the terminal
 marker, lacks a healthy BTC/ETH primary, and has primary snapshot/sequence/
 replay failures. The active r4 and Phase-0 r3 processes remain untouched.
 
+## Current active Phase-3 r4 observation
+
+The independent four-hour root
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+is still running under PID `87421` toward
+`2026-08-11T08:24:40.271709Z`. At the latest read-only observation it had 384
+samples, 384 connection attempts/disconnects, 128 snapshot-recovery attempts,
+zero successful connections, zero valid events, and all six source/symbol pairs
+fail-closed. The separate resource sidecar PID `88019` had no resource error.
+This root is in flight and cannot yet be judged as terminal evidence; its
+recorded code identity predates the newer failure-label projection, so no
+retroactive fields will be added.
+
 ## Current Phase-3 evidence projection update
 
 The durable public-data runner now records sanitized `failure_classes` and
