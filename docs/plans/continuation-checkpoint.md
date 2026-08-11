@@ -55,6 +55,18 @@ active stability root.)
   The machine-readable model roster points to the active r3 stability root;
   PID `70598` and its append-only evidence remain untouched.
 
+## Current continuation update — complete Phase-3 acceptance coverage
+
+- The offline Phase-3 validator checks optional `failure_classes` and
+  `failure_layers` for safe bounded labels and duplicate entries, while old
+  immutable roots may omit those new fields.
+- The acceptance runner now executes the complete `tests/phase3` directory;
+  the former explicit list omitted WSS diagnostics, admission, validator, and
+  resource-monitor tests. The complete Phase-3 suite passes `87` tests.
+- Post-#119 locked verification passed full pytest `626 passed` with 28
+  warnings and acceptance suites
+  `129/152/126/87/24/34/10/11/27/18/5`. Phase-3 admission remains closed.
+
 ## Current continuation update — terminal Phase-3 sample boundary
 
 - PR #110 changes future durable Phase-3 windows to collect one explicit sample

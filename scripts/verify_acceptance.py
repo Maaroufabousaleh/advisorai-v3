@@ -68,12 +68,10 @@ PHASE_SUITES: tuple[PhaseSuite, ...] = (
             "tests/data/test_market_events.py",
             "tests/data/test_official.py",
             "tests/data/test_acquisition.py",
-            "tests/phase3/test_source_qualification.py",
-            "tests/phase3/test_coinbase_wss_qualification.py",
-            "tests/phase3/test_coinbase_level2_qualification.py",
-            "tests/phase3/test_binance_depth_qualification.py",
-            "tests/phase3/test_source_health_controls.py",
-            "tests/phase3/test_phase3_public_data_qualification_runner.py",
+            # Keep the entire Phase-3 suite in the phase gate.  The explicit
+            # list previously omitted the WSS diagnostic, admission
+            # evaluator, qualification validator, and resource-monitor tests.
+            "tests/phase3",
         ),
     ),
     PhaseSuite(4, "quantitative baseline council", ("tests/models",)),

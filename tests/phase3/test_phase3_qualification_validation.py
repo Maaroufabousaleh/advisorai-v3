@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from scripts.validate_phase3_public_data_qualification import _load_chain
+from scripts.validate_phase3_public_data_qualification import (
+    _load_chain,
+    _validate_failure_details,
+)
 
 
 def _write_chain(path: Path) -> str:
@@ -50,3 +53,26 @@ def test_load_chain_rejects_tampering(tmp_path: Path):
 
     with pytest.raises(ValueError, match="invalid record hash"):
         _load_chain(path)
+
+
+def test_failure_detail_validation_is_backward_compatible_with_old_roots():
+    result = _validate_failure_details([{"source_id": "old-root"}])
+
+    assert result["issues"] == []
+    assert result["samples_with_details"] == 0
+    assert result["samples_without_details"] == 1
+
+
+def test_failure_detail_validation_rejects_unsafe_or_duplicate_labels():
+    result = _validate_failure_details(
+        [
+            {
+                "failure_classes": ["TimeoutError", "TimeoutError", "secret value"],
+                "failure_layers": ["first_message_timeout"],
+            }
+        ]
+    )
+
+    assert "sample_1_failure_classes_contains_duplicates" in result["issues"]
+    assert "sample_1_failure_classes_contains_unsafe_label" in result["issues"]
+    assert result["label_counts"]["failure_classes"] == {"TimeoutError": 2}

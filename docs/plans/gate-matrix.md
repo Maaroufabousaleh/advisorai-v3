@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`28a1cf8e591c43dc03558411d41554ff5a52b5d8` (PRs #86–#118 merged; PRs #95–#96
+`51e3e6a73e620920aed98034c60adc49f0d16844` (PRs #86–#119 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
@@ -9,8 +9,8 @@ runner boundary; PR #109 adds the offline Phase-3 admission evaluator, PR #110
 adds the terminal-sample runner fix, PR #112 requires the explicit terminal
 marker during review, PR #114 adds the closed Phase-4 utility preparation
 boundary, PR #115 refreshes the evidence anchors, PR #116 adds the sanitized
-Phase-3 failure-class projection, and PR #118 points the model roster at the
-active stability root.)
+Phase-3 failure-class projection, PR #118 points the model roster at the active
+stability root, and PR #119 records the post-roster verification.)
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
@@ -43,6 +43,20 @@ compilation, secret, weight, and diff checks passed. No external gate was
 opened by this verification.
 The machine-readable roster's stability pointer is the active r3 root; this is
 metadata only and does not alter the running process or its evidence.
+
+## Current Phase-3 validator and acceptance coverage
+
+The offline validator now checks optional `failure_classes` and `failure_layers`
+for bounded sanitized labels, duplicate labels, and safe backward-compatible
+omission on older immutable roots. It reports label coverage without opening
+admission. The Phase-3 acceptance manifest now includes the complete
+`tests/phase3` directory; the prior explicit list omitted WSS diagnostics,
+admission-evaluator, validator, and resource-monitor tests. The complete
+Phase-3 suite collects `87` tests and remains local evidence only.
+
+Post-#119 locked verification passed full pytest `626 passed` with 28 warnings;
+the complete acceptance results are
+`129/152/126/87/24/34/10/11/27/18/5`.
 
 ## Latest Phase-4 utility preparation
 
