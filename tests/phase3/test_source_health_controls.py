@@ -33,6 +33,7 @@ from scripts.run_phase3_public_data_qualification import (
     _binance_depth_snapshot_url,
     _connection_disconnected,
     _fault_drills,
+    _source_symbol_result,
 )
 
 NOW = datetime(2026, 8, 10, 22, 0, tzinfo=UTC)
@@ -234,6 +235,55 @@ def test_connection_metrics_distinguish_window_close_from_disconnect():
     )
 
 
+def test_source_sample_preserves_only_sanitized_failure_labels(tmp_path: Path):
+    source = next(
+        item
+        for item in reviewed_public_market_data_sources()
+        if item.source_id == "coinbase_exchange_public_market_data"
+    )
+    result = _source_symbol_result(
+        source,
+        tmp_path,
+        {
+            "required_read_state": "failed",
+            "error_class": "ProbeFailure",
+            "server_time": {"status": "failed", "error_class": "TimeoutError"},
+            "markets": {
+                "BTC-USD": {
+                    "order_book": {"state": "failed", "error_class": "HTTPStatusError"},
+                    "public_trades": {"state": "failed"},
+                }
+            },
+        },
+        {
+            "state": "failed",
+            "error_class": "WebSocketTransportError",
+            "connections": [
+                {
+                    "expected_symbols": ["BTC-USD"],
+                    "status": "failed",
+                    "failure_layer": "first_message_timeout",
+                    "error_class": "TimeoutError",
+                    "raw_spool": str(tmp_path / "missing.jsonl"),
+                }
+            ],
+        },
+        symbol="BTC-USD",
+        asset="BTC",
+        now=NOW,
+        previous_connected=None,
+    )
+
+    assert result["failure_classes"] == [
+        "HTTPStatusError",
+        "ProbeFailure",
+        "TimeoutError",
+        "WebSocketTransportError",
+    ]
+    assert result["failure_layers"] == ["first_message_timeout"]
+    assert all("secret" not in value.lower() for value in result["failure_classes"])
+
+
 def test_fault_drills_are_injected_and_pass():
     drills = _fault_drills()
     assert all(item["evidence_type"] == "deterministic_injected" for item in drills.values())
@@ -269,6 +319,8 @@ def test_dashboard_source_health_is_read_only_and_sanitized(tmp_path: Path):
                         "sequence_gap_count": 0,
                         "disagreement_state": "normal",
                         "snapshot_recovery_state": "not_required",
+                        "failure_classes": ["TimeoutError"],
+                        "failure_layers": ["first_message_timeout"],
                         "actual_provider_identity": "binance-public",
                         "fail_closed": False,
                         "secret_like_field": "must be ignored",
@@ -281,6 +333,8 @@ def test_dashboard_source_health_is_read_only_and_sanitized(tmp_path: Path):
     view = projection.source_health()
     assert view[0].actual_provider_identity == "binance-public"
     assert view[0].fail_closed is False
+    assert view[0].failure_classes == ("TimeoutError",)
+    assert view[0].failure_layers == ("first_message_timeout",)
     assert projection.overview().source_health == view
 
     pytest.importorskip("fastapi")

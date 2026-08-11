@@ -30,6 +30,27 @@ exist. Locked verification for this work package passed full pytest `622
 passed` with 28 warnings, the Phase-4/model suite `24 passed`, and the focused
 utility tests `5 passed`.
 
+## Current continuation update — Phase-3 failure-class evidence projection
+
+The durable Phase-3 runner now promotes only sanitized exception-class and
+failure-layer identifiers from its REST/WebSocket collectors into each
+source/symbol sample, summary bucket, and read-only dashboard/API snapshot. It
+does not copy provider response bodies, headers, exception messages, or
+credentials into the diagnostic fields. The focused regression coverage passes
+`14` tests. Existing roots are immutable: the active four-hour r4 process PID
+`87421` was launched with the earlier code identity and its samples remain
+unchanged; their failure fields are absent because that version predates this
+projection. Future roots will preserve the failure classification required for
+Phase-3 review. This improves evidence completeness only; it does not open
+Phase-3 admission or alter fail-closed source selection.
+
+Locked repository verification for this continuation passed full pytest `623
+passed` with 28 warnings and all eleven acceptance suites with results
+`128/152/126/69/24/34/10/11/27/18/5`. Ruff, repository format, `uv lock
+--check`, compilation, dashboard build, diff hygiene, tracked-secret, and
+tracked-weight checks also passed. These are implementation checks only; the
+active timed Phase-0 root and Phase-3 external admission remain pending.
+
 ## Historical continuation update — terminal Phase-3 sample boundary
 
 At the preceding checkpoint, clean `main` was
