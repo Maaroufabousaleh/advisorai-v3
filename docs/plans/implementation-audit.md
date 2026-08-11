@@ -5,6 +5,27 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current continuation update — r4 terminal review and r5 active root
+
+The pre-reconnect r4 root
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+finished its measured four-hour window at
+`2026-08-11T08:24:45.638125Z` with 810 samples. Its summary is hashed by
+`53b1b77192dc77360b63b12208a445cc889c6bd0ff570fe4bd08ef37d8753fe2` and
+records stale Binance primary streams, quarantined Coinbase, and degraded
+Deribit. The old root has no explicit terminal sample because it predates that
+runner fix. Its resource sidecar summary
+`75cc73ca44400d59df9f28037d5037ff8ca3c456c459f7d5e34ffe06e3168d47` is
+quarantined after the offline validator found an invalid hash on its final
+sparse process-exit record and a sanitized FileNotFoundError resource error.
+
+PR #138 fixes that sealing defect at executable main
+`1335bfabe93bdd990f9512430ae843a9795a7ebf` and adds regression coverage. The
+new current-code r5 root is active under PID `46864` with code identity
+`f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`; its
+independent sidecar is PID `47392`. The new root, not the quarantined r4 root,
+is the next admissible Phase-3 evidence candidate.
+
 ## Current continuation update — bounded Binance public-data reconnect
 
 PR #136 merged into main at `350d6b55ac36251750e0459dc4e24b3507ca865c`.

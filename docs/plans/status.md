@@ -4,6 +4,31 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — r4 terminal review and r5 active root
+
+The immutable r4 four-hour root
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+completed at `2026-08-11T08:24:45.638125Z` with 810 samples and state
+`multi_hour_window_complete`, but no terminal marker because its recorded
+runner predates that boundary. Summary SHA-256:
+`53b1b77192dc77360b63b12208a445cc889c6bd0ff570fe4bd08ef37d8753fe2`.
+Its resource sidecar summary SHA-256 is
+`75cc73ca44400d59df9f28037d5037ff8ca3c456c459f7d5e34ffe06e3168d47`; offline
+chain validation found an invalid final sparse exit-observation hash and
+`process:FileNotFoundError`. This is preserved as a quarantined operational
+incident, not repaired in place.
+
+PR #138 merged the sealing regression fix at
+`1335bfabe93bdd990f9512430ae843a9795a7ebf`. A fresh four-hour root is active
+under PID `46864` at
+`artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`
+with current runner code identity
+`f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`; its
+sidecar is PID `47392` under the matching `...-v2` resource-monitor root.
+The first real cycle contains BTC/ETH public data with valid snapshot/replay
+and remains fail-closed under the existing health policy. Phase-3 admission is
+still pending.
+
 ## Current continuation update — bounded Binance public-data reconnect
 
 PR #136 merged at `350d6b55ac36251750e0459dc4e24b3507ca865c`. Future durable

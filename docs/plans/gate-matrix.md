@@ -1,5 +1,32 @@
 # AdvisorAI V3 gate matrix
 
+## Current continuation update — r4 terminal review and r5 active root
+
+The prior four-hour root
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+ended at `2026-08-11T08:24:45.638125Z` with state
+`multi_hour_window_complete`, 810 samples, and no explicit terminal marker
+because it was launched before that runner fix. Its summary SHA-256 is
+`53b1b77192dc77360b63b12208a445cc889c6bd0ff570fe4bd08ef37d8753fe2`; it
+records Binance BTC/ETH stale at the terminal observation, Coinbase quarantined,
+and Deribit degraded. The separate sidecar summary SHA-256 is
+`75cc73ca44400d59df9f28037d5037ff8ca3c456c459f7d5e34ffe06e3168d47`, but its
+final sparse target-exited observation has an invalid record hash and a
+`process:FileNotFoundError` resource error. The old root and sidecar remain
+unchanged and are quarantined; no admission was opened.
+
+After PR #138 merged the sparse-observation sealing fix at
+`1335bfabe93bdd990f9512430ae843a9795a7ebf`, a fresh current-code root is
+active under PID `46864`:
+`artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`.
+Its runner code identity is
+`f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`, target
+end is `2026-08-11T12:35:59.156509Z`, and its independent resource sidecar is
+PID `47392` at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T083600Z-four-hour-r5-reconnect-hashfixed-v2`.
+The first cycle is real public/read-only evidence; phase admission remains
+closed pending terminal validation.
+
 ## Current continuation update — bounded Binance public-data reconnect
 
 PR #136 merged into clean main at `350d6b55ac36251750e0459dc4e24b3507ca865c`.
