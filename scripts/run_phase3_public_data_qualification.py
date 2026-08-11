@@ -112,6 +112,22 @@ def _binance_depth_snapshot_url(source: PublicMarketDataSource, symbol: str) -> 
     )
 
 
+def _connection_disconnected(connection: Mapping[str, object]) -> bool:
+    """Return whether a sample ended with an observed transport failure."""
+
+    if connection.get("status") != "pass":
+        return True
+    return any(
+        isinstance(connection.get(field), str) and bool(connection[field])
+        for field in (
+            "collection_error_class",
+            "transport_error_class",
+            "failure_layer",
+            "error_class",
+        )
+    )
+
+
 def _write_immutable(path: Path, payload: object) -> None:
     encoded = (json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n").encode()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -658,7 +674,13 @@ def _source_symbol_result(
         clock_confidence = ClockConfidence.DEGRADED
     connected = bool(successful_connections and metrics.get("valid_event_count", 0))
     reconnect_state = (
-        "stable" if connected else "failed" if previous_connected is not True else "reconnecting"
+        "reconnecting"
+        if connected and previous_connected is False
+        else "stable"
+        if connected
+        else "reconnecting"
+        if previous_connected is True
+        else "failed"
     )
     raw_spool_paths = [
         Path(str(item["raw_spool"]))
@@ -676,8 +698,8 @@ def _source_symbol_result(
         "connected": connected,
         "successful_connections": successful_connections,
         "connection_attempts": attempts,
-        "disconnects": attempts if attempts else 0,
-        "reconnects": max(0, attempts - 1),
+        "disconnects": sum(_connection_disconnected(item) for item in connections),
+        "reconnects": int(previous_connected is False and connected),
         "resubscriptions": int(
             websocket.get("resubscription", {}).get("subscription_acknowledgements", 0)
         )
