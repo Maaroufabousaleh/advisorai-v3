@@ -1,5 +1,26 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current continuation update — post-PR #120 Phase-3 review
+
+- Clean `main` is `98a62cd37d35f5f8aa6515daaa8daf22e15bfa40`; PR #120 is merged.
+- Full pytest remains `626 passed` with 28 warnings. Acceptance suites are
+  `129/152/126/87/24/34/10/11/27/18/5`; the complete Phase-3 suite is covered.
+- Offline validation of immutable r3 produced
+  `artifacts/phase3/public-market-data-validation/20260811T060000Z-two-hour-r3-v3/phase3-qualification-validation.json`
+  (SHA-256
+  `40b08077112092df4531175063d8c514ab58a65d31c317bb562e0d14ad8f1753`),
+  `PASS_FOR_REVIEW`, with no issues and `phase3_admission=false`.
+- Offline admission review produced
+  `artifacts/phase3/public-market-data-admission/20260811T060000Z-two-hour-r3-v3/phase3-admission-evaluation.json`
+  (SHA-256
+  `26ae8d2e7a209b71ce36fb1707a3183dff0840f14220d7df617874a1e8a80a26`),
+  `PENDING_EXTERNAL_EVIDENCE`. The blockers are the pre-terminal-marker r3
+  window, no healthy BTC/ETH primary, and primary snapshot/sequence/replay
+  failure.
+- PID `70598` (selected-model stability), PID `87421` (active Phase-3 r4), and
+  PID `88019` (r4 resource sidecar) remain untouched. Archive/rclone remains
+  externally deferred.
+
 Checkpoint refreshed 2026-08-11 from clean `main`
 `28a1cf8e591c43dc03558411d41554ff5a52b5d8` (PRs #86–#118 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
