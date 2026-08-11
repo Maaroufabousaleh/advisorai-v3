@@ -351,8 +351,6 @@ def _evaluate_checks(
                     continuity_failures.append(f"{source_id}:{asset}:sequence")
                 if row.get("out_of_order_count", 0):
                     continuity_failures.append(f"{source_id}:{asset}:ordering")
-                if row.get("stale_interval_count", 0):
-                    continuity_failures.append(f"{source_id}:{asset}:stale")
                 if int(row.get("valid_event_count", 0)) == 0:
                     continuity_failures.append(f"{source_id}:{asset}:no_events")
     checks.append(
@@ -361,6 +359,76 @@ def _evaluate_checks(
             not continuity_failures and bool(primary_pairs),
             "continuity findings=" + (", ".join(continuity_failures[:8]) or "none"),
             "primary_snapshot_sequence_or_replay_failure",
+        )
+    )
+
+    # Staleness is a source-health outcome, not sequence/replay corruption.
+    # A stale source must be removed from the decision path, either by an
+    # explicit fail-closed selection or by an identity-bound, quality-
+    # recomputed failover to another reviewed source.  Keeping this assertion
+    # separate prevents an ordinary provider outage from being misreported as
+    # a broken raw-spool/replay boundary while preserving the fail-closed
+    # safety invariant.
+    selections_by_cycle_asset: dict[tuple[int, str], dict[str, Any]] = {}
+    stale_selection_findings: list[str] = []
+    for selection in selections:
+        cycle = selection.get("cycle")
+        asset = selection.get("asset")
+        if isinstance(cycle, int) and isinstance(asset, str):
+            key = (cycle, asset)
+            if key in selections_by_cycle_asset:
+                stale_selection_findings.append(f"selection_duplicate:{cycle}:{asset}")
+            else:
+                selections_by_cycle_asset[key] = selection
+
+    stale_interval_count = 0
+    for source_id, asset in sorted(primary_pairs):
+        for row in primary_pairs[(source_id, asset)]:
+            if not row.get("stale_interval_count"):
+                continue
+            stale_interval_count += int(row.get("stale_interval_count", 0))
+            cycle = row.get("cycle")
+            selection = (
+                selections_by_cycle_asset.get((cycle, asset)) if isinstance(cycle, int) else None
+            )
+            if selection is None:
+                stale_selection_findings.append(f"{source_id}:{asset}:selection_missing")
+                continue
+            # A reviewed source can be stale while another source is the
+            # explicitly selected provider.  Only a stale source that was the
+            # prior selected identity must be removed from the decision path;
+            # an unselected quarantined source is not a failover violation.
+            if selection.get("previous_source_id") != source_id:
+                continue
+            if selection.get("fail_closed") is True:
+                if any(
+                    selection.get(field) is not None
+                    for field in (
+                        "selected_source_id",
+                        "selected_provider_identity",
+                        "actual_source_identity",
+                    )
+                ):
+                    stale_selection_findings.append(f"{source_id}:{asset}:fail_closed_identity")
+                continue
+            selected = selection.get("selected_source_id")
+            actual = selection.get("actual_source_identity")
+            if (
+                not isinstance(selected, str)
+                or selected == source_id
+                or selected != actual
+                or selection.get("selected_provider_identity") != actual
+                or selection.get("quality_recomputed") is not True
+                or selection.get("silent_substitution") is True
+            ):
+                stale_selection_findings.append(f"{source_id}:{asset}:failover_not_recomputed")
+    checks.append(
+        _check(
+            "primary_stale_intervals_fail_closed",
+            not stale_selection_findings,
+            f"stale intervals observed={stale_interval_count}, "
+            f"fail-closed/failover violations={len(stale_selection_findings)}",
+            "stale_source_selection_not_fail_closed",
         )
     )
 
