@@ -22,7 +22,7 @@
   externally deferred.
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`28a1cf8e591c43dc03558411d41554ff5a52b5d8` (PRs #86–#118 merged; PRs #95–#96
+`a4e127a6e95ae7bdadeed91cc9e19ecf22388c45` (PRs #86–#121 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
@@ -31,7 +31,9 @@ adds the terminal-sample runner fix, PR #112 requires the explicit terminal
 marker during review, PR #114 adds the closed Phase-4 utility preparation
 boundary, PR #115 refreshes the evidence anchors, PR #116 adds the sanitized
 Phase-3 failure-class projection, and PR #118 points the model roster at the
-active stability root.)
+active stability root; PR #119 records post-roster verification, PR #120
+completes Phase-3 acceptance coverage, and PR #121 records the fresh review
+evidence.)
 
 ## Current continuation update — Phase-4 utility preparation
 
