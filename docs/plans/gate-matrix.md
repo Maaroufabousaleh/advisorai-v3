@@ -2,11 +2,28 @@
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `f8802a8a5e4b1d605b07843e27a0d19a28d7e55f`, aligned with
-`origin/main`, after PR #145. The attachment checkpoint’s PID `13339` and
+Clean `main` is `1d16a59aee2c9260511bddb157a20a346d23ebae`, aligned with
+`origin/main`, after PR #146. The attachment checkpoint’s PID `13339` and
 two-hour r3 root are stale; the live protected Phase-0 model process is PID
 `70598`, and the live Phase-3 r5 process/sidecar are PIDs `46864`/`47392`.
 All immutable roots remain unchanged.
+
+## Current continuation observation — protected timed roots
+
+Read-only inspection at `2026-08-11T09:54:45Z` found PID `70598` still
+`running` with 175 passing cycles; its latest sample is
+`2026-08-11T09:54:45.558492Z`, and its genuine terminal target remains
+`2026-08-11T18:07:25.593600Z`. No terminal sample, summary, or Phase-0
+admission is claimed. The process cwd, command, and evidence root were not
+changed.
+
+Read-only inspection of the preserved Phase-3 r5 root at
+`2026-08-11T09:54:04Z` found 246 samples, 34 health transitions, state
+`running`, and no terminal summary; its target remains
+`2026-08-11T12:35:59.156509Z`. The root remains under its recorded earlier
+runner identity `f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`
+and cannot be retroactively credited with later age-reporting changes. No
+process or evidence root was modified, and Phase-3 admission remains closed.
 
 ## Current continuation update — offline model-stability validator
 
