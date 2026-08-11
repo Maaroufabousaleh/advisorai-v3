@@ -8,7 +8,7 @@ human gate into a unit-test claim.
 ## Current Phase-3 failure-class projection
 
 The current clean-main base for this work package is
-`37cec82504f35b78f13597a30b4139479e84206f` after PR #115. The Phase-3 durable
+`432f45c5db804465e8e06847b2581a19afa9b40e` after PR #116. The Phase-3 durable
 runner now projects sanitized exception classes and failure-layer identifiers
 from REST/WebSocket collectors into source/symbol samples, summary aggregates,
 and the read-only dashboard/API health view. It never copies response bodies,
@@ -41,7 +41,7 @@ not promote any model.
 
 ## Current Phase-3 evidence anchor
 
-Clean main base is `37cec82504f35b78f13597a30b4139479e84206f` after PR #115. The
+Clean main base is `432f45c5db804465e8e06847b2581a19afa9b40e` after PR #116. The
 completed durable root
 `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
 reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles

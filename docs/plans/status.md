@@ -32,7 +32,7 @@ utility tests `5 passed`.
 
 ## Current continuation update — Phase-3 failure-class evidence projection
 
-The durable Phase-3 runner now promotes only sanitized exception-class and
+PR #116 makes the durable Phase-3 runner promote only sanitized exception-class and
 failure-layer identifiers from its REST/WebSocket collectors into each
 source/symbol sample, summary bucket, and read-only dashboard/API snapshot. It
 does not copy provider response bodies, headers, exception messages, or

@@ -1,14 +1,15 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`37cec82504f35b78f13597a30b4139479e84206f` (PRs #86–#115 merged; PRs #95–#96
+`432f45c5db804465e8e06847b2581a19afa9b40e` (PRs #86–#116 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
 runner boundary; PR #109 adds the offline Phase-3 admission evaluator, PR #110
 adds the terminal-sample runner fix, PR #112 requires the explicit terminal
 marker during review, PR #114 adds the closed Phase-4 utility preparation
-boundary, and PR #115 refreshes the evidence anchors.)
+boundary, PR #115 refreshes the evidence anchors, and PR #116 adds the
+sanitized Phase-3 failure-class projection.)
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
