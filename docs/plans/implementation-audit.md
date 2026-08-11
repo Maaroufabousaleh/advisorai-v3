@@ -37,6 +37,12 @@ and a zero-network `--help` subprocess regression. The executable main anchor
 is `083798403323e18f2cc6577103d7b81c36454279`; admission logic and evidence
 roots were unchanged. Locked full pytest passed `635` tests and the complete
 Phase-3 acceptance suite passed `91` tests.
+The fixed direct entrypoint was exercised against immutable r3 and produced
+offline report
+`artifacts/phase3/public-market-data-admission/20260811T072500Z-two-hour-r3-entrypoint-recheck/phase3-admission-evaluation.json`
+with SHA-256
+`8c308ec39497ef962ea9dcb8fbbea611797bb2f0a488d08585923ae2fe7d131f`;
+the recommendation remains pending and `phase3_admission=false`.
 
 ## Current continuation update — Phase-3 source identity integrity
 
