@@ -25,6 +25,11 @@ CHAIN_LOGS = (
     "health-transitions.jsonl",
 )
 FAILURE_DETAIL_FIELDS = ("failure_classes", "failure_layers")
+TIMESTAMP_PROJECTION_FIELDS = (
+    "last_provider_event_at",
+    "last_event_received_at",
+    "provider_event_timestamp_count",
+)
 
 
 def _canonical(payload: object) -> bytes:
@@ -138,6 +143,54 @@ def _validate_failure_details(samples: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _validate_timestamp_projection(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    """Validate provider/receipt timestamp fields while preserving old roots."""
+
+    issues: list[str] = []
+    projected_rows = 0
+    legacy_rows = 0
+    for index, row in enumerate(samples, 1):
+        present = [field in row for field in TIMESTAMP_PROJECTION_FIELDS]
+        if not any(present):
+            legacy_rows += 1
+            continue
+        projected_rows += 1
+        if not all(present):
+            issues.append(f"sample_{index}_timestamp_projection_incomplete")
+            continue
+        provider_at = row.get("last_provider_event_at")
+        receipt_at = row.get("last_event_received_at")
+        legacy_receipt_at = row.get("last_valid_event_at")
+        count = row.get("provider_event_timestamp_count")
+        for field, value in (
+            ("last_provider_event_at", provider_at),
+            ("last_event_received_at", receipt_at),
+        ):
+            if value is not None:
+                try:
+                    _timestamp(value)
+                except ValueError:
+                    issues.append(f"sample_{index}_{field}_invalid")
+        if receipt_at != legacy_receipt_at:
+            issues.append(f"sample_{index}_receipt_timestamp_mismatch")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            issues.append(f"sample_{index}_provider_timestamp_count_invalid")
+        elif (count == 0) != (provider_at is None):
+            issues.append(f"sample_{index}_provider_timestamp_count_mismatch")
+    if projected_rows and legacy_rows:
+        issues.append("timestamp_projection_schema_mixed")
+    return {
+        "issues": issues,
+        "state": "projected"
+        if projected_rows and not legacy_rows
+        else "legacy_unprojected"
+        if not projected_rows
+        else "mixed",
+        "projected_rows": projected_rows,
+        "legacy_rows": legacy_rows,
+    }
+
+
 def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> dict[str, Any]:
     run_directory = run_directory.resolve()
     config_path = run_directory / "config.json"
@@ -173,6 +226,8 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
     issues: list[str] = []
     failure_details = _validate_failure_details(samples)
     issues.extend(failure_details["issues"])
+    timestamp_projection = _validate_timestamp_projection(samples)
+    issues.extend(timestamp_projection["issues"])
     if status.get("state") != "multi_hour_window_complete":
         issues.append("qualification_window_not_complete")
     if cycles != expected_cycles:
@@ -242,6 +297,9 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
             "raw_spool_hash_count": len(raw_hashes),
             "failure_details": {
                 key: value for key, value in failure_details.items() if key != "issues"
+            },
+            "timestamp_projection": {
+                key: value for key, value in timestamp_projection.items() if key != "issues"
             },
         },
         "fault_drills": json.loads(
