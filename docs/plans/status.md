@@ -6,11 +6,27 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`, aligned with
-`origin/main`, after PR #156. The attachment checkpoint naming PID `13339` and
+Clean `main` is `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with
+`origin/main`, after PR #158. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently
 protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
 with resource sidecar PID `47392`. No process was restarted or modified.
+
+## Current continuation update — PR #158 validator hardening
+
+PR #158 merged offline validation for the Phase-3 provider/local timestamp
+projection at `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`. Future projected roots
+must contain complete timezone-aware provider and receipt timestamps with a
+consistent provider-timestamp count. Existing roots are classified explicitly
+as `legacy_unprojected` and are not rewritten. The change is
+`IMPLEMENTED / TESTED`; full pytest passed 653 tests and no Phase-3 admission
+state changed.
+
+At `2026-08-11T11:33:35Z`, r5 remained active at 564 samples with no terminal
+sample and target `2026-08-11T12:35:59.156509Z`. Model stability PID `70598`
+remained untouched at 193 cycles with terminal target
+`2026-08-11T18:07:25.593600Z`. Corrected r6 has not started. Archive/rclone
+remains externally deferred and untouched.
 
 ## Current continuation update — PR #156 timestamp projection
 

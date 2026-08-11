@@ -8,11 +8,21 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
-`85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`, aligned with `origin/main` after
-PR #156. The attachment’s PID `13339` reference is not the live process: the
+`513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with `origin/main` after
+PR #158. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and
 resource sidecar PID `47392`. This audit preserves the live roots and does not
 rewrite historical evidence.
+
+## Current continuation update — PR #158 validator hardening
+
+PR #158 adds offline validation for the provider/local timestamp projection in
+future Phase-3 roots. Projected rows must contain complete timezone-aware
+timestamps and a consistent provider timestamp count; older roots are reported
+as `legacy_unprojected` without mutation. This is `IMPLEMENTED / TESTED`; full
+pytest passed 653 tests, and Phase-3 admission remains closed. At
+`2026-08-11T11:33:35Z`, r5 remained pre-terminal at 564 samples and PID
+`70598` remained pre-terminal at 193 cycles.
 
 ## Current continuation update — PR #156 timestamp projection
 
