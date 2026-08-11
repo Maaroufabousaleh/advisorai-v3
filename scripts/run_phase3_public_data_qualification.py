@@ -365,6 +365,7 @@ async def _collect_binance_public_connection(
     clock_sample: dict[str, object] | None = None
     snapshot_payload: dict[str, object] | None = None
     collection_error: str | None = None
+    measurement_ended_at: datetime | None = None
     started_at = datetime.now(UTC)
     deadline = time.monotonic() + duration_seconds
     try:
@@ -397,6 +398,11 @@ async def _collect_binance_public_connection(
                 except TimeoutError:
                     continue
                 live_records.append((len(live_records) + 1, datetime.now(UTC), raw))
+        # The bounded feed window has ended at this point.  Capture the
+        # measurement boundary before cancelling the websocket task: the
+        # library may spend its close timeout completing the protocol close,
+        # and that cleanup interval is not market-data age.
+        measurement_ended_at = datetime.now(UTC)
     finally:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -409,6 +415,7 @@ async def _collect_binance_public_connection(
         "connection_number": connection_number,
         "stream_url": f"{source.ws_url}/{symbol.lower()}@depth@100ms",
         "started_at": started_at.isoformat(),
+        "measurement_ended_at": (measurement_ended_at or datetime.now(UTC)).isoformat(),
         "ended_at": ended_at.isoformat(),
         "duration_seconds": round((ended_at - started_at).total_seconds(), 3),
         "network_calls": client.request_count,
@@ -476,6 +483,14 @@ def _run_binance_public_ws(
         return {
             "state": "pass" if all(item["status"] == "pass" for item in bundles) else "failed",
             "connections": connections,
+            "measurement_ended_at": max(
+                (
+                    observed_at
+                    for item in connections
+                    if (observed_at := _parse_time(item.get("measurement_ended_at"))) is not None
+                ),
+                default=datetime.now(UTC),
+            ).isoformat(),
             "reconnect": {
                 symbol: {
                     "attempt_count": len(by_symbol[symbol]["attempts"]),
@@ -762,6 +777,14 @@ def _source_symbol_result(
         if isinstance(item.get("raw_spool"), str)
     ]
     raw_spool_paths.extend(source_directory.rglob("raw-http.jsonl"))
+    measurement_ended_at = max(
+        (
+            observed_at
+            for item in connections
+            if (observed_at := _parse_time(item.get("measurement_ended_at"))) is not None
+        ),
+        default=None,
+    )
     market = rest.get("markets")
     market_record = market.get(symbol) if isinstance(market, Mapping) else None
     market_book = market_record.get("order_book") if isinstance(market_record, Mapping) else None
@@ -796,6 +819,9 @@ def _source_symbol_result(
         if isinstance(websocket.get("resubscription"), Mapping)
         else 0,
         "last_valid_event_at": metrics.get("last_valid_event_at"),
+        "measurement_ended_at": (
+            measurement_ended_at.isoformat() if measurement_ended_at is not None else None
+        ),
         "last_valid_event_age_seconds": round(age, 6) if age is not None else None,
         "clock_offset_seconds": clock_offset,
         "clock_confidence": clock_confidence.value,
@@ -964,6 +990,7 @@ def _collect_source_window(
 
     source_root = cycle_root / source.source_id
     source_root.mkdir(parents=True, exist_ok=True)
+    observed_at = datetime.now(UTC)
     try:
         rest = _run_rest(source, source_root)
     except Exception as exc:
@@ -981,6 +1008,7 @@ def _collect_source_window(
         )
         if source.source_id == "binance_spot_public_market_data":
             websocket = _run_binance_public_ws(source, source_root, window_seconds)
+            observed_at = _parse_time(websocket.get("measurement_ended_at")) or datetime.now(UTC)
         else:
             websocket = _run_ws(
                 source,
@@ -989,6 +1017,7 @@ def _collect_source_window(
                 1,
                 float(offset) if isinstance(offset, (int, float)) else None,
             )
+            observed_at = datetime.now(UTC)
     except Exception as exc:
         websocket = {
             "state": "failed",
@@ -997,7 +1026,7 @@ def _collect_source_window(
             "resubscription": {"subscription_acknowledgements": 0},
             "error_class": type(exc).__name__,
         }
-    return rest, websocket, datetime.now(UTC)
+    return rest, websocket, observed_at
 
 
 def _summary(
