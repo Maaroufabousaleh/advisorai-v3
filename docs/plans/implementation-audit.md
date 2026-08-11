@@ -5,6 +5,47 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current terminal-review checkpoint — 2026-08-11T23:01:40Z
+
+The review began from clean main
+`6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`. Phase-0 selected-model stability
+is terminal and independently qualified for TTM-R2, Finance DeBERTa-v3, and
+FinBERT-MiniLM; the global Phase-0 gate remains separate and pending. PID
+`70598` was not touched.
+The review-boundary change passes full pytest (`663` tests, 28 warnings), all
+eleven acceptance suites (`134/152/126/111/27/34/10/11/27/18/5`), Ruff,
+format, lock, compilation, dashboard build, diff hygiene, and tracked-secret/
+weight checks.
+
+R7 terminal evidence is preserved at
+`artifacts/phase3/public-market-data-durable/20260811T182252Z-four-hour-r7-validator-fix`.
+Independent chain validation found 129 contiguous cycles/774 samples, complete
+public read-only separation, explicit provider identities, zero sequence gaps,
+duplicates, out-of-order events, and replay failures. The root recorded three
+Binance stale samples and correctly failed closed for those selected asset
+paths; Coinbase quarantine and Deribit disconnect/recovery failures are
+external source/runtime outcomes, not implementation defects. The validator
+report is `PASS_FOR_REVIEW` with no issues (SHA-256
+`dbd9bdc6c96af82ef33ccfbb22557786de6c9d3e72cbfdc97a956cb91c7f32e4`).
+
+The admission-review implementation previously conflated `stale_interval_count`
+with replay continuity. It now has a separate deterministic
+`primary_stale_intervals_fail_closed` check requiring fail-closed selection or
+an identity-bound, quality-recomputed failover; it does not relax sequence,
+ordering, replay, identity, disagreement, or resource checks. New positive and
+negative coverage is included in `tests/phase3/test_phase3_admission.py`; the
+full focused Phase-3 suite passes 87 tests. Re-evaluation of the immutable r7
+root is `QUALIFIED_FOR_REVIEW` with all checks passing (SHA-256
+`d4ad647e1f668b88c78604bd9cd75b94ae925bb9b943117e6adb07cfc8ae7aaa`). The
+review used evaluator source SHA-256
+`0ea2a57e1a4d7135d8a65bbcf87f4ea5eb288d9b131ec6a56178431d5a4d235e`.
+
+This result qualifies the measured public BTC/ETH source-health component for
+formal review only. The complete Phase-3 V3-Core source spine still requires
+its remaining authoritative source-scope evidence and a formal gate record;
+Phase 3 is not yet admitted, and no Phase-4 utility, Phase-5 council, Phase-6
+fill attribution, or Phase-7 soak has been claimed.
+
 ## Current terminal-review checkpoint — 2026-08-11T18:46:29Z
 
 The verified clean executable anchor is

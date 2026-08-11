@@ -37,6 +37,7 @@ def _sample(symbol: str, *, healthy: bool = True, replay: bool = True) -> dict[s
         "source_id": "binance_spot_public_market_data",
         "provider_identity": "binance_spot_public_market_data",
         "endpoint": "wss://stream.binance.com:9443/ws",
+        "cycle": 1,
         "symbol": symbol,
         "health_state": "HEALTHY" if healthy else "STALE",
         "source_contract_valid": True,
@@ -58,18 +59,24 @@ def _logs(*samples: dict[str, object]) -> dict[str, list[dict[str, object]]]:
         "samples.jsonl": list(samples),
         "source-selection.jsonl": [
             {
+                "cycle": 1,
+                "asset": "BTC",
                 "fail_closed": False,
                 "silent_substitution": False,
                 "selected_source_id": "binance_spot_public_market_data",
                 "selected_provider_identity": "binance_spot_public_market_data",
                 "actual_source_identity": "binance_spot_public_market_data",
+                "previous_source_id": "binance_spot_public_market_data",
             },
             {
+                "cycle": 1,
+                "asset": "ETH",
                 "fail_closed": False,
                 "silent_substitution": False,
                 "selected_source_id": "binance_spot_public_market_data",
                 "selected_provider_identity": "binance_spot_public_market_data",
                 "actual_source_identity": "binance_spot_public_market_data",
+                "previous_source_id": "binance_spot_public_market_data",
             },
         ],
         "disagreement.jsonl": [
@@ -145,6 +152,59 @@ def test_admission_evaluator_preserves_fail_closed_blockers():
     assert "primary_snapshot_sequence_or_replay_failure" in failed
     assert "resource_sidecar_missing_or_failed" in failed
     assert all(check.blocker_code for check in checks if not check.passed)
+
+
+def test_admission_evaluator_separates_bounded_stale_fail_closed_from_continuity():
+    logs = _logs(_sample("BTC", healthy=False, replay=True), _sample("ETH"))
+    logs["source-selection.jsonl"][0] = {
+        "cycle": 1,
+        "asset": "BTC",
+        "fail_closed": True,
+        "silent_substitution": False,
+        "selected_source_id": None,
+        "selected_provider_identity": None,
+        "actual_source_identity": None,
+        "previous_source_id": "binance_spot_public_market_data",
+    }
+
+    checks = _evaluate_checks(**_inputs(logs))
+
+    continuity = next(
+        check for check in checks if check.name == "primary_snapshot_sequence_replay_continuity"
+    )
+    stale = next(check for check in checks if check.name == "primary_stale_intervals_fail_closed")
+    assert continuity.passed
+    assert stale.passed
+
+
+def test_admission_evaluator_rejects_stale_source_selected_without_recomputed_failover():
+    logs = _logs(_sample("BTC", healthy=False, replay=True), _sample("ETH"))
+
+    checks = _evaluate_checks(**_inputs(logs))
+
+    stale = next(check for check in checks if check.name == "primary_stale_intervals_fail_closed")
+    assert not stale.passed
+    assert stale.blocker_code == "stale_source_selection_not_fail_closed"
+
+
+def test_admission_evaluator_accepts_identity_bound_recomputed_failover():
+    logs = _logs(_sample("BTC", healthy=False, replay=True), _sample("ETH"))
+    logs["source-selection.jsonl"][0] = {
+        "cycle": 1,
+        "asset": "BTC",
+        "fail_closed": False,
+        "silent_substitution": False,
+        "selected_source_id": "coinbase_exchange_public_market_data",
+        "selected_provider_identity": "coinbase_exchange_public_market_data",
+        "actual_source_identity": "coinbase_exchange_public_market_data",
+        "previous_source_id": "binance_spot_public_market_data",
+        "quality_recomputed": True,
+    }
+
+    checks = _evaluate_checks(**_inputs(logs))
+
+    stale = next(check for check in checks if check.name == "primary_stale_intervals_fail_closed")
+    assert stale.passed
 
 
 def test_admission_evaluator_normalizes_lowercase_severe_disagreement():

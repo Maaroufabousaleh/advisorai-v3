@@ -1,5 +1,47 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current terminal-review checkpoint — 2026-08-11T23:01:40Z
+
+- Review started from clean `main`
+  `6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`. Selected-model stability PID
+  `70598` is terminal and was not reopened; archive/rclone remains deferred.
+- Verification for this review-boundary change passed full pytest (`663` tests,
+  28 warnings), all eleven acceptance suites
+  (`134/152/126/111/27/34/10/11/27/18/5`), Ruff, format, lock, compilation,
+  dashboard build, diff hygiene, and tracked-secret/weight checks.
+- Immutable Phase-3 r7 completed from
+  `2026-08-11T18:23:11.356614Z` through its four-hour target with 129
+  contiguous cycles and 774 samples. Root config SHA-256 is
+  `87abe16e4f16c24bd34e49381915005e0c73f826239c0412c3a81922debaf4c6`;
+  summary SHA-256 is
+  `8839afbdeae42cf587ae9522d2119943f8f5e431fcd4bd6a17a0d26e2449bfde`.
+  It is credential-free and write-free. Preserve the root unchanged.
+- Fresh independent terminal validation is `PASS_FOR_REVIEW` with no issues
+  at
+  `artifacts/phase3/public-market-data-validation/20260811T230500Z-four-hour-r7-validator-fix-codex-terminal-review/phase3-qualification-validation.json`
+  (SHA-256
+  `dbd9bdc6c96af82ef33ccfbb22557786de6c9d3e72cbfdc97a956cb91c7f32e4`).
+  R7 has zero sequence/replay integrity findings. Three Binance stale samples
+  were correctly removed from the decision path; 216/258 selections fail
+  closed and silent substitution is zero.
+- The admission evaluator fix separates stale provider health from replay
+  continuity and verifies stale-source fail-closed/recomputed-failover
+  semantics. The corrected r7 review is `QUALIFIED_FOR_REVIEW` at
+  `artifacts/phase3/public-market-data-admission/20260811T231500Z-four-hour-r7-validator-fix-codex-policy-review-final/phase3-admission-evaluation.json`
+  (SHA-256
+  `d4ad647e1f668b88c78604bd9cd75b94ae925bb9b943117e6adb07cfc8ae7aaa`).
+  The evaluator source SHA-256 is
+  `0ea2a57e1a4d7135d8a65bbcf87f4ea5eb288d9b131ec6a56178431d5a4d235e`.
+- The measured public BTC/ETH source-health component is ready for formal
+  review. Full Phase 3 remains pending until the broader V3-Core source-scope
+  evidence and formal `PhaseGateRecord` requirements are satisfied; do not
+  launch r8 for the correctly handled stale intervals, and do not start Phase
+  4 until the full gate is actually admitted.
+- Next legal work: merge and verify this narrow admission-review fix, then
+  continue the earliest unblocked Phase-3 source-scope work. Preserve all r7
+  and r3 roots; do not create production calls, model order authority, or
+  additional Binance orders.
+
 ## Current terminal-review checkpoint — 2026-08-11T18:46:29Z
 
 - Clean `main` is

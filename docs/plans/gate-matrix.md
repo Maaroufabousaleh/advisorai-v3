@@ -1,5 +1,51 @@
 # AdvisorAI V3 gate matrix
 
+## Current terminal-review checkpoint — 2026-08-11T23:01:40Z
+
+Review began from clean `main`
+`6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`; no selected-model stability or
+archive/rclone process was touched. The Phase-0 selected-model r3 terminal
+review remains independently `QUALIFIED` for TTM-R2, Finance DeBERTa-v3, and
+FinBERT-MiniLM, while global Phase 0 remains pending its separate route and
+archive gates.
+The review-boundary change passes full pytest (`663` tests, 28 warnings), all
+eleven acceptance suites (`134/152/126/111/27/34/10/11/27/18/5`), Ruff,
+format, lock, compilation, dashboard build, diff hygiene, and tracked-secret/
+weight checks.
+
+The immutable Phase-3 r7 public-data root
+`artifacts/phase3/public-market-data-durable/20260811T182252Z-four-hour-r7-validator-fix`
+has a four-hour terminal window, 129 contiguous cycles, 774 samples, config
+SHA-256 `87abe16e4f16c24bd34e49381915005e0c73f826239c0412c3a81922debaf4c6`,
+summary SHA-256
+`8839afbdeae42cf587ae9522d2119943f8f5e431fcd4bd6a17a0d26e2449bfde`, and
+code identity
+`b928650c279502b1f759c1584769f881f6c9a7f015ba34896d18c0501463fd0b`.
+Credential/write separation, source identity, raw-chain integrity, replay,
+sequence, recovery, disagreement, explicit failover/fail-closed selection,
+and resource-sidecar checks are structurally valid. Three Binance stale
+samples were external source-health events; each selected BTC/ETH path
+failed closed. No sequence gap, duplicate, ordering, or replay failure was
+observed.
+
+The independent structural review is `PASS_FOR_REVIEW` at
+`artifacts/phase3/public-market-data-validation/20260811T230500Z-four-hour-r7-validator-fix-codex-terminal-review/phase3-qualification-validation.json`
+with SHA-256
+`dbd9bdc6c96af82ef33ccfbb22557786de6c9d3e72cbfdc97a956cb91c7f32e4`. The
+corrected admission-policy review is `QUALIFIED_FOR_REVIEW` at
+`artifacts/phase3/public-market-data-admission/20260811T231500Z-four-hour-r7-validator-fix-codex-policy-review-final/phase3-admission-evaluation.json`
+with SHA-256
+`d4ad647e1f668b88c78604bd9cd75b94ae925bb9b943117e6adb07cfc8ae7aaa`;
+the evaluator source SHA-256 is
+`0ea2a57e1a4d7135d8a65bbcf87f4ea5eb288d9b131ec6a56178431d5a4d235e`.
+The evaluator now distinguishes provider stale intervals from actual replay
+continuity failures and enforces stale-source fail-closed/recomputed-failover
+behavior. This qualifies the measured public BTC/ETH data component for
+formal review; it does not silently promote the broader Phase-3 V3-Core
+source spine or create a gate record. Phase 3 remains `PENDING_EXTERNAL_EVIDENCE`
+until its remaining authoritative source-scope and formal admission
+requirements are met. Phase 4–7 remain unstarted.
+
 ## Current terminal-review checkpoint — 2026-08-11T18:46:29Z
 
 Clean `main` is `ced5d9301a816d89428616d1eb6ce0de48318cf7`, aligned with

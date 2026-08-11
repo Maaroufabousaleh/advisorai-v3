@@ -4,6 +4,64 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current terminal-review checkpoint — 2026-08-11T23:01:40Z
+
+This review started from clean `main` `6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`.
+The selected-model Phase-0 r3 terminal evidence remains unchanged and qualifies
+`ttm-r2`, `finsentiment-deberta-v3`, and `finbert-minilm` independently; overall
+Phase 0 remains pending its separate private-route and archive prerequisites.
+PID `70598` is terminal and was not reopened or modified.
+After this review-boundary change, full pytest passes `663` tests with 28
+warnings; all eleven acceptance suites pass
+`134/152/126/111/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
+dashboard build, diff hygiene, and tracked-secret/weight checks also pass.
+
+The protected Phase-3 r7 root
+`artifacts/phase3/public-market-data-durable/20260811T182252Z-four-hour-r7-validator-fix`
+completed a genuine four-hour window from
+`2026-08-11T18:23:11.356614Z` through the target
+`2026-08-11T22:23:11.356614Z`; its final sample ended at
+`2026-08-11T22:23:45.037199Z`. It contains 129 contiguous cycles and 774
+samples, with config SHA-256
+`87abe16e4f16c24bd34e49381915005e0c73f826239c0412c3a81922debaf4c6`, summary
+SHA-256
+`8839afbdeae42cf587ae9522d2119943f8f5e431fcd4bd6a17a0d26e2449bfde`, and
+runner code identity
+`b928650c279502b1f759c1584769f881f6c9a7f015ba34896d18c0501463fd0b`.
+Credentials and order writes were false throughout. The independent validator
+review is `PASS_FOR_REVIEW` with no structural issues at
+`artifacts/phase3/public-market-data-validation/20260811T230500Z-four-hour-r7-validator-fix-codex-terminal-review/phase3-qualification-validation.json`
+(SHA-256
+`dbd9bdc6c96af82ef33ccfbb22557786de6c9d3e72cbfdc97a956cb91c7f32e4`).
+
+R7 recorded zero sequence gaps, duplicates, out-of-order events, and replay
+failures. It recorded three Binance stale samples (two BTC and one ETH), 41
+severe and two degraded disagreement observations, and 216 of 258 selections
+explicitly fail-closed with zero silent substitutions. Binance BTC/ETH were
+healthy at the terminal sample; Coinbase remained quarantined and Deribit
+disconnect/recovery failures remained classified as external runtime/provider
+evidence. The resource sidecar reached `deadline_reached` with no resource
+errors across 337 observations; its maximum RSS was 391.7265625 MiB, maximum
+VMS 820.6015625 MiB, maximum CPU 9%, maximum file descriptors 18, maximum
+internet connections 4, and maximum target-root size 3,068,521,795 bytes.
+
+The original admission evaluator incorrectly treated a stale interval as a
+sequence/replay failure. The evaluator fix now keeps those concerns separate
+and requires every stale selected source to fail closed or use an explicit
+identity-bound, quality-recomputed failover. Focused Phase-3 tests pass 87;
+the corrected r7 policy review is `QUALIFIED_FOR_REVIEW` with all checks true
+at
+`artifacts/phase3/public-market-data-admission/20260811T231500Z-four-hour-r7-validator-fix-codex-policy-review-final/phase3-admission-evaluation.json`
+(SHA-256
+`d4ad647e1f668b88c78604bd9cd75b94ae925bb9b943117e6adb07cfc8ae7aaa`). The
+review used evaluator source SHA-256
+`0ea2a57e1a4d7135d8a65bbcf87f4ea5eb288d9b131ec6a56178431d5a4d235e`.
+This is a review artifact, not a rewritten r7 root. The measured public
+BTC/ETH market-data component is therefore qualified for formal review; the
+broader Phase-3 V3-Core source spine and formal `PhaseGateRecord` remain
+pending, so no Phase-4 utility evidence has been run or claimed. Archive/rclone
+remains externally deferred.
+
 ## Current terminal-review checkpoint — 2026-08-11T18:46:29Z
 
 Clean `main` is `ced5d9301a816d89428616d1eb6ce0de48318cf7` after merged PR #171.
