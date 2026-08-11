@@ -8,7 +8,7 @@ or 60-day operational gate.
 
 PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; the executable
 and evidence anchor for this checkpoint is `7eef93e55fecbf387385683437e1c30abb5b5d43`,
-with documentation-only follow-ups in PRs #129–#130. The provider-specific Binance
+with subsequent documentation-only follow-ups. The provider-specific Binance
 recovery qualification uses only the scoped `PAPER_VENUE` resolver and the
 existing Binance Spot Testnet transport. It activated a non-secret immutable
 configuration revision, rolled back to the original bundle, reopened the

@@ -50,7 +50,7 @@ untouched, and Phase-3 admission remains closed.
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
 `7eef93e55fecbf387385683437e1c30abb5b5d43` (PRs #86–#128 carry the executable
-implementation/evidence; PRs #129–#130 are documentation-only; PRs #95–#96
+implementation/evidence; subsequent PRs are documentation-only follow-ups; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
