@@ -53,6 +53,13 @@ active timed Phase-0 root and Phase-3 external admission remain pending.
 The machine-readable model roster now points to the active r3 evidence root;
 this metadata correction did not touch PID `70598` or its append-only files.
 
+The Phase-3 validator now checks optional sanitized failure labels and reports
+their coverage while preserving compatibility with older immutable roots. The
+acceptance runner now includes every test under `tests/phase3` rather than the
+previous incomplete explicit subset. Post-#119 verification passed full pytest
+`626 passed` with 28 warnings and acceptance suites
+`129/152/126/87/24/34/10/11/27/18/5`; no external gate was opened.
+
 ## Historical continuation update — terminal Phase-3 sample boundary
 
 At the preceding checkpoint, clean `main` was
