@@ -157,6 +157,44 @@ The dashboard is read-only with respect to orders and risk limits. Its guarded
 paper halt/resume commands are control-plane requests recorded in the incident
 ledger; they cannot enable live capital.
 
+## Durable Phase-7 process boundary
+
+`PaperRuntime.run_forever()` is the decision-loop library, not by itself a
+durable soak qualification. Once Phase 0–6 prerequisites are admitted, wrap an
+already-wired runtime/sample collector in
+`advisorai.soak.DurablePaperSoakRunner` and run it under the reviewed host
+supervisor:
+
+```python
+from advisorai.soak import DurablePaperSoakRunner, SoakRunConfig
+
+runner = DurablePaperSoakRunner(
+    config=SoakRunConfig(
+        run_id="operator-chosen-immutable-id",
+        started_at=operator_start_time,
+        code_sha256=reviewed_code_sha256,
+        configuration_sha256=reviewed_config_sha256,
+        policy_sha256=reviewed_policy_sha256,
+        model_roster_sha256=admitted_model_roster_sha256,
+        source_roster_sha256=admitted_source_roster_sha256,
+        venue_identity="binance_spot_testnet",
+        venue_environment="paper_testnet",
+        command="/reviewed/supervisor command with no secret-bearing arguments",
+    ),
+    evidence_root=state_root / "phase7-paper-soak",
+    sample_factory=collect_one_closed_paper_interval,
+)
+runner.run()
+```
+
+The sample factory must call the existing evidence → target → RiskKernel → OMS
+→ Binance testnet chain and return only sanitized typed scorecard data. The
+runner itself exposes no order or credential methods. `config.json`,
+`samples.jsonl`, `status.json`, `runner.lock`, and the terminal-only
+`summary.json` are the resumable evidence artifacts. Do not launch this root
+before the earlier gates are admitted, and do not treat a bounded test run as a
+60-day result.
+
 ## Required operator work that the agent cannot perform
 
 - Choose the venue/provider, create accounts, complete KYC/terms/billing, and
