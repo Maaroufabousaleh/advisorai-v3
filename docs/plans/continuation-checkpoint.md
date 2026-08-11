@@ -3,14 +3,30 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
-  `c1444364148be231585a96ced91ace223a8f989a`, aligned with `origin/main` after
-  PR #154.
+  `85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`, aligned with `origin/main` after
+  PR #156.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
   the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
   and resource sidecar PID `47392`; none has been stopped, restarted, or
   modified.
 - Archive/rclone remains externally deferred. No Phase-3 admission or later
   phase gate is opened by this metadata correction.
+
+## Current continuation update — PR #156 timestamp projection
+
+- PR #156 merged at `85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`. Future durable
+  Phase-3 roots use code identity
+  `f9f8c20aa33db840f1a930cc7a04f56b1c06b4a3a382130503e42462fa7e27c1` and
+  persist the latest provider event timestamp, latest local receipt timestamp,
+  and provider timestamp count for every source/symbol sample. Full pytest
+  passed 651 tests and all eleven acceptance suites passed; no gate was opened.
+- At `2026-08-11T11:22:33Z`, PID `70598` remained untouched at 191 cycles with
+  terminal target `2026-08-11T18:07:25.593600Z`. Preserved r5 PID `46864` and
+  sidecar PID `47392` remained untouched at 528 samples with no terminal sample
+  and target `2026-08-11T12:35:59.156509Z`. Corrected r6 has not started.
+- Archive/rclone remains externally deferred and unchanged. Phase-0 and
+  Phase-3 admission remain closed; next legal work is review of the r5 terminal
+  artifacts and then the corrected r6 root.
 
 ## Current continuation update — PR #154 provider freshness evidence
 
