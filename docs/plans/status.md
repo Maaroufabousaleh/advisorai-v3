@@ -6,11 +6,26 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `c1444364148be231585a96ced91ace223a8f989a`, aligned with
-`origin/main`, after PR #154. The attachment checkpoint naming PID `13339` and
+Clean `main` is `85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`, aligned with
+`origin/main`, after PR #156. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently
 protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
 with resource sidecar PID `47392`. No process was restarted or modified.
+
+## Current continuation update — PR #156 timestamp projection
+
+PR #156 merged the Phase-3 durable sample projection at
+`85724aa5f3dece9ef7eb6f51a455d9ef03f6e871`. Future roots use code identity
+`f9f8c20aa33db840f1a930cc7a04f56b1c06b4a3a382130503e42462fa7e27c1` and
+explicitly persist the latest provider event timestamp, latest local receipt
+timestamp, and provider timestamp count for every source/symbol sample. The
+change is `IMPLEMENTED / TESTED`; no Phase-3 admission state changed.
+
+At `2026-08-11T11:22:33Z`, r5 remained active at 528 samples with no terminal
+sample and target `2026-08-11T12:35:59.156509Z`. Model stability PID `70598`
+remained untouched at 191 cycles with terminal target
+`2026-08-11T18:07:25.593600Z`. Corrected r6 has not started. Archive/rclone
+remains externally deferred and untouched.
 
 ## Current continuation update — PR #154 provider freshness evidence
 
