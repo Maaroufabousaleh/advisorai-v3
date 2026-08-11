@@ -314,6 +314,24 @@ outcomes remain fail-closed. The read-only dashboard/API may project the latest
 sanitized `latest-health.json` through `ADVISORAI_PHASE3_HEALTH_SNAPSHOT`; it
 does not expose transport write methods or execution authority.
 
+After a root reaches `multi_hour_window_complete`, validate it offline with
+[`scripts/validate_phase3_public_data_qualification.py`](../../scripts/validate_phase3_public_data_qualification.py):
+
+```bash
+PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
+  scripts/validate_phase3_public_data_qualification.py \
+  --run-directory artifacts/phase3/public-market-data-durable/<immutable-run-id> \
+  --resource-monitor artifacts/phase3/public-market-data-resource-monitor/<monitor-run-id> \
+  --output-root artifacts/phase3/public-market-data-validation/<validation-run-id>
+```
+
+The validator reloads every hash-chained log, checks cycle/pair completeness,
+completion timing, credential/write separation, fail-closed selection,
+replay/sequence findings, raw-spool growth, and the optional OS-resource
+sidecar. A successful result is explicitly
+`PASS_FOR_REVIEW` / `evidence_for_review_only` with `phase3_admission=false`;
+it is not a promotion mechanism.
+
 ### OS resource sidecar
 
 The source runner's source observations are supplemented by the separate
