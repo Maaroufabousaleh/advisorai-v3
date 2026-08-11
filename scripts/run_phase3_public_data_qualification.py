@@ -972,6 +972,7 @@ def _summary(
         values = age_values.get(key, [])
         bucket["maximum_adjusted_event_age_seconds"] = round(max(values), 6) if values else None
         bucket["p95_adjusted_event_age_seconds"] = _percentile(values, 0.95)
+    terminal_sample_count = sum(record.get("terminal_sample") is True for record in records)
     return {
         "schema": f"{SCHEMA}.summary",
         "run_id": run_id,
@@ -983,6 +984,7 @@ def _summary(
         "phase3_admission_opened": False,
         "code_sha256": code_sha256,
         "sample_count": len(records),
+        "terminal_sample_count": terminal_sample_count,
         "maximum_event_age_seconds": round(max(ages), 6) if ages else None,
         "p95_event_age_seconds": _percentile(ages, 0.95),
         "totals": totals,
@@ -1050,6 +1052,16 @@ def _health_snapshot(
             for (source_id, symbol), source_state in sorted(latest_states.items())
         ],
     }
+
+
+def _terminal_sample_due(
+    cycle_started_at: datetime,
+    target_end: datetime,
+    terminal_cycle_completed: bool,
+) -> bool:
+    """Return whether this cycle is the one explicit post-boundary sample."""
+
+    return not terminal_cycle_completed and cycle_started_at >= target_end
 
 
 def run_qualification(
@@ -1149,11 +1161,15 @@ def run_qualification(
     old_sigterm = signal.signal(signal.SIGTERM, _stop)
     old_sigint = signal.signal(signal.SIGINT, _stop)
     state = "running"
+    terminal_cycle_completed = False
     try:
-        while datetime.now(UTC) < target_end and not stop_requested:
+        while not stop_requested and not terminal_cycle_completed:
             if max_cycles is not None and next_cycle > max_cycles:
                 break
             cycle_started = datetime.now(UTC)
+            terminal_cycle = _terminal_sample_due(
+                cycle_started, target_end, terminal_cycle_completed
+            )
             cycle_root = run_directory / "cycles" / f"cycle-{next_cycle:06d}"
             rest_by_source: dict[str, dict[str, object]] = {}
             ws_by_source: dict[str, dict[str, object]] = {}
@@ -1273,12 +1289,15 @@ def run_qualification(
                         "execution_venue": "binance_spot_testnet",
                         "credentials_loaded": False,
                         "order_writes_attempted": False,
+                        "terminal_sample": terminal_cycle,
                     }
                     sample_log.append(record)
                     cycle_records.append(record)
                     prior_connected[key] = bool(result["connected"])
                     if isinstance(current_offset, (int, float)):
                         prior_clock_offsets[key] = float(current_offset)
+
+            terminal_cycle_completed = terminal_cycle
 
             candidates = _source_candidates(latest_states, source_contracts)
             for asset in ("BTC", "ETH"):
@@ -1342,7 +1361,7 @@ def run_qualification(
             state = "stopped_with_evidence"
         elif max_cycles is not None and next_cycle > max_cycles:
             state = "bounded_window_complete"
-        elif datetime.now(UTC) >= target_end:
+        elif terminal_cycle_completed:
             state = "multi_hour_window_complete"
         else:
             state = "incomplete"
