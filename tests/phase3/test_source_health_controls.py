@@ -101,6 +101,36 @@ def test_source_health_ledger_resume_verifies_hash_chain(tmp_path: Path):
         SourceHealthLedger(path)
 
 
+def test_source_health_ledger_rejects_provider_identity_change(tmp_path: Path):
+    path = tmp_path / "health.jsonl"
+    ledger = SourceHealthLedger(path)
+    first = ledger.append(transition_source_health(None, _observation()))
+    changed_provider = transition_source_health(
+        first.state,
+        _observation(
+            provider_identity="coinbase-public",
+            endpoint="wss://ws-feed.exchange.coinbase.com",
+        ),
+    )
+
+    with pytest.raises(ValueError, match="silently change provider identity"):
+        ledger.append(changed_provider)
+
+
+def test_source_health_ledger_requires_declared_previous_state(tmp_path: Path):
+    path = tmp_path / "health.jsonl"
+    ledger = SourceHealthLedger(path)
+    first = ledger.append(transition_source_health(None, _observation()))
+    forged_predecessor = transition_source_health(
+        None,
+        _observation(last_valid_event_age_seconds=30),
+    )
+
+    assert first.state is SourceHealthState.HEALTHY
+    with pytest.raises(ValueError, match="previous state"):
+        ledger.append(forged_predecessor)
+
+
 def test_disagreement_policy_abstains_without_averaging_sources():
     left = SourceQuote(
         source_id="binance",
