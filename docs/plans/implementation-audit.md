@@ -25,6 +25,14 @@ executable base. The active model and Phase-3 evidence processes remain
 independent of this code change; at the latest inspection they were still
 pre-terminal and no external gate was promoted.
 
+## Current continuation update — Phase-3 resumable configuration bounds
+
+Candidate commit `49b3283` makes the durable runner's persisted `max_cycles`
+bound immutable across restart and tests that a same-configuration resume
+does not duplicate append-only records. Focused Phase-3 coverage is `66`
+passing tests. The active evidence roots were not opened or rewritten, and no
+Phase-3 admission state changed.
+
 ## Current continuation update — post-PR #120 Phase-3 review
 
 Current clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6`. PR #120

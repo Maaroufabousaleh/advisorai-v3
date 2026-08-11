@@ -10,7 +10,15 @@
   `3d3242cd07d55b2099b247b1d593a1701685f829`. The active selected-model PID
   `70598`, Phase-3 PID `87421`, and resource sidecar PID `88019` were not
   stopped, restarted, or modified. Phase-3 admission and all timed gates
-  remain pending.
+remain pending.
+
+## Current continuation update — Phase-3 resumable configuration bounds
+
+- Candidate commit `49b3283` rejects a resumed durable qualification root when
+  `max_cycles` differs from its immutable config and proves same-config resume
+  hydration does not duplicate samples or health transitions.
+- The focused Phase-3 suite passes `66` tests. The active model and Phase-3
+  processes remain untouched; no terminal or admission evidence is claimed.
 
 ## Current continuation update — post-PR #120 Phase-3 review
 
