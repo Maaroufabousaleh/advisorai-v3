@@ -40,3 +40,11 @@ def test_tspulse_is_not_admitted_as_a_forecaster():
     ]
     assert role["candidate"] == "tspulse"
     assert role["price_forecast_prohibited"] is True
+
+
+def test_stability_roster_points_to_the_active_immutable_root():
+    roster = json.loads(Path("configs/models/phase0_model_roster.json").read_text())
+    assert roster["stability"]["state"] == "running"
+    assert roster["stability"]["run_directory"].endswith(
+        "phase0-selected-24h-terminal-sample-20260810-r3"
+    )

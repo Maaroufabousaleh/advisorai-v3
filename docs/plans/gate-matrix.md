@@ -40,6 +40,8 @@ Locked verification for this continuation passed full pytest `623 passed` with
 `128/152/126/69/24/34/10/11/27/18/5`; repository static, build, lock,
 compilation, secret, weight, and diff checks passed. No external gate was
 opened by this verification.
+The machine-readable roster's stability pointer is the active r3 root; this is
+metadata only and does not alter the running process or its evidence.
 
 ## Latest Phase-4 utility preparation
 

@@ -51,6 +51,8 @@ sanitized Phase-3 failure-class projection.)
   `128/152/126/69/24/34/10/11/27/18/5`; Ruff/format, lock, compilation,
   dashboard build, diff hygiene, tracked-secret, and tracked-weight checks all
   passed. These checks do not open Phase-0, Phase-3, or later external gates.
+  The machine-readable model roster points to the active r3 stability root;
+  PID `70598` and its append-only evidence remain untouched.
 
 ## Current continuation update — terminal Phase-3 sample boundary
 

@@ -193,7 +193,7 @@
     }
   },
   "stability": {
-    "run_directory": "artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h",
+    "run_directory": "artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3",
     "state": "running",
     "required_duration_hours": 24,
     "phase7_60_day_soak": "not_started",
