@@ -8,14 +8,14 @@ human gate into a unit-test claim.
 ## Current Phase-3 failure-class projection
 
 The current clean-main base for this work package is
-`432f45c5db804465e8e06847b2581a19afa9b40e` after PR #116. The Phase-3 durable
+`28a1cf8e591c43dc03558411d41554ff5a52b5d8` after PR #118. The Phase-3 durable
 runner now projects sanitized exception classes and failure-layer identifiers
 from REST/WebSocket collectors into source/symbol samples, summary aggregates,
 and the read-only dashboard/API health view. It never copies response bodies,
 headers, messages, or credentials into these fields. Focused Phase-3 and
-dashboard coverage passed `31` tests; the full locked verification passed `623`
+dashboard coverage passed `31` tests; the full locked verification passed `624`
 tests and acceptance suites
-`128/152/126/69/24/34/10/11/27/18/5`. This is an implementation/evidence
+`129/152/126/69/24/34/10/11/27/18/5`. This is an implementation/evidence
 completeness improvement, not a Phase-3 admission.
 
 ## Current Phase-4 utility preparation boundary
@@ -41,7 +41,7 @@ not promote any model.
 
 ## Current Phase-3 evidence anchor
 
-Clean main base is `432f45c5db804465e8e06847b2581a19afa9b40e` after PR #116. The
+Clean main base is `28a1cf8e591c43dc03558411d41554ff5a52b5d8` after PR #118. The
 completed durable root
 `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
 reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles

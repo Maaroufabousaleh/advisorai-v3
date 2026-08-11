@@ -1,15 +1,16 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`432f45c5db804465e8e06847b2581a19afa9b40e` (PRs #86–#116 merged; PRs #95–#96
+`28a1cf8e591c43dc03558411d41554ff5a52b5d8` (PRs #86–#118 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
 runner boundary; PR #109 adds the offline Phase-3 admission evaluator, PR #110
 adds the terminal-sample runner fix, PR #112 requires the explicit terminal
 marker during review, PR #114 adds the closed Phase-4 utility preparation
-boundary, PR #115 refreshes the evidence anchors, and PR #116 adds the
-sanitized Phase-3 failure-class projection.)
+boundary, PR #115 refreshes the evidence anchors, PR #116 adds the sanitized
+Phase-3 failure-class projection, and PR #118 points the model roster at the
+active stability root.)
 
 ## Current continuation update — Phase-4 utility preparation
 
@@ -46,9 +47,9 @@ sanitized Phase-3 failure-class projection.)
   remains untouched under PID `87421`; it predates this implementation and is
   not retroactively upgraded. Future qualification roots will contain the
   complete sanitized failure classification. Phase-3 admission remains closed.
-- Locked verification for this continuation passed full pytest `623 passed` with
+- Locked verification for this continuation passed full pytest `624 passed` with
   28 warnings and acceptance suites
-  `128/152/126/69/24/34/10/11/27/18/5`; Ruff/format, lock, compilation,
+  `129/152/126/69/24/34/10/11/27/18/5`; Ruff/format, lock, compilation,
   dashboard build, diff hygiene, tracked-secret, and tracked-weight checks all
   passed. These checks do not open Phase-0, Phase-3, or later external gates.
   The machine-readable model roster points to the active r3 stability root;

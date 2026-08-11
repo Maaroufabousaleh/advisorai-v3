@@ -44,9 +44,9 @@ projection. Future roots will preserve the failure classification required for
 Phase-3 review. This improves evidence completeness only; it does not open
 Phase-3 admission or alter fail-closed source selection.
 
-Locked repository verification for this continuation passed full pytest `623
+Locked repository verification for this continuation passed full pytest `624
 passed` with 28 warnings and all eleven acceptance suites with results
-`128/152/126/69/24/34/10/11/27/18/5`. Ruff, repository format, `uv lock
+`129/152/126/69/24/34/10/11/27/18/5`. Ruff, repository format, `uv lock
 --check`, compilation, dashboard build, diff hygiene, tracked-secret, and
 tracked-weight checks also passed. These are implementation checks only; the
 active timed Phase-0 root and Phase-3 external admission remain pending.

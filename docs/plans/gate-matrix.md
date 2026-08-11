@@ -1,15 +1,16 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`432f45c5db804465e8e06847b2581a19afa9b40e` (PRs #86–#116 merged; PRs #95–#96
+`28a1cf8e591c43dc03558411d41554ff5a52b5d8` (PRs #86–#118 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
 runner boundary; PR #109 adds the offline Phase-3 admission evaluator, PR #110
 adds the terminal-sample runner fix, PR #112 requires the explicit terminal
 marker during review, PR #114 adds the closed Phase-4 utility preparation
-boundary, PR #115 refreshes the evidence anchors, and PR #116 adds the
-sanitized Phase-3 failure-class projection.)
+boundary, PR #115 refreshes the evidence anchors, PR #116 adds the sanitized
+Phase-3 failure-class projection, and PR #118 points the model roster at the
+active stability root.)
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
@@ -35,9 +36,9 @@ change and is preserved without retroactive modification; its current records
 therefore remain evidence as recorded. This is an implementation/evidence
 quality improvement and does not change `phase3_admission_opened=false`.
 
-Locked verification for this continuation passed full pytest `623 passed` with
+Locked verification for this continuation passed full pytest `624 passed` with
 28 warnings and acceptance suites
-`128/152/126/69/24/34/10/11/27/18/5`; repository static, build, lock,
+`129/152/126/69/24/34/10/11/27/18/5`; repository static, build, lock,
 compilation, secret, weight, and diff checks passed. No external gate was
 opened by this verification.
 The machine-readable roster's stability pointer is the active r3 root; this is
