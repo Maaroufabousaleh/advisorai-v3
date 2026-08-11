@@ -4,6 +4,49 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — Binance provider read-only recovery
+
+PR #128 is merged into clean `main`
+`aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`. The provider-specific Binance
+recovery qualification uses only the scoped `PAPER_VENUE` resolver and the
+existing Binance Spot Testnet transport. It activated a non-secret immutable
+configuration revision, rolled back to the original bundle, reopened the
+active pointer in a fresh subprocess, and repeated the authenticated read
+contract. It never submitted, canceled, transferred, withdrew, or mutated OMS
+state.
+
+The real report is
+`artifacts/phase1/binance-spot-testnet/recovery/20260811T064829.840702Z/binance-spot-testnet-recovery.json`
+with SHA-256
+`acf025287f717277552e3744b059dab3b2c1e35bda16f7c3db8d9eafcbe62e83`. It
+passed with provider-truth `BTCUSDT`/`ETHUSDT`, 18 total read-only calls,
+configuration hash
+`b41638ffc13149796f29676826b54097d2e7c417d9e4b1ff4d72be6d12f87286`, and
+matching initial/restored bundle hash
+`0a44fe86c6cd7a65c316886f93848147aa3b75fd3a1eb3c31ae2579eaf7dc691`.
+The state is `EXTERNALLY MEASURED / PROVIDER_READ_ONLY_RESTART_AND_CONFIG_ROLLBACK_MEASURED`
+with `admission=NOT_ADMITTED`; full provider deployment rollback, open-order
+recovery, Bronze rebuild, archive restore, and later gates remain pending.
+
+## Current active timed roots
+
+The selected-model stability root
+`artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`
+remains untouched under PID `70598`. Its config started at
+`2026-08-10T18:07:25.593600Z`; the latest read-only status had 144 passing
+cycles at `2026-08-11T07:04:06.519724Z`, and no terminal `summary.json` exists.
+It remains `PENDING_STABILITY`.
+
+The independent Phase-3 root
+`artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+remains untouched under PID `87421` toward
+`2026-08-11T08:24:40.271709Z`; its read-only status had 570 samples, 2,126
+valid events, 41 successful connections, 529 disconnects, 177 snapshot
+recovery attempts, and `phase3_admission_opened=false` at
+`2026-08-11T07:05:35.082784Z`. Its resource sidecar remains PID `88019`.
+The root is still running and must be judged only from its own terminal
+evidence.
+
 ## Current continuation update — Phase-3 source identity integrity
 
 Candidate commit `4abf2ce` hardens `SourceHealthLedger`: a source/symbol stream
@@ -337,6 +380,7 @@ the 24-hour gate remains `PENDING_STABILITY`.
 |---|---|---|---|
 | 0 | Harness, ports, policy-enforced model gateway, exact model acquisition, isolated/attested local runtimes, real public-data local bake-off, role roster, append-only stability runner, durable Phase-0 gate records, and scoped two-provider rclone-crypt qualification runner | `tests/phase0`, gateway/port tests, immutable local bake-off reports, component drill, isolated DuckLake comparison, pinned external Hermes review, exact-route stability runner, `tests/expansion/test_rclone.py`, `tests/config/test_secrets.py`, `tests/phase0/test_rclone_qualification.py` | Latest local component probe passed in `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` with SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7`; DuckLake was measured and rejected; the upstream Hermes runtime was reviewed in a disposable namespace with a synthetic route; DigitalOcean replacement roots `20260810T034500Z` and corrected `20260810T053600Z` are quarantined after immutable external route failures (HTTP 429/shared-pool capacity and deadline exhaustion); selected local roles still require 24-hour stability; the latest real archive root measured independent A/B crypt restores and equal hashes, but Provider B raw recursive enumeration failed, so archive admission remains closed |
 | 1 | Contracts, PIT lake, DuckDB/Polars query, ledgers, typed V3-Core YAML admission, config rollback, resources, traces, FTS5-first memory with optional deterministic hashing recall, durable flows/incidents, and explicit service ownership/mode boundaries | contracts/data/config/recovery/resource/orchestration/memory/service tests plus the local rebuild drill | Local rollback/Bronze rebuild evidence passed in `artifacts/phase1/local-rebuild/20260808T024709.706561Z/phase1-local-rebuild.json`; provider-specific paper deployment rollback remains external |
+| 1 provider recovery | Scoped Binance Spot Testnet read-only restart/configuration rollback qualification | `scripts/qualify_binance_spot_testnet_recovery.py`, `tests/recovery/test_binance_readonly_recovery.py`, `tests/recovery/test_config_bundles.py`, `tests/integrations/test_binance_spot.py` | Real report `artifacts/phase1/binance-spot-testnet/recovery/20260811T064829.840702Z/binance-spot-testnet-recovery.json` (SHA-256 `acf025287f717277552e3744b059dab3b2c1e35bda16f7c3db8d9eafcbe62e83`) passed two authenticated read projections, immutable bundle rollback/reopen, and fresh subprocess hydration with 18 read-only calls and zero writes | EXTERNALLY MEASURED / PARTIAL / NOT ADMITTED; full paper deployment rollback, open-order/in-flight recovery, Bronze rebuild, and archive restore remain pending |
 | 2 | Paper event spool/replay, typed native market events, account and margin/borrow/FX/corporate-action accounting, durable-first account/OMS retries, signed target constraints, combined-state-hash RiskKernel/OMS binding, paper/native testnet boundary with read-only account projection, venue-projection reconciliation, TCA, cadence-gated runtime admission, Coinbase Exchange Sandbox-specific CB-ACCESS signer/schema transport, and Binance Spot Testnet-specific HMAC/schema transport | `tests/execution`, `tests/integrations`, `tests/runtime`, `tests/integrations/test_coinbase_exchange.py`, `tests/integrations/test_binance_spot.py`, `tests/integrations/test_binance_spot_lifecycle.py`, `tests/integrations/test_paper_venue_bakeoff.py`, `scripts/qualify_paper_venue_candidates.py`, `scripts/qualify_binance_spot_testnet_lifecycle.py` | Coinbase real smoke remains partial: `ETH-USD` was absent and fills returned sanitized HTTP 401. Binance authenticated read-only evidence passed all required operations and one supervised fake-funds `LIMIT_MAKER` lifecycle passed through RiskKernel → OMS → provider transport → reconciliation. The real path observed no fill, so fill ingestion is fixture-tested and the measured lifecycle is qualified for the no-fill/cancel path; Phase 0 stability, longer source operation, and later paper/soak gates remain open. Nautilus remains Phase 0 governed despite being installed and locally tested |
 | 3 | Native/Deribit/RSS/GDELT/official-vintage parsers, raw-first REST/WSS replay, typed trade/book/bar/funding/open-interest normalization, origin/revision/availability, quality monitor, and bounded real-source qualification runners with freshness measurement | `tests/data`, `tests/phase3/test_source_qualification.py`, `tests/phase3/test_coinbase_wss_qualification.py`, `tests/phase3/test_coinbase_level2_qualification.py`, `scripts/qualify_phase3_sources.py`, `scripts/qualify_phase3_coinbase_wss.py`, `scripts/qualify_phase3_coinbase_level2.py` | Real source evidence is partial: REST replay passed for Coinbase BTC-USD ticker, Deribit BTC index, and SEC official RSS; Coinbase ETH-USD returned 404 and GDELT returned 429. Two real Coinbase Sandbox WSS connections replayed 29 ticker events and 23 heartbeats with freshness passing, but both observed provider sequence gaps. The public `level2_batch` path then delivered one BTC-USD snapshot, 79 updates, and 12 heartbeats; book-state replay matched, validation passed, and freshness passed. The completed durable root below adds two-hour source-health, recovery, disagreement, failover, and resource evidence, but final Binance staleness, Coinbase quarantine, Deribit degradation, replay failures, and severe disagreement keep Phase-3 admission closed |
 | 3 current evidence addendum | Binance Spot Testnet raw depth snapshot/update qualifier, WSS layer diagnosis, and reconnect observations | `tests/phase3/test_binance_depth_qualification.py`, `tests/phase3/test_binance_wss_diagnostic.py`, `scripts/qualify_phase3_binance_spot_testnet_depth.py`, `scripts/qualify_phase3_binance_wss_diagnostic.py` | The qualifier now has fixture-tested bounded provider/local clock-offset measurement and retains raw future-event counts. The latest root `artifacts/phase3/binance-spot-testnet-depth/20260810T211531.293435Z/phase3-binance-spot-testnet-depth.json` (SHA-256 `f75f4e25ba48d923df4cba4e29d7ccf4b45e7382a05b5f63bb3a500b8b59fcde`) captured ETH events with live/replay equality, while BTC and other streams failed closed on WSS/runtime or adjusted-future freshness. The layer diagnostic `artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json` (SHA-256 `8690b776e6e4237de9f4fe5ff775eb4da1cb7e16efbd11e2c3bd1fd5f2789e1b`) separately proved DNS/TCP/TLS and classified the remaining issue as intermittent connection timeout; it is not labeled provider-unavailable. Phase-3 remains pending longer freshness, recovery, and independent source disagreement |
