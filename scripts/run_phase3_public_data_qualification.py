@@ -65,6 +65,11 @@ DEFAULT_WINDOW_SECONDS = 5
 MAX_DURATION_HOURS = 72.0
 MAX_CYCLE_SECONDS = 3600.0
 MAX_WINDOW_SECONDS = 30
+# A recovery qualification needs provider-truth continuity, not a full-depth
+# market snapshot. Keep the raw spool bounded on laptop-class disks while
+# preserving the provider's lastUpdateId and enough top-of-book levels for
+# deterministic reconstruction.
+BINANCE_DEPTH_SNAPSHOT_LIMIT = 100
 EXECUTION_HOSTS = frozenset(
     {"testnet.binance.vision", "stream.testnet.binance.vision", "ws-api.testnet.binance.vision"}
 )
@@ -97,6 +102,14 @@ def _code_sha256() -> str:
         Path(__file__).resolve().parents[1] / "src/advisorai/collectors/public_market_data.py",
     )
     return _digest(b"".join(path.read_bytes() for path in paths))
+
+
+def _binance_depth_snapshot_url(source: PublicMarketDataSource, symbol: str) -> str:
+    """Build the bounded public recovery snapshot request."""
+
+    return (
+        f"{source.rest_base_url}/api/v3/depth?limit={BINANCE_DEPTH_SNAPSHOT_LIMIT}&symbol={symbol}"
+    )
 
 
 def _write_immutable(path: Path, payload: object) -> None:
@@ -284,7 +297,7 @@ async def _collect_binance_public_connection(
         response = await asyncio.to_thread(
             client.request,
             "GET",
-            f"{source.rest_base_url}/api/v3/depth?limit=1000&symbol={symbol}",
+            _binance_depth_snapshot_url(source, symbol),
             acceptable_statuses=frozenset({200}),
             max_retries=1,
         )
@@ -354,6 +367,7 @@ async def _collect_binance_public_connection(
         "snapshot_last_update_id": snapshot_payload.get("lastUpdateId")
         if snapshot_payload
         else None,
+        "snapshot_depth_limit": BINANCE_DEPTH_SNAPSHOT_LIMIT,
         "expected_symbols": [symbol],
         "observed_symbols": [symbol] if live_records else [],
         "status": "pass" if snapshot_payload is not None and live_records else "failed",
@@ -1055,6 +1069,7 @@ def run_qualification(
             "duration_hours": duration_hours,
             "cycle_seconds": cycle_seconds,
             "window_seconds": window_seconds,
+            "binance_depth_snapshot_limit": BINANCE_DEPTH_SNAPSHOT_LIMIT,
             "max_cycles": max_cycles,
             "code_sha256": code_sha256,
             "source_health_policy": SourceHealthPolicy().model_dump(mode="json"),
