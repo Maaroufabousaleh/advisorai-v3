@@ -6,26 +6,37 @@ or 60-day operational gate.
 
 ## Current continuation update — durable Phase-3 source qualification
 
-The Phase-3 source-health package is implemented on branch
-`phase3-durable-source-health` at `6efa78d991947e125ae27d6d25ac9ab0812b04db`.
-It adds the restartable append-only runner
-[`scripts/run_phase3_public_data_qualification.py`](../../scripts/run_phase3_public_data_qualification.py),
-typed deterministic source-health and failover controls under
-[`src/advisorai/collectors`](../../src/advisorai/collectors), snapshot/sequence
-recovery, versioned source disagreement thresholds, and a sanitized read-only
-dashboard/API projection. The package is fixture-tested; it does not add order
-authority or credentials to public connectors.
+PRs #89–#93 are merged on clean main `2d56913`. They add the restartable
+append-only runner, deterministic source-health/failover/recovery controls, a
+read-only dashboard projection, bounded Binance recovery snapshots, concurrent
+BTC/ETH collection, and accurate disconnect/reconnect accounting. Public
+connectors load no credentials and have no order/write method.
 
-A real two-hour qualification is currently running at
+The original two-hour root
 `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`
-under PID `62977`. Its config records code SHA-256
-`030bca24e1844a04277e5c33afe028e9eddf0638279fefdf18f4523d129b3558`,
-`credentials_loaded=false`, and `order_writes_attempted=false`; the start is
-`2026-08-10T23:13:21.437160Z` and the target end is
-`2026-08-11T01:13:21.437160Z`. Heartbeat and append-only logs are advancing.
-This is `IMPLEMENTED / TESTED / EXTERNALLY MEASURED / RUNNING`, not Phase-3
-admission. Completion must be independently validated, and any stale,
-disconnected, quarantined, or disagreement state remains fail-closed.
+completed at `2026-08-11T01:13:21.437160Z` with summary SHA-256
+`96aac309e23df24e090b97a99127b33d4dbb90e9b593cf76d909ef43e65f0283`.
+Independent validation reloaded all five append-only logs, verified 336 samples
+across 56 cycles, and passed the deterministic gap/recovery drills. Because
+that root used the pre-fix sequential symbol collection and metrics, its
+observed Binance BTC/ETH health remained fail-closed and its result is
+`evidence_for_review_only`; it did not open Phase-3 admission.
+
+A fresh corrected two-hour qualification is now active under PID `13339` at
+`artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`.
+Its immutable config records code SHA-256
+`c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`, bounded
+Binance snapshot limit `100`, `credentials_loaded=false`, and
+`order_writes_attempted=false`; it started at `2026-08-11T01:14:37.205719Z`
+and targets `2026-08-11T03:14:37.205719Z`. Its first concurrent Binance sample
+records zero disconnects but remains fail-closed on measured stale age and
+degraded clock confidence. This is `IMPLEMENTED / TESTED / EXTERNALLY MEASURED
+/ RUNNING`, not Phase-3 admission.
+
+PID `70598` remains the untouched selected-model stability process. Its latest
+read-only sample was sequence 79 at `2026-08-11T01:15:16.975316Z`, record
+SHA-256 `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`;
+the 24-hour gate remains `PENDING_STABILITY`.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|
@@ -254,10 +265,10 @@ Latest local verification (2026-08-10, after the Phase-3 public-source changes) 
 created with the repository's declared optional extras:
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python scripts/verify_acceptance.py`
 passed all eleven phase suites, with suite results of
-Phase 0/1/2/3/4/5/6/7/8/9/10 = 128/152/126/63/19/34/10/7/27/18/5. Suite totals
+Phase 0/1/2/3/4/5/6/7/8/9/10 = 128/152/126/65/19/34/10/7/27/18/5. Suite totals
 overlap a few shared contract tests. A single-process
 `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 <verify-env>/bin/python -m pytest -q`
-passes all 598 tests with every declared optional extra active in the isolated
+passes all 600 tests with every declared optional extra active in the isolated
 locked verification environment. The acceptance runner stops at the first failed
 phase, so later suites are never counted as evidence after an earlier gate
 failure. The Phase 0 inventory was regenerated at
@@ -294,9 +305,9 @@ failure; its immutable interruption record SHA-256 is
 root is resumed or concatenated. A fresh immutable runtime-admission root was
 attested, the one-cycle cwd-fix smoke passed with all candidates and status
 `short_smoke_complete`, and replacement r3 is active under PID `70598` from
-`2026-08-10T18:07:25.593600Z`; 37 cycles had passed at
-`2026-08-10T21:20:29.661771Z`, the latest record hash was
-`39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`, and no
+`2026-08-10T18:07:25.593600Z`; 79 cycles had passed at
+`2026-08-11T01:15:16.975316Z`, the latest record hash was
+`1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`, and no
 24-hour result exists yet.
 
 The Phase-1 local operational report has SHA-256

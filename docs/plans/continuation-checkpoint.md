@@ -1,26 +1,34 @@
 # AdvisorAI V3 continuation checkpoint
 
-Checkpoint refreshed 2026-08-10 from clean `main`
-`4bf26b3f7ef447fc8a676f70851fb07a03de2b30` (PRs #86–#88 merged). The current
-Phase-3 implementation branch is `phase3-durable-source-health` at
-`6efa78d991947e125ae27d6d25ac9ab0812b04db`; it is pending merge and its
-active external evidence is listed below.
+Checkpoint refreshed 2026-08-11 from clean `main`
+`2d5691315b0dcaca79291dfa621221f430484b7c` (PRs #86–#93 merged). The Phase-3
+durable source-health implementation, bounded snapshot fix, concurrent symbol
+collection, accurate connection metrics, and read-only dashboard projection
+are merged. The active corrected external evidence is listed below.
 
 ## Current continuation update — durable Phase-3 qualification
 
 - PID `70598` remains untouched under
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
-  Its latest read-only status is still running with passing cycles; no root was
-  restarted, concatenated, or modified.
-- PID `62977` is a separate durable, read-only Phase-3 qualification process at
-  `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`.
-  It started at `2026-08-10T23:13:21.437160Z`, targets
-  `2026-08-11T01:13:21.437160Z`, and uses code SHA-256
-  `030bca24e1844a04277e5c33afe028e9eddf0638279fefdf18f4523d129b3558`. Its
-  immutable config records `credentials_loaded=false` and
-  `order_writes_attempted=false`. Heartbeat, status, raw spool, observation,
-  selection, disagreement, and health-transition logs are append-only; the
-  result is not yet an admission record.
+  Its latest read-only sample is sequence 79 at `2026-08-11T01:15:16.975316Z`,
+  record SHA-256
+  `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`; no
+  root was restarted, concatenated, or modified.
+- The prior PID `62977` Phase-3 root completed its fixed two-hour target at
+  `2026-08-11T01:13:21.437160Z` with summary SHA-256
+  `96aac309e23df24e090b97a99127b33d4dbb90e9b593cf76d909ef43e65f0283`.
+  Independent validation reloaded its append-only ledgers and verified 336
+  samples across 56 cycles; its result remains evidence-for-review-only.
+- PID `13339` is the fresh durable, read-only Phase-3 qualification process at
+  `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`.
+  It started at `2026-08-11T01:14:37.205719Z`, targets
+  `2026-08-11T03:14:37.205719Z`, and uses code SHA-256
+  `c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`. Its
+  immutable config records snapshot limit 100,
+  `credentials_loaded=false`, and `order_writes_attempted=false`.
+  Heartbeat, status, raw spool, observation, selection, disagreement, and
+  health-transition logs are append-only; the result is not an admission
+  record.
 - The implementation supplies deterministic HEALTHY/DEGRADED/STALE/
   DISCONNECTED/RECOVERING/QUARANTINED transitions, provider-truth snapshot and
   sequence recovery, severe-disagreement abstention, and explicit failover or
@@ -35,9 +43,9 @@ active external evidence is listed below.
 
 - PID `70598` remains untouched and active under
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
-  Its latest read-only heartbeat at `2026-08-10T21:20:29.661771Z` recorded 37
+  Its latest read-only sample at `2026-08-11T01:15:16.975316Z` recorded 79
   passing cycles with last record SHA-256
-  `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`.
+  `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`.
   The 24-hour gate remains pending; no earlier root was concatenated.
 - The layered Binance Testnet WSS diagnostic at
   `artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json`
@@ -104,8 +112,8 @@ The following supersedes the earlier pending-operator Binance bullets below.
 - Archive/rclone work is externally deferred and was not touched. The next
   legal independent work is Phase-3 source/reconnect evidence and truthful
   status updates while Phase-0 stability continues.
-- The latest locked verification passed 598 tests and all eleven acceptance
-  suites with results `128/152/126/63/19/34/10/7/27/18/5`.
+- The latest locked verification passed 600 tests and all eleven acceptance
+  suites with results `128/152/126/65/19/34/10/7/27/18/5`.
 - A fresh bounded Phase-3 REST/raw-first retry made seven public calls at
   `artifacts/phase3/source-qualification/20260810T201653.611706Z/phase3-v3-core-source-qualification.json`,
   SHA-256
@@ -334,7 +342,7 @@ The following supersedes the earlier pending-operator Binance bullets below.
 
 | Process | PID | Evidence root | State |
 |---|---:|---|---|
-| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 37 cycles had passed at `2026-08-10T21:20:29.661771Z`, last record SHA-256 `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`; inspect heartbeat and preserve the process |
+| Selected local model stability | 70598 | `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3` | `PENDING_STABILITY`; r3 started `2026-08-10T18:07:25.593600Z`, 79 cycles had passed at `2026-08-11T01:15:16.975316Z`, last record SHA-256 `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`; inspect heartbeat and preserve the process |
 | DigitalOcean exact remote route stability | — | `artifacts/phase0/remote-route-stability/20260810T053600Z` (quarantined) | `QUARANTINED`; first corrected probe ended in deadline exhaustion; retry is provider-availability/time-dependent |
 
 The current selected-model process is detached with its exact command recorded
@@ -357,9 +365,9 @@ must not be concatenated with the replacement root.
   unavailable-cwd `FileNotFoundError`; both are preserved and cannot be resumed
   or concatenated. The cwd-fix smoke passed, and replacement root
   `phase0-selected-24h-terminal-sample-20260810-r3` is active under PID
-  `70598` with a new immutable runtime-admission root; 37 cycles had passed at
-  `2026-08-10T21:20:29.661771Z`, and the latest record hash was
-  `39d63d7bb5c42b634ecb3e3e9fbe4de0b39b5046009062bfe766ecbd89368f66`, and the
+  `70598` with a new immutable runtime-admission root; 79 cycles had passed at
+  `2026-08-11T01:15:16.975316Z`, and the latest record hash was
+  `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`, and the
   24-hour result does not yet exist. All
   current DigitalOcean duration roots are quarantined: the 20260809T173237.710604Z
   root has three upstream shared-pool HTTP 429 abstentions; the corrected

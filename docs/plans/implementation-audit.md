@@ -34,13 +34,21 @@ and the typed collectors under
 [`src/advisorai/collectors`](../../src/advisorai/collectors), with focused
 coverage in [`tests/phase3/test_source_health_controls.py`](../../tests/phase3/test_source_health_controls.py).
 
-The real qualification root
-`artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2` is
-active under PID `62977`. Its config records code SHA-256
-`030bca24e1844a04277e5c33afe028e9eddf0638279fefdf18f4523d129b3558`, no
-credentials, and no order writes. This is implementation plus active external
-measurement; the result, append-only integrity, source-health outcomes, and
-Phase-3 admission remain pending. No execution authority was added.
+The prior real qualification root
+`artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`
+completed 336 samples across 56 cycles. Its summary SHA-256 is
+`96aac309e23df24e090b97a99127b33d4dbb90e9b593cf76d909ef43e65f0283`; all five
+append-only logs reloaded successfully, but the root used the pre-fix
+sequential-symbol and connection-accounting implementation, so its result is
+evidence-for-review-only and Phase-3 admission remains closed.
+
+A fresh corrected root
+`artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3` is
+active under PID `13339`. Its config records code SHA-256
+`c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`, bounded
+Binance snapshot limit `100`, no credentials, and no order writes. This is
+implementation plus active external measurement; its result and Phase-3
+admission remain pending. No execution authority was added.
 
 ## Latest Phase-3 Binance availability evidence
 
@@ -69,8 +77,8 @@ This remains provider/runtime availability evidence, not a Phase-3 pass.
 
 The pre-qualification local run on 2026-08-10 passed all 570 tests in one process with every
 declared optional extra active in an isolated locked verification environment, and
-all eleven isolated phase suites. The post-qualification rerun passed 598 tests
-and phase suites `128/152/126/63/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
+all eleven isolated phase suites. The latest merged-main rerun passed 600 tests
+and phase suites `128/152/126/65/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
 format checking passes with all 277 Python files formatted. The Phase-1 local
