@@ -4,6 +4,32 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — Phase-4 utility preparation boundary
+
+The Phase-4 preparation work in PR #114 is based on clean-main anchor
+`dea0d4e832143d9ae1ab6515a255e25ee1377b3f`. It adds the strict offline
+[`src/advisorai/phase4/paper_utility.py`](../../src/advisorai/phase4/paper_utility.py)
+contract and
+[`scripts/prepare_phase4_utility_evaluation.py`](../../scripts/prepare_phase4_utility_evaluation.py).
+The boundary requires an immutable Phase-3 gate hash and `phase3_admitted=true`
+observations before measuring utility; it records directional accuracy,
+interval/confidence calibration, regime slices, turnover, spread/slippage,
+fee-schedule cost, net utility, and incremental utility against the current
+mandatory baseline set (`naive`, `drift`, `seasonal-7`, `linear`, `lightgbm`).
+
+The preparation manifest is
+`artifacts/phase4/utility-evaluation-preparation/20260811T051344.190783212Z-offline-contract-v1/phase4-utility-preparation.json`
+with SHA-256
+`620f2ce32bb19aed8ce64ed0c12cddd4e0684db9f5b78add11e5b8ce6445456b`.
+Its state is `ready_for_admitted_input`; `phase4_admission_opened=false`.
+It made no network calls, loaded no credentials or model weights, created no
+gate record, and grants no model, dashboard, or research order authority.
+Real Phase-4 utility remains `PENDING_STABILITY / PENDING_EXTERNAL_EVIDENCE`
+until Phase 0 and Phase 3 are genuinely admitted and real paper observations
+exist. Locked verification for this work package passed full pytest `622
+passed` with 28 warnings, the Phase-4/model suite `24 passed`, and the focused
+utility tests `5 passed`.
+
 ## Current continuation update — terminal Phase-3 sample boundary
 
 Clean `main` is now

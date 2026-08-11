@@ -5,6 +5,27 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current Phase-4 utility preparation boundary
+
+PR #114 adds
+[`src/advisorai/phase4/paper_utility.py`](../../src/advisorai/phase4/paper_utility.py)
+and focused coverage in
+[`tests/models/test_paper_utility.py`](../../tests/models/test_paper_utility.py).
+The evaluator requires source observations to carry `phase3_admitted=true` and
+requires an immutable Phase-3 gate SHA-256 before it will measure anything. It
+keeps the current model candidates and mandatory baseline set explicit, applies
+the versioned conservative Binance Spot Testnet fee schedule together with
+measured spread/slippage, and reports calibration, regime, turnover, cost, net
+utility, and incremental utility without changing the roster or creating a gate
+record. The preparation command writes only a closed input manifest.
+
+The manifest at
+`artifacts/phase4/utility-evaluation-preparation/20260811T051344.190783212Z-offline-contract-v1/phase4-utility-preparation.json`
+has SHA-256
+`620f2ce32bb19aed8ce64ed0c12cddd4e0684db9f5b78add11e5b8ce6445456b` and state
+`ready_for_admitted_input`. This is not real Phase-4 utility evidence and does
+not promote any model.
+
 ## Current Phase-3 evidence anchor
 
 Clean main is `647cb3a65b19ed088fda9ff1e86d6a25ae6139aa` after PR #112. The
