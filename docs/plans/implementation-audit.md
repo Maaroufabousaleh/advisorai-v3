@@ -5,6 +5,29 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current Phase-3 evidence anchor
+
+Clean main is `53e4437743b3bc7042267734d118f970f9792d14` after PR #103. The
+completed durable root
+`artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
+reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles
+and 378 samples. Its summary SHA-256 is
+`eb33cb5939feb5126bef3eff210c3710a95d6fbf3d85b3433bc2ad024a191ed7` and its
+status SHA-256 is
+`df8a7aa57aa95205636ce0e800882f6ccca0647b386a29488c83b7bba97ed5da`.
+The offline validator report
+`artifacts/phase3/public-market-data-validation/20260811T011500Z-two-hour-r3-v2/phase3-qualification-validation.json`
+has SHA-256
+`efa926a1f5264caf5fb5bdcfd8ca268d77f6d98aeb2d5504cbe5a90484a3b7ca` and
+returned `PASS_FOR_REVIEW` with `phase3_admission=false` and no validator
+issues. All 126 source selections failed closed; three replay failures, 22
+severe disagreements, final Binance stale states, Coinbase quarantine, and
+Deribit degradation remain part of the evidence. The corrected v2 resource
+sidecar completed with no resource errors; its summary SHA-256 is
+`42203ff04e875b3e1bc13a0c35dae9daa9a72e1c8be3e85892d1ccb3eeed7bbd`.
+PID `13339` and the sidecar are no longer running. This records measured
+operational behavior without promoting Phase 3.
+
 | Phase | Local implementation boundary | Automated evidence | Remaining admission evidence |
 |---|---|---|---|
 | 0 | Typed gateway/archive/event ports; trading-authority denylist; policy-enforced three-tier gateway; exact model acquisition; isolated runtime attestation; real frozen-data local bake-off; strict role roster; append-only stability records; durable Phase-0 gate and redacted gateway-call records; local component evidence drill; exact-route stability runner; scoped two-provider rclone-crypt qualification boundary | [`tests/phase0`](../../tests/phase0), [`tests/contracts`](../../tests/contracts), [`scripts/run_phase0_component_bakeoff.py`](../../scripts/run_phase0_component_bakeoff.py), [`tests/phase0/test_remote_stability.py`](../../tests/phase0/test_remote_stability.py), [`tests/expansion/test_rclone.py`](../../tests/expansion/test_rclone.py), [`tests/phase0/test_rclone_qualification.py`](../../tests/phase0/test_rclone_qualification.py), [`scripts/qualify_rclone_archive.py`](../../scripts/qualify_rclone_archive.py) | 24-hour selected-model stability, a future exact-route stability root, and complete two-provider raw-layer archive evidence remain; the latest archive root measured independent A/B crypt restores and equal SHA-256 values, but Provider B raw recursive listing returned a sanitized provider command failure; the prior DigitalOcean root recorded three upstream shared-pool HTTP 429 gateway abstentions and is quarantined at `artifacts/phase0/remote-route-stability/20260809T173237.710604Z/incident.json` (SHA-256 `f58eee4632a644655d6f9edd563091740799beec40d3f1048394d6d5541410ea`); root `20260810T034500Z` was quarantined after another HTTP 429 with incident SHA `805d763d69841515f7beb676ec2a0dea2e2043106dbb4dbc43b292bff4350e9f`; corrected root `20260810T053600Z` stopped after a deadline-exhausted first probe with incident SHA `5b6d5ffe9133811a664f24151b95fcd850f130cff718bc6ed1eae9289178cff1`; Novita exact-route trial was preserved as a failed/quarantined 429 incident; DuckLake was measured and rejected at `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`; pinned upstream Hermes runtime review is at `artifacts/phase0/external-hermes-review/20260809T162031Z/external-hermes-review.json`; latest local report `artifacts/phase0/component-bakeoff/20260810T000406.852454Z/phase0-component-bakeoff.json` has SHA-256 `6914b9e1ba508777a3c3edd47433c5a340be06f73857ae600b84c68510fdf4b7` and passed without opening admission |
@@ -13,6 +36,7 @@ human gate into a unit-test claim.
 | 3 | Native/CCXT/Deribit/LSE-context parsers; raw-first REST/WSS replay; typed native market events with provider timestamp normalization; RSS/GDELT and official source parsers; untrusted-content stripping; PIT availability/revision/origin metadata; quality findings and cutoff dashboard; bounded real-source qualification runners with WSS freshness measurement and level-2 book recovery boundary | [`tests/data/test_collectors.py`](../../tests/data/test_collectors.py), [`tests/data/test_market_events.py`](../../tests/data/test_market_events.py), [`tests/data/test_official.py`](../../tests/data/test_official.py), [`tests/data/test_acquisition.py`](../../tests/data/test_acquisition.py), [`tests/phase3/test_source_qualification.py`](../../tests/phase3/test_source_qualification.py), [`tests/phase3/test_coinbase_wss_qualification.py`](../../tests/phase3/test_coinbase_wss_qualification.py), [`tests/phase3/test_coinbase_level2_qualification.py`](../../tests/phase3/test_coinbase_level2_qualification.py), [`scripts/qualify_phase3_sources.py`](../../scripts/qualify_phase3_sources.py), [`scripts/qualify_phase3_coinbase_wss.py`](../../scripts/qualify_phase3_coinbase_wss.py), [`scripts/qualify_phase3_coinbase_level2.py`](../../scripts/qualify_phase3_coinbase_level2.py) | REST evidence remains partial at `artifacts/phase3/source-qualification/20260810T044558.818461Z/phase3-v3-core-source-qualification.json` (SHA-256 `d435e99b59d815700ccfc5d75e309632ecc91fa1aea3cd3b6c7157a02df272bf`): the bounded retry still records BTC-USD native ticker, Deribit index, and SEC RSS raw replay passes, Coinbase ETH-USD HTTP 404, and GDELT HTTP 429. Ticker WSS evidence at `artifacts/phase3/coinbase-wss-qualification/20260810T044142.351959Z/phase3-coinbase-wss-qualification.json` (SHA-256 `a41fa2367a7f940e8197d5f8e0188765f9c522086091f93df988e0b2abbde702`) completed two real connections with deterministic replay and freshness passing, but observed provider sequence gaps. Level-2 batch evidence at `artifacts/phase3/coinbase-level2-qualification/20260810T052805.696329Z/phase3-coinbase-level2-qualification.json` has SHA-256 `dc620a8fa41458fa4f89396e33687b13750461a3cd643be1b18d0588092e23de` and passed bounded snapshot/update validation and replay. Continuous freshness soak, recovery, and source-disagreement evidence remain external; no Phase-3 admission is claimed |
 | 3 current evidence addendum | Binance Spot Testnet depth snapshot/update reducer and raw replay boundary | [`tests/phase3/test_binance_depth_qualification.py`](../../tests/phase3/test_binance_depth_qualification.py), [`scripts/qualify_phase3_binance_spot_testnet_depth.py`](../../scripts/qualify_phase3_binance_spot_testnet_depth.py) | The qualifier now includes fixture-tested bounded provider/local clock-offset measurement and raw future-event retention. The latest root `artifacts/phase3/binance-spot-testnet-depth/20260810T211531.293435Z/phase3-binance-spot-testnet-depth.json` has SHA-256 `f75f4e25ba48d923df4cba4e29d7ccf4b45e7382a05b5f63bb3a500b8b59fcde`; an ETH stream replayed equivalently, while BTC and other streams failed closed on WSS/runtime or adjusted-future freshness. The diagnostic root `artifacts/phase3/binance-wss-diagnostic/20260810T203747.511668Z/phase3-binance-wss-diagnostic.json` has SHA-256 `8690b776e6e4237de9f4fe5ff775eb4da1cb7e16efbd11e2c3bd1fd5f2789e1b` and independently proved DNS/TCP/TLS before classifying intermittent connection timeout. Longer freshness, recovery, source disagreement, and Phase-3 admission remain pending |
 | 3 public market-data separation | Credential-free public source cards and raw-first source-selection runner | [`src/advisorai/collectors/public_market_data.py`](../../src/advisorai/collectors/public_market_data.py), [`tests/data/test_public_market_data.py`](../../tests/data/test_public_market_data.py), [`scripts/qualify_phase3_public_market_data.py`](../../scripts/qualify_phase3_public_market_data.py) | v2 real public Binance REST/WSS product, filter, book, trade, server-time, four full-window, reconnect, adjusted-freshness, and cross-source observation evidence selected BTCUSDT/ETHUSDT as the current primary candidate in `artifacts/phase3/public-market-data-qualification/20260810T211233.301638Z/phase3-public-market-data-qualification.json` (SHA-256 `14df66c9cb142598c0cca98d653af2896bb08c6faea2dc6c7221ed71d5a51c41`). The source card loads no credentials, has no write method, and is separate from Binance Spot Testnet execution. Candidate evidence remains bounded, not continuous source admission |
+| 3 durable public-data qualification | Restartable append-only runner, typed source-health state machine, provider-truth snapshot recovery, disagreement/failover policy, read-only dashboard projection, offline validator, and separate OS-resource monitor | [`scripts/run_phase3_public_data_qualification.py`](../../scripts/run_phase3_public_data_qualification.py), [`scripts/validate_phase3_public_data_qualification.py`](../../scripts/validate_phase3_public_data_qualification.py), [`scripts/monitor_phase3_process_resources.py`](../../scripts/monitor_phase3_process_resources.py), [`tests/phase3/test_source_health_controls.py`](../../tests/phase3/test_source_health_controls.py), [`tests/phase3/test_phase3_qualification_validation.py`](../../tests/phase3/test_phase3_qualification_validation.py), [`tests/phase3/test_phase3_resource_monitor.py`](../../tests/phase3/test_phase3_resource_monitor.py) | The completed root produced 378 samples/63 cycles, 20,744 valid events, 35 disconnects, 25 reconnects, 252 resubscriptions, three snapshot-recovery attempts, zero gaps/duplicates, one out-of-order event, and three replay failures. The validator report has SHA-256 `efa926a1f5264caf5fb5bdcfd8ca268d77f6d98aeb2d5504cbe5a90484a3b7ca`; the resource sidecar had 32 observations and no resource errors | IMPLEMENTED / TESTED / EXTERNALLY MEASURED / QUALIFIED FOR REVIEW / NOT ADMITTED; Phase-0 stability, remaining Phase-3 admission criteria, and later paper gates remain open |
 | 4 | Mandatory naive/drift/seasonal/linear/LightGBM boundaries; real isolated ModernFinBERT/MiniLM/DeBERTa, TTM-R2/R3, TSPulse, Chronos and Kronos workers; frozen public walk-forward and sentiment evaluation; one-family GPU lease; evidence-bound role roster | [`tests/models`](../../tests/models), [`tests/phase0`](../../tests/phase0) | Selected-role 24-hour stability and later paper net-utility evidence; TabPFN-TS waits on gated terms |
 | 5 | Policy Mission Router; bounded adaptive council waves; typed role results; snapshot/mission-bound runs; ancestry-aware evidence graph; dissent/expiry/cutoff handling; target-only DecisionBundle and RiskKernel hand-off | [`tests/agents`](../../tests/agents), [`tests/api`](../../tests/api) | Real provider route selection and scored multi-factor evidence from live V3-Core data |
 | 6 | Benchmark portfolio comparisons; robust covariance/factors/capacity/margin/stress; purged walk-forward, multiple-testing, sensitivity/regime checks; TCA/P&L attribution; incident/postmortem reconciliation; model challenge evidence | [`tests/institutional`](../../tests/institutional), [`tests/data/test_observability.py`](../../tests/data/test_observability.py) | Production paper-order sample proving exact attribution and unresolved-incident handling |
@@ -43,22 +67,26 @@ sequential-symbol and connection-accounting implementation, so its result is
 evidence-for-review-only and Phase-3 admission remains closed.
 
 A fresh corrected root
-`artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3` is
-active under PID `13339`. Its config records code SHA-256
+`artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
+completed its target at `2026-08-11T03:14:39.940009Z` after 63 cycles and 378
+samples. Its config records code SHA-256
 `c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`, bounded
-Binance snapshot limit `100`, no credentials, and no order writes. This is
-implementation plus active external measurement; its result and Phase-3
-admission remain pending. No execution authority was added.
+Binance snapshot limit `100`, no credentials, and no order writes. The offline
+validator returned `PASS_FOR_REVIEW` with `phase3_admission=false`; the
+validated report SHA-256 is
+`efa926a1f5264caf5fb5bdcfd8ca268d77f6d98aeb2d5504cbe5a90484a3b7ca`. No
+execution authority was added.
 
 The first v1 resource sidecar root is preserved as failed hash evidence. The
-corrected v2 systemd resource sidecar is active under
-`advisorai-phase3-resource-monitor-20260811T025103Z-v2.service`. It records
-sanitized process RSS/CPU/thread/fd/socket counts and qualification-root file
-growth at
-`artifacts/phase3/public-market-data-resource-monitor/20260811T025102Z-pid13339-v2`;
-its config SHA-256 is
-`3202ad6c45f750a9b1c250336a0d7819cdcfa78486a6ee5bd78d645c544d3e08`.
-The sidecar has no credential or execution access and does not open admission.
+corrected v2 systemd sidecar completed at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T025102Z-pid13339-v2`
+with config SHA-256
+`3202ad6c45f750a9b1c250336a0d7819cdcfa78486a6ee5bd78d645c544d3e08`, summary
+SHA-256
+`42203ff04e875b3e1bc13a0c35dae9daa9a72e1c8be3e85892d1ccb3eeed7bbd`, 32
+observations, and no resource errors. It has no credential or execution access
+and did not open admission; the service and target process are no longer
+running.
 
 ## Latest Phase-3 Binance availability evidence
 
@@ -87,11 +115,11 @@ This remains provider/runtime availability evidence, not a Phase-3 pass.
 
 The pre-qualification local run on 2026-08-10 passed all 570 tests in one process with every
 declared optional extra active in an isolated locked verification environment, and
-all eleven isolated phase suites. The latest merged-main rerun passed 601 tests
+all eleven isolated phase suites. The latest merged-main rerun passed 607 tests
 and phase suites `128/152/126/66/19/34/10/7/27/18/5`. The exact phase distribution and static checks are kept in
 [`status.md`](status.md). Phase 0’s 24-hour evidence, Phase 7’s 60-day soak, and
 Phase 10’s human/live approval remain intentionally pending. Repository-wide Ruff
-format checking passes with all 277 Python files formatted. The Phase-1 local
+format checking passes with all 281 Python files formatted. The Phase-1 local
 rollback/Bronze rebuild report is immutable evidence with SHA-256
 `6e8cd86017dacea7b4a0fff8e9ea41901ec4bb7ee02961f5811dcbb7266342b2` and does
 not open any external or human gate. The Phase-0 component evidence report is

@@ -1,14 +1,51 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`af7a31b95d48545ac62a9b7ac54bd59ca42138dd` (PRs #86–#101 merged; PRs #95–#96
-are documentation-only follow-ups to the #94 implementation/evidence anchor).
-The Phase-3
-durable source-health implementation, bounded snapshot fix, concurrent symbol
-collection, accurate connection metrics, and read-only dashboard projection
-are merged. The active corrected external evidence is listed below.
+`53e4437743b3bc7042267734d118f970f9792d14` (PRs #86–#103 merged; PRs #95–#96
+are documentation-only follow-ups to the #94 implementation/evidence anchor;
+PR #103 adds the offline Phase-3 qualification validator).
 
-## Current continuation update — durable Phase-3 qualification
+## Current continuation update — completed Phase-3 qualification
+
+- The corrected durable root
+  `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
+  completed at `2026-08-11T03:14:39.940009Z` after 63 cycles and 378 samples.
+  Its config/status/summary/heartbeat SHA-256 values are respectively
+  `eb09ac0aa008c5a42c7e318178c79421bdf4d471b5649ddf65baa50a59f12398`,
+  `df8a7aa57aa95205636ce0e800882f6ccca0647b386a29488c83b7bba97ed5da`,
+  `eb33cb5939feb5126bef3eff210c3710a95d6fbf3d85b3433bc2ad024a191ed7`, and
+  `5d44ef77d3bf459f75c8141c53dbb45e6275489399d42616a1ad20ddd1fcb66`.
+- Offline validation at
+  `artifacts/phase3/public-market-data-validation/20260811T011500Z-two-hour-r3-v2/phase3-qualification-validation.json`
+  returned `PASS_FOR_REVIEW`, `qualification_state=evidence_for_review_only`,
+  `phase3_admission=false`, and no issues. Its SHA-256 is
+  `efa926a1f5264caf5fb5bdcfd8ca268d77f6d98aeb2d5504cbe5a90484a3b7ca`.
+  Append-only validation covered 378 samples, 126 source selections, 126
+  disagreement records, and 78 health transitions. All selections failed
+  closed with zero silent substitutions; three replay failures, one
+  out-of-order event, and 22 severe disagreement observations remain preserved.
+- The corrected resource sidecar at
+  `artifacts/phase3/public-market-data-resource-monitor/20260811T025102Z-pid13339-v2`
+  reached `deadline_reached` with 32 observations and no resource errors.
+  Its summary SHA-256 is
+  `42203ff04e875b3e1bc13a0c35dae9daa9a72e1c8be3e85892d1ccb3eeed7bbd`.
+  The qualification process and sidecar are no longer running; the first v1
+  sidecar remains preserved as failed evidence.
+- PID `70598` remains untouched and active under
+  `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
+  Its latest read-only record is sequence 103 at
+  `2026-08-11T03:25:18.150192Z`, SHA-256
+  `49bb4f3ea73fce5661ec64bb546cdba08cc21ac07ba74b97834b6a656b494fb0`.
+  The 24-hour gate remains pending; no root was stopped, restarted, modified,
+  concatenated, or backdated.
+- Archive/rclone remains externally deferred and was not touched. Phase 0
+  stability, Phase-3 admission, Phases 4–7, Phase-8 formal admission, Alpha
+  E0–E7, and Phase-10 human approval remain open. The next legal work item is
+  read-only inspection of PID `70598` and the genuine terminal-sample gate.
+
+## Prior continuation update — durable Phase-3 source qualification
+
+### Historical details
 
 - PID `70598` remains untouched under
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
@@ -51,7 +88,7 @@ are merged. The active corrected external evidence is listed below.
   continuous admission, Phases 4–6 real paper evidence, Phase 7, Phase 8 formal
   admission, Phase 9, Alpha E0–E7, and Phase 10 human approval remain open.
 
-## Current continuation update — Phase-3 source spine
+### Historical Phase-3 source-spine details
 
 - PID `70598` remains untouched and active under
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
@@ -124,7 +161,7 @@ The following supersedes the earlier pending-operator Binance bullets below.
 - Archive/rclone work is externally deferred and was not touched. The next
   legal independent work is Phase-3 source/reconnect evidence and truthful
   status updates while Phase-0 stability continues.
-- The latest locked verification passed 601 tests and all eleven acceptance
+- The latest locked verification passed 607 tests and all eleven acceptance
   suites with results `128/152/126/66/19/34/10/7/27/18/5`.
 - A fresh bounded Phase-3 REST/raw-first retry made seven public calls at
   `artifacts/phase3/source-qualification/20260810T201653.611706Z/phase3-v3-core-source-qualification.json`,
