@@ -7,7 +7,7 @@ human gate into a unit-test claim.
 
 ## Current Phase-3 evidence anchor
 
-Clean main is `53e4437743b3bc7042267734d118f970f9792d14` after PR #103. The
+Clean main is `7d68304320107c9f9382a48173193988387707f8` after PR #105. The
 completed durable root
 `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
 reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles
@@ -27,6 +27,12 @@ sidecar completed with no resource errors; its summary SHA-256 is
 `42203ff04e875b3e1bc13a0c35dae9daa9a72e1c8be3e85892d1ccb3eeed7bbd`.
 PID `13339` and the sidecar are no longer running. This records measured
 operational behavior without promoting Phase 3.
+
+The untouched selected-model stability process PID `70598` was observed
+read-only at sequence 107 at `2026-08-11T03:47:10.345140Z`, record SHA-256
+`c3e9e65afe59a78c80687ca19243e28cbf70f227131e4f207c1a05c8bd34b02f`. The
+sample is before the configured 24-hour boundary, so Phase-0 remains
+`PENDING_STABILITY`; no stability root was changed or combined.
 
 An independent one-cycle recheck at
 `artifacts/phase3/public-market-data-durable/20260811T034114Z-one-cycle-recheck`

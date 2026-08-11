@@ -6,8 +6,8 @@ or 60-day operational gate.
 
 ## Current continuation update — completed Phase-3 qualification validation
 
-PRs #89–#103 are merged on clean main
-`53e4437743b3bc7042267734d118f970f9792d14`. PR #103 adds the offline validator
+PRs #86–#105 are merged on clean main
+`7d68304320107c9f9382a48173193988387707f8`. PR #103 adds the offline validator
 for the durable Phase-3 qualification root. The validator report is
 `artifacts/phase3/public-market-data-validation/20260811T011500Z-two-hour-r3-v2/phase3-qualification-validation.json`
 with SHA-256
@@ -49,11 +49,12 @@ the qualification root. PID `13339` and its sidecar are no longer running.
 
 PID `70598` remains the untouched selected-model stability process at
 `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
-Its latest read-only cycle is sequence 103 at `2026-08-11T03:25:18.150192Z`
+At a read-only inspection it had sequence 107 at `2026-08-11T03:47:10.345140Z`
 with record SHA-256
-`49bb4f3ea73fce5661ec64bb546cdba08cc21ac07ba74b97834b6a656b494fb0`; the
-24-hour gate remains `PENDING_STABILITY`. It has not been stopped, restarted,
-modified, or concatenated with another root.
+`c3e9e65afe59a78c80687ca19243e28cbf70f227131e4f207c1a05c8bd34b02f`; the
+24-hour gate remains `PENDING_STABILITY`, and this is not the terminal sample.
+It has not been stopped, restarted, modified, or concatenated with another
+root.
 
 Archive/rclone remains externally deferred and was not touched. No Phase-4–7
 admission is opened from this evidence; the next legal gate is the genuine
