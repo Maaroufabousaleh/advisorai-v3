@@ -4,8 +4,9 @@
 
 - The current executable main anchor is
   `27f4783171c03cf2cc606231689f7a4d22b7ca9b` after merged PR #177; this
-  checkpoint is carried by docs-only main
-  `0fe6865fc2f2ebd9fad2cf6063ba72fb6fba7ec6`.
+  checkpoint was first carried by docs-only main
+  `0fe6865fc2f2ebd9fad2cf6063ba72fb6fba7ec6` and is now carried by
+  `743c03227badeeedfb523ee3f623ca5ca452c3ef`.
 - The bounded source qualifier now distinguishes provider product absence,
   provider availability/rate limiting, stale/clock-uncertain data, and
   replay/data-integrity failures. Failed source paths remain explicitly

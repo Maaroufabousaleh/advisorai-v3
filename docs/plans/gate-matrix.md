@@ -3,8 +3,9 @@
 ## Current source-scope checkpoint — 2026-08-11T23:33:32Z
 
 The current executable main anchor is
-`27f4783171c03cf2cc606231689f7a4d22b7ca9b` after PR #177; this checkpoint is
-carried by docs-only main `0fe6865fc2f2ebd9fad2cf6063ba72fb6fba7ec6`.
+`27f4783171c03cf2cc606231689f7a4d22b7ca9b` after PR #177; this checkpoint was
+first carried by docs-only main `0fe6865fc2f2ebd9fad2cf6063ba72fb6fba7ec6`
+and is now carried by `743c03227badeeedfb523ee3f623ca5ca452c3ef`.
 The Phase-3 bounded source qualifier now classifies external HTTP/product
 failures and stale/clock-uncertain provider data separately from replay or
 data-integrity findings; every failed operation remains fail-closed.
