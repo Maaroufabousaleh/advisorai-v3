@@ -8,11 +8,22 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
-`ce17e5d95f4d335850d297979e317d2ea4e37878`, aligned with `origin/main` after
-PR #141. The attachment’s PID `13339` reference is not the live process: the
+`3404a0b649eeff960de0dced95efe5f7c1593bea`, aligned with `origin/main` after
+PR #143. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and
-resource sidecar PID `47392`. This audit preserves the newer live roots and
-does not rewrite historical evidence.
+resource sidecar PID `47392`. This audit preserves the live roots and does not
+rewrite historical evidence.
+
+## Current continuation update — Phase-3 non-negative age metrics
+
+PR #143 merged the Phase-3 reporting fix at
+`3404a0b649eeff960de0dced95efe5f7c1593bea`. The future durable-runner code
+identity is
+`30d9fb147e6ce4a7204aaa0f2867d8c8e8e5200ec2d7a34ff2c3e037100d36eb`; signed
+future-event diagnostics still force degraded/fail-closed clock handling, but
+reported event-age durations are clamped at zero. The active r5 root uses the
+previous code identity and remains untouched; it cannot be credited with the
+fix. Full pytest `640` and Phase-3 `72` passed. No admission state changed.
 
 ## Current continuation update — Phase-3 measurement boundary
 
