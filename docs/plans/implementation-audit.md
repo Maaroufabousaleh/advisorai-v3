@@ -5,14 +5,15 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current recovery checkpoint — 2026-08-11T13:11:37Z
+## Current recovery checkpoint — 2026-08-11T13:30:41Z
 
 The verified clean executable anchor is
-`cfa13123a8320193c192592ae208c014a5bd493a`, after PR #165. The direct
-Phase-3 runner now self-bootstraps repository imports for detached execution;
-the regression test covers a no-`PYTHONPATH` `--help` invocation. Full pytest
+`de9e7c997d3a435aa4b8aa5e73c355cf695d81fe`, after PR #166. The direct
+Phase-3 runner self-bootstraps repository imports for detached execution; the
+regression test covers a no-`PYTHONPATH` `--help` invocation. Full pytest
 passed `657` tests with 28 warnings and all eleven acceptance suites passed
-`133/152/126/106/27/34/10/11/27/18/5`.
+`133/152/126/106/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
+dashboard build, diff hygiene, and tracked-secret/weight checks also passed.
 
 The r5 root completed and passed structural validation, including the
 sanitized dashboard health projection, but remains unadmitted because its
@@ -20,10 +21,11 @@ terminal primary BTC/ETH health and replay/continuity checks failed. Its
 summary, validation, and admission report hashes are recorded in the gate
 matrix. Two failed corrected-r6/supervisor attempts are preserved as incident
 evidence; the current fresh r6 root is active under PID `2943` with sidecar
-PID `4807`, at 84 samples through cycle 14. Binance BTC/ETH remain healthy and
-replay-equivalent; the disconnected Deribit observation is preserved rather
-than hidden. No Phase-0/3 gate was promoted by elapsed time alone, and PID
-`70598` remains untouched.
+PID `4807`, at `144` samples with no terminal sample. The latest cycle records
+Binance BTC/ETH and Deribit BTC/ETH healthy and replay-equivalent, with
+Coinbase explicitly quarantined. Post-run review watcher PID `28569` is
+separate and writes only fresh review roots. No Phase-0/3 gate was promoted by
+elapsed time alone, and PID `70598` remains untouched at cycle `215`.
 
 ## Current repository anchor — 2026-08-11
 
