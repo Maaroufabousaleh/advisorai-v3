@@ -313,3 +313,30 @@ admission; stale, disconnected, recovering, quarantined, or severe-disagreement
 outcomes remain fail-closed. The read-only dashboard/API may project the latest
 sanitized `latest-health.json` through `ADVISORAI_PHASE3_HEALTH_SNAPSHOT`; it
 does not expose transport write methods or execution authority.
+
+### OS resource sidecar
+
+The source runner's source observations are supplemented by the separate
+read-only [`scripts/monitor_phase3_process_resources.py`](../../scripts/monitor_phase3_process_resources.py)
+sidecar. It must write to a separate evidence root and never append to or
+rewrite the qualification root. Before starting it, capture the target PID's
+OS start time and SHA-256 of its complete command line, then pass both values
+explicitly:
+
+```bash
+PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
+  scripts/monitor_phase3_process_resources.py \
+  --pid <qualification-pid> \
+  --expected-start-time <psutil-create-time> \
+  --expected-command-sha256 <command-line-sha256> \
+  --target-root artifacts/phase3/public-market-data-durable/<immutable-run-id> \
+  --evidence-dir artifacts/phase3/public-market-data-resource-monitor/<monitor-run-id> \
+  --until <target-end-timestamp> \
+  --interval-seconds 30
+```
+
+The sidecar records sanitized RSS, VMS, CPU, threads, file descriptors,
+internet connections, target-root file count/bytes, process identity, and a
+hash-chained append-only observation log. It records no command text, response
+bodies, credentials, or private venue state. An identity mismatch fails closed;
+the sidecar is resource evidence only and cannot open Phase-3 admission.
