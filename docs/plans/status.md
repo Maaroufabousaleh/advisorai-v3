@@ -4,6 +4,24 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — terminal Phase-3 sample boundary
+
+Clean `main` is now
+`e089337585da7ff4fffbfdbd8571820dc560cf13e` after PRs #109 and #110. PR #110
+fixes the durable Phase-3 runner boundary exposed by the r3 review: future
+windows collect one explicit cycle starting at or after the configured target,
+mark its records `terminal_sample=true`, and publish
+`terminal_sample_count` in the summary. The active r4 process was launched
+before this fix with its recorded code hash and remains untouched; its evidence
+will be judged as recorded, not retroactively upgraded.
+
+The post-PR #110 verification passed full pytest `616 passed` and all eleven
+acceptance suites with results
+`128/152/126/68/19/34/10/11/27/18/5`. Ruff, repository format, `uv lock
+--check`, compilation, dashboard build, diff hygiene, tracked-secret, and
+tracked-weight checks also passed. PID `70598` remains untouched, and
+archive/rclone remains externally deferred and untouched.
+
 ## Current continuation update — Phase-3 admission review boundary
 
 Current clean-main anchor before this work package was
