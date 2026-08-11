@@ -112,8 +112,8 @@ The following supersedes the earlier pending-operator Binance bullets below.
 - Archive/rclone work is externally deferred and was not touched. The next
   legal independent work is Phase-3 source/reconnect evidence and truthful
   status updates while Phase-0 stability continues.
-- The latest locked verification passed 600 tests and all eleven acceptance
-  suites with results `128/152/126/65/19/34/10/7/27/18/5`.
+- The latest locked verification passed 601 tests and all eleven acceptance
+  suites with results `128/152/126/66/19/34/10/7/27/18/5`.
 - A fresh bounded Phase-3 REST/raw-first retry made seven public calls at
   `artifacts/phase3/source-qualification/20260810T201653.611706Z/phase3-v3-core-source-qualification.json`,
   SHA-256
