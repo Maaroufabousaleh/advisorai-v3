@@ -8,11 +8,29 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
-`ee0b092492ae11b0c04ace22ee64348cd4baf581`, aligned with `origin/main` after
-PR #150. The attachment’s PID `13339` reference is not the live process: the
+`2c2d266d7483ef157d15dd22a361bc1879d933c1`, aligned with `origin/main` after
+PR #152. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and
 resource sidecar PID `47392`. This audit preserves the live roots and does not
 rewrite historical evidence.
+
+## Current continuation update — Phase-4 offline measurement boundary
+
+PR #152 adds the strict offline
+[`scripts/run_phase4_paper_utility.py`](../../scripts/run_phase4_paper_utility.py)
+runner and runbook. It validates a current passed Phase-3 `PhaseGateRecord`
+and typed Phase-4 observations/predictions, records file/canonical hashes, and
+writes immutable measurement-only evidence. It has no credential, weight,
+network, gate-recording, promotion, or order capability. The output remains
+`measured_pending_review` and no Phase-4 admission is claimed because Phase 3
+is still pending.
+
+Read-only inspection at `2026-08-11T10:48:08Z` found model PID `70598` at cycle
+184 and r5 at 414 samples, both still before their genuine terminal boundaries;
+all protected roots and watchers remain untouched. PR #152 passed full pytest
+`649 passed` with 28 warnings, acceptance suites
+`133/152/126/98/27/34/10/11/27/18/5`, repository static/format/compile/lock
+checks, dashboard build, and secret/weight hygiene.
 
 ## Current continuation observation — protected timed roots
 
