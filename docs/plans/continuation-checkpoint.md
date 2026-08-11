@@ -9,6 +9,29 @@ runner boundary; PR #109 adds the offline Phase-3 admission evaluator, PR #110
 adds the terminal-sample runner fix, and PR #112 requires the explicit terminal
 marker during review).
 
+## Current continuation update — Phase-4 utility preparation
+
+- PR #114 is based on clean-main anchor
+  `dea0d4e832143d9ae1ab6515a255e25ee1377b3f` and adds the offline
+  `src/advisorai/phase4/paper_utility.py` boundary plus
+  `scripts/prepare_phase4_utility_evaluation.py`.
+- The boundary is ready for admitted BTC/ETH V3-Core paper observations. It
+  requires an immutable Phase-3 gate hash and refuses unadmitted observations;
+  it measures directional accuracy, interval/confidence calibration, regime
+  slices, turnover, spread/slippage, Binance-testnet fee cost, net utility,
+  and incremental value against `naive`, `drift`, `seasonal-7`, `linear`, and
+  `lightgbm`. It cannot promote a model, create a gate record, or submit an
+  order.
+- Preparation evidence is
+  `artifacts/phase4/utility-evaluation-preparation/20260811T051344.190783212Z-offline-contract-v1/phase4-utility-preparation.json`
+  with SHA-256
+  `620f2ce32bb19aed8ce64ed0c12cddd4e0684db9f5b78add11e5b8ce6445456b` and
+  state `ready_for_admitted_input`; Phase-4 admission remains closed.
+- Locked verification passed full pytest `622 passed` with 28 warnings;
+  focused utility tests passed `5`, and the model/Phase-4 suite passed `24`.
+  The selected-model stability PID `70598` and public-data PID `87421` with
+  sidecar PID `88019` remain untouched. Archive/rclone remains deferred.
+
 ## Current continuation update — terminal Phase-3 sample boundary
 
 - PR #110 changes future durable Phase-3 windows to collect one explicit sample
