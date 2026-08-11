@@ -24,6 +24,7 @@ CHAIN_LOGS = (
     "disagreement.jsonl",
     "health-transitions.jsonl",
 )
+FAILURE_DETAIL_FIELDS = ("failure_classes", "failure_layers")
 
 
 def _canonical(payload: object) -> bytes:
@@ -95,6 +96,48 @@ def _validate_resource_monitor(path: Path) -> dict[str, Any]:
     }
 
 
+def _validate_failure_details(samples: list[dict[str, Any]]) -> dict[str, Any]:
+    """Validate optional sanitized failure labels without rewriting old roots."""
+
+    issues: list[str] = []
+    counts = {field: Counter() for field in FAILURE_DETAIL_FIELDS}
+    samples_with_details = 0
+    samples_without_details = 0
+    for index, row in enumerate(samples, 1):
+        row_has_details = False
+        for field in FAILURE_DETAIL_FIELDS:
+            value = row.get(field)
+            if value is None:
+                continue
+            row_has_details = True
+            if not isinstance(value, list):
+                issues.append(f"sample_{index}_{field}_not_a_list")
+                continue
+            string_labels = [label for label in value if isinstance(label, str)]
+            if len(string_labels) != len(set(string_labels)):
+                issues.append(f"sample_{index}_{field}_contains_duplicates")
+            for label in value:
+                if (
+                    not isinstance(label, str)
+                    or not label
+                    or len(label) > 128
+                    or any(not (character.isalnum() or character in "._-") for character in label)
+                ):
+                    issues.append(f"sample_{index}_{field}_contains_unsafe_label")
+                    continue
+                counts[field][label] += 1
+        if row_has_details:
+            samples_with_details += 1
+        else:
+            samples_without_details += 1
+    return {
+        "issues": issues,
+        "samples_with_details": samples_with_details,
+        "samples_without_details": samples_without_details,
+        "label_counts": {field: dict(sorted(counter.items())) for field, counter in counts.items()},
+    }
+
+
 def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> dict[str, Any]:
     run_directory = run_directory.resolve()
     config_path = run_directory / "config.json"
@@ -128,6 +171,8 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
         }
     )
     issues: list[str] = []
+    failure_details = _validate_failure_details(samples)
+    issues.extend(failure_details["issues"])
     if status.get("state") != "multi_hour_window_complete":
         issues.append("qualification_window_not_complete")
     if cycles != expected_cycles:
@@ -195,6 +240,9 @@ def validate(run_directory: Path, *, resource_monitor: Path | None = None) -> di
             "raw_spool_file_count": len(raw_spools),
             "raw_spool_bytes": sum(path.stat().st_size for path in raw_spools),
             "raw_spool_hash_count": len(raw_hashes),
+            "failure_details": {
+                key: value for key, value in failure_details.items() if key != "issues"
+            },
         },
         "fault_drills": json.loads(
             (run_directory / "fault-drills.json").read_text(encoding="utf-8")
