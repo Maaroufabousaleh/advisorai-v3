@@ -6,8 +6,8 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `1d16a59aee2c9260511bddb157a20a346d23ebae`, aligned with
-`origin/main`, after PR #146. The attachment checkpoint naming PID `13339` and
+Clean `main` is `3f7bfa26f0db1f15680576d09e0246525f3db8fd`, aligned with
+`origin/main`, after PR #148. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently
 protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
 with resource sidecar PID `47392`. No process was restarted or modified.
@@ -19,12 +19,24 @@ cycles and latest sample `2026-08-11T09:54:45.558492Z`; the 24-hour target is
 `2026-08-11T18:07:25.593600Z`. The terminal sample and summary do not yet
 exist, so Phase-0 remains `PENDING_STABILITY`.
 
-At `2026-08-11T09:54:04Z`, the preserved Phase-3 r5 root had 246 samples and
-34 health transitions, remained `running`, and had no terminal summary. Its
+At `2026-08-11T10:13:34Z`, the preserved Phase-3 r5 root had 306 samples and
+48 health transitions, remained `running`, and had no terminal summary. Its
 target is `2026-08-11T12:35:59.156509Z`. It remains immutable under runner
 identity `f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8`;
 Phase-3 admission remains closed pending terminal review and a fresh
 corrected-code measurement if required.
+
+## Current continuation update — provider-clock confidence hardening
+
+PR #148 merged the Phase-3 public-data safety patch at
+`3f7bfa26f0db1f15680576d09e0246525f3db8fd`. The current runner identity is
+`9fc1875357437df27dfe3d0ae3a64c7e6ec957c6ba770c0569197281322ee684`; it now
+propagates the measured provider server-time result into cross-source quote
+confidence. Missing or out-of-policy clock evidence produces severe
+fail-closed disagreement and no-trade abstention. This is
+`IMPLEMENTED / TESTED` only. The active r5 root still uses its immutable
+earlier identity and remains pending terminal review; no external gate was
+opened.
 
 ## Current continuation update — offline model-stability validator
 

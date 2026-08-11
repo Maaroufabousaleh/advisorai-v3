@@ -8,8 +8,8 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
-`1d16a59aee2c9260511bddb157a20a346d23ebae`, aligned with `origin/main` after
-PR #146. The attachment’s PID `13339` reference is not the live process: the
+`3f7bfa26f0db1f15680576d09e0246525f3db8fd`, aligned with `origin/main` after
+PR #148. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and
 resource sidecar PID `47392`. This audit preserves the live roots and does not
 rewrite historical evidence.
@@ -21,10 +21,22 @@ passing cycles at `2026-08-11T09:54:45.558492Z`, with target
 `2026-08-11T18:07:25.593600Z`. The Phase-0 validator therefore remains
 `PENDING_STABILITY` and no roster promotion is made.
 
-The Phase-3 r5 root remains in flight with 246 samples and 34 health
-transitions at `2026-08-11T09:54:04Z`, targeting
+The Phase-3 r5 root remains in flight with 306 samples and 48 health
+transitions at `2026-08-11T10:13:34Z`, targeting
 `2026-08-11T12:35:59.156509Z`. It is preserved under its own earlier runner
 identity and is not credited with later fixes; no Phase-3 admission is claimed.
+
+## Current continuation update — provider-clock confidence hardening
+
+PR #148 adds a deterministic provider-clock confidence boundary to the
+Phase-3 cross-source comparison. The public quote projection now marks a quote
+clock-confident only when its source server-time probe passed and its measured
+offset remains within the reviewed health bound. Missing or out-of-policy
+clock evidence therefore produces severe disagreement, abstention, and
+fail-closed behavior. The Phase-3 acceptance suite passed `98` tests and full
+pytest passed `646` tests with 28 warnings. This remains local implementation
+and test evidence; the active r5 root predates the patch and no Phase-3
+admission was opened.
 
 ## Current continuation update — offline model-stability validator
 
