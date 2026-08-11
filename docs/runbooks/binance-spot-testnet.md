@@ -126,4 +126,26 @@ No model, LLM, Hermes task, research agent, browser task, dashboard, or venue
 provider can bypass `RiskKernel` or mutate OMS truth. Transfers, withdrawals,
 and production endpoints are prohibited.
 
+## Read-only restart and configuration rollback
+
+After the authenticated read-only smoke passes, the provider-specific recovery
+check can measure configuration rollback and process-boundary hydration without
+placing another order:
+
+```bash
+ADVISORAI_RUN_NETWORK_SMOKE=1 \
+  ./.venv/bin/python scripts/qualify_binance_spot_testnet_recovery.py \
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env \
+  --configuration-hash <zero-network-binance-config-sha256> \
+  --repository-root /mnt/c/projects/advisorai-v3 \
+  --evidence-dir artifacts/phase1/binance-spot-testnet/recovery
+```
+
+The runner uses only the scoped `PAPER_VENUE` resolver. It records aggregate
+read schema/count information, immutable bundle hashes, and a fresh child
+process result. It never persists credential values, response bodies, headers,
+signatures, account values, or order mutations. A passing report is measured
+provider read-only recovery evidence, not full paper deployment rollback or
+open-order/fill recovery evidence.
+
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`
