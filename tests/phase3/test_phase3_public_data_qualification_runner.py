@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.run_phase3_public_data_qualification import _terminal_sample_due, run_qualification
+from advisorai.collectors.public_market_data import reviewed_public_market_data_sources
+from scripts.run_phase3_public_data_qualification import (
+    _collect_source_window,
+    _terminal_sample_due,
+    run_qualification,
+)
 
 TARGET = datetime(2026, 8, 11, 8, 0, tzinfo=UTC)
 
@@ -66,3 +71,31 @@ def test_resumed_run_rejects_changed_max_cycles_and_hydrates_without_duplicates(
     assert (root / "samples.jsonl").read_bytes() == samples_before
     assert (root / "health-transitions.jsonl").read_bytes() == health_before
     assert json.loads((root / "config.json").read_text())["max_cycles"] == 1
+
+
+def test_binance_source_observation_uses_window_end_before_close_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    measured_at = TARGET + timedelta(seconds=3)
+
+    monkeypatch.setattr(
+        "scripts.run_phase3_public_data_qualification._run_rest",
+        lambda *_args: {
+            "required_read_state": "pass",
+            "server_time": {"status": "pass", "clock_offset_seconds": 0},
+            "markets": {},
+        },
+    )
+    monkeypatch.setattr(
+        "scripts.run_phase3_public_data_qualification._run_binance_public_ws",
+        lambda *_args: {"measurement_ended_at": measured_at.isoformat()},
+    )
+
+    source = next(
+        item
+        for item in reviewed_public_market_data_sources()
+        if item.source_id == "binance_spot_public_market_data"
+    )
+    _rest, _websocket, observed_at = _collect_source_window(source, tmp_path, 1)
+
+    assert observed_at == measured_at
