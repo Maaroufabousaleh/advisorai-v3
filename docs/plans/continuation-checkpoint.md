@@ -6,10 +6,11 @@
   predecessor-state validation to the append-only Phase-3 health ledger.
 - Focused Phase-3 coverage passes `64` tests with one FastAPI-only skip; all
   nine historical Phase-3 health ledgers reopen successfully.
-- Main remains clean at `ff7088d` until this isolated change is reviewed. The
-  active selected-model PID `70598`, Phase-3 PID `87421`, and resource sidecar
-  PID `88019` were not stopped, restarted, or modified. Phase-3 admission and
-  all timed gates remain pending.
+- PR #125 merged this change; clean main is now
+  `3d3242cd07d55b2099b247b1d593a1701685f829`. The active selected-model PID
+  `70598`, Phase-3 PID `87421`, and resource sidecar PID `88019` were not
+  stopped, restarted, or modified. Phase-3 admission and all timed gates
+  remain pending.
 
 ## Current continuation update — post-PR #120 Phase-3 review
 

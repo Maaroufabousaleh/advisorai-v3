@@ -1,18 +1,19 @@
 # AdvisorAI V3 gate matrix
 
-## Current continuation update — Phase-3 source identity integrity
+## Current continuation update — post-PR #125 Phase-3 source identity integrity
 
 The Phase-3 source-health ledger now binds each `(source_id, symbol)` stream to
 one provider identity and endpoint, and verifies every appended transition's
 declared predecessor state. A provider cannot silently replace another source
 under the same stream identity. The change is isolated in candidate commit
-`4abf2ce` from clean main `ff7088d4`; focused Phase-3 coverage passes `64 tests`
-with one environment-only FastAPI skip, and all historical Phase-3 health
-ledgers reopen successfully. This is an implementation and local-test result;
-it does not promote Phase-3 admission or alter the active r4 evidence root.
+`4abf2ce` is merged into clean main `3d3242c`; focused Phase-3 coverage passes
+`64 tests` with one environment-only FastAPI skip, and all historical Phase-3
+health ledgers reopen successfully. This is an implementation and local-test
+result; it does not promote Phase-3 admission or alter the active r4 evidence
+root.
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`22370e95a85b0cffbf104e867ac59dee5ac4c2f6` (PRs #86–#122 merged; PRs #95–#96
+`3d3242cd07d55b2099b247b1d593a1701685f829` (PRs #86–#125 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
@@ -23,7 +24,8 @@ boundary, PR #115 refreshes the evidence anchors, PR #116 adds the sanitized
 Phase-3 failure-class projection, PR #118 points the model roster at the active
 stability root, PR #119 records the post-roster verification, and PR #120
 completes Phase-3 acceptance coverage and hardens failure-label validation; PRs
-#121–#122 refresh the current evidence and continuation anchors.)
+#121–#122 refresh the current evidence and continuation anchors, and PR #125
+adds source-health provider identity/state-chain enforcement.)
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
