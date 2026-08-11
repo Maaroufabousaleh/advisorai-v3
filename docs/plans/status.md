@@ -4,6 +4,21 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — Phase-3 measurement boundary
+
+PR #140 merged into main at `335114ba73156cb75e44465a4d21ff27f86299e1` with
+runner code identity
+`17bed912495868062c6a7a79e515d5a29a8b65b40cf138b8845e837ba3ec280d`. The
+Binance public-data collector now records the end of the measured feed window
+before asynchronous WebSocket close cleanup and uses that boundary for source
+freshness; the later teardown timestamp remains separately recorded. This
+prevents local close-time latency from being misclassified as provider staleness
+without changing source identity, failover, execution isolation, or the
+fail-closed policy. The no-network regression and full local verification pass.
+The active r5 root remains immutable under its earlier code identity and was not
+restarted or rewritten; no Phase-3 admission state changed. A fresh external
+qualification root is required to measure this implementation.
+
 ## Current continuation update — r4 terminal review and r5 active root
 
 The immutable r4 four-hour root

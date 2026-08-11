@@ -1,5 +1,24 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current continuation update — Phase-3 measurement boundary
+
+- PR #140 merged into main at
+  `335114ba73156cb75e44465a4d21ff27f86299e1`; current durable-runner code
+  identity is
+  `17bed912495868062c6a7a79e515d5a29a8b65b40cf138b8845e837ba3ec280d`.
+- The public Binance collector now distinguishes the measured feed-window end
+  from asynchronous WebSocket close cleanup, preserving both timestamps and
+  evaluating freshness at the former. This fixes a local teardown-latency
+  measurement artifact; it does not relax staleness, change source identity, or
+  affect execution authority.
+- Full pytest passed `638` tests with 28 warnings; acceptance passed
+  `129/152/126/94/24/34/10/11/27/18/5`; Ruff, format, lock, compilation,
+  dashboard build, diff, and tracked-secret/weight checks passed.
+- The active r5 root remains under its prior code identity and was not touched;
+  Phase-3 admission remains pending until a fresh external root measures the
+  corrected code. PID `70598` remains untouched; archive/rclone remains
+  externally deferred.
+
 ## Current continuation update — r4 terminal review and r5 active root
 
 - The preserved r4 root

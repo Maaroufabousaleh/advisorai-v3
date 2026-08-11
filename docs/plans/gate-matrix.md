@@ -1,5 +1,17 @@
 # AdvisorAI V3 gate matrix
 
+## Current continuation update — Phase-3 measurement boundary
+
+PR #140 merged into main at `335114ba73156cb75e44465a4d21ff27f86299e1`.
+The durable public-data runner code identity is now
+`17bed912495868062c6a7a79e515d5a29a8b65b40cf138b8845e837ba3ec280d`; it
+separates the measured feed-window end from asynchronous WebSocket teardown and
+uses the former for freshness/health evidence. Full pytest, all eleven
+acceptance suites, static checks, compilation, dashboard build, and tracked
+secret/weight checks passed. The active r5 root remains under its prior code
+identity and was not disturbed. This is `IMPLEMENTED / TESTED`, not external
+Phase-3 admission; a fresh root must measure the corrected boundary.
+
 ## Current continuation update — r4 terminal review and r5 active root
 
 The prior four-hour root
