@@ -8,6 +8,7 @@ import pytest
 
 from advisorai.collectors.public_market_data import reviewed_public_market_data_sources
 from scripts.run_phase3_public_data_qualification import (
+    _clock_adjusted_event_ages,
     _collect_source_window,
     _terminal_sample_due,
     run_qualification,
@@ -24,6 +25,20 @@ def test_terminal_sample_is_marked_once_at_or_after_boundary():
     assert _terminal_sample_due(TARGET, TARGET, False)
     assert _terminal_sample_due(TARGET + timedelta(seconds=1), TARGET, False)
     assert not _terminal_sample_due(TARGET + timedelta(seconds=1), TARGET, True)
+
+
+def test_clock_adjusted_event_ages_never_persist_negative_durations():
+    ages, future_count = _clock_adjusted_event_ages((0.2, -0.4, 1.1), 0.1)
+
+    assert ages == pytest.approx((0.3, 0.0, 1.2))
+    assert future_count == 1
+
+
+def test_clock_adjusted_event_ages_are_unmeasured_without_clock_offset():
+    ages, future_count = _clock_adjusted_event_ages((0.2, 1.1), None)
+
+    assert ages == ()
+    assert future_count == 0
 
 
 def test_resumed_run_rejects_changed_max_cycles_and_hydrates_without_duplicates(
