@@ -1,9 +1,9 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current recovery checkpoint — 2026-08-11T12:51:31Z
+## Current recovery checkpoint — 2026-08-11T13:01:39Z
 
 - Clean `main` is
-  `b1bafad6c765a6b4cf196c9c1a44156756e5d717` after PR #163. The direct
+  `0b7e74b4b943225bf80ca6e27d5e34550267cae6` after PR #164. The direct
   Phase-3 runner now resolves repository imports when launched directly by a
   detached supervisor; full pytest passed `657` tests with 28 warnings and all
   eleven acceptance suites passed `133/152/126/106/27/34/10/11/27/18/5`.
@@ -23,9 +23,10 @@
   `artifacts/phase3/public-market-data-durable/20260811T124600Z-four-hour-r6-clock-confidence-setsid`,
   and resource sidecar PID `4807`, v3 monitor root
   `artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`.
-  Target is `2026-08-11T16:46:26.507901Z`. Do not stop, restart, edit, or
-  concatenate these roots. Also preserve selected-model PID `70598`; archive/
-  rclone remains externally deferred.
+  Target is `2026-08-11T16:46:26.507901Z`; it has reached 54 samples through
+  cycle 9 with current Binance BTC/ETH healthy and replay-equivalent. Do not
+  stop, restart, edit, or concatenate these roots. Also preserve selected-model
+  PID `70598`; archive/rclone remains externally deferred.
 
 ## Current repository anchor — 2026-08-11
 

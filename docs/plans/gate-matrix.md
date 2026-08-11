@@ -1,9 +1,9 @@
 # AdvisorAI V3 gate matrix
 
-## Current recovery checkpoint — 2026-08-11T12:51:31Z
+## Current recovery checkpoint — 2026-08-11T13:01:39Z
 
-Clean `main` is `b1bafad6c765a6b4cf196c9c1a44156756e5d717`, aligned with
-`origin/main`, after PR #163. PR #163 fixes direct supervisor invocation of
+Clean `main` is `0b7e74b4b943225bf80ca6e27d5e34550267cae6`, aligned with
+`origin/main`, after PR #164. PR #163 fixes direct supervisor invocation of
 the durable Phase-3 runner by bootstrapping the repository import path and
 adds a no-`PYTHONPATH` entrypoint regression test. Full pytest passed `657`
 tests with 28 warnings and all eleven acceptance suites passed
@@ -39,8 +39,11 @@ under PID `2943`, runner code SHA-256
 `2026-08-11T16:46:26.507901Z`. Its v3 resource sidecar is PID `4807` at
 `artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`;
 the v1 precreation failure and v2 command-hash mismatch are preserved as
-separate sidecar attempts. At this checkpoint r6 has produced `18` samples and
-the sidecar has produced three identity-matching, error-free observations.
+separate sidecar attempts. At this checkpoint r6 has produced `54` samples
+through cycle `9`; Binance BTC/ETH and Deribit are currently healthy with
+successful replay equivalence, Coinbase remains explicitly quarantined, and
+the sidecar has produced `24` identity-matching observations with no resource
+errors. This is still a running timed qualification, not admission.
 PID `70598` selected-model stability remains untouched and running; archive/
 rclone remains externally deferred.
 

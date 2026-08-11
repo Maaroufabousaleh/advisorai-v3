@@ -4,9 +4,9 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current recovery checkpoint — 2026-08-11T12:51:31Z
+## Current recovery checkpoint — 2026-08-11T13:01:39Z
 
-Clean `main` is `b1bafad6c765a6b4cf196c9c1a44156756e5d717` after PR #163. The
+Clean `main` is `0b7e74b4b943225bf80ca6e27d5e34550267cae6` after PR #164. The
 direct Phase-3 runner entrypoint now works under a detached supervisor without
 an inherited `PYTHONPATH`; the failed launch roots remain preserved and
 quarantined. Full pytest passed `657` tests with 28 warnings; all eleven
@@ -24,8 +24,11 @@ continuity failures (admission report SHA-256
 The corrected r6 retry is active under PID `2943` at
 `artifacts/phase3/public-market-data-durable/20260811T124600Z-four-hour-r6-clock-confidence-setsid`,
 with resource sidecar PID `4807` under the v3 monitor root. It is a fresh
-four-hour run; no prior samples were concatenated. The selected-model stability
-PID `70598` remains untouched. Archive/rclone remains externally deferred.
+four-hour run; no prior samples were concatenated. At this checkpoint it has
+54 samples through cycle 9; the current Binance BTC/ETH observations are
+healthy and replay-equivalent, while Coinbase remains quarantined by the
+explicit source policy. The selected-model stability PID `70598` remains
+untouched. Archive/rclone remains externally deferred.
 
 ## Current repository anchor — 2026-08-11
 
