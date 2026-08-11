@@ -4,6 +4,7 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -23,7 +24,13 @@ from advisorai.collectors import (
     select_source,
     transition_source_health,
 )
-from scripts.run_phase3_public_data_qualification import _AppendOnlyLog, _fault_drills
+from advisorai.collectors.public_market_data import reviewed_public_market_data_sources
+from scripts.run_phase3_public_data_qualification import (
+    BINANCE_DEPTH_SNAPSHOT_LIMIT,
+    _AppendOnlyLog,
+    _binance_depth_snapshot_url,
+    _fault_drills,
+)
 
 NOW = datetime(2026, 8, 10, 22, 0, tzinfo=UTC)
 
@@ -161,6 +168,19 @@ def test_snapshot_gap_invalidates_local_book_and_recovery_reestablishes_equivale
     replay, _ = recover_binance_depth(recovered_snapshot, (gap,), symbol="BTCUSDT")
     assert live.state == "pass"
     assert replay_equivalent(live, replay)
+
+
+def test_durable_public_recovery_uses_bounded_provider_snapshot():
+    source = next(
+        item
+        for item in reviewed_public_market_data_sources()
+        if item.source_id == "binance_spot_public_market_data"
+    )
+
+    url = _binance_depth_snapshot_url(source, "BTCUSDT")
+
+    assert BINANCE_DEPTH_SNAPSHOT_LIMIT == 100
+    assert parse_qs(urlsplit(url).query) == {"limit": ["100"], "symbol": ["BTCUSDT"]}
 
 
 def test_fault_drills_are_injected_and_pass():
