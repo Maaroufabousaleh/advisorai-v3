@@ -1,9 +1,10 @@
 # AdvisorAI V3 gate matrix
 
-## Current terminal-review checkpoint — 2026-08-11T23:01:40Z
+## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
-Review began from clean `main`
-`6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`; no selected-model stability or
+Current merged `main` is `d5bfde76ed3cacaba365f3d7981db5a756eaf314` after PR
+#174; review began from clean `main`
+`6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`. No selected-model stability or
 archive/rclone process was touched. The Phase-0 selected-model r3 terminal
 review remains independently `QUALIFIED` for TTM-R2, Finance DeBERTa-v3, and
 FinBERT-MiniLM, while global Phase 0 remains pending its separate route and
