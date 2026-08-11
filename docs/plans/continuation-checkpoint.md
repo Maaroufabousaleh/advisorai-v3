@@ -4,7 +4,7 @@
 
 - PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; the executable
   and evidence anchor for this checkpoint is `7eef93e55fecbf387385683437e1c30abb5b5d43`.
-  PRs #129–#130 are documentation-only follow-ups.
+  Subsequent PRs are documentation-only follow-ups.
 - The provider-specific recovery qualification uses the existing scoped
   `PAPER_VENUE` resolver and Binance Spot Testnet transport. It activated a
   non-secret immutable configuration revision, rolled back to the original
@@ -83,7 +83,7 @@ remain pending.
 
 Checkpoint refreshed 2026-08-11 from clean `main`
 `7eef93e55fecbf387385683437e1c30abb5b5d43` (PRs #86–#128 carry the executable
-implementation/evidence; PRs #129–#130 are documentation-only; PRs #95–#96
+implementation/evidence; subsequent PRs are documentation-only follow-ups; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
