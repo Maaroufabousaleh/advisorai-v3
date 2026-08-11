@@ -5,6 +5,17 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current continuation update — Phase-3 measurement boundary
+
+PR #140 merged into main at `335114ba73156cb75e44465a4d21ff27f86299e1` with
+runner code identity
+`17bed912495868062c6a7a79e515d5a29a8b65b40cf138b8845e837ba3ec280d`. The
+collector persists a pre-teardown measurement timestamp and the later cleanup
+timestamp, and source freshness is evaluated at the measurement boundary. This
+is a local implementation/test hardening result; the currently active r5 root
+uses the earlier code identity, remains untouched, and cannot be retroactively
+credited with this fix. No authority boundary or gate state changed.
+
 ## Current continuation update — r4 terminal review and r5 active root
 
 The pre-reconnect r4 root
