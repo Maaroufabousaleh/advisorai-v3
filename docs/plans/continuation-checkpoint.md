@@ -1,9 +1,10 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`53e4437743b3bc7042267734d118f970f9792d14` (PRs #86–#103 merged; PRs #95–#96
+`7d68304320107c9f9382a48173193988387707f8` (PRs #86–#105 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
-PR #103 adds the offline Phase-3 qualification validator).
+PR #103 adds the offline Phase-3 qualification validator and PR #105 records
+the independent Phase-3 availability recheck).
 
 ## Current continuation update — completed Phase-3 qualification
 
@@ -33,9 +34,10 @@ PR #103 adds the offline Phase-3 qualification validator).
   sidecar remains preserved as failed evidence.
 - PID `70598` remains untouched and active under
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r3`.
-  Its latest read-only record is sequence 103 at
-  `2026-08-11T03:25:18.150192Z`, SHA-256
-  `49bb4f3ea73fce5661ec64bb546cdba08cc21ac07ba74b97834b6a656b494fb0`.
+  A read-only inspection observed sequence 107 at
+  `2026-08-11T03:47:10.345140Z`, SHA-256
+  `c3e9e65afe59a78c80687ca19243e28cbf70f227131e4f207c1a05c8bd34b02f`; the
+  configured terminal sample has not occurred.
   The 24-hour gate remains pending; no root was stopped, restarted, modified,
   concatenated, or backdated.
 - Archive/rclone remains externally deferred and was not touched. Phase 0
