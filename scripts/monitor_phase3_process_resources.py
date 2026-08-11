@@ -222,14 +222,11 @@ def _process_sample(
 
 
 def _observation(**values: Any) -> ResourceObservation:
-    without_hash = dict(values)
-    without_hash["schema"] = SCHEMA
-    without_hash["record_hash"] = "0" * 64
-    digest_payload = without_hash.copy()
-    digest_payload.pop("record_hash")
+    without_hash = {**values, "schema": SCHEMA, "record_hash": "0" * 64}
+    validated = ResourceObservation.model_validate(without_hash)
+    digest_payload = validated.model_dump(mode="json", by_alias=True, exclude={"record_hash"})
     digest = _sha256(_canonical(digest_payload))
-    without_hash["record_hash"] = digest
-    return ResourceObservation.model_validate(without_hash)
+    return validated.model_copy(update={"record_hash": digest})
 
 
 def _append(path: Path, record: ResourceObservation) -> None:
