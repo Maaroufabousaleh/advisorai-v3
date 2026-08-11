@@ -7,8 +7,8 @@ human gate into a unit-test claim.
 
 ## Current continuation update — Binance provider read-only recovery
 
-PR #128 is merged into clean `main`
-`aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`. The new
+PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; this checkpoint
+is on clean `main` `7eef93e55fecbf387385683437e1c30abb5b5d43`. The new
 `scripts/qualify_binance_spot_testnet_recovery.py` qualification uses the
 existing `ConfigBundleStore`, scoped `PAPER_VENUE` resolver, and
 `BinanceSpotTestnetTransport` to measure configuration rollback and a fresh

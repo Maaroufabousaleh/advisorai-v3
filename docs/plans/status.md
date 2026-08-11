@@ -6,8 +6,8 @@ or 60-day operational gate.
 
 ## Current continuation update — Binance provider read-only recovery
 
-PR #128 is merged into clean `main`
-`aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`. The provider-specific Binance
+PR #128 merged at `aa4cdcb86a9bd0c1ca749f0ded5524b8cb842c9c`; this checkpoint
+is on clean `main` `7eef93e55fecbf387385683437e1c30abb5b5d43`. The provider-specific Binance
 recovery qualification uses only the scoped `PAPER_VENUE` resolver and the
 existing Binance Spot Testnet transport. It activated a non-secret immutable
 configuration revision, rolled back to the original bundle, reopened the
