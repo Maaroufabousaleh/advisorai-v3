@@ -96,6 +96,36 @@ calls transfer/withdrawal endpoints; cancellation and order lifecycle checks
 are performed only through the deterministic OMS/adapter contract tests until
 the operator has selected and reviewed one provider-specific API.
 
+## Provider-specific read-only restart and rollback evidence
+
+The selected Binance Spot Testnet adapter has a separate supervised recovery
+qualification. It exercises the existing content-addressed configuration
+bundles, activates a temporary non-secret revision, rolls back to the original
+bundle, and reopens that active pointer in a fresh child process. Both the
+parent and child perform only the Binance authenticated read contract. The
+child receives the secrets file path and the explicit network opt-in only; it
+does not receive credential values through its environment. No submit, cancel,
+transfer, withdrawal, or OMS mutation is part of this check.
+
+Run it only after inspecting a passing Binance read-only smoke report:
+
+```bash
+ADVISORAI_RUN_NETWORK_SMOKE=1 \
+  ./.venv/bin/python scripts/qualify_binance_spot_testnet_recovery.py \
+  --secrets /mnt/c/projects/advisorai-v3/secrets.env \
+  --configuration-hash <zero-network-binance-config-sha256> \
+  --repository-root /mnt/c/projects/advisorai-v3 \
+  --evidence-dir artifacts/phase1/binance-spot-testnet/recovery
+```
+
+The immutable report records the bundle hashes, activation/rollback event,
+exact reviewed testnet identity, adapter and qualifier hashes, read operation
+classes/counts, fresh-subprocess timestamps, and child report hash. It records
+`writes_attempted=false` and `admission=NOT_ADMITTED` by design. A passing
+report is real provider read-only restart/configuration-recovery evidence; it
+does not by itself qualify full paper deployment rollback, open-order recovery,
+Bronze rebuild, or any Phase-7/Phase-10 gate.
+
 For the configured Coinbase Exchange Sandbox, use the provider-specific
 [`coinbase-exchange-sandbox.md`](coinbase-exchange-sandbox.md) runbook and
 [`smoke_coinbase_exchange_sandbox.py`](../../scripts/smoke_coinbase_exchange_sandbox.py).
