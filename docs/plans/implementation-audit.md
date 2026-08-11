@@ -5,6 +5,24 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current recovery checkpoint — 2026-08-11T12:51:31Z
+
+The verified clean executable anchor is
+`b1bafad6c765a6b4cf196c9c1a44156756e5d717`, after PR #163. The direct
+Phase-3 runner now self-bootstraps repository imports for detached execution;
+the regression test covers a no-`PYTHONPATH` `--help` invocation. Full pytest
+passed `657` tests with 28 warnings and all eleven acceptance suites passed
+`133/152/126/106/27/34/10/11/27/18/5`.
+
+The r5 root completed and passed structural validation, including the
+sanitized dashboard health projection, but remains unadmitted because its
+terminal primary BTC/ETH health and replay/continuity checks failed. Its
+summary, validation, and admission report hashes are recorded in the gate
+matrix. Two failed corrected-r6/supervisor attempts are preserved as incident
+evidence; the current fresh r6 root is active under PID `2943` with sidecar
+PID `4807`. No Phase-0/3 gate was promoted by elapsed time alone, and PID
+`70598` remains untouched.
+
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is

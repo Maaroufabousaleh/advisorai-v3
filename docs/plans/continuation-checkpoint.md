@@ -1,5 +1,32 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current recovery checkpoint — 2026-08-11T12:51:31Z
+
+- Clean `main` is
+  `b1bafad6c765a6b4cf196c9c1a44156756e5d717` after PR #163. The direct
+  Phase-3 runner now resolves repository imports when launched directly by a
+  detached supervisor; full pytest passed `657` tests with 28 warnings and all
+  eleven acceptance suites passed `133/152/126/106/27/34/10/11/27/18/5`.
+- Preserve completed r5 at
+  `artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`:
+  `774` samples, `6` terminal samples, summary SHA-256
+  `d79a00a980af649e9de228b5d56e5123fb547691f728db57821de0216de90c7c`.
+  Validation is `PASS_FOR_REVIEW`; admission remains pending with blockers
+  `no_healthy_primary_source_for_btc_eth` and
+  `primary_snapshot_sequence_or_replay_failure`.
+- Preserve failed r6 launch roots
+  `20260811T-after-r5-four-hour-r6-clock-confidence` and
+  `20260811T124355Z-four-hour-r6-clock-confidence-retry`; do not reuse or
+  concatenate them. The first records the import failure; the second is an
+  incomplete detached-supervisor attempt. The one-cycle diagnostic is separate.
+- Protect fresh r6 runner PID `2943`, root
+  `artifacts/phase3/public-market-data-durable/20260811T124600Z-four-hour-r6-clock-confidence-setsid`,
+  and resource sidecar PID `4807`, v3 monitor root
+  `artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`.
+  Target is `2026-08-11T16:46:26.507901Z`. Do not stop, restart, edit, or
+  concatenate these roots. Also preserve selected-model PID `70598`; archive/
+  rclone remains externally deferred.
+
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is

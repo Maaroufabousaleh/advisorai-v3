@@ -360,11 +360,23 @@ PYTHONPATH=. /tmp/advisorai-v3-full-verify-20260809/bin/python \
 ```
 
 For a detached run, use a durable host-supported supervisor such as
-`systemd --user` or `setsid nohup`; retain the exact command, PID/service
-identity, evidence root, code hash, config hash, heartbeat, and stop/restart
-procedure. Resume the same root with the same command only after confirming the
-prior process is absent and the lock is recoverable. Never concatenate roots or
-backdate elapsed time.
+`systemd --user` or the following `setsid nohup` shape; close stdin and keep
+the supervisor log outside any sidecar evidence directory:
+
+```bash
+setsid nohup env PYTHONPATH=. PYTHONUNBUFFERED=1 \
+  ./.venv/bin/python scripts/run_phase3_public_data_qualification.py \
+  --real --run-directory "$RUN_ROOT" --duration-hours 4 \
+  --cycle-seconds 90 --window-seconds 10 \
+  </dev/null >"$RUN_ROOT/runner.nohup.log" 2>&1 &
+```
+
+Retain the exact command, PID/session identity, evidence root, code hash,
+config hash, heartbeat, and stop/restart procedure. The runner now supports
+the direct entrypoint without `PYTHONPATH`, but keeping the repository root
+explicit makes the supervisor contract auditable. Resume the same root with
+the same command only after confirming the prior process is absent and the lock
+is recoverable. Never concatenate roots or backdate elapsed time.
 
 Each cycle records source/symbol provider and endpoint identity, provider and
 local timestamps, offset/drift, freshness percentiles, connection and recovery
@@ -428,3 +440,26 @@ internet connections, target-root file count/bytes, process identity, and a
 hash-chained append-only observation log. It records no command text, response
 bodies, credentials, or private venue state. An identity mismatch fails closed;
 the sidecar is resource evidence only and cannot open Phase-3 admission.
+
+The sidecar creates `--evidence-dir` itself with `exist_ok=False`; do not
+pre-create that directory. If a supervisor needs a log, redirect it to the
+qualification root or another separate path. The expected command hash must
+match the sidecar's NUL-separated argv hash, for example:
+
+```bash
+COMMAND_SHA256=$(./.venv/bin/python - "$PID" <<'PY'
+import hashlib
+import sys
+
+raw = open(f"/proc/{sys.argv[1]}/cmdline", "rb").read()
+argv = raw.split(b"\0")[:-1]
+print(hashlib.sha256(b"\0".join(argv)).hexdigest())
+PY
+)
+```
+
+After a completed root, the offline validator also verifies that
+`latest-health.json` is a sanitized, identity-preserving projection of the
+latest append-only samples. The admission evaluator requires that projection
+check to pass; this remains review evidence only and cannot open the phase
+gate.

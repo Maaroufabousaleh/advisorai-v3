@@ -1,5 +1,49 @@
 # AdvisorAI V3 gate matrix
 
+## Current recovery checkpoint — 2026-08-11T12:51:31Z
+
+Clean `main` is `b1bafad6c765a6b4cf196c9c1a44156756e5d717`, aligned with
+`origin/main`, after PR #163. PR #163 fixes direct supervisor invocation of
+the durable Phase-3 runner by bootstrapping the repository import path and
+adds a no-`PYTHONPATH` entrypoint regression test. Full pytest passed `657`
+tests with 28 warnings and all eleven acceptance suites passed
+`133/152/126/106/27/34/10/11/27/18/5`.
+
+The preserved r5 root
+`artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`
+completed at `2026-08-11T12:36:19.079514Z` with `774` samples and `6` terminal
+samples. Its summary SHA-256 is
+`d79a00a980af649e9de228b5d56e5123fb547691f728db57821de0216de90c7c`; offline
+validation is `PASS_FOR_REVIEW` with report SHA-256
+`33919b778ca079b916ec61fba7faa6d32bf5555177cbdfc9828b4ae907da9e00`, and the
+health projection was validated. Admission remains
+`PENDING_EXTERNAL_EVIDENCE`: report SHA-256
+`2e38ff83eee96791010182c0997bcd6d5aacd6817fe114dc1e779c02f95e10db`, with
+blockers `no_healthy_primary_source_for_btc_eth` and
+`primary_snapshot_sequence_or_replay_failure`. No Phase-3 admission was
+opened.
+
+The first corrected-r6 launch failed before status creation with the preserved
+`ModuleNotFoundError: No module named 'scripts'` log at
+`artifacts/phase3/public-market-data-durable/20260811T-after-r5-four-hour-r6-clock-confidence`.
+A second retry root at
+`artifacts/phase3/public-market-data-durable/20260811T124355Z-four-hour-r6-clock-confidence-retry`
+was preserved incomplete after its non-detached supervisor exited; it was not
+reused. A one-cycle foreground diagnostic completed successfully and remains
+separate evidence.
+
+The fresh corrected r6 root is now active at
+`artifacts/phase3/public-market-data-durable/20260811T124600Z-four-hour-r6-clock-confidence-setsid`
+under PID `2943`, runner code SHA-256
+`b928650c279502b1f759c1584769f881f6c9a7f015ba34896d18c0501463fd0b`, target
+`2026-08-11T16:46:26.507901Z`. Its v3 resource sidecar is PID `4807` at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`;
+the v1 precreation failure and v2 command-hash mismatch are preserved as
+separate sidecar attempts. At this checkpoint r6 has produced `18` samples and
+the sidecar has produced three identity-matching, error-free observations.
+PID `70598` selected-model stability remains untouched and running; archive/
+rclone remains externally deferred.
+
 ## Current repository anchor — 2026-08-11
 
 Clean `main` is `fbb010809598d6096b42309f16b5e13dd3e1acb8`, aligned with
