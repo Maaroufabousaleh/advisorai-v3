@@ -5,6 +5,26 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current continuation update — post-PR #120 Phase-3 review
+
+Clean `main` is `98a62cd37d35f5f8aa6515daaa8daf22e15bfa40`. PR #120 merged the
+complete Phase-3 acceptance coverage and bounded failure-label validator. The
+full repository verification remains `626 passed` with 28 warnings and the
+complete acceptance results are `129/152/126/87/24/34/10/11/27/18/5`.
+
+The immutable two-hour r3 qualification root was revalidated offline. The fresh
+validator report
+`artifacts/phase3/public-market-data-validation/20260811T060000Z-two-hour-r3-v3/phase3-qualification-validation.json`
+has SHA-256
+`40b08077112092df4531175063d8c514ab58a65d31c317bb562e0d14ad8f1753` and is
+`PASS_FOR_REVIEW` with no validator issues. Its paired admission review
+`artifacts/phase3/public-market-data-admission/20260811T060000Z-two-hour-r3-v3/phase3-admission-evaluation.json`
+has SHA-256
+`26ae8d2e7a209b71ce36fb1707a3183dff0840f14220d7df617874a1e8a80a26` and is
+`PENDING_EXTERNAL_EVIDENCE`; the old root lacks the terminal marker, did not
+establish a healthy BTC/ETH primary, and recorded primary snapshot/sequence/
+replay failure. No gate state was promoted.
+
 ## Current Phase-3 failure-class projection
 
 The current clean-main base for this work package is

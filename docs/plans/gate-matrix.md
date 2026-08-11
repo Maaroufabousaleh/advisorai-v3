@@ -1,7 +1,7 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`51e3e6a73e620920aed98034c60adc49f0d16844` (PRs #86–#119 merged; PRs #95–#96
+`98a62cd37d35f5f8aa6515daaa8daf22e15bfa40` (PRs #86–#120 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
@@ -10,7 +10,8 @@ adds the terminal-sample runner fix, PR #112 requires the explicit terminal
 marker during review, PR #114 adds the closed Phase-4 utility preparation
 boundary, PR #115 refreshes the evidence anchors, PR #116 adds the sanitized
 Phase-3 failure-class projection, PR #118 points the model roster at the active
-stability root, and PR #119 records the post-roster verification.)
+stability root, PR #119 records the post-roster verification, and PR #120
+completes Phase-3 acceptance coverage and hardens failure-label validation.)
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
@@ -23,6 +24,21 @@ recorded code hash.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
+
+## Current Phase-3 review evidence
+
+The immutable two-hour r3 root was revalidated offline after PR #120. The fresh
+validator report is
+`artifacts/phase3/public-market-data-validation/20260811T060000Z-two-hour-r3-v3/phase3-qualification-validation.json`
+with SHA-256
+`40b08077112092df4531175063d8c514ab58a65d31c317bb562e0d14ad8f1753`; it is
+`PASS_FOR_REVIEW`, not admission. The corresponding admission review is
+`artifacts/phase3/public-market-data-admission/20260811T060000Z-two-hour-r3-v3/phase3-admission-evaluation.json`
+with SHA-256
+`26ae8d2e7a209b71ce36fb1707a3183dff0840f14220d7df617874a1e8a80a26` and
+remains `PENDING_EXTERNAL_EVIDENCE` because the root predates the terminal
+marker, lacks a healthy BTC/ETH primary, and has primary snapshot/sequence/
+replay failures. The active r4 and Phase-0 r3 processes remain untouched.
 
 ## Current Phase-3 evidence projection update
 

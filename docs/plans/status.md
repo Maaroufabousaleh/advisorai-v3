@@ -4,6 +4,37 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — post-PR #120 Phase-3 review evidence
+
+Clean `main` is now `98a62cd37d35f5f8aa6515daaa8daf22e15bfa40` after PR #120.
+The complete Phase-3 acceptance coverage correction is merged; all eleven
+acceptance suites remain green at `129/152/126/87/24/34/10/11/27/18/5`, and
+locked full pytest remains `626 passed` with 28 warnings.
+
+The hardened validator was rerun offline against the immutable two-hour r3 root
+at `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`.
+The fresh report is
+`artifacts/phase3/public-market-data-validation/20260811T060000Z-two-hour-r3-v3/phase3-qualification-validation.json`
+with SHA-256
+`40b08077112092df4531175063d8c514ab58a65d31c317bb562e0d14ad8f1753`.
+It is `PASS_FOR_REVIEW`, has no validator issues, and records 378 samples,
+126 fail-closed selections, zero silent substitutions, and no failure-label
+fields because the immutable r3 runner predates that projection.
+
+The corresponding fresh offline admission review is
+`artifacts/phase3/public-market-data-admission/20260811T060000Z-two-hour-r3-v3/phase3-admission-evaluation.json`
+with SHA-256
+`26ae8d2e7a209b71ce36fb1707a3183dff0840f14220d7df617874a1e8a80a26`.
+It remains `PENDING_EXTERNAL_EVIDENCE` with `phase3_admission=false`; its
+blockers are the pre-terminal-marker qualification window, absence of a healthy
+BTC/ETH primary, and primary snapshot/sequence/replay failure. No admission
+was opened.
+
+The active four-hour r4 public-data process remains PID `87421` with resource
+sidecar PID `88019`; the selected-model stability process remains PID `70598`.
+Both are untouched and must be evaluated only from their own immutable terminal
+evidence. Archive/rclone remains externally deferred.
+
 ## Current continuation update — Phase-4 utility preparation boundary
 
 The Phase-4 preparation work in PR #114 is based on clean-main anchor
