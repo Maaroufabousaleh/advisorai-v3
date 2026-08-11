@@ -6,14 +6,14 @@ or 60-day operational gate.
 
 ## Current continuation update — durable Phase-3 source qualification
 
-PRs #89–#98 are merged on clean main
-`fdb35c3f5f6f9f61e8dfe4b835783dedc3fb9dd4`. PRs #89–#94 add the restartable
+PRs #89–#101 are merged on clean main
+`af7a31b95d48545ac62a9b7ac54bd59ca42138dd`. PRs #89–#94 add the restartable
 append-only runner, deterministic source-health/failover/recovery controls, a
 read-only dashboard projection, bounded Binance recovery snapshots, concurrent
 BTC/ETH collection, and accurate disconnect/reconnect accounting. Public
 connectors load no credentials and have no order/write method; PRs #95–#96
-refresh the checkpoint and verification records only, and PR #98 adds the
-separate OS-resource evidence monitor.
+refresh the checkpoint and verification records only; PR #98 adds the separate
+OS-resource evidence monitor and PR #101 fixes its WSL process identity guard.
 
 The original two-hour root
 `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`
@@ -36,11 +36,14 @@ records zero disconnects but remains fail-closed on measured stale age and
 degraded clock confidence. This is `IMPLEMENTED / TESTED / EXTERNALLY MEASURED
 / RUNNING`, not Phase-3 admission.
 
-An independent systemd user sidecar observes PID `13339` without modifying the
-qualification root. Its evidence is at
-`artifacts/phase3/public-market-data-resource-monitor/20260811T023624Z-pid13339-systemd`
-with config SHA-256 `26ff511166cd41c8f3782d779a5fccf22cbd93bd5e6888a827df0bd1373d21bb`;
-the service is `advisorai-phase3-resource-monitor-20260811T023624Z.service`.
+The first v1 systemd sidecar attempt is preserved at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T023624Z-pid13339-systemd`;
+its datetime hash canonicalization failed reload validation and it is not used
+as a pass. The corrected v2 sidecar observes PID `13339` without modifying the
+qualification root at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T025102Z-pid13339-v2`
+with config SHA-256 `3202ad6c45f750a9b1c250336a0d7819cdcfa78486a6ee5bd78d645c544d3e08`;
+the service is `advisorai-phase3-resource-monitor-20260811T025103Z-v2.service`.
 It records sanitized RSS/CPU/thread/fd/socket and target-root growth metrics;
 credentials and order writes remain false. This is resource evidence, not an
 admission record.

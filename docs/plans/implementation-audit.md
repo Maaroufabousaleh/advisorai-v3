@@ -50,13 +50,14 @@ Binance snapshot limit `100`, no credentials, and no order writes. This is
 implementation plus active external measurement; its result and Phase-3
 admission remain pending. No execution authority was added.
 
-An independent systemd resource sidecar is active for this root under
-`advisorai-phase3-resource-monitor-20260811T023624Z.service`. It records
+The first v1 resource sidecar root is preserved as failed hash evidence. The
+corrected v2 systemd resource sidecar is active under
+`advisorai-phase3-resource-monitor-20260811T025103Z-v2.service`. It records
 sanitized process RSS/CPU/thread/fd/socket counts and qualification-root file
 growth at
-`artifacts/phase3/public-market-data-resource-monitor/20260811T023624Z-pid13339-systemd`;
+`artifacts/phase3/public-market-data-resource-monitor/20260811T025102Z-pid13339-v2`;
 its config SHA-256 is
-`26ff511166cd41c8f3782d779a5fccf22cbd93bd5e6888a827df0bd1373d21bb`.
+`3202ad6c45f750a9b1c250336a0d7819cdcfa78486a6ee5bd78d645c544d3e08`.
 The sidecar has no credential or execution access and does not open admission.
 
 ## Latest Phase-3 Binance availability evidence
