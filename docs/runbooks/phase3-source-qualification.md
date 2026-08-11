@@ -304,6 +304,16 @@ summary SHA-256 is
 The qualification process, sidecar service, and PID `13339` are no longer
 running; the failed v1 sidecar remains preserved for audit.
 
+An independent one-cycle recheck at
+`artifacts/phase3/public-market-data-durable/20260811T034114Z-one-cycle-recheck`
+made six public connections and received 503 valid events with no credentials
+or order writes. Its summary SHA-256 is
+`698ad40af908757a398d19c6df83e4bfc50209bca541fe8b3acd6c314d6eff1e`.
+Binance BTC/ETH again ended stale at `5.096588s`/`5.011760s` under the
+5-second health policy, while Coinbase was quarantined and Deribit degraded.
+This corroborates the source-health blocker; it is not an admission result and
+does not justify changing the policy or silently substituting a source.
+
 Start a fresh bounded engineering window with an explicit run root:
 
 ```bash

@@ -59,6 +59,24 @@ Archive/rclone remains externally deferred and was not touched. No Phase-4–7
 admission is opened from this evidence; the next legal gate is the genuine
 Phase-0 terminal sample, followed by sufficient admitted Phase-3 evidence.
 
+### Latest Phase-3 availability recheck
+
+An independent credential-free one-cycle recheck at
+`artifacts/phase3/public-market-data-durable/20260811T034114Z-one-cycle-recheck`
+made six public connections, received 503 valid events, made no credentialed
+or order calls, and ended `evidence_for_review_only` with
+`phase3_admission_opened=false`. Its config/status/summary/heartbeat SHA-256
+values are respectively
+`077317f1b764db41b9bd157b7129289d6b781e20cd86cebf8112498f9cf66711`,
+`187730cb97e522ecede7eaa9c6315ad84fc27301e1f82dd595e9e8ff7f6d307c`,
+`698ad40af908757a398d19c6df83e4bfc50209bca541fe8b3acd6c314d6eff1e`, and
+`2e0ac99f11b341cf9610a9daed84a85a5c89a25dd1d9f1d75d9072930ec9924b`.
+Binance BTC/ETH again ended `STALE` with last-event ages `5.096588s` and
+`5.011760s` against the immutable 5-second policy, despite adjusted event-age
+maxima below zero; Coinbase remained `QUARANTINED`, Deribit `DEGRADED`, and no
+source substitution or write occurred. This corroborates the full-window
+blocker and does not open Phase 3.
+
 ## Prior continuation update — durable Phase-3 source qualification
 
 PRs #89–#101 are merged on clean main

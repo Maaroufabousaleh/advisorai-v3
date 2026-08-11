@@ -42,6 +42,12 @@ PR #103 adds the offline Phase-3 qualification validator).
   stability, Phase-3 admission, Phases 4–7, Phase-8 formal admission, Alpha
   E0–E7, and Phase-10 human approval remain open. The next legal work item is
   read-only inspection of PID `70598` and the genuine terminal-sample gate.
+- Independent recheck root
+  `artifacts/phase3/public-market-data-durable/20260811T034114Z-one-cycle-recheck`
+  corroborated the source blocker: six public connections, 503 valid events,
+  Binance BTC/ETH stale at `5.096588s`/`5.011760s`, Coinbase quarantined,
+  Deribit degraded, no credentials, and no writes. Summary SHA-256:
+  `698ad40af908757a398d19c6df83e4bfc50209bca541fe8b3acd6c314d6eff1e`.
 
 ## Prior continuation update — durable Phase-3 source qualification
 
