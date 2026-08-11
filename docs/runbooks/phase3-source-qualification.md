@@ -279,6 +279,31 @@ atomic heartbeat/status projection plus append-only hash-chained
 `disagreement.jsonl`, and `health-transitions.jsonl`; a run root is resumed only
 when its immutable code/policy/config identity matches.
 
+The latest completed engineering window is
+`artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`.
+It reached `multi_hour_window_complete` at
+`2026-08-11T03:14:39.940009Z` with 63 cycles and 378 samples. The offline
+validator
+`artifacts/phase3/public-market-data-validation/20260811T011500Z-two-hour-r3-v2/phase3-qualification-validation.json`
+has SHA-256
+`efa926a1f5264caf5fb5bdcfd8ca268d77f6d98aeb2d5504cbe5a90484a3b7ca` and
+returned `PASS_FOR_REVIEW` / `evidence_for_review_only` with
+`phase3_admission=false` and no validator issues. The run recorded 35
+disconnects, 25 reconnects, 252 resubscriptions, three snapshot-recovery
+attempts, zero sequence gaps, one out-of-order event, three replay failures,
+and 22 severe disagreement observations. All 126 source selections failed
+closed with zero silent substitutions. Final Binance sources were stale,
+Coinbase sources quarantined, and Deribit sources degraded; this is measured
+fail-closed behavior, not source admission.
+
+The separate corrected v2 resource sidecar at
+`artifacts/phase3/public-market-data-resource-monitor/20260811T025102Z-pid13339-v2`
+reached `deadline_reached` with 32 observations and no resource errors. Its
+summary SHA-256 is
+`42203ff04e875b3e1bc13a0c35dae9daa9a72e1c8be3e85892d1ccb3eeed7bbd`.
+The qualification process, sidecar service, and PID `13339` are no longer
+running; the failed v1 sidecar remains preserved for audit.
+
 Start a fresh bounded engineering window with an explicit run root:
 
 ```bash

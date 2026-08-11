@@ -1,13 +1,14 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`af7a31b95d48545ac62a9b7ac54bd59ca42138dd` (PRs #86–#101 merged; PRs #95–#96
-are documentation-only follow-ups to the #94 implementation/evidence anchor).
+`53e4437743b3bc7042267734d118f970f9792d14` (PRs #86–#103 merged; PRs #95–#96
+are documentation-only follow-ups to the #94 implementation/evidence anchor;
+PR #103 adds the offline Phase-3 qualification validator).
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
-concurrent symbol collection, and accurate connection accounting are merged;
-the active corrected real qualification root is recorded below and is not an
-admission record.
+concurrent symbol collection, accurate connection accounting, resource sidecar,
+and offline validation are merged. The completed corrected real qualification
+root is recorded below and is not an admission record.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
@@ -19,19 +20,21 @@ interruption record SHA-256 is
 `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`. The
 absolute-path runner fix is implemented and regression-tested; a one-cycle
 cwd-fix smoke passed with all three candidates, while fresh r3 is active under
-PID `70598` from `2026-08-10T18:07:25.593600Z` with 81 passing cycles as of
-`2026-08-11T01:26:03.661578Z` and last record SHA-256
-`cd5525a4c0fe993999708fa10d0736623045604765e025a43e169340610c89fe`. State remains
+PID `70598` from `2026-08-10T18:07:25.593600Z` with latest observed sequence
+103 at `2026-08-11T03:25:18.150192Z` and last record SHA-256
+`49bb4f3ea73fce5661ec64bb546cdba08cc21ac07ba74b97834b6a656b494fb0`. State remains
 `PENDING_STABILITY`; no predecessor cycles are concatenated and no roster role
 is promoted. The prompt-named non-r3 root remains append-only and is not
 modified; its status file still names PID `12973`, while that PID is no longer
 present in the host process table. The separately active r3 root is preserved
-under PID `70598`.
+under PID `70598` with latest observed sequence 103 at
+`2026-08-11T03:25:18.150192Z` and record SHA-256
+`49bb4f3ea73fce5661ec64bb546cdba08cc21ac07ba74b97834b6a656b494fb0`.
 
 | Stage / requirement | Authoritative source | Implementation present? | Automated tests? | Local deterministic evidence? | Real external evidence? | Timed evidence? | Human action? | Current gate state | Blocker | Next admissible action |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|---|
 | Phase 0 contracts, ports, policy gateway, model/runtime harness | architecture §11; phase-00 plan | yes | yes | yes | no | no | no | TESTED / LOCALLY MEASURED | none for local boundary | Preserve accepted local records; do not treat them as admission |
-| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with 79 passing cycles as of `2026-08-11T01:15:16.975316Z` and last record SHA-256 `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
+| Phase 0 selected-model stability: TTM-R2, Finance DeBERTa-v3, FinBERT-MiniLM | phase-00 plan; model-runtime runbook | yes, including terminal-sample boundary fix, absolute startup/evidence paths, and explicit repository-root launch | yes | partial | no | pending | no | PENDING_STABILITY / INTERRUPTED-THEN-RESTARTED | predecessor root `phase0-selected-24h-post-format-final-20260809` ended `short_smoke_complete` at `23.968570833055555` hours after 273 passing cycles; r1 recorded 7 passing cycles and r2 recorded 8 before the same sanitized unavailable-cwd `FileNotFoundError`; r2 interruption SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`; fresh r3 is active under PID `70598` with latest observed sequence 103 at `2026-08-11T03:25:18.150192Z` and last record SHA-256 `49bb4f3ea73fce5661ec64bb546cdba08cc21ac07ba74b97834b6a656b494fb0` | Preserve all interrupted roots and the new admission root separately; inspect r3 heartbeat and wait for a real terminal sample; never concatenate cycles |
 | Phase 0 remote route bake-off | phase-00 plan; remote-model runbook | yes, including resumable stability runner with stop-on-failure | yes | short live route evidence plus preserved hash-chained failures | yes, exact provider/model/endpoint identity on earlier successful samples; current retries failed closed | pending 24-hour window | provider availability/time-dependent | EXTERNALLY MEASURED / QUARANTINED | Novita and DigitalOcean roots are quarantined after shared-pool HTTP 429, deadline exhaustion, and earlier runner-integrity incidents; corrected root `artifacts/phase0/remote-route-stability/20260810T053600Z` stopped after its first failed probe and has no eligible duration evidence | Preserve incident roots; retry the reviewed exact route only after provider availability returns, using a fresh systemd-backed root; never concatenate failed samples |
 | Phase 0 Nautilus / Prefect / Hamilton seams | phase-00 plan | yes | yes | yes, credential-free component drill | no provider-specific evidence | no | no | TESTED / QUARANTINED | external Nautilus qualification and operational use remain governed by Phase 0 | Keep local seam evidence; qualify only through the selected gate |
 | Phase 0 Parquet-manifest vs DuckLake comparison | architecture §4.2; phase-00 plan | manifest/DuckDB baseline yes | baseline yes | yes | yes, isolated challenger review | no | no | QUALIFIED / REJECTED | DuckLake snapshot/reopen worked, but the second catalog added measurable footprint and relocation override complexity without enough incremental value | Keep manifest-managed Parquet + DuckDB + SQLite WAL; preserve the immutable comparison report |
@@ -121,8 +124,8 @@ still pending.
 
 | Requirement | Implementation and tests | Real evidence | Current state / next action |
 |---|---|---|---|
-| Restartable unattended qualification | `scripts/run_phase3_public_data_qualification.py`; `src/advisorai/collectors/source_health.py`, `market_recovery.py`, `source_disagreement.py`, and `source_failover.py`; `tests/phase3/test_source_health_controls.py` plus Phase-3/data/dashboard suites | Prior root `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2` completed 336 samples/56 cycles with summary SHA-256 `96aac309e23df24e090b97a99127b33d4dbb90e9b593cf76d909ef43e65f0283`; fresh root `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3` is active under PID `13339`, config code SHA-256 `c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`, snapshot limit `100`, `credentials_loaded=false`, `order_writes_attempted=false`, start `2026-08-11T01:14:37.205719Z`, target end `2026-08-11T03:14:37.205719Z`; v1 resource monitor root is preserved as failed hash evidence and corrected v2 sidecar config SHA-256 is `3202ad6c45f750a9b1c250336a0d7819cdcfa78486a6ee5bd78d645c544d3e08` | IMPLEMENTED / TESTED / EXTERNALLY MEASURED / RUNNING / PENDING_EXTERNAL_EVIDENCE. The prior root is independently validated but remains evidence-for-review-only; leave the qualification and corrected resource monitor running and validate both after completion. |
-| Deterministic health and failover | Typed HEALTHY, DEGRADED, STALE, DISCONNECTED, RECOVERING, and QUARANTINED transitions; hash-chained transition ledger; explicit severe-disagreement abstention and fail-closed selection; sanitized read-only dashboard/API | Prior selection remained fail-closed for BTC and ETH with no silent substitution. The fresh root’s first concurrent Binance sample records zero disconnects but measured stale age/degraded clock confidence; no credentials or execution writes are available to public connectors | No Phase-3 admission yet. A stale/disconnected/quarantined source or severe disagreement remains fail-closed; source identity cannot silently change. |
+| Restartable unattended qualification | `scripts/run_phase3_public_data_qualification.py`; `src/advisorai/collectors/source_health.py`, `market_recovery.py`, `source_disagreement.py`, and `source_failover.py`; `scripts/validate_phase3_public_data_qualification.py`; `scripts/monitor_phase3_process_resources.py`; `tests/phase3/test_source_health_controls.py`, `test_phase3_qualification_validation.py`, and `test_phase3_resource_monitor.py` | Completed root `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3` reached its target at `2026-08-11T03:14:39.940009Z` with 63 cycles/378 samples, summary SHA-256 `eb33cb5939feb5126bef3eff210c3710a95d6fbf3d85b3433bc2ad024a191ed7`, config SHA-256 `eb09ac0aa008c5a42c7e318178c79421bdf4d471b5649ddf65baa50a59f12398`, status SHA-256 `df8a7aa57aa95205636ce0e800882f6ccca0647b386a29488c83b7bba97ed5da`, and heartbeat SHA-256 `5d44ef77d3bf459f75c8141c53dbb45e6275489399d42616a1ad20ddd1fcb66`. The offline validation report at `artifacts/phase3/public-market-data-validation/20260811T011500Z-two-hour-r3-v2/phase3-qualification-validation.json` has SHA-256 `efa926a1f5264caf5fb5bdcfd8ca268d77f6d98aeb2d5504cbe5a90484a3b7ca`, state `PASS_FOR_REVIEW`, `phase3_admission=false`, and no validation issues. The corrected v2 resource sidecar reached `deadline_reached` with 32 observations and no resource errors; summary SHA-256 `42203ff04e875b3e1bc13a0c35dae9daa9a72e1c8be3e85892d1ccb3eeed7bbd` | IMPLEMENTED / TESTED / EXTERNALLY MEASURED / QUALIFIED FOR REVIEW / NOT ADMITTED. The root is no longer running. Final Binance sources were stale, Coinbase sources quarantined, and Deribit sources degraded; all 126 selections failed closed, silent substitution was zero, three replay failures and 22 severe disagreements were preserved. Keep admission closed and proceed only after Phase-0 stability and remaining Phase-3 criteria are satisfied. |
+| Deterministic health and failover | Typed HEALTHY, DEGRADED, STALE, DISCONNECTED, RECOVERING, and QUARANTINED transitions; hash-chained transition ledger; explicit severe-disagreement abstention and fail-closed selection; sanitized read-only dashboard/API | Completed r3 validation reloaded 78 health transitions and 126 source selections. Final Binance states were `STALE`, Coinbase states `QUARANTINED`, and Deribit states `DEGRADED`; 126/126 selections failed closed, silent substitution was zero, disagreement was severe 22 times, and the root preserved three replay failures | No Phase-3 admission yet. The measured state machine is externally qualified for review; preserve source identity and fail closed until the remaining admission criteria and Phase-0 stability gate pass. |
 
 ## Current external blockers
 
@@ -197,9 +200,9 @@ still pending.
   `artifacts/phase0/model-runtime-qualification/stability/phase0-selected-24h-terminal-sample-20260810-r2`
   is preserved as interrupted after eight passing cycles; its interruption
   record SHA-256 is `4b1c33ba1762fcbad67ce6b9a54ed82ba7531bb6d93a2d1585c35fd20e29c5ac`.
-  Fresh r3 is active under PID `70598` with 79 passing cycles as of
-  `2026-08-11T01:15:16.975316Z` and last record SHA-256
-  `1130100d0cff6fd829d7546d147d1b7220f4d4a0e70c56672443e5c5e355c7d2`;
+  Fresh r3 is active under PID `70598` with latest observed sequence 103 at
+  `2026-08-11T03:25:18.150192Z` and last record SHA-256
+  `49bb4f3ea73fce5661ec64bb546cdba08cc21ac07ba74b97834b6a656b494fb0`;
   do not concatenate roots.
 - DuckLake comparison is complete and rejected with measured evidence at
   `artifacts/phase0/ducklake-comparison/20260809T162300Z/ducklake-comparison.json`.
