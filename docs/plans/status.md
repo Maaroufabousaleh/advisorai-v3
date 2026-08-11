@@ -6,6 +6,23 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
+Clean `main` is `fbb010809598d6096b42309f16b5e13dd3e1acb8`, aligned with
+`origin/main`, after PR #160. The Phase-3 validator now verifies the sanitized
+`latest-health.json` projection against the latest append-only samples,
+including source identity, state, freshness, counters, fail-closed state, and
+payload-field boundaries. This is `IMPLEMENTED / TESTED`; it does not open
+Phase-3 admission. Full pytest passed `655` tests with 28 warnings and all
+eleven acceptance suites passed `133/152/126/104/27/34/10/11/27/18/5`.
+
+At `2026-08-11T11:49:14Z`, selected-model PID `70598` remained untouched and
+`running` at cycle `196`, with terminal target
+`2026-08-11T18:07:25.593600Z`. Phase-3 r5 PID `46864` remained untouched and
+`running` at `612` samples with no terminal sample; its target is
+`2026-08-11T12:35:59.156509Z`, and resource sidecar PID `47392` remains
+active. The r5 post-run watcher PID `91664`, r6 controller, and model terminal
+validator remain separate and waiting. Archive/rclone remains externally
+deferred and untouched.
+
 Clean `main` is `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with
 `origin/main`, after PR #158. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently

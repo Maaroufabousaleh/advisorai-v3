@@ -3,6 +3,23 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
+  `fbb010809598d6096b42309f16b5e13dd3e1acb8`, aligned with `origin/main` after
+  PR #160.
+- PR #160 adds offline validation of the sanitized Phase-3
+  `latest-health.json` projection against append-only source samples. It
+  rejects source identity drift, stale/mismatched operational fields, missing
+  source/symbol pairs, and unexpected fields; it records the projection hash
+  without opening admission. Full pytest passed `655` tests with 28 warnings;
+  all eleven acceptance suites passed
+  `133/152/126/104/27/34/10/11/27/18/5`.
+- At `2026-08-11T11:49:14Z`, preserve selected-model PID `70598` (cycle `196`,
+  target `2026-08-11T18:07:25.593600Z`) and Phase-3 r5 PID `46864` (612
+  samples, target `2026-08-11T12:35:59.156509Z`) with sidecar PID `47392`.
+  The r5 post-run watcher, corrected-r6 controller, and model terminal
+  validator remain waiting. Do not stop, restart, concatenate, or modify any
+  of these processes or roots. Archive/rclone remains externally deferred.
+
+- Clean `main` is
   `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with `origin/main` after
   PR #158.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
