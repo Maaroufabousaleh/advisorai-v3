@@ -8,6 +8,21 @@ human gate into a unit-test claim.
 ## Current repository anchor — 2026-08-11
 
 The verified clean executable anchor is
+`fbb010809598d6096b42309f16b5e13dd3e1acb8`, aligned with `origin/main` after
+PR #160. The Phase-3 offline validator now verifies that the read-only
+`latest-health.json` projection is a complete, sanitized, identity-preserving
+projection of the latest append-only source samples. It records projection
+state and SHA-256 in the validation report while keeping formal admission
+closed. This is `IMPLEMENTED / TESTED`; full pytest passed `655` tests and all
+eleven acceptance suites passed `133/152/126/104/27/34/10/11/27/18/5`.
+
+At `2026-08-11T11:49:14Z`, model stability PID `70598` remained active at
+cycle `196`, and Phase-3 r5 PID `46864` remained active at `612` samples with
+sidecar PID `47392`. The exact post-run and terminal validators remain
+read-only watchers; no terminal sample, corrected-r6 root, Phase-0 admission,
+or Phase-3 admission is claimed. Archive/rclone remains externally deferred.
+
+The verified clean executable anchor is
 `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with `origin/main` after
 PR #158. The attachment’s PID `13339` reference is not the live process: the
 protected model stability PID is `70598`, with Phase-3 r5 PID `46864` and

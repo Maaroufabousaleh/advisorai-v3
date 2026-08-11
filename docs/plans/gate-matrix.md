@@ -2,6 +2,25 @@
 
 ## Current repository anchor — 2026-08-11
 
+Clean `main` is `fbb010809598d6096b42309f16b5e13dd3e1acb8`, aligned with
+`origin/main`, after PR #160. PR #160 adds offline validation that the
+sanitized `latest-health.json` dashboard projection matches the latest
+append-only source samples, preserves actual provider identity, and contains
+no widened fields; the report records its projection SHA-256 and keeps
+`phase3_admission=false`. Full pytest passed `655` tests with 28 warnings and
+all eleven acceptance suites passed
+`133/152/126/104/27/34/10/11/27/18/5`; no external gate was opened.
+
+Read-only inspection at `2026-08-11T11:49:14Z` found selected-model PID
+`70598` still `running` at cycle `196`, with genuine terminal target
+`2026-08-11T18:07:25.593600Z`. Preserved Phase-3 r5 PID `46864` remained
+`running` at `612` samples with zero terminal samples and target
+`2026-08-11T12:35:59.156509Z`; its resource sidecar is PID `47392`. The exact
+r5 review watcher is PID `91664`; the corrected-r6 controller is still waiting
+and has not created its root, and the model terminal validator is still
+waiting. No protected process or immutable evidence root was modified.
+Archive/rclone remains externally deferred and untouched.
+
 Clean `main` is `513a4fae65ddbf8f15b00eac52b8ebc390c6b5b1`, aligned with
 `origin/main`, after PR #158. The attachment checkpoint’s PID `13339` and
 two-hour r3 root are stale; the live protected Phase-0 model process is PID
