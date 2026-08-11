@@ -44,7 +44,27 @@ def test_tspulse_is_not_admitted_as_a_forecaster():
 
 def test_stability_roster_points_to_the_active_immutable_root():
     roster = json.loads(Path("configs/models/phase0_model_roster.json").read_text())
-    assert roster["stability"]["state"] == "running"
+    assert roster["stability"]["state"] == "passed"
     assert roster["stability"]["run_directory"].endswith(
         "phase0-selected-24h-terminal-sample-20260810-r3"
     )
+    assert roster["stability"]["phase0_admission"] is False
+    assert roster["stability"]["validation_sha256"] == (
+        "1a6ab92c4f28d456776eac0c89ab099b0c1ef579c729fa8e458e4d5192b06949"
+    )
+
+
+def test_terminal_model_roles_are_stable_qualified_without_global_promotion():
+    roster = json.loads(Path("configs/models/phase0_model_roster.json").read_text())
+    roles = roster["roles"]
+    expected = {
+        "forecast_primary": "1eaec1958847ac85e3019d948e8050727a93bf937aa147924fde37f1aa415952",
+        "forecast_fast": "1eaec1958847ac85e3019d948e8050727a93bf937aa147924fde37f1aa415952",
+        "finance_sentiment_primary": "dd1b8ca98bd836c85be652373cd7fd49b8fd9cad03f37b79d5cb93b458a1f288",
+        "finance_sentiment_fast": "5c08e2684732aaeb6c2585305509307356faf5db864094c75fc1395f39845d1e",
+    }
+    for role, evidence_hash in expected.items():
+        assert roles[role]["state"] == "qualified"
+        assert roles[role]["stability_status"] == "passed"
+        assert roles[role]["evidence_hash"] == evidence_hash
+    assert roster["live_capital"] == "not_approved"

@@ -118,8 +118,8 @@
     "revision": "fdbfec0cd09610bd5af26da8998507fe7838e838",
     "role": "finance_sentiment_fast",
     "runtime_class": "transformers/5.5.4",
-    "stability": "not_started",
-    "state": "pending_stability"
+    "stability": "passed",
+    "state": "qualified"
   },
   "finance_sentiment_primary": {
     "candidate": "finsentiment-deberta-v3",
@@ -160,8 +160,8 @@
     "revision": "f2312de96d6cfe6251da37afb0e99b8e29885bdd",
     "role": "finance_sentiment_primary",
     "runtime_class": "transformers/5.5.4",
-    "stability": "not_started",
-    "state": "pending_stability"
+    "stability": "passed",
+    "state": "qualified"
   },
   "forecast_challengers": [
     {
@@ -371,8 +371,8 @@
     "revision": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
     "role": "forecast_fast",
     "runtime_class": "granite-tsfm/0.3.8",
-    "stability": "not_started",
-    "state": "pending_stability"
+    "stability": "passed",
+    "state": "qualified"
   },
   "forecast_primary": {
     "candidate": "ttm-r2",
@@ -423,8 +423,8 @@
     "revision": "d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f",
     "role": "forecast_primary",
     "runtime_class": "granite-tsfm/0.3.8",
-    "stability": "not_started",
-    "state": "pending_stability"
+    "stability": "passed",
+    "state": "qualified"
   },
   "generated_at": "2026-08-07T22:37:38.571045Z",
   "inactive_or_waiting": [
