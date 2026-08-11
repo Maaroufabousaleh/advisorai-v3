@@ -1,17 +1,21 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`c14287ba4b84becf0356a9a36dc79c8c683791f0` (PRs #86–#108 merged; PRs #95–#96
+`e089337585da7ff4fffbfdbd8571820dc560cf13e` (PRs #86–#110 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
-runner boundary).
+runner boundary; PR #109 adds the offline Phase-3 admission evaluator and PR
+#110 adds the terminal-sample runner fix).
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
 offline validation, and separate offline admission evaluator are merged. The
 completed corrected real qualification root is recorded below and is not an
 admission record.
+Future durable windows now include an explicit post-boundary terminal sample;
+the active r4 root predates that fix and remains separately identified by its
+recorded code hash.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.

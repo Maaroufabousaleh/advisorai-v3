@@ -7,7 +7,7 @@ human gate into a unit-test claim.
 
 ## Current Phase-3 evidence anchor
 
-Clean main is `c14287ba4b84becf0356a9a36dc79c8c683791f0` after PR #108. The
+Clean main is `e089337585da7ff4fffbfdbd8571820dc560cf13e` after PR #110. The
 completed durable root
 `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
 reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles
@@ -64,6 +64,12 @@ The next independent four-hour root is active under PID `87421` at
 `artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
 with sidecar PID `88019`. Both are credential-free/read-only and are preserved
 as separate evidence; neither opens Phase 3.
+
+PR #110 fixes the durable runner's terminal boundary for future roots. It
+collects one explicit cycle starting at or after the target, marks the sample
+`terminal_sample=true`, and records `terminal_sample_count` in the summary.
+The active r4 root predates this implementation and remains bound to its
+recorded code SHA-256; it is not restarted or retroactively reclassified.
 
 | Phase | Local implementation boundary | Automated evidence | Remaining admission evidence |
 |---|---|---|---|

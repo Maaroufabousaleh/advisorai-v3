@@ -1,11 +1,33 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`c14287ba4b84becf0356a9a36dc79c8c683791f0` (PRs #86–#108 merged; PRs #95–#96
+`e089337585da7ff4fffbfdbd8571820dc560cf13e` (PRs #86–#110 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
-runner boundary).
+runner boundary; PR #109 adds the offline Phase-3 admission evaluator and PR
+#110 adds the terminal-sample runner fix).
+
+## Current continuation update — terminal Phase-3 sample boundary
+
+- PR #110 changes future durable Phase-3 windows to collect one explicit sample
+  whose cycle starts at or after the configured target. The sample is marked
+  `terminal_sample=true` and summaries expose `terminal_sample_count`; the
+  process no longer finalizes immediately after a pre-target cycle. The
+  boundary regression is covered by
+  `tests/phase3/test_phase3_public_data_qualification_runner.py` and included
+  in the Phase-3 acceptance suite.
+- Verification after PR #110: full pytest `616 passed`; acceptance suites
+  `128/152/126/68/19/34/10/11/27/18/5`; Ruff/format, lock, compilation,
+  dashboard build, diff hygiene, tracked-secret, and tracked-weight checks all
+  passed.
+- The active r4 public-data process PID `87421` was launched before PR #110
+  with code SHA-256
+  `c45b6e6ae3417cb7555d726c819a7835b05e9b76d3c58fe7c99c4de0e0e4795b`; it is
+  not restarted or retroactively treated as if it had the new terminal marker.
+  Its independent resource sidecar remains PID `88019`. Evaluate that root
+  using the evidence actually recorded, then use a fresh root if the terminal
+  boundary remains unresolved.
 
 ## Current continuation update — Phase-3 admission evaluator and active window
 
