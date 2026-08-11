@@ -4,6 +4,17 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current continuation update — Phase-3 source identity integrity
+
+Candidate commit `4abf2ce` hardens `SourceHealthLedger`: a source/symbol stream
+must retain its provider identity and endpoint, and each transition must declare
+the state recorded immediately before it. Focused Phase-3 coverage passes `64`
+tests with one FastAPI-dependent dashboard test skipped only because the default
+`.venv` does not contain FastAPI. The active four-hour r4 process (PID `87421`),
+its resource sidecar (PID `88019`), and selected-model stability process (PID
+`70598`) were read-only inspected and not changed. No external or timed gate was
+opened; Phase-3 remains pending terminal operational evidence.
+
 ## Current continuation update — post-PR #120 Phase-3 review evidence
 
 Current clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6` after PR #122;

@@ -1,5 +1,16 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current continuation update — Phase-3 source identity integrity
+
+- Candidate commit `4abf2ce` adds provider/endpoint identity binding and
+  predecessor-state validation to the append-only Phase-3 health ledger.
+- Focused Phase-3 coverage passes `64` tests with one FastAPI-only skip; all
+  nine historical Phase-3 health ledgers reopen successfully.
+- Main remains clean at `ff7088d` until this isolated change is reviewed. The
+  active selected-model PID `70598`, Phase-3 PID `87421`, and resource sidecar
+  PID `88019` were not stopped, restarted, or modified. Phase-3 admission and
+  all timed gates remain pending.
+
 ## Current continuation update — post-PR #120 Phase-3 review
 
 - Clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6`; PRs #120–#122 are

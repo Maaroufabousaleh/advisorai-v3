@@ -1,5 +1,16 @@
 # AdvisorAI V3 gate matrix
 
+## Current continuation update — Phase-3 source identity integrity
+
+The Phase-3 source-health ledger now binds each `(source_id, symbol)` stream to
+one provider identity and endpoint, and verifies every appended transition's
+declared predecessor state. A provider cannot silently replace another source
+under the same stream identity. The change is isolated in candidate commit
+`4abf2ce` from clean main `ff7088d4`; focused Phase-3 coverage passes `64 tests`
+with one environment-only FastAPI skip, and all historical Phase-3 health
+ledgers reopen successfully. This is an implementation and local-test result;
+it does not promote Phase-3 admission or alter the active r4 evidence root.
+
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
 `22370e95a85b0cffbf104e867ac59dee5ac4c2f6` (PRs #86–#122 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
