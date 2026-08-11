@@ -4,9 +4,11 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current terminal-review checkpoint — 2026-08-11T23:01:40Z
+## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 
-This review started from clean `main` `6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`.
+Current merged `main` is `d5bfde76ed3cacaba365f3d7981db5a756eaf314` after PR
+#174; this review started from clean `main`
+`6913f2b4feaf71f4fada05a5e9611d7601dd5e8d`.
 The selected-model Phase-0 r3 terminal evidence remains unchanged and qualifies
 `ttm-r2`, `finsentiment-deberta-v3`, and `finbert-minilm` independently; overall
 Phase 0 remains pending its separate private-route and archive prerequisites.
