@@ -3,14 +3,35 @@
 ## Current repository anchor — 2026-08-11
 
 - Clean `main` is
-  `ee0b092492ae11b0c04ace22ee64348cd4baf581`, aligned with `origin/main` after
-  PR #150.
+  `2c2d266d7483ef157d15dd22a361bc1879d933c1`, aligned with `origin/main` after
+  PR #152.
 - The attachment’s PID `13339` / two-hour r3 reference is stale relative to
   the live host. Preserve model stability PID `70598`, Phase-3 r5 PID `46864`,
   and resource sidecar PID `47392`; none has been stopped, restarted, or
   modified.
 - Archive/rclone remains externally deferred. No Phase-3 admission or later
   phase gate is opened by this metadata correction.
+
+## Current continuation update — Phase-4 offline measurement boundary
+
+- PR #152 adds the offline, fail-closed
+  `scripts/run_phase4_paper_utility.py` runner and
+  `docs/runbooks/phase4-paper-utility.md`. It requires a currently valid
+  passed Phase-3 `PhaseGateRecord` plus strict typed observations/predictions,
+  writes one immutable `measured_pending_review` report, and records input/gate
+  hashes. It cannot load credentials or weights, make network calls, create a
+  gate record, promote a model, open Phase-4 admission, or submit an order.
+- At `2026-08-11T10:48:08Z`, the protected model PID `70598` was still running
+  at cycle 184 with terminal target `2026-08-11T18:07:25.593600Z`. The
+  preserved Phase-3 r5 PID `46864` was still running at 414 samples with no
+  terminal marker and target `2026-08-11T12:35:59.156509Z`; PID `47392` remains
+  its resource sidecar. The validator/controller watchers remain separate.
+  No protected process or immutable root was modified.
+- PR #152 verification passed full pytest `649 passed` with 28 warnings and
+  acceptance suites `133/152/126/98/27/34/10/11/27/18/5`; Ruff, format,
+  compileall, `/home/maaro/.local/bin/uv lock --check`, dashboard build,
+  `git diff --check`, and tracked-secret/weight checks passed. Real Phase-4
+  utility, Phase-0/3 admission, and all later gates remain pending.
 
 ## Current continuation observation — protected timed roots
 

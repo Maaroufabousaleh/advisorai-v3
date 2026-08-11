@@ -6,11 +6,33 @@ or 60-day operational gate.
 
 ## Current repository anchor — 2026-08-11
 
-Clean `main` is `ee0b092492ae11b0c04ace22ee64348cd4baf581`, aligned with
-`origin/main`, after PR #150. The attachment checkpoint naming PID `13339` and
+Clean `main` is `2c2d266d7483ef157d15dd22a361bc1879d933c1`, aligned with
+`origin/main`, after PR #152. The attachment checkpoint naming PID `13339` and
 the two-hour r3 root is stale relative to the live host; the currently
 protected processes are model stability PID `70598` and Phase-3 r5 PID `46864`
 with resource sidecar PID `47392`. No process was restarted or modified.
+
+## Current continuation update — Phase-4 offline measurement boundary
+
+PR #152 adds the offline, fail-closed
+[`scripts/run_phase4_paper_utility.py`](../../scripts/run_phase4_paper_utility.py)
+runner and its
+[`phase4-paper-utility.md`](../runbooks/phase4-paper-utility.md) runbook. The
+runner requires a currently valid passed Phase-3 `PhaseGateRecord` and strict
+typed observations/predictions, then writes immutable
+`measured_pending_review` evidence. It cannot load credentials or weights,
+make network calls, create a gate record, promote a model, open Phase-4
+admission, or submit an order. No real Phase-4 measurement has been produced;
+Phase 3 remains unadmitted.
+
+The `2026-08-11T10:48:08Z` read-only checkpoint found model PID `70598`
+running at cycle 184 and the preserved r5 public-data root running at 414
+samples with no terminal marker. Their exact targets remain
+`2026-08-11T18:07:25.593600Z` and `2026-08-11T12:35:59.156509Z`; no process or
+evidence root was touched. PR #152 verification passed full pytest `649`
+tests with 28 warnings, all eleven acceptance suites
+`133/152/126/98/27/34/10/11/27/18/5`, Ruff, format, compileall, lock, dashboard,
+diff, tracked-secret, and tracked-weight checks.
 
 ## Current continuation observation — protected timed roots
 
