@@ -145,6 +145,14 @@ class SourceHealthTransition(BaseModel):
     previous_record_hash: str | None = None
     record_hash: str | None = None
 
+    @field_validator("source_id", "provider_identity", "endpoint", "symbol")
+    @classmethod
+    def require_nonblank_identity(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("source health transition identity fields cannot be blank")
+        return value
+
     @field_validator("observed_at")
     @classmethod
     def require_aware_timestamp(cls, value: datetime) -> datetime:
@@ -264,6 +272,8 @@ class SourceHealthLedger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._records: list[SourceHealthTransition] = []
         self._last_hash: str | None = None
+        self._latest_state_by_key: dict[tuple[str, str], SourceHealthState] = {}
+        self._identity_by_key: dict[tuple[str, str], tuple[str, str]] = {}
         if path.exists():
             for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if not line.strip():
@@ -282,8 +292,22 @@ class SourceHealthLedger:
                     raise RuntimeError("source-health ledger record hash does not match content")
                 if record.previous_record_hash != self._last_hash:
                     raise RuntimeError("source-health ledger hash chain is not append-only")
+                key = (record.source_id, record.symbol)
+                expected_previous_state = self._latest_state_by_key.get(key)
+                if record.previous_state != expected_previous_state:
+                    raise RuntimeError(
+                        "source-health ledger state chain does not match the previous state"
+                    )
+                identity = (record.provider_identity, record.endpoint)
+                previous_identity = self._identity_by_key.get(key)
+                if previous_identity is not None and identity != previous_identity:
+                    raise RuntimeError(
+                        "source-health ledger provider identity changed for a source stream"
+                    )
                 self._records.append(record)
                 self._last_hash = record.record_hash
+                self._latest_state_by_key[key] = record.state
+                self._identity_by_key[key] = identity
 
     @staticmethod
     def _record_digest(record: SourceHealthTransition) -> str:
@@ -297,6 +321,14 @@ class SourceHealthLedger:
             raise ValueError(
                 "source-health transitions must be appended without a precomputed hash"
             )
+        key = (transition.source_id, transition.symbol)
+        expected_previous_state = self._latest_state_by_key.get(key)
+        if transition.previous_state != expected_previous_state:
+            raise ValueError("source-health transition previous state does not match the ledger")
+        identity = (transition.provider_identity, transition.endpoint)
+        previous_identity = self._identity_by_key.get(key)
+        if previous_identity is not None and identity != previous_identity:
+            raise ValueError("source-health transition cannot silently change provider identity")
         record = transition.model_copy(
             update={
                 "previous_record_hash": self._last_hash,
@@ -312,6 +344,8 @@ class SourceHealthLedger:
             os.fsync(handle.fileno())
         self._records.append(record)
         self._last_hash = record.record_hash
+        self._latest_state_by_key[key] = record.state
+        self._identity_by_key[key] = identity
         return record
 
     def read(self) -> tuple[SourceHealthTransition, ...]:

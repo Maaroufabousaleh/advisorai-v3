@@ -5,6 +5,17 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current continuation update — Phase-3 source identity integrity
+
+Candidate commit `4abf2ce` strengthens the append-only Phase-3 health ledger by
+checking predecessor state and rejecting provider/endpoint changes for an
+existing source/symbol stream. This preserves explicit source identity during
+failover and prevents a dashboard or downstream consumer from inheriting a
+different provider's continuity. The focused Phase-3 suite passes `64` tests
+with one dependency-only skip; all nine existing Phase-3 health ledgers reopen
+under the new checks. The active r4 process and Phase-0 stability process remain
+untouched, and no admission state changed.
+
 ## Current continuation update — post-PR #120 Phase-3 review
 
 Current clean `main` is `22370e95a85b0cffbf104e867ac59dee5ac4c2f6`. PR #120
