@@ -253,6 +253,23 @@ def _percentile(values: Sequence[float], percentile: float) -> float | None:
     return round(ordered[index], 6)
 
 
+def _clock_adjusted_event_ages(
+    raw_ages: Sequence[float], clock_offset_seconds: float | None
+) -> tuple[tuple[float, ...], int]:
+    """Return non-negative ages and retain signed future-event diagnostics.
+
+    A provider clock correction can make an event appear ahead of local time.
+    That is a clock-confidence failure, not a negative age.  Keep the signed
+    result only for the explicit fail-closed counter and clamp the reported
+    age distribution at zero so percentile/minimum metrics remain durations.
+    """
+
+    if clock_offset_seconds is None:
+        return (), 0
+    signed = tuple(float(age) + float(clock_offset_seconds) for age in raw_ages)
+    return tuple(max(0.0, age) for age in signed), sum(age < 0 for age in signed)
+
+
 def _raw_records(path: Path) -> tuple[tuple[int, datetime, bytes], ...]:
     if not path.exists():
         return ()
@@ -749,10 +766,7 @@ def _source_symbol_result(
         for value in metrics.get("provider_event_age_samples", ())
         if isinstance(value, (int, float))
     )
-    adjusted_ages = tuple(
-        value + float(clock_offset) for value in raw_ages if isinstance(clock_offset, (int, float))
-    )
-    adjusted_future_count = sum(value < 0 for value in adjusted_ages)
+    adjusted_ages, adjusted_future_count = _clock_adjusted_event_ages(raw_ages, clock_offset)
     if adjusted_future_count:
         clock_confidence = ClockConfidence.DEGRADED
     connected = bool(successful_connections and metrics.get("valid_event_count", 0))
