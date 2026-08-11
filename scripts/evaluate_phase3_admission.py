@@ -31,6 +31,7 @@ if __package__ in {None, ""}:
 from scripts.validate_phase3_public_data_qualification import (
     CHAIN_LOGS,
     _load_chain,
+    _validate_health_snapshot,
     _validate_resource_monitor,
 )
 
@@ -87,6 +88,7 @@ class Phase3AdmissionReport(BaseModel):
     run_config_sha256: str = Field(min_length=64, max_length=64)
     run_summary_sha256: str = Field(min_length=64, max_length=64)
     resource_monitor_summary_sha256: str | None = None
+    health_snapshot_sha256: str | None = None
     recommendation: Literal["PENDING_EXTERNAL_EVIDENCE", "QUALIFIED_FOR_REVIEW"]
     qualification_state: Literal["evidence_for_review_only"] = "evidence_for_review_only"
     phase3_admission: Literal[False] = False
@@ -176,6 +178,7 @@ def _evaluate_checks(
     summary: dict[str, Any],
     logs: dict[str, list[dict[str, Any]]],
     resource_monitor: dict[str, Any] | None,
+    health_snapshot: dict[str, Any],
 ) -> tuple[AdmissionCheck, ...]:
     samples = logs["samples.jsonl"]
     selections = logs["source-selection.jsonl"]
@@ -255,6 +258,20 @@ def _evaluate_checks(
             public_only,
             "qualification config and every sample deny credentials and order writes",
             "public_read_only_invariant_failed",
+        )
+    )
+
+    health_projection_ok = health_snapshot.get("state") == "validated" and not health_snapshot.get(
+        "issues"
+    )
+    checks.append(
+        _check(
+            "dashboard_health_projection",
+            health_projection_ok,
+            "latest-health.json matches the latest append-only source samples"
+            if health_projection_ok
+            else "latest-health.json is missing, invalid, or does not match source samples",
+            "health_snapshot_invalid",
         )
     )
 
@@ -400,12 +417,18 @@ def evaluate(
         if resource_monitor is not None
         else None
     )
+    health_snapshot = _validate_health_snapshot(
+        run_directory / "latest-health.json",
+        logs["samples.jsonl"],
+        expected_run_id=str(config.get("run_id", run_directory.name)),
+    )
     checks = _evaluate_checks(
         config=config,
         status=status,
         summary=summary,
         logs=logs,
         resource_monitor=resource_summary,
+        health_snapshot=health_snapshot,
     )
     blockers = tuple(
         check.blocker_code for check in checks if not check.passed and check.blocker_code
@@ -424,6 +447,7 @@ def evaluate(
         resource_monitor_summary_sha256=(
             resource_summary.get("summary_sha256") if resource_summary is not None else None
         ),
+        health_snapshot_sha256=health_snapshot.get("sha256"),
         recommendation=recommendation,
         checks=checks,
         blocker_codes=blockers,

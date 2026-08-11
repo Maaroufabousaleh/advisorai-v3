@@ -105,6 +105,11 @@ def _inputs(logs: dict[str, list[dict[str, object]]]) -> dict[str, object]:
             "resource_errors": [],
             "summary_sha256": "d" * 64,
         },
+        "health_snapshot": {
+            "state": "validated",
+            "issues": [],
+            "sha256": "e" * 64,
+        },
     }
 
 
@@ -165,3 +170,21 @@ def test_admission_evaluator_requires_terminal_sample_marker():
     window_check = next(check for check in checks if check.name == "multi_hour_window_complete")
     assert not window_check.passed
     assert window_check.blocker_code == "qualification_window_incomplete"
+
+
+def test_admission_evaluator_requires_valid_dashboard_health_projection():
+    logs = _logs(_sample("BTC"), _sample("ETH"))
+    inputs = _inputs(logs)
+    inputs["health_snapshot"] = {
+        "state": "invalid",
+        "issues": ["health_snapshot_source_1_actual_provider_identity_mismatch"],
+        "sha256": "e" * 64,
+    }
+
+    checks = _evaluate_checks(**inputs)
+
+    projection_check = next(
+        check for check in checks if check.name == "dashboard_health_projection"
+    )
+    assert not projection_check.passed
+    assert projection_check.blocker_code == "health_snapshot_invalid"
