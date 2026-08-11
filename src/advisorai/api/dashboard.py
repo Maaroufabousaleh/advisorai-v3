@@ -140,6 +140,8 @@ class SourceHealthView(BaseModel):
     sequence_gap_count: int = Field(default=0, ge=0)
     disagreement_state: str = Field(min_length=1)
     snapshot_recovery_state: str = Field(min_length=1)
+    failure_classes: tuple[str, ...] = ()
+    failure_layers: tuple[str, ...] = ()
     actual_provider_identity: str = Field(min_length=1)
     fail_closed: bool
 
@@ -991,6 +993,16 @@ class DashboardProjection:
                         disagreement_state=str(record.get("disagreement_state", "unmeasured")),
                         snapshot_recovery_state=str(
                             record.get("snapshot_recovery_state", "unmeasured")
+                        ),
+                        failure_classes=tuple(
+                            value
+                            for value in record.get("failure_classes", ())
+                            if isinstance(value, str)
+                        ),
+                        failure_layers=tuple(
+                            value
+                            for value in record.get("failure_layers", ())
+                            if isinstance(value, str)
                         ),
                         actual_provider_identity=str(record["actual_provider_identity"]),
                         fail_closed=bool(record["fail_closed"]),

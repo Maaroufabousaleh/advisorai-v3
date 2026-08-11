@@ -5,6 +5,19 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current Phase-3 failure-class projection
+
+The current clean-main base for this work package is
+`37cec82504f35b78f13597a30b4139479e84206f` after PR #115. The Phase-3 durable
+runner now projects sanitized exception classes and failure-layer identifiers
+from REST/WebSocket collectors into source/symbol samples, summary aggregates,
+and the read-only dashboard/API health view. It never copies response bodies,
+headers, messages, or credentials into these fields. Focused Phase-3 and
+dashboard coverage passed `31` tests; the full locked verification passed `623`
+tests and acceptance suites
+`128/152/126/69/24/34/10/11/27/18/5`. This is an implementation/evidence
+completeness improvement, not a Phase-3 admission.
+
 ## Current Phase-4 utility preparation boundary
 
 PR #114 adds
@@ -28,7 +41,7 @@ not promote any model.
 
 ## Current Phase-3 evidence anchor
 
-Clean main is `f7d05ae646cb8ee6264e5cf38bedb4f8f17c08cf` after PR #114. The
+Clean main base is `37cec82504f35b78f13597a30b4139479e84206f` after PR #115. The
 completed durable root
 `artifacts/phase3/public-market-data-durable/20260811T011500Z-two-hour-r3`
 reached its two-hour target at `2026-08-11T03:14:39.940009Z` with 63 cycles
@@ -122,6 +135,15 @@ dashboard/API projection. The implementation is in
 and the typed collectors under
 [`src/advisorai/collectors`](../../src/advisorai/collectors), with focused
 coverage in [`tests/phase3/test_source_health_controls.py`](../../tests/phase3/test_source_health_controls.py).
+
+The runner also projects sanitized `failure_classes` and `failure_layers` from
+the REST/WebSocket collector boundary into per-source/symbol samples, summary
+aggregates, and the read-only dashboard/API health projection. Only bounded class or
+layer identifiers are retained; response bodies, headers, messages, and
+credentials remain outside the evidence projection. The regression test for
+this boundary is included in the focused Phase-3 suite (`14 passed`). Existing
+qualification roots are immutable and are not retrofitted; the active r4 root
+predates this projection and remains evidence as recorded.
 
 The prior real qualification root
 `artifacts/phase3/public-market-data-durable/20260810T231500Z-two-hour-r2`

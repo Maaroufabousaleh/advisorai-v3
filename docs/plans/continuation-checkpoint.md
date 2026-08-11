@@ -1,14 +1,14 @@
 # AdvisorAI V3 continuation checkpoint
 
 Checkpoint refreshed 2026-08-11 from clean `main`
-`f7d05ae646cb8ee6264e5cf38bedb4f8f17c08cf` (PRs #86–#114 merged; PRs #95–#96
+`37cec82504f35b78f13597a30b4139479e84206f` (PRs #86–#115 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
 runner boundary; PR #109 adds the offline Phase-3 admission evaluator, PR #110
 adds the terminal-sample runner fix, PR #112 requires the explicit terminal
-marker during review, and PR #114 adds the closed Phase-4 utility preparation
-boundary.)
+marker during review, PR #114 adds the closed Phase-4 utility preparation
+boundary, and PR #115 refreshes the evidence anchors.)
 
 ## Current continuation update — Phase-4 utility preparation
 
@@ -32,6 +32,24 @@ boundary.)
   focused utility tests passed `5`, and the model/Phase-4 suite passed `24`.
   The selected-model stability PID `70598` and public-data PID `87421` with
   sidecar PID `88019` remain untouched. Archive/rclone remains deferred.
+
+## Current continuation update — Phase-3 failure classification
+
+- The durable public-data runner now carries sanitized collector exception
+  classes and failure-layer labels into each source/symbol sample, its summary
+  aggregation, and the read-only dashboard/API health projection. Response bodies,
+  headers, messages, credentials, and provider state are not copied into these
+  fields.
+- Focused Phase-3 coverage is `14 passed`. The active r4 root at
+  `artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+  remains untouched under PID `87421`; it predates this implementation and is
+  not retroactively upgraded. Future qualification roots will contain the
+  complete sanitized failure classification. Phase-3 admission remains closed.
+- Locked verification for this continuation passed full pytest `623 passed` with
+  28 warnings and acceptance suites
+  `128/152/126/69/24/34/10/11/27/18/5`; Ruff/format, lock, compilation,
+  dashboard build, diff hygiene, tracked-secret, and tracked-weight checks all
+  passed. These checks do not open Phase-0, Phase-3, or later external gates.
 
 ## Current continuation update — terminal Phase-3 sample boundary
 

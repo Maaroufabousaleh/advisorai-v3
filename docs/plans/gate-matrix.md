@@ -1,14 +1,14 @@
 # AdvisorAI V3 gate matrix
 
 Checkpoint refreshed 2026-08-11 from the clean `main` anchor
-`f7d05ae646cb8ee6264e5cf38bedb4f8f17c08cf` (PRs #86–#114 merged; PRs #95–#96
+`37cec82504f35b78f13597a30b4139479e84206f` (PRs #86–#115 merged; PRs #95–#96
 are documentation-only follow-ups to the #94 implementation/evidence anchor;
 PR #103 adds the offline Phase-3 qualification validator, PR #105 records the
 independent Phase-3 availability recheck, and PR #108 adds the durable Phase-7
 runner boundary; PR #109 adds the offline Phase-3 admission evaluator, PR #110
 adds the terminal-sample runner fix, PR #112 requires the explicit terminal
-marker during review, and PR #114 adds the closed Phase-4 utility preparation
-boundary.)
+marker during review, PR #114 adds the closed Phase-4 utility preparation
+boundary, and PR #115 refreshes the evidence anchors.)
 The
 Phase-3 durable source-health implementation, bounded snapshot resource fix,
 concurrent symbol collection, accurate connection accounting, resource sidecar,
@@ -21,6 +21,24 @@ recorded code hash.
 This matrix separates implementation, tests, local measurements, external
 measurements, qualification, and admission. A passing test suite does not open
 an external, timed, or human gate.
+
+## Current Phase-3 evidence projection update
+
+The durable public-data runner now records sanitized `failure_classes` and
+`failure_layers` per source/symbol sample, aggregates them in the summary, and
+exposes the latest values through the read-only health snapshot/API. The projection
+is limited to collector exception classes and deterministic layer labels; it
+does not persist response bodies, headers, messages, or credentials. Focused
+coverage passes `14` tests. The active r4 root under PID `87421` predates this
+change and is preserved without retroactive modification; its current records
+therefore remain evidence as recorded. This is an implementation/evidence
+quality improvement and does not change `phase3_admission_opened=false`.
+
+Locked verification for this continuation passed full pytest `623 passed` with
+28 warnings and acceptance suites
+`128/152/126/69/24/34/10/11/27/18/5`; repository static, build, lock,
+compilation, secret, weight, and diff checks passed. No external gate was
+opened by this verification.
 
 ## Latest Phase-4 utility preparation
 

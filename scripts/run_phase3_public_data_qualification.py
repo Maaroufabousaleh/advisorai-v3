@@ -128,6 +128,43 @@ def _connection_disconnected(connection: Mapping[str, object]) -> bool:
     )
 
 
+def _sanitized_failure_details(
+    *payloads: Mapping[str, object] | None,
+) -> tuple[list[str], list[str]]:
+    """Project only safe failure labels from transport/collector records.
+
+    The lower-level collectors deliberately persist exception classes rather
+    than messages or response bodies.  Keep that boundary when promoting the
+    details into the durable source/symbol sample: failure diagnostics are
+    useful only if they cannot accidentally become a second response-log
+    channel.
+    """
+
+    failure_classes: set[str] = set()
+    failure_layers: set[str] = set()
+    for payload in payloads:
+        if not isinstance(payload, Mapping):
+            continue
+        for field, target in (
+            ("error_class", failure_classes),
+            ("collection_error_class", failure_classes),
+            ("transport_error_class", failure_classes),
+            ("failure_layer", failure_layers),
+        ):
+            value = payload.get(field)
+            if not isinstance(value, str) or not value:
+                continue
+            # Collector values are exception classes/layer identifiers.  Do
+            # not carry arbitrary provider text into immutable evidence.
+            sanitized = "".join(
+                character if character.isalnum() or character in "._-" else "_"
+                for character in value
+            )[:128]
+            if sanitized:
+                target.add(sanitized)
+    return sorted(failure_classes), sorted(failure_layers)
+
+
 def _write_immutable(path: Path, payload: object) -> None:
     encoded = (json.dumps(payload, sort_keys=True, indent=2, allow_nan=False) + "\n").encode()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -688,6 +725,22 @@ def _source_symbol_result(
         if isinstance(item.get("raw_spool"), str)
     ]
     raw_spool_paths.extend(source_directory.rglob("raw-http.jsonl"))
+    market = rest.get("markets")
+    market_record = market.get(symbol) if isinstance(market, Mapping) else None
+    market_book = market_record.get("order_book") if isinstance(market_record, Mapping) else None
+    market_trades = (
+        market_record.get("public_trades") if isinstance(market_record, Mapping) else None
+    )
+    failure_classes, failure_layers = _sanitized_failure_details(
+        rest,
+        rest.get("server_time") if isinstance(rest.get("server_time"), Mapping) else None,
+        rest.get("catalogue") if isinstance(rest.get("catalogue"), Mapping) else None,
+        market_record if isinstance(market_record, Mapping) else None,
+        market_book if isinstance(market_book, Mapping) else None,
+        market_trades if isinstance(market_trades, Mapping) else None,
+        websocket,
+        *connections,
+    )
     return {
         "source_id": source.source_id,
         "provider_identity": source.source_id,
@@ -740,6 +793,8 @@ def _source_symbol_result(
         "snapshot_recovery_attempt_count": int(
             metrics.get("snapshot_recovery") not in {None, "not_required", "not_applicable"}
         ),
+        "failure_classes": failure_classes,
+        "failure_layers": failure_layers,
         "downtime_ratio": 0.0 if connected else 1.0,
     }
 
@@ -949,6 +1004,10 @@ def _summary(
                 "sample_count": 0,
                 "downtime_ratio": 0.0,
                 "health_states": [],
+                "failure_classes": [],
+                "failure_layers": [],
+                "failure_class_counts": {},
+                "failure_layer_counts": {},
             },
         )
         bucket["sample_count"] = int(bucket["sample_count"]) + 1
@@ -963,6 +1022,23 @@ def _summary(
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 totals[field] += int(value)
                 bucket[field] = int(bucket.get(field, 0)) + int(value)
+        for field, counts_field in (
+            ("failure_classes", "failure_class_counts"),
+            ("failure_layers", "failure_layer_counts"),
+        ):
+            values = record.get(field)
+            if not isinstance(values, list):
+                continue
+            labels = bucket[field]
+            counts = bucket[counts_field]
+            if not isinstance(labels, list) or not isinstance(counts, dict):
+                continue
+            for value in values:
+                if not isinstance(value, str):
+                    continue
+                if value not in labels:
+                    labels.append(value)
+                counts[value] = int(counts.get(value, 0)) + 1
         age = record.get("adjusted_provider_event_age_seconds_max")
         if isinstance(age, (int, float)):
             age_values.setdefault(key, []).append(float(age))
@@ -1043,6 +1119,12 @@ def _health_snapshot(
                 ),
                 "snapshot_recovery_state": latest_by_key.get((source_id, symbol), {}).get(
                     "snapshot_recovery", "unmeasured"
+                ),
+                "failure_classes": latest_by_key.get((source_id, symbol), {}).get(
+                    "failure_classes", []
+                ),
+                "failure_layers": latest_by_key.get((source_id, symbol), {}).get(
+                    "failure_layers", []
                 ),
                 "actual_provider_identity": latest_by_key.get((source_id, symbol), {}).get(
                     "provider_identity", source_id
