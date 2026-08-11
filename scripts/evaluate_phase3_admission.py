@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -20,6 +21,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.collectors.public_market_data import reviewed_public_market_data_sources
+
+if __package__ in {None, ""}:
+    # Direct `python scripts/evaluate_phase3_admission.py` entrypoints do not
+    # put the repository root on sys.path; keep the documented offline command
+    # equivalent to importing the module through the package.
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts.validate_phase3_public_data_qualification import (
     CHAIN_LOGS,
     _load_chain,

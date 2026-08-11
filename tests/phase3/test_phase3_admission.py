@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 from scripts.evaluate_phase3_admission import (
     Phase3AdmissionReport,
@@ -8,6 +12,24 @@ from scripts.evaluate_phase3_admission import (
 )
 
 NOW = datetime(2026, 8, 11, 4, 0, tzinfo=UTC)
+
+
+def test_admission_evaluator_direct_entrypoint_help_is_offline_and_executable():
+    repository_root = Path(__file__).resolve().parents[2]
+    environment = os.environ.copy()
+    environment.pop("PYTHONPATH", None)
+    completed = subprocess.run(
+        [sys.executable, "scripts/evaluate_phase3_admission.py", "--help"],
+        cwd=repository_root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "Evaluate Phase-3 operational evidence" in completed.stdout
+    assert completed.stderr == ""
 
 
 def _sample(symbol: str, *, healthy: bool = True, replay: bool = True) -> dict[str, object]:
