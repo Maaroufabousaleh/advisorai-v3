@@ -1,5 +1,30 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current continuation update — r4 terminal review and r5 active root
+
+- The preserved r4 root
+  `artifacts/phase3/public-market-data-durable/20260811T042355Z-four-hour-r4-fixed`
+  completed at `2026-08-11T08:24:45.638125Z` with 810 samples and summary
+  SHA-256 `53b1b77192dc77360b63b12208a445cc889c6bd0ff570fe4bd08ef37d8753fe2`.
+  It has no terminal marker, and its final sidecar observation invalidated the
+  sidecar hash chain with `process:FileNotFoundError`; sidecar summary SHA-256
+  is `75cc73ca44400d59df9f28037d5037ff8ca3c456c459f7d5e34ffe06e3168d47`.
+  Both artifacts are preserved and quarantined; no gate was promoted.
+- PR #138 merged at
+  `1335bfabe93bdd990f9512430ae843a9795a7ebf`, fixing sparse resource-record
+  sealing and adding a regression test. The fresh r5 root is active under PID
+  `46864` at
+  `artifacts/phase3/public-market-data-durable/20260811T083600Z-four-hour-r5-reconnect-hashfixed`
+  with code identity
+  `f90489cf21267a748514db7ae3c72d86835044b29771d2af87dbde321511a8b8` and
+  target `2026-08-11T12:35:59.156509Z`.
+- Its resource sidecar is PID `47392` at
+  `artifacts/phase3/public-market-data-resource-monitor/20260811T083600Z-four-hour-r5-reconnect-hashfixed-v2`.
+  The first real cycle has valid BTC/ETH snapshot/replay data, but all current
+  source selections remain fail-closed. Phase-3 admission is pending.
+- Selected-model stability PID `70598` remains untouched; archive/rclone is
+  unchanged and externally deferred.
+
 ## Current continuation update — bounded Binance public-data reconnect
 
 - PR #136 merged at `350d6b55ac36251750e0459dc4e24b3507ca865c`. Future
