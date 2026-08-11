@@ -4,13 +4,14 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current recovery checkpoint — 2026-08-11T13:30:41Z
+## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
-Clean `main` is `de9e7c997d3a435aa4b8aa5e73c355cf695d81fe` after PR #166. The
-direct Phase-3 runner entrypoint works under a detached supervisor without an
-inherited `PYTHONPATH`; failed launch roots remain preserved and quarantined.
-Full pytest passed `657` tests with 28 warnings; all eleven acceptance suites
-passed `133/152/126/106/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
+Clean `main` is `48d913d1ac1c78549b9d1c6115550308cacced19` after PR #167, a
+docs-only live Phase-3 checkpoint. The direct Phase-3 runner entrypoint works
+under a detached supervisor without an inherited `PYTHONPATH`; failed launch
+roots remain preserved and quarantined. Full pytest passed `657` tests with 28
+warnings; all eleven acceptance suites passed
+`133/152/126/106/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
 dashboard build, diff hygiene, and tracked-secret/weight checks also passed.
 
 The prior r5 window completed truthfully with `774` samples and `6` terminal
@@ -26,12 +27,14 @@ The corrected r6 root is active under PID `2943` at
 `artifacts/phase3/public-market-data-durable/20260811T124600Z-four-hour-r6-clock-confidence-setsid`,
 with resource sidecar PID `4807` under the v3 monitor root. It is a fresh
 four-hour run; no prior samples were concatenated. At this checkpoint it has
-`144` samples and no terminal sample; the latest cycle records Binance BTC/ETH
-and Deribit BTC/ETH healthy and replay-equivalent, with Coinbase explicitly
-quarantined. The separate post-run watcher PID `28569` will write only fresh
-read-only validation/evaluation roots after the protected runner and sidecar
-finish. Selected-model stability PID `70598` remains untouched at cycle `215`
-with terminal target `2026-08-11T18:07:25.593600Z`. Archive/rclone remains
+`192` samples and no terminal sample. All observed Binance BTC/ETH rows are
+replay-equivalent and sequence-continuous; Coinbase remains explicitly
+quarantined, while Deribit disconnect/recovery events and severe cross-source
+disagreement remain preserved as measured fail-closed states. The separate
+post-run watcher PID `28569` will write only fresh read-only
+validation/evaluation roots after the protected runner and sidecar finish.
+Selected-model stability PID `70598` remains untouched at cycle `218` with
+terminal target `2026-08-11T18:07:25.593600Z`. Archive/rclone remains
 externally deferred.
 
 ## Current repository anchor — 2026-08-11

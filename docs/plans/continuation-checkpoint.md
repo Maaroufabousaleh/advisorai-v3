@@ -1,10 +1,11 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current recovery checkpoint — 2026-08-11T13:30:41Z
+## Current recovery checkpoint — 2026-08-11T13:44:48Z
 
 - Clean `main` is
-  `de9e7c997d3a435aa4b8aa5e73c355cf695d81fe`, aligned with `origin/main` after
-  PR #166. Full pytest passed `657` tests with 28 warnings; all eleven
+  `48d913d1ac1c78549b9d1c6115550308cacced19`, aligned with `origin/main` after
+  PR #167, a docs-only live Phase-3 checkpoint. Full pytest passed `657` tests
+  with 28 warnings; all eleven
   acceptance suites passed `133/152/126/106/27/34/10/11/27/18/5`. Ruff,
   repository format, lock, compilation, dashboard build, diff hygiene, and
   tracked-secret/weight checks also passed.
@@ -24,16 +25,18 @@
   and resource sidecar PID `4807`, v3 monitor root
   `artifacts/phase3/public-market-data-resource-monitor/20260811T124600Z-four-hour-r6-clock-confidence-setsid-v3`.
   The immutable r6 configuration targets
-  `2026-08-11T16:46:26.507901Z`; at this checkpoint it is `running` with `144`
+  `2026-08-11T16:46:26.507901Z`; at this checkpoint it is `running` with `192`
   samples and `0` terminal samples under code SHA-256
   `b928650c279502b1f759c1584769f881f6c9a7f015ba34896d18c0501463fd0b`.
-  The latest cycle records Binance BTC/ETH and Deribit BTC/ETH healthy and
-  replay-equivalent, with Coinbase explicitly quarantined. Do not stop,
-  restart, edit, or concatenate these roots.
+  All observed Binance BTC/ETH rows are replay-equivalent and
+  sequence-continuous; Coinbase remains explicitly quarantined, while Deribit
+  disconnect/recovery events and severe cross-source disagreement remain
+  preserved as measured fail-closed states. Do not stop, restart, edit, or
+  concatenate these roots.
 - A separate post-run watcher PID `28569` waits for the runner and resource
   sidecar to finish, then writes only fresh read-only validation/evaluation
   roots under the Phase-3 validation and admission directories. Selected-model
-  stability PID `70598` remains untouched and running at cycle `215`, with
+  stability PID `70598` remains untouched and running at cycle `218`, with
   genuine terminal target `2026-08-11T18:07:25.593600Z`; no Phase-0 terminal
   result exists yet. Archive/rclone remains externally deferred.
 
