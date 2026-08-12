@@ -35,6 +35,11 @@
   still pending fresh independent cadence evidence. Phase 2/3 remain passed;
   Phase 5–7 remain closed; archive/rclone remains deferred. The laptop remains
   running.
+- Offline materialization is prepared in
+  `scripts/materialize_phase4_v3core_forward_input.py`; it refuses incomplete
+  roots and writes the typed evaluation input only after the frozen 64-per-
+  symbol target is reached. Its 2 focused refusal tests pass. It has not read
+  or modified the active root.
 
 ## Historical forward PIT collector checkpoint — 2026-08-12T20:33:06Z
 

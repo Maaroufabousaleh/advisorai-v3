@@ -48,6 +48,14 @@ No Phase-4 admission, model promotion, Phase-5 council, Phase-6 fill, or
 Phase-7 soak has been created. Phase 2/3 are unchanged and passed; archive and
 private-route work remain outside this continuation.
 
+The offline completion boundary is
+`scripts/materialize_phase4_v3core_forward_input.py`. It revalidates the
+completed-case hash ledger and `V3CoreForecastCase` objects, requires the
+terminal target and frozen source/gate identities, and emits the typed
+`V3CoreEvaluationInput` only after all 128 cases (64 per symbol) exist. It has
+no credential, network, model, or execution dependency and has not yet been
+run against the incomplete r2 root.
+
 ## Historical V3-Core forward PIT collector audit — 2026-08-12T20:33:06Z
 
 PR #186 is merged at main `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.

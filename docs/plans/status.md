@@ -55,6 +55,14 @@ it is bound to process start ticks `6203958` and command SHA-256
 At launch review it had two normalized bars, zero failures, and zero completed
 cases; no outcome is counted before its one-hour horizon closes.
 
+The offline completion boundary is implemented in
+`scripts/materialize_phase4_v3core_forward_input.py` and covered by two
+focused refusal tests. It accepts only a terminal `target_reached` root whose
+per-symbol minimum, manifest hashes, case hashes, source identity, and
+forward/Phase-3 admission flags validate; it writes a new immutable
+`V3CoreEvaluationInput` and never changes the acquisition root or makes a
+network call. It has not been run because the active root is incomplete.
+
 Phase 4 remains `PENDING` on fresh independent V3-Core cadence evidence. The
 collector is durable, append-only, restartable only with matching immutable
 configuration/code identity, and does not grant any model or agent execution

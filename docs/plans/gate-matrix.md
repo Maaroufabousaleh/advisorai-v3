@@ -33,6 +33,7 @@ symbol, 0 failures, 2 normalized bars, and no writes.
 | Resumable code identity binding | IMPLEMENTED / TESTED | `eeb62f0af2ecba6cfb21f79d81793963241252e0`; resumed roots reject code/module/collector hash changes |
 | Fresh independent forward cases | PENDING / RUNNING | r2 root above; target 64 completed cases per BTCUSDT and ETHUSDT, target end `2026-08-17T20:45:11.984069Z` |
 | Resource qualification sidecar | LOCALLY MEASURED / RUNNING | sidecar root above; PID identity and command hash bound; no admission claim before terminal review |
+| Offline completed-root materializer | IMPLEMENTED / TESTED | `scripts/materialize_phase4_v3core_forward_input.py`; 2 refusal tests; requires target-reached status, frozen preregistration/Phase-3 hashes, validated case hashes, source identity, and forward admission flags; no network/credential/write path |
 | Phase-4 robust candidate admission | PENDING | no utility evaluation or model promotion |
 | Phase 2 / Phase 3 | PASSED / UNCHANGED | no predecessor gate or Phase-3 evidence reopened |
 | Phase 5–7 | CLOSED | no council, fill, attribution, or soak started |
