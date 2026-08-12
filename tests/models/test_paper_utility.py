@@ -104,6 +104,8 @@ def test_phase4_utility_measures_costs_regimes_and_incremental_value():
     assert report.phase4_admission_opened is False
     assert result.trade_count == 3
     assert result.abstention_count == 0
+    assert result.mae_bps == Decimal("5")
+    assert result.rmse_bps == Decimal("5")
     assert result.directional_accuracy == Decimal("1")
     assert result.calibration_coverage == Decimal("1")
     assert result.confidence_brier_score == Decimal("0.04")
