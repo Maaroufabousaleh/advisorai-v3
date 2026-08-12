@@ -1,5 +1,47 @@
 # AdvisorAI V3 gate matrix
 
+## Current corrected Phase-4 reviewer audit — 2026-08-12T16:25:00Z
+
+Draft PR #184 remains unmerged; `main` remains at
+`056a39d5641c81330dd89668e117108e1fa1bf5c`. The reviewer correction is
+committed on `agent/phase4-formal-robustness-review` at
+`52342b1093dc95dd0358257cdd8999cb2935479b`. Phase 2 and Phase 3 were not
+reopened, no new data was acquired, no credentials were loaded, and no order
+was submitted. The selected-model stability roots and the prior robustness-v2
+root remain untouched.
+
+The old robustness-v2 root remains immutable and historical:
+`artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`.
+It is superseded for current calibration and latency interpretation because
+its signed-residual implementation was corrected and its daily next-bar result
+was reclassified as severe signal-decay stress rather than normal operational
+latency.
+
+The fresh independent v2 review uses the same immutable input and measurement:
+
+- root: `artifacts/phase4/formal-review/20260812T162500Z-btc-eth-64x2-reviewer-v2-final/`;
+- review SHA-256 `c5117a011dc118687bfa2b1aea55e5b0cc76c42929e6e360ce86fb063880c867`;
+- checklist SHA-256 `50ef16346c73fc0d64247114dad73ecde28143e0a48468f55b7524fb4463b58b`;
+- pending PhaseGateRecord SHA-256 `18a05e1769a5356b860800ea2c7a84fb241385ba7884bf7e9c7d3865ebc28a18`.
+
+The corrected requirement result is:
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Point-in-time BTC/ETH input, sample, symbols, holdout | SATISFIED | Same immutable 128-observation input; 64 BTCUSDT, 64 ETHUSDT, 32 untouched holdout observations |
+| Chronological/PIT methodology | SATISFIED | Case contexts end at their cutoffs; simple baselines and LightGBM are evaluated from cutoff-only context; TTM-R2/R3 are frozen checkpoint inference; no holdout tuning/retraining |
+| Past-only rolling calibration | SATISFIED | `rolling_abs_residual_quantile_v1`; 88 derived intervals per model; same instrument/model history; residuals are absolute and strictly earlier; TTM-R2 full coverage `0.73863636`, holdout `0.75`, nominal `0.80` |
+| Native/derived interval boundary | SATISFIED | Native intervals are preserved and validated; partial/invalid native bounds are rejected; derived intervals are explicit and non-negative |
+| Latency sensitivity | SATISFIED as measured | Runtime p50 `7.758473 ms`; daily 10s/1h scenarios are zero-bar operational proxies; +1/+2 bars are severe signal-decay stress only; no sub-bar decay claim |
+| Cost stress/break-even | SATISFIED as measured | All-in assumptions: optimistic 7, base 14, conservative 23, severe 41 bps/turnover; TTM-R2 model net-zero break-even `49.243883` bps/turnover, but conservative incremental utility is `-181.04` bps |
+| Robust candidate admission | UNSATISFIED | TTM-R2 remains `CHALLENGER`; TTM-R3 remains `RESEARCH_ONLY`; no model is admitted |
+| Intraday latency resolution | EXTERNALLY_BLOCKED, non-gating | The reviewed input is daily; no new data was acquired |
+| Global Phase-0 private/archive gates | EXTERNALLY_BLOCKED, non-gating here | Phase-4 measurement dependency remains separate from global Phase 0 |
+
+Phase 4 therefore remains `PENDING`, with the sole current gating blocker
+`robust_candidate_admission`. Phase 5–7 remain closed. RiskKernel and OMS
+authority are unchanged, and live capital remains prohibited.
+
 ## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
 
 The review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c`.

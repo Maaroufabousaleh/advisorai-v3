@@ -1,5 +1,36 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current corrected Phase-4 reviewer checkpoint — 2026-08-12T16:25:00Z
+
+- Draft PR #184 remains open and unmerged. Main remains
+  `056a39d5641c81330dd89668e117108e1fa1bf5c`; the corrected reviewer/tests
+  are committed at `52342b1093dc95dd0358257cdd8999cb2935479b`.
+- Phase 2 and Phase 3 remain passed. No Phase-3 durability run, selected-model
+  stability run, data acquisition, credential load, or Binance order was
+  started or changed. The laptop remains running.
+- The old robustness-v2 Phase-4 review is preserved unchanged. The fresh v2
+  root is
+  `artifacts/phase4/formal-review/20260812T162500Z-btc-eth-64x2-reviewer-v2-final/`:
+  review `c5117a011dc118687bfa2b1aea55e5b0cc76c42929e6e360ce86fb063880c867`,
+  checklist `50ef16346c73fc0d64247114dad73ecde28143e0a48468f55b7524fb4463b58b`,
+  gate record `18a05e1769a5356b860800ea2c7a84fb241385ba7884bf7e9c7d3865ebc28a18`.
+- Phase 4 is `PENDING` only on `robust_candidate_admission`. TTM-R2 is
+  `CHALLENGER`, not promoted; TTM-R3 is `RESEARCH_ONLY`.
+- Corrected calibration: absolute, past-only, same-instrument/model residuals;
+  88 intervals, TTM-R2 coverage `0.73863636` full and `0.75` holdout at
+  `0.80` nominal. Corrected latency semantics: runtime p50 `7.758473 ms`,
+  10s/1h daily zero-bar operational proxies, +1/+2 bar severe stress only.
+- Cost stress remains a real blocker: TTM-R2 conservative incremental utility
+  `-181.04` bps; model net-zero break-even `49.243883` bps/turnover. Costs are
+  modeled assumptions, not Binance fills.
+- Focused reviewer/input tests pass (`20 passed`). Full pytest passes (`703
+  passed`, 28 warnings); acceptance suites pass
+  `134/152/126/117/50/34/10/11/27/18/5`; Ruff, format, lock, compilation,
+  dashboard build, diff hygiene, tracked-secret, and tracked-weight checks pass.
+- Next legal work: inspect the final diff, push the draft update, and leave
+  Phase 4 pending. Do not start Phase 5–7, acquire data, submit orders, or
+  promote TTM-R2.
+
 ## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
 
 - Review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c`; the

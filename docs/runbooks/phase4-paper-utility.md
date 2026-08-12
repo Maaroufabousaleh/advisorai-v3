@@ -1,5 +1,56 @@
 # Phase-4 paper utility evidence
 
+## Current corrected formal review — 2026-08-12T16:25:00Z
+
+The old `robustness-v2` review remains immutable and is not rewritten. The
+current reviewer is v2 and uses the same immutable input/report without data
+acquisition, credentials, network calls, order writes, or promotion:
+
+```text
+artifacts/phase4/formal-review/20260812T162500Z-btc-eth-64x2-reviewer-v2-final/
+review SHA-256: c5117a011dc118687bfa2b1aea55e5b0cc76c42929e6e360ce86fb063880c867
+checklist SHA-256: 50ef16346c73fc0d64247114dad73ecde28143e0a48468f55b7524fb4463b58b
+gate-record SHA-256: 18a05e1769a5356b860800ea2c7a84fb241385ba7884bf7e9c7d3865ebc28a18
+```
+
+The calibration policy `rolling_abs_residual_quantile_v1` now uses absolute
+forecast residual magnitude from strictly earlier observations for the same
+instrument and model. Observations sharing a cutoff are processed as one time
+group, so one outcome cannot calibrate another observation at the same cutoff.
+No interval is produced before the deterministic minimum history. Native
+intervals are preserved and validated; partial, inverted, or point-excluding
+native intervals fail closed. Derived interval widths cannot be negative.
+
+The corrected review measures TTM-R2 full coverage `0.73863636` and untouched
+holdout coverage `0.75` against `0.80` nominal, within the `0.10` tolerance.
+Calibration is therefore no longer a blocker. TTM-R2 remains a challenger
+because conservative modeled-cost incremental utility is `-181.04` bps; TTM-R3
+remains research-only. The current decision is `PENDING` solely on
+`robust_candidate_admission`.
+
+The input is daily. Runtime p50 is `7.758473 ms`. The 10-second and 1-hour
+scenarios are explicitly zero-bar operational proxies; +1 and +2 bars are
+reported as severe signal-decay stress, not as normal operational latency and
+not as sub-bar observations. No intraday data was fabricated or acquired.
+
+The walk-forward audit verifies cutoff-bounded cases, per-cutoff simple and
+LightGBM baselines, frozen TTM checkpoint inference, and chronological holdout
+handling. The generation artifact omitted source hashes; the reviewer verifies
+case/baseline methodology against its recorded commit and records the current
+input-preparation hash as a bounded provenance limitation.
+
+The formal review command remains offline and writes a new output root only:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/review_phase4_utility.py \
+  --input artifacts/phase4/real-utility-input/<run-id>/phase4-paper-utility-input.json \
+  --measurement artifacts/phase4/utility-evaluation/<run-id>/phase4-paper-utility-evidence.json \
+  --phase3-gate-record artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json \
+  --phase4-dependency artifacts/phase4/formal-dependency/20260812T014100Z-phase3-and-role-contract-v2/phase4-predecessor-dependency.json \
+  --output-root artifacts/phase4/formal-review/<new-run-id>
+```
+
 ## Current formal-review result — 2026-08-12T04:50:00Z
 
 The existing 64-observation report was preserved. A fresh, larger chronological
