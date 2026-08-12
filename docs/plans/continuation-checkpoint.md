@@ -1,10 +1,12 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current forward PIT collector checkpoint — 2026-08-12T20:47:00Z
+## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.
-- Draft PR #187 is on `agent/phase4-forward-pit-collector` at
-  `eeb62f0af2ecba6cfb21f79d81793963241252e`; it is not merged.
+- Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
+  `ef1ec1c`; it is not merged. The active collector executable remains bound
+  to code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`; later commits add
+  only offline ledger/materialization code and documentation.
 - The initial forward root
   `artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/`
   is preserved unchanged and quarantined as an implementation-failure root.
@@ -46,6 +48,11 @@
   seasonal-7, linear, and LightGBM predictions. TTM-R2 remains ungenerated
   pending its distinct runtime worker boundary; Chronos remains quarantined.
   The ledger has no network, credential, or order capability.
+- Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+  with 28 warnings; acceptance phases passed
+  `134/152/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+  compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+  passed. These checks do not close the time-dependent forward PIT gate.
 
 ## Historical forward PIT collector checkpoint — 2026-08-12T20:33:06Z
 

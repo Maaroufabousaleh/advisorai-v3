@@ -5,10 +5,11 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current V3-Core forward PIT collector audit — 2026-08-12T20:47:00Z
+## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
-Draft PR #187 is at
-`eeb62f0af2ecba6cfb21f79d81793963241252e0`; PR #186 remains merged at main
+Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
+`ef1ec1c`; its active collector executable remains bound to
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`. PR #186 remains merged at main
 `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
 
 The first forward attempt is preserved under
@@ -66,6 +67,12 @@ backdating. Prediction entries are immutable hash-chain records, and later
 outcome associations use a separate append-only link ledger. TTM-R2 and
 Chronos are explicitly recorded as separate candidate states, not replaced by
 a baseline. The focused baseline and ledger tests pass.
+
+Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+with 28 warnings; acceptance phases passed
+`134/152/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+passed. These checks do not constitute Phase-4 admission.
 
 ## Historical V3-Core forward PIT collector audit — 2026-08-12T20:33:06Z
 

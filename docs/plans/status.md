@@ -4,11 +4,13 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current V3-Core forward PIT collector — 2026-08-12T20:47:00Z
+## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at
-`eeb62f0af2ecba6cfb21f79d81793963241252e`; it remains unmerged.
+`ef1ec1c`; it remains unmerged. The active collector executable is bound to
+its unchanged code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`; later
+commits add only offline ledger/materialization code and documentation.
 
 The first real forward attempt is preserved as an implementation-failure
 root, not admission evidence:
@@ -73,6 +75,12 @@ ledger plus a separate outcome-link schema. Its manifest records
 `order_writes_attempted = false`. TTM-R2 is not silently replaced; it remains
 an ungenerated challenger pending its separate runtime worker boundary, while
 Chronos remains quarantined for its identity mismatch.
+
+Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+with 28 warnings; acceptance phases passed
+`134/152/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+passed. These checks do not close the time-dependent forward PIT gate.
 
 Phase 4 remains `PENDING` on fresh independent V3-Core cadence evidence. The
 collector is durable, append-only, restartable only with matching immutable

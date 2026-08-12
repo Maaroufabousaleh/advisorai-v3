@@ -1,9 +1,12 @@
 # AdvisorAI V3 gate matrix
 
-## Current V3-Core forward PIT collector — 2026-08-12T20:47:00Z
+## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
-The follow-on implementation is draft PR #187 at
-`eeb62f0af2ecba6cfb21f79d81793963241252e0`. The first attempted forward root
+The follow-on implementation is draft PR #187 on
+`agent/phase4-forward-pit-collector` at branch head `ef1ec1c`. The active
+collector executable remains bound to code commit
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`; later commits add only offline
+ledger/materialization code and documentation. The first attempted forward root
 is preserved and classified as an implementation failure caused by comparing
 receipt-varying metadata as normalized bar identity; it is not concatenated or
 used for admission. The classification artifact is
@@ -43,6 +46,12 @@ The next legal work while the time-dependent root runs is offline preparation
 of the frozen baseline/prediction-ledger path and Chronos identity review; no
 holdout tuning, arbitrary order, credential use, or source substitution is
 permitted.
+
+Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+with 28 warnings; acceptance phases passed
+`134/152/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+passed. These checks do not close the time-dependent forward PIT gate.
 
 ## Historical V3-Core forward PIT collector contract — 2026-08-12T20:33:06Z
 
