@@ -4,40 +4,34 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current source-scope checkpoint — 2026-08-11T23:33:32Z
+## Current formal-admission checkpoint — 2026-08-12T00:45:13Z
 
-The current executable main anchor is
-`27f4783171c03cf2cc606231689f7a4d22b7ca9b` after PR #177; this checkpoint was
-first carried by docs-only main `0fe6865fc2f2ebd9fad2cf6063ba72fb6fba7ec6`
-and is now carried by `743c03227badeeedfb523ee3f623ca5ca452c3ef`.
-The
-Phase-3 bounded source qualifier now records whether a failed operation is an
-external provider/product failure, stale or clock-uncertain provider data, or
-replay/data-integrity evidence, while marking every failed path fail-closed.
-It does not infer an implementation defect from an HTTP availability failure,
-and it does not open a phase gate.
+Clean `main` before this docs refresh is
+`d9f2bb9d6738b3850ebd7798821b31e662b1d263`. The new offline formal evaluator
+(`scripts/evaluate_phase3_gate.py`) and four regression tests create a complete
+machine-readable Phase-3 checklist and dependency-aware `PhaseGateRecord`
+without network access, credentials, collector startup, or order authority.
 
-The fresh seven-call public source pass is at
-`artifacts/phase3/source-qualification/20260811T233228.867449Z/phase3-v3-core-source-qualification.json`
-with evidence SHA-256
-`d6d1bbde354df87b8e4f3407e91839b5cf6dc9e10d432a2ed7557d7fd061ca73`; its
-manifest carries the same evidence digest and has SHA-256
-`c3c3afd53c7bfb18c282fc2e1b0bfd3f6f331631a3d2e2b1f305973938a110a8`.
-Coinbase Sandbox BTC-USD, Deribit BTC index, and SEC official RSS passed
-raw-spool replay and quality checks. Coinbase Sandbox ETH-USD returned
-provider-truth HTTP 404 (`external_provider_product_unavailable`), while GDELT
-returned HTTP 429 (`external_provider_unavailable_or_rate_limited`); both were
-explicitly safe-fail-closed, with no silent substitution and no implementation
-or data-integrity failure claimed. The report remains
-`EXTERNALLY_MEASURED / PENDING_EXTERNAL_EVIDENCE`.
+Checklist:
+`artifacts/phase3/formal-admission/20260812T004513Z-contract-review/phase3-admission-checklist.json`
+(SHA-256
+`0cd305d79d70a7427100437b977ce028cb643fc885d680a113312b11d3a0a79c`). It
+classifies all 21 requirements: 16 mandatory evidence requirements are
+`SATISFIED`; GDELT availability is `EXTERNALLY_BLOCKED` but non-gating because
+its dependent path safely abstains; Coinbase Sandbox ETH-USD is provider-truth
+`EXTERNALLY_BLOCKED` and non-gating; LSE is `OPTIONAL`; equity SEC/ALFRED is
+`NOT_APPLICABLE`.
 
-The immutable r7 public BTC/ETH source-health component remains
-`QUALIFIED_FOR_REVIEW`, but the broader Phase-3 source spine still has no
-passed formal `PhaseGateRecord`; therefore Phase 3 is not admitted and no real
-Phase-4 utility evidence has been run. Phase-0 selected-model roles remain
-qualified independently, while global Phase 0, the deferred archive gate, and
-the private route remain separate. No r8 root, Binance order, production call,
-or model/LLM execution authority was introduced.
+The immutable pending record is
+`artifacts/phase3/formal-admission/20260812T004513Z-contract-review/phase3-gate-record.json`
+(SHA-256
+`0ee4b783c1afa943fb8a9e94ca29ea2c358d6b7e68ba097fd224fd96614d4bbe`). Its only
+mandatory blocker is `phase_2_formal_predecessor`: the dependency-ordered
+registry has no currently valid passed Phase-2 predecessor record. Phase 3 is
+therefore `PENDING_BASE_GATES`, not admitted. The r7 root was not reopened, no
+duplicate durability run was launched, Phase 4 was not run, and archive/rclone
+remains externally deferred. Selected Phase-0 model roles remain independently
+qualified; global Phase 0 remains separate.
 
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 

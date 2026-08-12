@@ -5,32 +5,35 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current source-scope checkpoint — 2026-08-11T23:33:32Z
+## Current formal-admission checkpoint — 2026-08-12T00:45:13Z
 
-PR #177 is merged on `main` at
-`27f4783171c03cf2cc606231689f7a4d22b7ca9b`. It adds deterministic failure
-classification to `scripts/qualify_phase3_sources.py` and regression coverage:
-HTTP 404 product absence, provider availability/rate limiting, stale or clock
-uncertainty, and replay/data-integrity failures are distinct evidence classes;
-failed operations are explicitly marked safe-fail-closed. The classifier does
-not convert provider degradation into an implementation defect or a phase pass.
+From clean main `d9f2bb9d6738b3850ebd7798821b31e662b1d263`, the offline
+`scripts/evaluate_phase3_gate.py` implementation reconciles the immutable r7
+review, the broader source qualification, the formal source roles, and the
+dependency-ordered `PhaseGateRecord` contract. It has four focused tests in
+`tests/phase3/test_phase3_formal_gate.py` and performs no network I/O, secret
+loading, collector startup, or execution operation.
 
-The fresh real source report is
-`artifacts/phase3/source-qualification/20260811T233228.867449Z/phase3-v3-core-source-qualification.json`
-(SHA-256
-`d6d1bbde354df87b8e4f3407e91839b5cf6dc9e10d432a2ed7557d7fd061ca73`),
-generated with runner code SHA-256
-`d5f6eb35ac24ed4cacbf5ce9c2382dc7db9d334755825be9903469ea3e4521d7`.
-The result is `EXTERNALLY_MEASURED / PENDING_EXTERNAL_EVIDENCE`: BTC/Deribit/
-SEC RSS passed; Coinbase Sandbox ETH-USD is unavailable in the provider
-catalogue; GDELT was rate-limited. Both external failures were sanitized and
-fail-closed. No response-body, credential, order, or production evidence was
-introduced.
+The checklist at
+`artifacts/phase3/formal-admission/20260812T004513Z-contract-review/phase3-admission-checklist.json`
+has SHA-256
+`0cd305d79d70a7427100437b977ce028cb643fc885d680a113312b11d3a0a79c` and binds
+all referenced evidence by digest. R7 structural/policy review, primary
+Binance BTC/ETH coverage, raw/replay/sequence integrity, timestamp/freshness,
+source lineage, disagreement, fail-closed selection, Deribit context, official
+RSS, and resource evidence are `SATISFIED`. The fresh source pass preserves
+Coinbase Sandbox ETH-USD HTTP 404 and GDELT HTTP 429 as external failures with
+zero observations and no substitution; GDELT availability is non-gating while
+its dependent decision path remains abstained.
 
-This closes the classification/observability defect only. It does not close
-the broader Phase-3 source-scope or formal gate-record requirement. The r7
-terminal root and its review artifacts remain immutable; Phase 4–7 remain
-unadmitted and no additional r7/r8 run was launched.
+The pending `PhaseGateRecord` at
+`artifacts/phase3/formal-admission/20260812T004513Z-contract-review/phase3-gate-record.json`
+has SHA-256
+`0ee4b783c1afa943fb8a9e94ca29ea2c358d6b7e68ba097fd224fd96614d4bbe` and sole
+reason `phase_2_formal_predecessor`. No Phase-3 pass was inferred from review
+recommendations, no r8/r9 run was launched, and Phase 4–7 remain unadmitted.
+Archive/rclone, private-route, Hermes, Phase 9/Alpha, and Phase 10 states were
+not changed.
 
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 

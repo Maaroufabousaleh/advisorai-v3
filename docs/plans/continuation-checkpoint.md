@@ -1,36 +1,34 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current source-scope checkpoint — 2026-08-11T23:33:32Z
+## Current formal-admission checkpoint — 2026-08-12T00:45:13Z
 
-- The current executable main anchor is
-  `27f4783171c03cf2cc606231689f7a4d22b7ca9b` after merged PR #177; this
-  checkpoint was first carried by docs-only main
-  `0fe6865fc2f2ebd9fad2cf6063ba72fb6fba7ec6` and is now carried by
-  `743c03227badeeedfb523ee3f623ca5ca452c3ef`.
-- The bounded source qualifier now distinguishes provider product absence,
-  provider availability/rate limiting, stale/clock-uncertain data, and
-  replay/data-integrity failures. Failed source paths remain explicitly
-  fail-closed.
-- Fresh report:
-  `artifacts/phase3/source-qualification/20260811T233228.867449Z/phase3-v3-core-source-qualification.json`
-  with SHA-256
-  `d6d1bbde354df87b8e4f3407e91839b5cf6dc9e10d432a2ed7557d7fd061ca73`;
-  manifest SHA-256 is
-  `c3c3afd53c7bfb18c282fc2e1b0bfd3f6f331631a3d2e2b1f305973938a110a8`.
-  BTC/Deribit/SEC RSS passed; Coinbase Sandbox ETH-USD returned 404 and GDELT
-  returned 429. These are external provider/quarantine outcomes, not
-  implementation or data-integrity failures, and no substitution occurred.
-- Phase-3 r7 remains an immutable `QUALIFIED_FOR_REVIEW` public BTC/ETH
-  component. Full Phase 3 remains `PENDING_EXTERNAL_EVIDENCE` pending the
-  broader source-scope/formal `PhaseGateRecord` boundary. Do not launch r8 for
-  the correctly handled stale intervals and do not start Phase 4 without a
-  passed Phase-3 gate.
-- Full pytest after PR #177: `665 passed, 28 warnings`; acceptance suites:
-  `134/152/126/113/27/34/10/11/27/18/5`. Ruff, format, lock, compilation,
-  dashboard build, diff hygiene, and tracked-secret/weight checks passed.
-- Phase-0 selected-model stability remains terminal and untouched; archive/
-  rclone remains deferred. No production calls, additional Binance orders,
-  or model/LLM/Hermes/browser/dashboard trading authority were introduced.
+- Clean `main` before this checkpoint is
+  `d9f2bb9d6738b3850ebd7798821b31e662b1d263`.
+- `scripts/evaluate_phase3_gate.py` performed an offline contract-first review
+  of the immutable r7 validator/admission reports and the fresh broader source
+  pass. It produced 21 requirement rows with explicit `SATISFIED`,
+  `UNSATISFIED`, `NOT_APPLICABLE`, `OPTIONAL`, and `EXTERNALLY_BLOCKED` states.
+- Checklist:
+  `artifacts/phase3/formal-admission/20260812T004513Z-contract-review/phase3-admission-checklist.json`,
+  SHA-256
+  `0cd305d79d70a7427100437b977ce028cb643fc885d680a113312b11d3a0a79c`.
+  All measured mandatory Phase-3 evidence is satisfied. Binance public BTC/ETH
+  is the required primary source; Deribit and official RSS are measured
+  context; GDELT 429 and Coinbase Sandbox ETH-USD 404 are preserved external
+  availability/product states, with zero observations and fail-closed paths.
+- Pending record:
+  `artifacts/phase3/formal-admission/20260812T004513Z-contract-review/phase3-gate-record.json`,
+  SHA-256
+  `0ee4b783c1afa943fb8a9e94ca29ea2c358d6b7e68ba097fd224fd96614d4bbe`;
+  canonical hash
+  `55e9df60b1947fb3bd30e7c184b4bf1c48c7cbbfdf4623483525e2eb316b14d`.
+  The sole blocker is `phase_2_formal_predecessor`: the dependency-ordered
+  registry has no currently valid passed Phase-2 record. Phase 3 is not
+  admitted, and Phase 4 remains closed.
+- No r8/r9 run, additional Binance order, production call, archive/rclone
+  action, model stability restart, or authority-boundary change occurred.
+  Selected Phase-0 model roles remain qualified; global Phase 0 remains
+  separate.
 
 ## Current terminal-review checkpoint — 2026-08-11T23:17:07Z
 

@@ -15,6 +15,39 @@ It does not load `secrets.env`. Coinbase production hosts, transfer paths, and
 withdrawal paths are rejected. Native source failures remain failures; the
 runner never substitutes a different venue or symbol.
 
+## Formal Phase-3 admission review
+
+The bounded and durable runners do not infer admission. The offline formal
+review boundary is
+[`scripts/evaluate_phase3_gate.py`](../../scripts/evaluate_phase3_gate.py). It
+reads the immutable r7 validation/admission reports and the broader source
+qualification, verifies their hashes and source roles, and writes a complete
+requirement checklist plus a typed `PhaseGateRecord`. It performs no network
+I/O, loads no credentials, starts no collector, and cannot submit an order.
+
+Run it with a new output root only:
+
+```bash
+PYTHONPATH=. ./.venv/bin/python scripts/evaluate_phase3_gate.py \
+  --output-root artifacts/phase3/formal-admission/<immutable-review-id>
+```
+
+The 2026-08-12 review is preserved at
+`artifacts/phase3/formal-admission/20260812T004513Z-contract-review/`.
+Its checklist SHA-256 is
+`0cd305d79d70a7427100437b977ce028cb643fc885d680a113312b11d3a0a79c`; the
+pending `PhaseGateRecord` SHA-256 is
+`0ee4b783c1afa943fb8a9e94ca29ea2c358d6b7e68ba097fd224fd96614d4bbe`.
+The only mandatory blocker is the absent valid Phase-2 predecessor record.
+GDELT HTTP 429 is retained as an external availability event rather than an
+implementation/data-integrity failure; it is non-gating only because all
+GDELT-dependent decisions must remain abstained. Coinbase Sandbox ETH-USD HTTP
+404 is likewise provider truth for a non-selected alternative, never a
+fabricated ETH source.
+
+Do not launch another durability root merely because the checklist is pending.
+Launch one only when the checklist identifies a genuinely missing measurement.
+
 ## Durable multi-source qualification
 
 The restartable Phase-3 runner is
