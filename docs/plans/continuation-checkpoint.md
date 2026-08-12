@@ -5,6 +5,9 @@
 - Review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c`; the
   laptop remains running. Phase 2 and Phase 3 remain formally passed, no
   Phase-3 durability root was reopened, and no Binance order was submitted.
+- Implementation commit: `bc163bc` (`Review Phase 4 utility robustness`) on
+  `agent/phase4-formal-robustness-review`; draft PR #184 is open. Main remains
+  `056a39d5641c81330dd89668e117108e1fa1bf5c` until that review is merged.
 - Final verification: full pytest `692 passed` with 28 warnings; acceptance
   suites `134/152/126/117/39/34/10/11/27/18/5`; Ruff, format, lock,
   compilation, dashboard build, and `git diff --check` passed.

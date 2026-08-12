@@ -3,6 +3,9 @@
 ## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
 
 The review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c`.
+The implementation is committed as `bc163bc` on
+`agent/phase4-formal-robustness-review` in draft PR #184; main remains at the
+review-start SHA until merge.
 Phase 2 and Phase 3 remain formally passed; neither predecessor was reopened,
 no Phase-3 durability run was collected, and no Binance order or network call
 was made by this review. The selected Phase-0 model runtime roles remain
