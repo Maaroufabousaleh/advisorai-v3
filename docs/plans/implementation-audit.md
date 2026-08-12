@@ -5,13 +5,37 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current V3-Core PIT provenance audit — 2026-08-12T19:58:26Z
+## Current V3-Core forward PIT collector audit — 2026-08-12T20:33:06Z
 
-PR #186 remains draft from main
+PR #186 is merged at main `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+The follow-on implementation is commit
+`80b3c5eb6c0055b81e224bbc833b8a9e240906eb` on
+`agent/phase4-forward-pit-collector` and is not yet merged.
+
+The v3 cadence contract corrects a real forward-PIT availability defect: a
+five-minute interval ending at an hourly cutoff cannot be locally collected by
+that cutoff. Cases therefore use context interval ends
+`cutoff - 4h` through `cutoff - 5m`, and future outcome ends `cutoff + 5m`
+through `cutoff + 1h`. This is a contract correction, not a relaxation of
+look-ahead rules. The v2 contract and its preregistration remain immutable
+historical evidence.
+
+The collector is a dedicated read-only acquisition boundary. It uses the
+existing safe HTTPS client with an exact reviewed host, does not import the
+credential resolver, and has no order-capable method. Raw responses are
+fsync'd before parsing; normalized bars, rejected case cutoffs, failure
+classes, health transitions, and completed cases are independently append-only
+and hash-linked where applicable. No acquisition has started yet, so no
+external measurement or Phase-4 admission is claimed.
+
+## Historical V3-Core PIT provenance audit — 2026-08-12T19:58:26Z
+
+PR #186 was then draft from main
 `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; the contract correction is
 `6b2ed741650f9de0f51e8db921aefb507979d0d3`.
 
-The cadence boundary is now a versioned v2 contract. `V3CoreBarProvenance`
+The cadence boundary at that historical checkpoint was a versioned v2 contract.
+`V3CoreBarProvenance`
 records interval end, provider availability, actual local collection, optional
 provider event time, availability basis, evidence class, source health, and
 content hashes. `V3CoreForecastCase` validates one evidence class throughout,

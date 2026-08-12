@@ -1,11 +1,36 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current V3-Core PIT provenance checkpoint — 2026-08-12T19:58:26Z
+## Current forward PIT collector checkpoint — 2026-08-12T20:33:06Z
 
-- PR #186 remains draft. Its base is main
+- PR #186 is merged; clean main is
+  `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+- Follow-on branch `agent/phase4-forward-pit-collector` is at
+  `80b3c5eb6c0055b81e224bbc833b8a9e240906eb`; it is not merged.
+- The causal v3 contract is frozen. Its preregistration is
+  `artifacts/phase4/v3core-cadence-preregistration/20260812T203306Z-v3core-1h-5m-causal-v3/`
+  with evidence SHA-256
+  `fa7920ac365c63ea73ffb2a446d0ba5f19b7af5a0c1d92552ac7af891b0cded4` and
+  manifest SHA-256
+  `58a73993997009239252764b698bd082c857a4605f7c3423abb1f35740f4429d`.
+- Context bars now end one 5m interval before the decision cutoff; the next
+  12 bars are the future 1h outcome. This was corrected before any acquisition.
+- `scripts/collect_phase4_v3core_forward.py` is implemented and tested but no
+  network data, credentials, or orders have been used. The next legal action is
+  to launch its durable public-only collector for 64 completed BTCUSDT and 64
+  completed ETHUSDT cases, with the existing Phase-3 gate hash bound in its
+  manifest.
+- Phase 2 and Phase 3 remain passed; Phase 4 remains pending on fresh
+  independent cadence evidence; TTM-R2 remains challenger; Chronos remains
+  quarantined; Phase 5–7 remain closed. Archive/rclone is untouched.
+- Full pytest after this correction: `740 passed`, 28 warnings. The laptop
+  remains running.
+
+## Historical V3-Core PIT provenance checkpoint — 2026-08-12T19:58:26Z
+
+- PR #186 was then draft. Its base was main
   `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; the contract-hardening commit is
   `6b2ed741650f9de0f51e8db921aefb507979d0d3`.
-- The active cadence contract is v2: 5m observations, 4h context, 1h outcome,
+- The historical cadence contract was v2: 5m observations, 4h context, 1h outcome,
   BTCUSDT/ETHUSDT, and separate `historical_development` versus
   `forward_pit_admission` evidence classes.
 - Forward bars require `provider_available_at <= collected_at` and actual local

@@ -1,11 +1,29 @@
 # AdvisorAI V3 gate matrix
 
-## Current V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+## Current V3-Core forward PIT collector — 2026-08-12T20:33:06Z
 
-PR #186 remains draft on top of main
-`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; contract code is at
+Main is `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after PR #186. The unmerged
+collector follow-on is `80b3c5eb6c0055b81e224bbc833b8a9e240906eb` on
+`agent/phase4-forward-pit-collector`.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Causal v3 cadence contract | IMPLEMENTED / TESTED / FROZEN | Context is 48 bars ending one 5m interval before cutoff; outcome is the next 12 bars; v3 schemas and adversarial tests preserve the correction |
+| Credential-free acquisition boundary | IMPLEMENTED / TESTED | `scripts/collect_phase4_v3core_forward.py`; exact `data-api.binance.vision` klines GET only; no secrets, account, user-data, write, transfer, or withdrawal path |
+| Raw-first immutable receipts | IMPLEMENTED / TESTED | `ForwardRawSpool` retains every receipt with payload hash and append-only hash chain; normalization occurs only after raw fsync |
+| Normalized bars / rejected cutoffs | IMPLEMENTED / TESTED | `ForwardNormalizedBarSpool`, `ForwardRejectionSpool`, strict close semantics, duplicate rejection, no synthetic bars |
+| Fresh independent forward cases | PENDING / NOT YET MEASURED | No network collection has started; target is 64 completed cases per BTCUSDT and ETHUSDT, with a 120-hour maximum window |
+| Phase-4 robust candidate admission | PENDING | No utility evaluation or model promotion; TTM-R2 remains `CHALLENGER`, TTM-R3 `RESEARCH_ONLY` |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | No predecessor gate or Phase-3 evidence was reopened |
+| Phase 5–7 | CLOSED | No council, fill, attribution, or soak may start before formal Phase-4 passage |
+
+## Historical V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+
+PR #186 was then draft on top of main
+`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; its contract code was at
 `6b2ed741650f9de0f51e8db921aefb507979d0d3`. The prior v1 preregistration is
-preserved; the corrected v2 preregistration is the active contract.
+preserved; the corrected v2 preregistration was active at that historical
+checkpoint, and the causal v3 preregistration above is active now.
 
 | Requirement | State | Evidence/result |
 | --- | --- | --- |

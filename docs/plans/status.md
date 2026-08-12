@@ -4,15 +4,54 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+## Current V3-Core forward PIT collector — 2026-08-12T20:33:06Z
 
-PR #186 remains the focused draft continuation from merged main
+PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+The focused follow-on implementation is on branch
+`agent/phase4-forward-pit-collector` at commit
+`80b3c5eb6c0055b81e224bbc833b8a9e240906eb`; it has not been merged.
+
+The v3 cadence correction is frozen before acquisition. A forward case now
+uses the 48 closed five-minute bars ending one observation before the hourly
+cutoff, because a bar ending exactly at the cutoff cannot have been locally
+received by that cutoff. The following 12 bars are the future one-hour outcome.
+This prevents actual receipt timestamps from making every forward case
+impossible while preserving strict causal availability.
+
+The new immutable preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T203306Z-v3core-1h-5m-causal-v3/`:
+evidence SHA-256
+`fa7920ac365c63ea73ffb2a446d0ba5f19b7af5a0c1d92552ac7af891b0cded4` and
+manifest SHA-256
+`58a73993997009239252764b698bd082c857a4605f7c3423abb1f35740f4429d`.
+It binds `advisorai.phase4.v3-core-cadence.v3`, plan
+`phase4-v3-core-1h-5m-v3`, the credential-free Binance market-data-only REST
+surface, BTCUSDT/ETHUSDT, 5m observations, 4h context, and a 1h horizon.
+
+The dedicated collector is
+`scripts/collect_phase4_v3core_forward.py`. It has no secrets or credential
+resolver, permits only public GET klines on
+`https://data-api.binance.vision/api/v3/klines`, writes each raw response
+before normalization, preserves repeated receipts in a hash chain, records
+sanitized failures and health transitions, and records rejected cutoffs rather
+than filling gaps. No forward network data has been acquired yet; the durable
+64-valid-cases-per-symbol collection remains the next operational action.
+
+Focused forward/cadence tests pass `27`; full pytest after the v3 correction
+passes `740` with 28 warnings. Phase 4 remains `PENDING` on
+`fresh_independent_v3core_cadence_pit_evidence`; no model is promoted and
+Phase 5–7 remain closed.
+
+## Historical V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+
+PR #186 was the focused draft continuation from merged main
 `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. The contract-hardening commit is
 `6b2ed741650f9de0f51e8db921aefb507979d0d3`; it changes no Phase-2/3 gate,
 execution adapter, credential scope, or model role.
 
-The cadence contract is now version `advisorai.phase4.v3-core-cadence.v2` and
-requires a nested `V3CoreBarProvenance` record containing distinct
+At that historical checkpoint the cadence contract was version
+`advisorai.phase4.v3-core-cadence.v2`; it was superseded by the causal v3
+correction above. It required a nested `V3CoreBarProvenance` record containing distinct
 `interval_end`, `provider_available_at`, `collected_at`, optional provider event
 time, availability basis, evidence class, source-health state, source snapshot
 hash, raw-record hash, and normalized-record hash. Forward admission bars must
