@@ -7,6 +7,7 @@ or 60-day operational gate.
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 The current implementation/evidence anchor is `cd2b09066096977ac38ddb6dd756339fea9a4330`.
+It is merged in main at `b6a72834398465271f9be08e372d292286671fb8` (PR #182).
 Phase-0 selected model roles remain qualified; global Phase 0 remains separate
 and pending its private-route/archive prerequisites. No timed stability root,
 Phase-3 durability root, or Binance order was reopened or created.

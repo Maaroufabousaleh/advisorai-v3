@@ -6,6 +6,8 @@ The implementation/evidence source anchor for this checkpoint is
 `cd2b09066096977ac38ddb6dd756339fea9a4330`. No Phase-3 durability root was
 reopened, no selected-model stability process was changed, and no additional
 Binance order was submitted.
+The work is merged in main at `b6a72834398465271f9be08e372d292286671fb8`
+(PR #182); this checkpoint branch contains documentation-only follow-up.
 
 Verification after this implementation boundary passed full pytest (`687
 passed`, 28 warnings), acceptance suites
