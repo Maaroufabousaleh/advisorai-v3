@@ -187,6 +187,14 @@ def test_normalized_spool_rejects_conflicting_bar_identity(tmp_path: Path) -> No
     spool = ForwardNormalizedBarSpool(tmp_path / "bars.jsonl")
     assert spool.append(bar)
     assert not spool.append(bar)
+    later_receipt = bar.model_copy(
+        update={
+            "provenance": bar.provenance.model_copy(
+                update={"collected_at": bar.collected_at + timedelta(seconds=30)}
+            )
+        }
+    )
+    assert not spool.append(later_receipt)
     changed = bar.model_copy(update={"close": bar.close + 1})
     with pytest.raises(RuntimeError, match="changed"):
         spool.append(changed)

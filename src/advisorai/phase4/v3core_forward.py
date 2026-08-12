@@ -490,8 +490,17 @@ class ForwardNormalizedBarSpool:
         key = (bar.instrument, bar.interval_end)
         prior = self.bars.get(key)
         if prior is not None:
-            if prior != bar:
+            prior_identity = prior.model_dump(mode="json")
+            current_identity = bar.model_dump(mode="json")
+            for payload in (prior_identity, current_identity):
+                provenance = payload["provenance"]
+                provenance.pop("collected_at", None)
+                provenance.pop("normalized_record_hash", None)
+            if prior_identity != current_identity:
                 raise RuntimeError("forward normalization changed an existing bar")
+            # The same closed bar is commonly returned on several polls.  Keep
+            # the first receipt as the canonical normalized record while the
+            # raw spool retains every later receipt and its local timestamp.
             return False
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(bar.model_dump_json() + "\n")
