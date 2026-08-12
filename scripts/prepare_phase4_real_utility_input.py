@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import subprocess
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -32,6 +33,7 @@ from advisorai.phase0.runtime_qualification import (
     BenchmarkDataset,
     LightGBMBaseline,
     LocalCandidateAdmission,
+    QualificationError,
     QualificationStatus,
     apply_local_candidate_admission,
     default_runtime_candidates,
@@ -48,6 +50,15 @@ REQUIRED_SYMBOLS = ("BTCUSDT", "ETHUSDT")
 DEFAULT_ADMISSION_ROOT = REPOSITORY_ROOT / (
     "artifacts/phase0/model-runtime-qualification/runtime-admission-post-cwd-fix-20260810"
 )
+DEFAULT_CANDIDATE_ADMISSION_ROOTS = {
+    "ttm-r2": DEFAULT_ADMISSION_ROOT,
+    "ttm-r3": REPOSITORY_ROOT
+    / "artifacts/phase0/model-runtime-qualification/runtime-admission-phase4-ttm-r3-20260812",
+}
+# Preserve the original control-only default for callers that have not supplied
+# a challenger admission root.  The Phase-4 work package requests TTM-R3
+# explicitly when its current immutable runtime admission is available.
+DEFAULT_FORECAST_CANDIDATES = ("ttm-r2",)
 FORECAST_CODE = REPOSITORY_ROOT / "src/advisorai/models/forecasting.py"
 LIGHTGBM_CODE = REPOSITORY_ROOT / "src/advisorai/phase0/runtime_qualification.py"
 PHASE3_GATE = REPOSITORY_ROOT / (
@@ -226,14 +237,14 @@ def _baseline_predictions(
     return tuple(predictions)
 
 
-def _ttm_r2_predictions(
+def _forecast_predictions(
     cases: tuple[Any, ...],
     observations: tuple[Phase4MarketObservation, ...],
     snapshot: ForecastBenchmarkSnapshot,
-    admission_root: Path,
+    candidate_name: str,
+    admission_path: Path,
 ) -> tuple[tuple[Phase4Prediction, ...], dict[str, Any]]:
-    candidate = next(item for item in default_runtime_candidates() if item.name == "ttm-r2")
-    admission_path = admission_root / "ttm-r2" / "local-admission.json"
+    candidate = next(item for item in default_runtime_candidates() if item.name == candidate_name)
     try:
         admission = LocalCandidateAdmission.model_validate_json(
             admission_path.read_text(encoding="utf-8")
@@ -259,18 +270,23 @@ def _ttm_r2_predictions(
             repeats=3,
             repository_root=REPOSITORY_ROOT,
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, QualificationError) as exc:
         return (), {
-            "candidate": "ttm-r2",
+            "candidate": candidate_name,
             "status": "quarantined",
             "failure_class": type(exc).__name__,
+            "failure_reason": str(exc),
+            "admission_path": _relative(admission_path),
         }
     report: dict[str, Any] = {
-        "candidate": "ttm-r2",
+        "candidate": candidate_name,
         "status": result.status.value,
         "failure_class": type(result.failure_reason).__name__ if result.failure_reason else None,
+        "failure_reason": str(result.failure_reason) if result.failure_reason else None,
         "failure_reason_present": result.failure_reason is not None,
         "network_access_attempted": result.network_access_attempted,
+        "admission_path": _relative(admission_path),
+        "admission_sha256": _sha256(admission_path),
         "resource": result.resource.model_dump(mode="json") if result.resource else None,
         "environment": result.environment.model_dump(mode="json"),
         "runtime_worker_hash": result.environment.runner_hash,
@@ -288,13 +304,13 @@ def _ttm_r2_predictions(
     )
     code_hash = result.environment.runner_hash
     if code_hash is None:
-        raise Phase4InputRefused("measured TTM-R2 result has no worker identity hash")
+        raise Phase4InputRefused(f"measured {candidate_name} result has no worker identity hash")
     predictions = tuple(
         _return_prediction(
             observation,
             Decimal(str(forecast[0])),
             Decimal(str(case.context[-1])),
-            "ttm-r2",
+            candidate_name,
             code_hash,
             artifact_hash,
             resource_limit_passed=bool(result.resource and result.resource.resource_limit_passed),
@@ -306,6 +322,23 @@ def _ttm_r2_predictions(
     return predictions, report
 
 
+def _ttm_r2_predictions(
+    cases: tuple[Any, ...],
+    observations: tuple[Phase4MarketObservation, ...],
+    snapshot: ForecastBenchmarkSnapshot,
+    admission_root: Path,
+) -> tuple[tuple[Phase4Prediction, ...], dict[str, Any]]:
+    """Retain the original helper for callers that measure only the control."""
+
+    return _forecast_predictions(
+        cases,
+        observations,
+        snapshot,
+        "ttm-r2",
+        admission_root / "ttm-r2" / "local-admission.json",
+    )
+
+
 def build_input(
     *,
     forecast_snapshot: Path,
@@ -315,6 +348,8 @@ def build_input(
     spread_bps: Decimal = Decimal("2"),
     slippage_bps: Decimal = Decimal("2"),
     phase3_gate_path: Path = PHASE3_GATE,
+    forecast_candidates: tuple[str, ...] = DEFAULT_FORECAST_CANDIDATES,
+    candidate_admission_roots: Mapping[str, Path] | None = None,
     generated_at: datetime | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if cases_per_series < 16:
@@ -331,12 +366,42 @@ def build_input(
         )
     observations = _observations(cases, snapshot.content_hash, spread_bps, slippage_bps)
     predictions = list(_baseline_predictions(cases, observations))
-    ttm_predictions, ttm_report = _ttm_r2_predictions(
-        cases, observations, snapshot, admission_root.resolve()
-    )
-    predictions.extend(ttm_predictions)
-    if not ttm_predictions:
-        raise Phase4InputRefused("qualified TTM-R2 did not produce a measured price forecast")
+    requested_candidates = tuple(dict.fromkeys(forecast_candidates))
+    if not requested_candidates:
+        raise Phase4InputRefused("at least one Phase-4 forecast candidate is required")
+    known_forecast_candidates = {
+        item.name
+        for item in default_runtime_candidates()
+        if item.task.value == "forecast" and item.external_checkpoint is not None
+    }
+    unknown_candidates = set(requested_candidates) - known_forecast_candidates
+    if unknown_candidates:
+        raise Phase4InputRefused(
+            f"unsupported Phase-4 forecast candidates: {sorted(unknown_candidates)}"
+        )
+    roots = dict(DEFAULT_CANDIDATE_ADMISSION_ROOTS)
+    roots["ttm-r2"] = admission_root.resolve()
+    if candidate_admission_roots:
+        roots.update({name: path.resolve() for name, path in candidate_admission_roots.items()})
+    candidate_reports: dict[str, dict[str, Any]] = {}
+    measured_candidates: list[str] = []
+    for candidate_name in requested_candidates:
+        candidate_root = roots.get(candidate_name)
+        if candidate_root is None:
+            raise Phase4InputRefused(f"no admission root configured for {candidate_name}")
+        candidate_predictions, candidate_report = _forecast_predictions(
+            cases,
+            observations,
+            snapshot,
+            candidate_name,
+            candidate_root / candidate_name / "local-admission.json",
+        )
+        candidate_reports[candidate_name] = candidate_report
+        predictions.extend(candidate_predictions)
+        if candidate_predictions:
+            measured_candidates.append(candidate_name)
+        elif candidate_name == "ttm-r2":
+            raise Phase4InputRefused("qualified TTM-R2 did not produce a measured price forecast")
     timestamp = (generated_at or datetime.now(UTC)).astimezone(UTC)
     input_payload = {
         "schema": INPUT_SCHEMA,
@@ -379,13 +444,14 @@ def build_input(
         },
         "models": {
             "mandatory_baselines": ["naive", "drift", "seasonal-7", "linear", "lightgbm"],
-            "measured_candidates": ["ttm-r2"],
+            "requested_candidates": list(requested_candidates),
+            "measured_candidates": measured_candidates,
+            "candidate_reports": candidate_reports,
             "context_roles_not_coerced_to_price_forecast": [
                 "finsentiment-deberta-v3",
                 "finbert-minilm",
                 "tspulse",
             ],
-            "ttm_r2": ttm_report,
         },
         "input": {
             "prediction_count": len(predictions),
@@ -444,6 +510,18 @@ def write_evidence(
     }
 
 
+def _parse_candidate_admission_roots(values: list[str]) -> dict[str, Path]:
+    roots: dict[str, Path] = {}
+    for value in values:
+        name, separator, raw_path = value.partition("=")
+        if not separator or not name.strip() or not raw_path.strip():
+            raise Phase4InputRefused("candidate admission roots must use NAME=PATH")
+        if name in roots:
+            raise Phase4InputRefused(f"duplicate candidate admission root: {name}")
+        roots[name] = Path(raw_path)
+    return roots
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--forecast-snapshot", type=Path, required=True)
@@ -453,6 +531,20 @@ def main() -> int:
     parser.add_argument("--cases-per-series", type=int, default=32)
     parser.add_argument("--spread-bps", type=Decimal, default=Decimal("2"))
     parser.add_argument("--slippage-bps", type=Decimal, default=Decimal("2"))
+    parser.add_argument(
+        "--forecast-candidate",
+        action="append",
+        dest="forecast_candidates",
+        default=None,
+        help="price-forecast candidate to measure (repeatable; defaults to TTM-R2)",
+    )
+    parser.add_argument(
+        "--candidate-admission-root",
+        action="append",
+        default=[],
+        metavar="NAME=PATH",
+        help="override a candidate's local-admission root (repeatable)",
+    )
     parser.add_argument("--output-root", type=Path, required=True)
     args = parser.parse_args()
     try:
@@ -464,6 +556,10 @@ def main() -> int:
             spread_bps=args.spread_bps,
             slippage_bps=args.slippage_bps,
             phase3_gate_path=args.phase3_gate_record.resolve(),
+            forecast_candidates=tuple(args.forecast_candidates or DEFAULT_FORECAST_CANDIDATES),
+            candidate_admission_roots=_parse_candidate_admission_roots(
+                args.candidate_admission_root
+            ),
         )
         print(
             json.dumps(

@@ -8,12 +8,14 @@ import pytest
 
 from advisorai.phase0 import build_walk_forward_cases
 from scripts.prepare_phase4_real_utility_input import (
+    DEFAULT_FORECAST_CANDIDATES,
     REQUIRED_SYMBOLS,
     SOURCE_ENDPOINT,
     SOURCE_ID,
     Phase4InputRefused,
     _load_snapshot,
     _observations,
+    _parse_candidate_admission_roots,
 )
 
 SNAPSHOT = Path(
@@ -54,3 +56,17 @@ def test_real_input_rejects_manifest_hash_mismatch(tmp_path: Path):
         _load_snapshot(SNAPSHOT, manifest)
 
     assert snapshot.content_hash != "0" * 64
+
+
+def test_real_input_default_candidate_preserves_ttm_r2_control():
+    assert DEFAULT_FORECAST_CANDIDATES == ("ttm-r2",)
+
+
+def test_real_input_candidate_admission_root_parser_is_explicit():
+    assert _parse_candidate_admission_roots(["ttm-r3=/tmp/admission"]) == {
+        "ttm-r3": Path("/tmp/admission")
+    }
+    with pytest.raises(Phase4InputRefused, match="NAME=PATH"):
+        _parse_candidate_admission_roots(["ttm-r3"])
+    with pytest.raises(Phase4InputRefused, match="duplicate"):
+        _parse_candidate_admission_roots(["ttm-r3=/tmp/a", "ttm-r3=/tmp/b"])
