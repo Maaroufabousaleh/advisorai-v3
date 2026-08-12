@@ -1,5 +1,39 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
+
+- Review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c`; the
+  laptop remains running. Phase 2 and Phase 3 remain formally passed, no
+  Phase-3 durability root was reopened, and no Binance order was submitted.
+- Final verification: full pytest `692 passed` with 28 warnings; acceptance
+  suites `134/152/126/117/39/34/10/11/27/18/5`; Ruff, format, lock,
+  compilation, dashboard build, and `git diff --check` passed.
+- New input: `artifacts/phase4/real-utility-input/20260812T032000Z-btc-eth-daily-64x2-walk-forward/phase4-paper-utility-input.json`,
+  SHA-256 `38fa4aef19d9e3c030749083e3c85cb1b7ba9fec99e86ea01d5a59b798e0067c`;
+  128 observations, 64 per symbol, 32 final holdout observations, 896
+  predictions, frozen snapshot hash
+  `0f84a34fb0537ecb0305cd8e5fd07e5d2dfa14500dbb61961168ee5351f55546`.
+- Measurement report:
+  `artifacts/phase4/utility-evaluation/20260812T033000Z-btc-eth-daily-64x2-base/phase4-paper-utility-evidence.json`,
+  SHA-256 `2a79d08314717f18c4d4286f40e623c90ddf800a2dbbc06a7b25f89ae369d7fe`.
+- Formal review root:
+  `artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`.
+  Review SHA-256 `64b9080176109ab12ce58cbd68b5e2160115537e5e4f75cba175c0051515bee3`;
+  checklist SHA-256 `16e485072f23ffbdccea463b82fa0765d7691d380db57679e38d4cb173b65154`;
+  pending gate record SHA-256
+  `a7a99bc18d52e8bcbd49c9ecb625564c4b363b497b4a4708ba89fc40f989d36c`.
+- Phase 4 is `PENDING_REVIEW`, with exact blockers
+  `past_only_calibration` and `robust_candidate_admission`. TTM-R2 is
+  `CHALLENGER` (full `+610.96` bps, holdout `+129.89` bps, rolling coverage
+  `0.56818` versus `0.80` nominal, conservative-cost increment `-181.04` bps,
+  next-bar increment `-1950.94` bps). TTM-R3 is `RESEARCH_ONLY` (full
+  `-10302.69` bps; holdout `-4828.28` bps).
+- The optional Chronos challenger remains quarantined because its existing
+  immutable admission root pins a different worker hash. No bypass, new
+  admission, network call, credential load, model promotion, execution write,
+  or RiskKernel/OMS change occurred. Global Phase 0 private-route/archive
+  blockers remain separate; Phase 5–7 remain closed.
+
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 - Implementation/evidence anchor: `cd2b09066096977ac38ddb6dd756339fea9a4330`.

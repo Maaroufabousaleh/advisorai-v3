@@ -16,6 +16,7 @@ from scripts.prepare_phase4_real_utility_input import (
     _load_snapshot,
     _observations,
     _parse_candidate_admission_roots,
+    _return_prediction,
 )
 
 SNAPSHOT = Path(
@@ -70,3 +71,29 @@ def test_real_input_candidate_admission_root_parser_is_explicit():
         _parse_candidate_admission_roots(["ttm-r3"])
     with pytest.raises(Phase4InputRefused, match="duplicate"):
         _parse_candidate_admission_roots(["ttm-r3=/tmp/a", "ttm-r3=/tmp/b"])
+
+
+def test_real_input_preserves_runtime_latency_and_native_intervals():
+    snapshot = _load_snapshot(SNAPSHOT, MANIFEST)
+    cases = tuple(
+        item
+        for item in build_walk_forward_cases(snapshot, cases_per_series=2)
+        if item.instrument in REQUIRED_SYMBOLS
+    )
+    observation = _observations(cases, snapshot.content_hash, Decimal("2"), Decimal("2"))[0]
+
+    prediction = _return_prediction(
+        observation,
+        Decimal("101"),
+        Decimal("100"),
+        "ttm-r2",
+        "a" * 64,
+        "b" * 64,
+        latency_ms=Decimal("7.5"),
+        interval_lower_bps=Decimal("-10"),
+        interval_upper_bps=Decimal("20"),
+    )
+
+    assert prediction.latency_ms == Decimal("7.5")
+    assert prediction.interval_lower_bps == Decimal("-10")
+    assert prediction.interval_upper_bps == Decimal("20")

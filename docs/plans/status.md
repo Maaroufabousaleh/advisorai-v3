@@ -4,6 +4,45 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
+
+Main at review start: `056a39d5641c81330dd89668e117108e1fa1bf5c`. Phase 2 and
+Phase 3 remain formally passed; no predecessor or Phase-3 durability evidence
+was reopened. The Phase-4 reviewer and regression tests are implemented, but
+the gate is still `PENDING_REVIEW`.
+
+Final verification passed full pytest (`692 passed`, 28 warnings), all eleven
+acceptance suites (`134/152/126/117/39/34/10/11/27/18/5`), Ruff, repository
+format, lock check, compilation, dashboard build, and `git diff --check`.
+
+The fresh immutable chronological input has 128 observations (64 BTCUSDT and
+64 ETHUSDT), 32 untouched holdout observations, and 896 predictions. It is
+bound to the frozen Binance public snapshot hash
+`0f84a34fb0537ecb0305cd8e5fd07e5d2dfa14500dbb61961168ee5351f55546` and has
+input SHA-256 `38fa4aef19d9e3c030749083e3c85cb1b7ba9fec99e86ea01d5a59b798e0067c`.
+The corresponding measurement report SHA-256 is
+`2a79d08314717f18c4d4286f40e623c90ddf800a2dbbc06a7b25f89ae369d7fe`.
+
+The formal offline review is at
+`artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`:
+review SHA-256 `64b9080176109ab12ce58cbd68b5e2160115537e5e4f75cba175c0051515bee3`,
+checklist SHA-256 `16e485072f23ffbdccea463b82fa0765d7691d380db57679e38d4cb173b65154`,
+and pending gate-record SHA-256
+`a7a99bc18d52e8bcbd49c9ecb625564c4b363b497b4a4708ba89fc40f989d36c`.
+
+The exact blockers are `past_only_calibration` and
+`robust_candidate_admission`. TTM-R2 is `CHALLENGER`: full incremental utility
+`+610.96` bps and holdout `+129.89` bps, but rolling coverage is `0.56818` at
+`0.80` nominal, conservative-cost incremental utility is `-181.04` bps, and
+next-bar delay incremental utility is `-1950.94` bps. TTM-R3 is
+`RESEARCH_ONLY` with full incremental utility `-10302.69` bps and holdout
+`-4828.28` bps. No model is promoted. Phase 5–7 remain closed.
+
+The optional Chronos challenger remains quarantined because its existing
+immutable runtime-admission root pins a different worker hash; this was
+preserved as generation evidence and not bypassed. No network, credentials,
+order writes, RiskKernel/OMS changes, or live-capital actions occurred.
+
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 The current implementation/evidence anchor is `cd2b09066096977ac38ddb6dd756339fea9a4330`.

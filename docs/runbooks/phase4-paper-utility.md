@@ -1,5 +1,49 @@
 # Phase-4 paper utility evidence
 
+## Current formal-review result — 2026-08-12T04:50:00Z
+
+The existing 64-observation report was preserved. A fresh, larger chronological
+input was measured from the same frozen reviewed Binance public snapshot: 128
+observations (64 BTCUSDT and 64 ETHUSDT), 96 chronological training
+observations, 32 final holdout observations, and 896 predictions. This is
+measurement-only evidence; it does not acquire data, load credentials, submit
+orders, or promote a model.
+
+Input:
+`artifacts/phase4/real-utility-input/20260812T032000Z-btc-eth-daily-64x2-walk-forward/phase4-paper-utility-input.json`
+(SHA-256 `38fa4aef19d9e3c030749083e3c85cb1b7ba9fec99e86ea01d5a59b798e0067c`).
+Measurement:
+`artifacts/phase4/utility-evaluation/20260812T033000Z-btc-eth-daily-64x2-base/phase4-paper-utility-evidence.json`
+(SHA-256 `2a79d08314717f18c4d4286f40e623c90ddf800a2dbbc06a7b25f89ae369d7fe`).
+
+The offline formal reviewer is:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/review_phase4_utility.py \
+  --input artifacts/phase4/real-utility-input/<run-id>/phase4-paper-utility-input.json \
+  --measurement artifacts/phase4/utility-evaluation/<run-id>/phase4-paper-utility-evidence.json \
+  --phase3-gate-record artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json \
+  --phase4-dependency artifacts/phase4/formal-dependency/20260812T014100Z-phase3-and-role-contract-v2/phase4-predecessor-dependency.json \
+  --output-root artifacts/phase4/formal-review/<new-run-id>
+```
+
+The current immutable review is
+`artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`.
+It is `PENDING`, with blockers `past_only_calibration` and
+`robust_candidate_admission`. TTM-R2 is `CHALLENGER`, not promoted: its full
+incremental utility is `+610.96` bps and untouched holdout increment is
+`+129.89` bps, but rolling coverage is `0.56818` versus `0.80` nominal,
+conservative-cost increment is `-181.04` bps, and next-bar delay increment is
+`-1950.94` bps. TTM-R3 is `RESEARCH_ONLY`. The holdout-positive result is
+recorded separately from robust candidate admission, so a promising holdout
+does not bypass calibration, cost, or latency requirements.
+
+The review also records a truthful optional Chronos quarantine: its existing
+immutable runtime-admission root pins a different worker hash. The mismatch was
+not bypassed and no new model role was admitted. Phase 5–7 remain closed until
+the formal Phase-4 gate passes and their own predecessors are evaluated.
+
 ## Current admitted predecessors and measured evidence
 
 Phase 2 is formally passed from the existing Binance Spot Testnet

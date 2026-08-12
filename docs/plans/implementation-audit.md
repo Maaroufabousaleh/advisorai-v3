@@ -5,6 +5,39 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
+
+This review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c` and
+added the offline `scripts/review_phase4_utility.py` boundary plus four focused
+regression tests in `tests/models/test_phase4_review.py`. The preparation
+boundary now preserves measured runtime latency and native forecast intervals
+when a worker supplies them; it never invents intervals.
+
+Final verification passed full pytest (`692 passed`, 28 warnings), all eleven
+acceptance suites (`134/152/126/117/39/34/10/11/27/18/5`), Ruff, repository
+format, lock check, compilation, dashboard build, and `git diff --check`.
+
+The new review consumes only the immutable 128-observation BTC/ETH input and
+measurement report. It recomputes chronological training/holdout, BTC/ETH and
+regime slices, past-only rolling calibration, causal delay scenarios, cost
+stress, and break-even cost. It writes a classified checklist and a typed
+pending `PhaseGateRecord` without network, credentials, model weights, order
+writes, promotion, or authority changes.
+
+Review root:
+`artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`.
+Review, checklist, and gate-record SHA-256 values are respectively
+`64b9080176109ab12ce58cbd68b5e2160115537e5e4f75cba175c0051515bee3`,
+`16e485072f23ffbdccea463b82fa0765d7691d380db57679e38d4cb173b65154`, and
+`a7a99bc18d52e8bcbd49c9ecb625564c4b363b497b4a4708ba89fc40f989d36c`.
+The reviewer bound code hashes `phase4_contract=1107b5356955fa402e575b18da1b127855a941dba133e8931885070e6b7aac10`
+and `reviewer=3ce1d9cd77157db971fd1115f3f3ba488d6379a5f79a1ead9866ab50aee14329`.
+
+The implementation is `IMPLEMENTED / TESTED / REAL_MEASURED`, while the gate is
+`PENDING_REVIEW` with exact blockers `past_only_calibration` and
+`robust_candidate_admission`. TTM-R2 remains `CHALLENGER`; TTM-R3 is
+`RESEARCH_ONLY`. Phase 5–7 remain closed and no model authority was added.
+
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 The implementation anchor is `cd2b09066096977ac38ddb6dd756339fea9a4330`,

@@ -1,5 +1,59 @@
 # AdvisorAI V3 gate matrix
 
+## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
+
+The review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c`.
+Phase 2 and Phase 3 remain formally passed; neither predecessor was reopened,
+no Phase-3 durability run was collected, and no Binance order or network call
+was made by this review. The selected Phase-0 model runtime roles remain
+qualified, while global Phase 0 remains separately pending its private-route
+and archive prerequisites.
+
+Final verification for this working tree: full pytest `692 passed` with 28
+warnings; acceptance suites `134/152/126/117/39/34/10/11/27/18/5`; Ruff,
+repository format, lock check, compilation, dashboard build, and `git diff
+--check` passed.
+
+The measurement-only Phase-4 input is the frozen Binance public BTC/ETH
+snapshot (`0f84a34fb0537ecb0305cd8e5fd07e5d2dfa14500dbb61961168ee5351f55546`)
+with 128 observations (64 per symbol), 96 chronological training observations,
+32 final holdout observations, and 896 predictions:
+
+- input: `artifacts/phase4/real-utility-input/20260812T032000Z-btc-eth-daily-64x2-walk-forward/phase4-paper-utility-input.json`
+  (SHA-256 `38fa4aef19d9e3c030749083e3c85cb1b7ba9fec99e86ea01d5a59b798e0067c`);
+- generation evidence SHA-256 `0d8ce592c558e27b1bf0de8607c6b288677ddee7d168f8aa386336fc2be78ece`;
+- measurement report: `artifacts/phase4/utility-evaluation/20260812T033000Z-btc-eth-daily-64x2-base/phase4-paper-utility-evidence.json`
+  (SHA-256 `2a79d08314717f18c4d4286f40e623c90ddf800a2dbbc06a7b25f89ae369d7fe`).
+
+The immutable offline formal review is
+`artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`:
+
+- review evidence SHA-256 `64b9080176109ab12ce58cbd68b5e2160115537e5e4f75cba175c0051515bee3`;
+- checklist SHA-256 `16e485072f23ffbdccea463b82fa0765d7691d380db57679e38d4cb173b65154`;
+- pending PhaseGateRecord SHA-256 `a7a99bc18d52e8bcbd49c9ecb625564c4b363b497b4a4708ba89fc40f989d36c`.
+
+The review is `PENDING`, not `PASSED`. Its requirement matrix is:
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Phase-3 predecessor, point-in-time input, sample size, walk-forward/holdout | SATISFIED | Passed Phase-3 record and immutable 128-observation input |
+| Mandatory baselines, provenance/resources, BTC/ETH and regime slices | SATISFIED | Same-input deterministic recomputation |
+| Past-only rolling calibration | UNSATISFIED | 88 derived intervals; TTM-R2 coverage `0.56818` vs nominal `0.80` |
+| Causal latency sensitivity | SATISFIED as measured | Next-bar TTM-R2 incremental utility `-1950.94` bps; this fails the candidate robustness check |
+| Cost stress and break-even | SATISFIED as measured | Conservative TTM-R2 incremental utility `-181.04` bps; break-even all-in cost `49.24` bps/turnover |
+| Holdout incremental utility | SATISFIED as measured | TTM-R2 holdout incremental utility `+129.89` bps |
+| Robust candidate admission | UNSATISFIED | No candidate passes all utility, calibration, cost, latency, and holdout checks |
+| Global Phase-0 route/archive | EXTERNALLY_BLOCKED, non-gating here | The Phase-4 dependency explicitly opens measurement without closing global Phase 0 |
+| Initial GPU family challenger | OPTIONAL | Chronos input generation preserved an old pinned-worker hash mismatch; no bypass or promotion |
+
+TTM-R2 is retained as `CHALLENGER`, not promoted. TTM-R3 is `RESEARCH_ONLY`
+after negative full and holdout incremental utility. The evidence also shows
+TTM-R2's advantage is regime-concentrated and disappears under the measured
+next-bar delay and conservative modeled costs. These costs are stress assumptions,
+not historical Binance fills. Phase 5, Phase 6, and Phase 7 remain closed; a
+real fill/TCA/attribution remains a Phase-6 requirement. RiskKernel and OMS
+authority are unchanged, and live capital remains prohibited.
+
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 The implementation/evidence source anchor for this checkpoint is
