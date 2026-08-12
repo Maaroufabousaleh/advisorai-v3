@@ -5,6 +5,86 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current corrected Phase-4 reviewer audit — 2026-08-12T16:25:00Z
+
+The Phase-4 formal reviewer correction is committed at
+`52342b1093dc95dd0358257cdd8999cb2935479b` on draft PR #184; main remains
+`056a39d5641c81330dd89668e117108e1fa1bf5c`. It adds v2 review semantics and
+20 focused regression tests without touching Phase 2/3, execution, credentials,
+data acquisition, or model promotion.
+
+The fresh review root is
+`artifacts/phase4/formal-review/20260812T162500Z-btc-eth-64x2-reviewer-v2-final/`
+with review/checklist/gate-record SHA-256 values
+`c5117a011dc118687bfa2b1aea55e5b0cc76c42929e6e360ce86fb063880c867`,
+`50ef16346c73fc0d64247114dad73ecde28143e0a48468f55b7524fb4463b58b`, and
+`18a05e1769a5356b860800ea2c7a84fb241385ba7884bf7e9c7d3865ebc28a18`.
+The decision is `PENDING`; the only gating blocker is
+`robust_candidate_admission`.
+
+Implementation audit results:
+
+- rolling calibration now derives widths from non-negative absolute residuals
+  from strictly earlier same-cutoff groups for the same instrument/model;
+  native intervals are validated and preserved, while partial/invalid native
+  intervals fail closed;
+- calibration exposes nominal/observed/signed/absolute coverage error and
+  holdout counts; TTM-R2 is `0.73863636` full and `0.75` holdout at `0.80`
+  nominal, so the corrected calibration requirement passes;
+- daily latency semantics are explicit: 10s/1h are zero-bar operational
+  proxies, while +1/+2 bars are severe signal-decay stress and cannot be used
+  as sub-bar observations; the current next-bar negative result is preserved;
+- the generation audit verifies cutoff-bounded cases, causal per-cutoff
+  baselines/LightGBM, frozen TTM checkpoints, and no holdout tuning/retraining.
+  Because the immutable generation manifest lacks source hashes, the reviewer
+  records the exact methodology-source comparison and a bounded provenance
+  limitation rather than claiming a stronger source identity;
+- all modeled cost scenarios remain present and labeled non-historical. TTM-R2
+  has 7/14/23/41 bps optimistic/base/conservative/severe all-in assumptions,
+  a 49.243883 bps model net-zero break-even, and -181.04 bps conservative
+  incremental utility. It is not promoted.
+
+The prior robustness-v2 root is preserved unchanged and superseded only for
+the corrected reviewer interpretation. RiskKernel remains the deterministic
+veto, OMS remains authoritative, and no model/LLM/Hermes/dashboard/research
+component gained order authority. Full pytest passes `703` tests with 28
+warnings, all eleven acceptance suites pass
+`134/152/126/117/50/34/10/11/27/18/5`, and Ruff, format, lock, compilation,
+dashboard build, diff hygiene, and tracked-secret/model-weight checks pass.
+
+## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
+
+This review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c` and
+added the offline `scripts/review_phase4_utility.py` boundary plus four focused
+regression tests in `tests/models/test_phase4_review.py`. The preparation
+boundary now preserves measured runtime latency and native forecast intervals
+when a worker supplies them; it never invents intervals.
+
+Final verification passed full pytest (`692 passed`, 28 warnings), all eleven
+acceptance suites (`134/152/126/117/39/34/10/11/27/18/5`), Ruff, repository
+format, lock check, compilation, dashboard build, and `git diff --check`.
+
+The new review consumes only the immutable 128-observation BTC/ETH input and
+measurement report. It recomputes chronological training/holdout, BTC/ETH and
+regime slices, past-only rolling calibration, causal delay scenarios, cost
+stress, and break-even cost. It writes a classified checklist and a typed
+pending `PhaseGateRecord` without network, credentials, model weights, order
+writes, promotion, or authority changes.
+
+Review root:
+`artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`.
+Review, checklist, and gate-record SHA-256 values are respectively
+`64b9080176109ab12ce58cbd68b5e2160115537e5e4f75cba175c0051515bee3`,
+`16e485072f23ffbdccea463b82fa0765d7691d380db57679e38d4cb173b65154`, and
+`a7a99bc18d52e8bcbd49c9ecb625564c4b363b497b4a4708ba89fc40f989d36c`.
+The reviewer bound code hashes `phase4_contract=1107b5356955fa402e575b18da1b127855a941dba133e8931885070e6b7aac10`
+and `reviewer=3ce1d9cd77157db971fd1115f3f3ba488d6379a5f79a1ead9866ab50aee14329`.
+
+The implementation is `IMPLEMENTED / TESTED / REAL_MEASURED`, while the gate is
+`PENDING_REVIEW` with exact blockers `past_only_calibration` and
+`robust_candidate_admission`. TTM-R2 remains `CHALLENGER`; TTM-R3 is
+`RESEARCH_ONLY`. Phase 5–7 remain closed and no model authority was added.
+
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 The implementation anchor is `cd2b09066096977ac38ddb6dd756339fea9a4330`,

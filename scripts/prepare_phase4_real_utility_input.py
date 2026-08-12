@@ -189,15 +189,21 @@ def _return_prediction(
     artifact_hash: str,
     *,
     resource_limit_passed: bool = True,
+    latency_ms: Decimal | None = None,
+    interval_lower_bps: Decimal | None = None,
+    interval_upper_bps: Decimal | None = None,
 ) -> Phase4Prediction:
     return Phase4Prediction(
         observation_id=observation.observation_id,
         model_name=model_name,
         predicted_return_bps=(predicted_price / cutoff_price - Decimal("1")) * Decimal("10000"),
         confidence=Decimal("0.5"),
+        interval_lower_bps=interval_lower_bps,
+        interval_upper_bps=interval_upper_bps,
         model_code_hash=code_hash,
         model_artifact_hash=artifact_hash,
         resource_limit_passed=resource_limit_passed,
+        latency_ms=latency_ms,
     )
 
 
@@ -314,9 +320,31 @@ def _forecast_predictions(
             code_hash,
             artifact_hash,
             resource_limit_passed=bool(result.resource and result.resource.resource_limit_passed),
+            latency_ms=(
+                Decimal(str(result.resource.warm_inference_p50_ms))
+                if result.resource is not None
+                else None
+            ),
+            interval_lower_bps=(
+                (Decimal(str(interval_lower[0])) / Decimal(str(case.context[-1])) - Decimal("1"))
+                * Decimal("10000")
+                if interval_lower is not None
+                else None
+            ),
+            interval_upper_bps=(
+                (Decimal(str(interval_upper[0])) / Decimal(str(case.context[-1])) - Decimal("1"))
+                * Decimal("10000")
+                if interval_upper is not None
+                else None
+            ),
         )
-        for case, observation, forecast in zip(
-            cases, observations, result.forecast_batch_predictions, strict=True
+        for case, observation, forecast, interval_lower, interval_upper in zip(
+            cases,
+            observations,
+            result.forecast_batch_predictions,
+            result.forecast_batch_lower or (None,) * len(cases),
+            result.forecast_batch_upper or (None,) * len(cases),
+            strict=True,
         )
     )
     return predictions, report

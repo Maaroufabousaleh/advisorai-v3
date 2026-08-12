@@ -1,5 +1,73 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current corrected Phase-4 reviewer checkpoint — 2026-08-12T16:25:00Z
+
+- Draft PR #184 remains open and unmerged. Main remains
+  `056a39d5641c81330dd89668e117108e1fa1bf5c`; the corrected reviewer/tests
+  are committed at `52342b1093dc95dd0358257cdd8999cb2935479b`.
+- Phase 2 and Phase 3 remain passed. No Phase-3 durability run, selected-model
+  stability run, data acquisition, credential load, or Binance order was
+  started or changed. The laptop remains running.
+- The old robustness-v2 Phase-4 review is preserved unchanged. The fresh v2
+  root is
+  `artifacts/phase4/formal-review/20260812T162500Z-btc-eth-64x2-reviewer-v2-final/`:
+  review `c5117a011dc118687bfa2b1aea55e5b0cc76c42929e6e360ce86fb063880c867`,
+  checklist `50ef16346c73fc0d64247114dad73ecde28143e0a48468f55b7524fb4463b58b`,
+  gate record `18a05e1769a5356b860800ea2c7a84fb241385ba7884bf7e9c7d3865ebc28a18`.
+- Phase 4 is `PENDING` only on `robust_candidate_admission`. TTM-R2 is
+  `CHALLENGER`, not promoted; TTM-R3 is `RESEARCH_ONLY`.
+- Corrected calibration: absolute, past-only, same-instrument/model residuals;
+  88 intervals, TTM-R2 coverage `0.73863636` full and `0.75` holdout at
+  `0.80` nominal. Corrected latency semantics: runtime p50 `7.758473 ms`,
+  10s/1h daily zero-bar operational proxies, +1/+2 bar severe stress only.
+- Cost stress remains a real blocker: TTM-R2 conservative incremental utility
+  `-181.04` bps; model net-zero break-even `49.243883` bps/turnover. Costs are
+  modeled assumptions, not Binance fills.
+- Focused reviewer/input tests pass (`20 passed`). Full pytest passes (`703
+  passed`, 28 warnings); acceptance suites pass
+  `134/152/126/117/50/34/10/11/27/18/5`; Ruff, format, lock, compilation,
+  dashboard build, diff hygiene, tracked-secret, and tracked-weight checks pass.
+- Next legal work: inspect the final diff, push the draft update, and leave
+  Phase 4 pending. Do not start Phase 5–7, acquire data, submit orders, or
+  promote TTM-R2.
+
+## Current Phase-4 formal review checkpoint — 2026-08-12T04:50:00Z
+
+- Review started from main `056a39d5641c81330dd89668e117108e1fa1bf5c`; the
+  laptop remains running. Phase 2 and Phase 3 remain formally passed, no
+  Phase-3 durability root was reopened, and no Binance order was submitted.
+- Implementation commit: `bc163bc` (`Review Phase 4 utility robustness`) on
+  `agent/phase4-formal-robustness-review`; draft PR #184 is open. Main remains
+  `056a39d5641c81330dd89668e117108e1fa1bf5c` until that review is merged.
+- Final verification: full pytest `692 passed` with 28 warnings; acceptance
+  suites `134/152/126/117/39/34/10/11/27/18/5`; Ruff, format, lock,
+  compilation, dashboard build, and `git diff --check` passed.
+- New input: `artifacts/phase4/real-utility-input/20260812T032000Z-btc-eth-daily-64x2-walk-forward/phase4-paper-utility-input.json`,
+  SHA-256 `38fa4aef19d9e3c030749083e3c85cb1b7ba9fec99e86ea01d5a59b798e0067c`;
+  128 observations, 64 per symbol, 32 final holdout observations, 896
+  predictions, frozen snapshot hash
+  `0f84a34fb0537ecb0305cd8e5fd07e5d2dfa14500dbb61961168ee5351f55546`.
+- Measurement report:
+  `artifacts/phase4/utility-evaluation/20260812T033000Z-btc-eth-daily-64x2-base/phase4-paper-utility-evidence.json`,
+  SHA-256 `2a79d08314717f18c4d4286f40e623c90ddf800a2dbbc06a7b25f89ae369d7fe`.
+- Formal review root:
+  `artifacts/phase4/formal-review/20260812T045000Z-btc-eth-64x2-robustness-v2/`.
+  Review SHA-256 `64b9080176109ab12ce58cbd68b5e2160115537e5e4f75cba175c0051515bee3`;
+  checklist SHA-256 `16e485072f23ffbdccea463b82fa0765d7691d380db57679e38d4cb173b65154`;
+  pending gate record SHA-256
+  `a7a99bc18d52e8bcbd49c9ecb625564c4b363b497b4a4708ba89fc40f989d36c`.
+- Phase 4 is `PENDING_REVIEW`, with exact blockers
+  `past_only_calibration` and `robust_candidate_admission`. TTM-R2 is
+  `CHALLENGER` (full `+610.96` bps, holdout `+129.89` bps, rolling coverage
+  `0.56818` versus `0.80` nominal, conservative-cost increment `-181.04` bps,
+  next-bar increment `-1950.94` bps). TTM-R3 is `RESEARCH_ONLY` (full
+  `-10302.69` bps; holdout `-4828.28` bps).
+- The optional Chronos challenger remains quarantined because its existing
+  immutable admission root pins a different worker hash. No bypass, new
+  admission, network call, credential load, model promotion, execution write,
+  or RiskKernel/OMS change occurred. Global Phase 0 private-route/archive
+  blockers remain separate; Phase 5–7 remain closed.
+
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 - Implementation/evidence anchor: `cd2b09066096977ac38ddb6dd756339fea9a4330`.
