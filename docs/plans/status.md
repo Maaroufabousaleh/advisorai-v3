@@ -4,7 +4,64 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current V3-Core forward PIT collector — 2026-08-12T20:33:06Z
+## Current V3-Core forward PIT collector — 2026-08-12T20:47:00Z
+
+PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+Draft PR #187 is on `agent/phase4-forward-pit-collector` at
+`eeb62f0af2ecba6cfb21f79d81793963241252e`; it remains unmerged.
+
+The first real forward attempt is preserved as an implementation-failure
+root, not admission evidence:
+`artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/`.
+Its manifest SHA-256 is
+`5a774eed7f27d71e8fdead35e661d826bfc080abbcb950a452c7d8250edab4e9`, and its
+status SHA-256 is
+`077b4a8b70dc4a67103c9499ec44610c94ff1fc49c621b890f9d9920d8f7c83a`.
+The collector correctly reached public Binance data, but incorrectly treated
+the later receipt of an unchanged closed bar as a conflicting normalized bar
+because receipt metadata was included in identity comparison. The sanitized
+classification is preserved at
+`artifacts/phase4/v3core-forward-incidents/20260812T204700Z-repeated-closed-bar-normalization/incident-classification.json`.
+The root was not edited, concatenated, or reused.
+
+Commit `4949b5cc5b494ab6ff79c0ff40118219773d6277` fixes that defect: raw
+receipts remain append-only, while unchanged closed bars are normalized
+idempotently. Commit `eeb62f0af2ecba6cfb21f79d81793963241252e0` additionally
+requires resumed roots to match the original collector/module/code hashes.
+The focused forward/cadence suite passes 27 tests after the fix.
+
+The corrected v5 preregistration is frozen at
+`artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`:
+evidence SHA-256
+`5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd` and
+manifest SHA-256
+`1aec860d56e9cf5d78ebb441ba5077bc93da157239c092682a76ca49be76910e`.
+It remains pre-outcome, with `network_calls = 0`,
+`credentials_loaded = false`, and `order_writes_attempted = false`.
+
+A fresh independent root is now running at
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`.
+The collector is PID `160717`, started at
+`2026-08-12T20:45:11.984069Z`, with target end
+`2026-08-17T20:45:11.984069Z`; its manifest binds code commit
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`, source snapshot hash
+`f41af27a93dfbee5b4c67cff2570cb80de09004133b84e2eb0f0ffd2546b0b9a`, and
+preregistration SHA above. It uses only the reviewed public
+`data-api.binance.vision` klines GET for BTCUSDT/ETHUSDT, with credentials and
+order writes disabled. The separate resource sidecar is PID `161130` at
+`artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`;
+it is bound to process start ticks `6203958` and command SHA-256
+`51f51380cd07cedbc531a04eb835889c1f814b3788a24a0bb40e74ad499d4874`.
+At launch review it had two normalized bars, zero failures, and zero completed
+cases; no outcome is counted before its one-hour horizon closes.
+
+Phase 4 remains `PENDING` on fresh independent V3-Core cadence evidence. The
+collector is durable, append-only, restartable only with matching immutable
+configuration/code identity, and does not grant any model or agent execution
+authority. Phase 2/3 remain passed; Phase 5–7 remain closed; archive/rclone is
+untouched.
+
+## Historical V3-Core forward PIT collector contract — 2026-08-12T20:33:06Z
 
 PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
 The focused follow-on implementation is on branch

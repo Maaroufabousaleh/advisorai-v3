@@ -1,6 +1,48 @@
 # AdvisorAI V3 gate matrix
 
-## Current V3-Core forward PIT collector — 2026-08-12T20:33:06Z
+## Current V3-Core forward PIT collector — 2026-08-12T20:47:00Z
+
+The follow-on implementation is draft PR #187 at
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`. The first attempted forward root
+is preserved and classified as an implementation failure caused by comparing
+receipt-varying metadata as normalized bar identity; it is not concatenated or
+used for admission. The classification artifact is
+`artifacts/phase4/v3core-forward-incidents/20260812T204700Z-repeated-closed-bar-normalization/incident-classification.json`.
+
+The corrected v5 preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`
+with evidence SHA-256
+`5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd` and
+manifest SHA-256
+`1aec860d56e9cf5d78ebb441ba5077bc93da157239c092682a76ca49be76910e`.
+
+The fresh r2 collector is running from
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`
+under PID `160717`; its separate resource sidecar is PID `161130` at
+`artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`.
+The source is credential-free Binance public market data only, and the root is
+bound to code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`, source
+snapshot `f41af27a93dfbee5b4c67cff2570cb80de09004133b84e2eb0f0ffd2546b0b9a`,
+and the frozen preregistration. At the first checkpoint: 0 completed cases per
+symbol, 0 failures, 2 normalized bars, and no writes.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Prior root integrity | QUARANTINED / IMPLEMENTATION_FAILURE | `artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/`; repeated closed-bar receipt bug preserved unchanged; no admission use |
+| Corrected repeated-receipt handling | IMPLEMENTED / TESTED | `4949b5cc5b494ab6ff79c0ff40118219773d6277`; 27 focused tests pass; raw receipt history remains separate from normalized identity |
+| Resumable code identity binding | IMPLEMENTED / TESTED | `eeb62f0af2ecba6cfb21f79d81793963241252e0`; resumed roots reject code/module/collector hash changes |
+| Fresh independent forward cases | PENDING / RUNNING | r2 root above; target 64 completed cases per BTCUSDT and ETHUSDT, target end `2026-08-17T20:45:11.984069Z` |
+| Resource qualification sidecar | LOCALLY MEASURED / RUNNING | sidecar root above; PID identity and command hash bound; no admission claim before terminal review |
+| Phase-4 robust candidate admission | PENDING | no utility evaluation or model promotion |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | no predecessor gate or Phase-3 evidence reopened |
+| Phase 5–7 | CLOSED | no council, fill, attribution, or soak started |
+
+The next legal work while the time-dependent root runs is offline preparation
+of the frozen baseline/prediction-ledger path and Chronos identity review; no
+holdout tuning, arbitrary order, credential use, or source substitution is
+permitted.
+
+## Historical V3-Core forward PIT collector contract — 2026-08-12T20:33:06Z
 
 Main is `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after PR #186. The unmerged
 collector follow-on is `80b3c5eb6c0055b81e224bbc833b8a9e240906eb` on

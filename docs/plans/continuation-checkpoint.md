@@ -1,6 +1,42 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current forward PIT collector checkpoint — 2026-08-12T20:33:06Z
+## Current forward PIT collector checkpoint — 2026-08-12T20:47:00Z
+
+- Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.
+- Draft PR #187 is on `agent/phase4-forward-pit-collector` at
+  `eeb62f0af2ecba6cfb21f79d81793963241252e`; it is not merged.
+- The initial forward root
+  `artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/`
+  is preserved unchanged and quarantined as an implementation-failure root.
+  A repeated valid closed Binance bar received later had a different local
+  receipt timestamp, and the old normalized spool incorrectly treated that as
+  a conflicting identity. Its manifest SHA-256 is
+  `5a774eed7f27d71e8fdead35e661d826bfc080abbcb950a452c7d8250edab4e9`.
+- The defect fix is `4949b5cc5b494ab6ff79c0ff40118219773d6277`; resumed-root
+  identity binding is `eeb62f0af2ecba6cfb21f79d81793963241252e0`. The focused
+  forward/cadence suite passes 27 tests.
+- New frozen preregistration:
+  `artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`
+  with evidence SHA-256
+  `5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd` and
+  manifest SHA-256
+  `1aec860d56e9cf5d78ebb441ba5077bc93da157239c092682a76ca49be76910e`.
+- Fresh independent r2 collection is running at
+  `artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`.
+  Collector PID `160717`; start `2026-08-12T20:45:11.984069Z`; target end
+  `2026-08-17T20:45:11.984069Z`; target 64 completed cases per BTCUSDT and
+  ETHUSDT. It is credential-free, public-GET-only, and order-write-free.
+- Resource sidecar PID `161130` is at
+  `artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`.
+  It is bound to process start ticks `6203958` and command SHA-256
+  `51f51380cd07cedbc531a04eb835889c1f814b3788a24a0bb40e74ad499d4874`.
+- At checkpoint: 0 completed cases per symbol, 0 failures, 2 normalized bars;
+  no case is counted before its future one-hour outcome closes. Phase 4 is
+  still pending fresh independent cadence evidence. Phase 2/3 remain passed;
+  Phase 5–7 remain closed; archive/rclone remains deferred. The laptop remains
+  running.
+
+## Historical forward PIT collector checkpoint — 2026-08-12T20:33:06Z
 
 - PR #186 is merged; clean main is
   `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.

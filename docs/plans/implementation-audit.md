@@ -5,7 +5,50 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current V3-Core forward PIT collector audit — 2026-08-12T20:33:06Z
+## Current V3-Core forward PIT collector audit — 2026-08-12T20:47:00Z
+
+Draft PR #187 is at
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`; PR #186 remains merged at main
+`5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+
+The first forward attempt is preserved under
+`artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/` and
+classified as `IMPLEMENTATION_FAILURE`, not external provider failure: the
+collector compared later local receipt metadata for an unchanged closed bar as
+part of normalized identity. The raw public response and sanitized failure
+ledgers remain untouched. The machine-readable classification is preserved in
+`artifacts/phase4/v3core-forward-incidents/20260812T204700Z-repeated-closed-bar-normalization/incident-classification.json`.
+
+The correction at `4949b5cc5b494ab6ff79c0ff40118219773d6277` makes normalized
+bar append idempotent for repeated closed-bar observations while retaining all
+raw receipts. The follow-up at
+`eeb62f0af2ecba6cfb21f79d81793963241252e0` prevents a resumed root from mixing
+collector/module/code identities. The regression suite covers a later receipt
+with changed `collected_at`, and the focused forward/cadence tests pass 27.
+
+The fresh v5 pre-outcome contract is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`
+(evidence SHA-256
+`5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd`). It
+binds the corrected module and collector hashes, but still records zero
+credentials, zero order writes, and zero network calls at preregistration.
+
+The active public-only r2 acquisition is
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`
+under PID `160717`, with resource observation isolated in
+`artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`
+under PID `161130`. The collector started at
+`2026-08-12T20:45:11.984069Z` and is allowed to run until
+`2026-08-17T20:45:11.984069Z`. It has no credential-loading import or
+execution-capable method; the exact reviewed surface is the Binance public
+market-data klines GET. No case is eligible until its 4-hour context and
+following 1-hour outcome are both present.
+
+No Phase-4 admission, model promotion, Phase-5 council, Phase-6 fill, or
+Phase-7 soak has been created. Phase 2/3 are unchanged and passed; archive and
+private-route work remain outside this continuation.
+
+## Historical V3-Core forward PIT collector audit — 2026-08-12T20:33:06Z
 
 PR #186 is merged at main `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
 The follow-on implementation is commit
