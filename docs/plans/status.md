@@ -4,6 +4,62 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current V3-Core cadence Phase-4 continuation — 2026-08-12T18:58:28Z
+
+PR #185 is merged at main `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. This
+focused continuation is based on that clean main at
+`53cdc9eba5f57ce54e87348f04320b138d82fa8d`; it adds an offline typed
+evaluation boundary for the configured V3-Core cadence without changing Phase
+2, Phase 3, execution, credentials, or model authority.
+
+The contract is implemented in
+`src/advisorai/phase4/v3core_cadence.py`, exported through
+`src/advisorai/phase4/__init__.py`, and exercised by six focused tests in
+`tests/models/test_phase4_v3core_cadence.py`. It fixes the evaluation universe
+and cadence at BTCUSDT/ETHUSDT, 5-minute observations, 4-hour context, and a
+1-hour outcome. It requires one provider/source identity per case,
+cutoff-bounded context, contiguous context/outcome bars, and deterministic
+context-only regime labels. It never acquires data, loads credentials, or
+submits orders.
+
+The immutable preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T185716Z-v3core-1h-5m-prereg-v1/`:
+evidence SHA-256
+`1bbe362240a1fb136a074117f734e270afcef3cf0be6f6af34e81dc3c2631e00` and
+manifest SHA-256
+`ffce302f99e27317f5a9c38520d5170fb0a39b8e7332657e6c9aad87324a085c`.
+The preregistration freezes TTM-R2 and Chronos-2-small as the first candidate
+families, the five mandatory baselines, causal latency cases, four modeled cost
+scenarios, minimum sample policy, and chronological evaluation rules.
+
+Measurement status is `PENDING_FRESH_PIT_DATA`. Existing Phase-3 r7 samples are
+source-health/order-book qualification telemetry, not a contiguous 5-minute
+OHLCV case set with four hours of prior context and one-hour future outcomes.
+The consumed daily Phase-4 input is explicitly not reused. No data was acquired
+or concatenated to manufacture cases. The next legal action is a
+reviewed/accumulated independent 5-minute PIT window, followed by
+`scripts/build_phase4_v3core_cadence_input.py` and the frozen evaluation path.
+
+Chronos-2-small was audited once against its preserved runtime identity. The
+fresh offline audit is
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-identity-audit/20260812T185828.820414Z/chronos-2-small.json`
+with SHA-256
+`62b971745a7536cf45fd30944a14919b570200a0382ed1dd54512a2570f9785b` and
+manifest SHA-256
+`f17c441abd7c14140806bab872150d9b1c08f77b664a6b083c4e813820bb2eff`.
+It remains `QUARANTINED` because the current worker hash does not match the
+preserved measured runtime hash; no mismatch was waived and no model was
+promoted. Phase 4 remains `PENDING` on `robust_candidate_admission`; TTM-R2
+remains `CHALLENGER`, TTM-R3 remains `RESEARCH_ONLY`, and Phase 5–7 remain
+closed. Global Phase-0 private-route/archive gates remain separate.
+
+Verification for this focused branch passed full pytest (`719 passed`, 28
+warnings), all eleven acceptance suites
+(`134/152/126/117/66/34/10/11/27/18/5`), Ruff, repository format, lock check,
+compilation, dashboard build, `git diff --check`, tracked-secret hygiene, and
+tracked-model-weight hygiene. These are implementation checks only and do not
+open Phase 4 or any later gate.
+
 ## Current Phase-4 signal-policy research — 2026-08-12T19:00:00Z
 
 PR #184 is merged at main `4b9ca30353132804eff559abd9220821493b9366`. This

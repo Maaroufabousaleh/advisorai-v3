@@ -1,5 +1,42 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current V3-Core cadence Phase-4 checkpoint — 2026-08-12T18:58:28Z
+
+- PR #185 is merged; the current clean main base is
+  `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. The focused implementation is on
+  `agent/phase4-v3core-cadence` at
+  `53cdc9eba5f57ce54e87348f04320b138d82fa8d`; it is not yet merged.
+- Phase 2 and Phase 3 remain passed. Phase 4 remains pending solely on
+  `robust_candidate_admission`; TTM-R2 is `CHALLENGER`, TTM-R3 is
+  `RESEARCH_ONLY`, and Phase 5–7 remain closed.
+- The new typed boundary fixes the next evaluation at 5m observations, 4h
+  context, 1h outcome, and BTCUSDT/ETHUSDT. It does not acquire data, load
+  credentials, submit orders, or grant any model/agent execution authority.
+- Immutable preregistration:
+  `artifacts/phase4/v3core-cadence-preregistration/20260812T185716Z-v3core-1h-5m-prereg-v1/`
+  with evidence SHA-256
+  `1bbe362240a1fb136a074117f734e270afcef3cf0be6f6af34e81dc3c2631e00` and
+  manifest SHA-256
+  `ffce302f99e27317f5a9c38520d5170fb0a39b8e7332657e6c9aad87324a085c`.
+- No eligible fresh 5m PIT case set is present. Existing r7 telemetry lacks a
+  contiguous 4h-context/1h-outcome OHLCV input, and the consumed daily Phase-4
+  input is not reused. Do not concatenate roots or fabricate observations. The
+  next legal action is a reviewed/accumulated independent PIT window followed
+  by the offline case builder and frozen evaluation.
+- Fresh Chronos identity audit:
+  `artifacts/phase0/model-runtime-qualification/chronos-v3core-identity-audit/20260812T185828.820414Z/chronos-2-small.json`,
+  SHA-256
+  `62b971745a7536cf45fd30944a14919b570200a0382ed1dd54512a2570f9785b`.
+  It is quarantined for the preserved worker/runner hash mismatch. Do not
+  waive it; do not start a model lottery.
+- No new Phase-3 run, data acquisition, credential use, Binance order, or
+  archive/rclone work occurred. The laptop remains running.
+- Verification on this branch: full pytest `719 passed` with 28 warnings;
+  acceptance suites `134/152/126/117/66/34/10/11/27/18/5`; Ruff, format, lock,
+  compileall, dashboard build, diff hygiene, tracked-secret, and
+  tracked-model-weight checks all pass. These checks do not constitute Phase-4
+  admission.
+
 ## Current Phase-4 signal-policy checkpoint — 2026-08-12T19:00:00Z
 
 - PR #184 is merged; the clean main base for this continuation is
