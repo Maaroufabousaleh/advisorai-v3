@@ -8,7 +8,7 @@ or 60-day operational gate.
 
 PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at
-`ef1ec1c`; it remains unmerged. The active collector executable is bound to
+`5856b35`; it remains unmerged. The active collector executable is bound to
 its unchanged code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`; later
 commits add only offline ledger/materialization code and documentation.
 

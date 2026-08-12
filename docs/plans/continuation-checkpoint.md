@@ -4,7 +4,7 @@
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.
 - Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
-  `ef1ec1c`; it is not merged. The active collector executable remains bound
+  `5856b35`; it is not merged. The active collector executable remains bound
   to code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`; later commits add
   only offline ledger/materialization code and documentation.
 - The initial forward root

@@ -8,7 +8,7 @@ human gate into a unit-test claim.
 ## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
-`ef1ec1c`; its active collector executable remains bound to
+`5856b35`; its active collector executable remains bound to
 `eeb62f0af2ecba6cfb21f79d81793963241252e0`. PR #186 remains merged at main
 `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
 

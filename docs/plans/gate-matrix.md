@@ -3,7 +3,7 @@
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 The follow-on implementation is draft PR #187 on
-`agent/phase4-forward-pit-collector` at branch head `ef1ec1c`. The active
+`agent/phase4-forward-pit-collector` at branch head `5856b35`. The active
 collector executable remains bound to code commit
 `eeb62f0af2ecba6cfb21f79d81793963241252e0`; later commits add only offline
 ledger/materialization code and documentation. The first attempted forward root
