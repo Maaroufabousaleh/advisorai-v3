@@ -22,7 +22,7 @@ HASH = "a" * 64
 RAW_HASH = "b" * 64
 NORMALIZED_HASH = "c" * 64
 CONTRACT_HASH = "d" * 64
-START = datetime(2026, 8, 5, 1, 5, tzinfo=UTC)
+START = datetime(2026, 8, 5, 1, 0, tzinfo=UTC)
 SOURCE_ID = "binance_spot_public_market_data"
 ENDPOINT = "https://data-api.binance.vision/api/v3/klines"
 
@@ -32,7 +32,7 @@ def _bars(
     *,
     collected_offset: timedelta = timedelta(0),
     evidence_class: str = "forward_pit_admission",
-    count: int = 60,
+    count: int = 61,
 ) -> tuple[V3CoreBar, ...]:
     values: list[V3CoreBar] = []
     for index in range(count):
@@ -116,7 +116,7 @@ def test_builder_creates_one_causal_case_from_contiguous_context_and_outcome():
     assert len(case.context_bars) == 48
     assert len(case.future_bars) == 12
     assert case.cutoff == datetime(2026, 8, 5, 5, tzinfo=UTC)
-    assert case.context_bars[-1].interval_end == case.cutoff
+    assert case.context_bars[-1].interval_end == case.cutoff - timedelta(minutes=5)
     assert case.future_bars[0].interval_end == case.cutoff + timedelta(minutes=5)
     assert case.realized_at == datetime(2026, 8, 5, 6, tzinfo=UTC)
     assert case.phase3_admitted is True
@@ -124,7 +124,7 @@ def test_builder_creates_one_causal_case_from_contiguous_context_and_outcome():
 
 def test_builder_retains_missing_or_unavailable_cutoffs_instead_of_filling_them():
     bars = list(_bars())
-    bars.pop(48)
+    bars.pop(49)
     result = build_v3core_cases(
         bars,
         evidence_class="forward_pit_admission",
@@ -138,7 +138,7 @@ def test_builder_retains_missing_or_unavailable_cutoffs_instead_of_filling_them(
     assert not result.cases
     assert any(item.reason == "missing_one_hour_outcome_bars" for item in result.rejected_cutoffs)
 
-    late = _bars(collected_offset=timedelta(minutes=1))
+    late = _bars(collected_offset=timedelta(minutes=6))
     late_result = build_v3core_cases(
         late,
         evidence_class="forward_pit_admission",
@@ -192,7 +192,7 @@ def test_case_validation_binds_outcome_to_future_bars_and_phase3_input():
         case.model_validate({**case.model_dump(mode="python"), "realized_return_bps": Decimal("0")})
 
     typed = V3CoreEvaluationInput(
-        plan_id="phase4-v3-core-1h-5m-v2",
+        plan_id="phase4-v3-core-1h-5m-v3",
         phase3_gate_record_sha256=HASH,
         build=build,
     )
@@ -210,7 +210,7 @@ def test_case_validation_binds_outcome_to_future_bars_and_phase3_input():
     )
     with pytest.raises(ValueError, match="Phase-3 admission"):
         V3CoreEvaluationInput(
-            plan_id="phase4-v3-core-1h-5m-v2",
+            plan_id="phase4-v3-core-1h-5m-v3",
             phase3_gate_record_sha256=HASH,
             build=not_admitted,
         )
@@ -277,7 +277,7 @@ def test_historical_backfill_is_distinct_and_uses_reviewed_provider_availability
     assert case.context_bars[-1].collected_at > case.cutoff
     assert case.context_bars[-1].provider_available_at <= case.cutoff
     typed = V3CoreEvaluationInput(
-        plan_id="phase4-v3-core-1h-5m-v2",
+        plan_id="phase4-v3-core-1h-5m-v3",
         phase3_gate_record_sha256=HASH,
         build=result,
     )
