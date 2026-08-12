@@ -5,7 +5,45 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current Phase-4 signal-policy research audit — 2026-08-12T19:00:00Z
+
+The focused continuation from merged main `4b9ca30353132804eff559abd9220821493b9366`
+adds `src/advisorai/phase4/signal_policy.py` and the offline
+`scripts/evaluate_phase4_signal_policies.py` runner. The boundary contains no
+network, credential, model-weight, or execution operation. It emits typed target
+directions only; RiskKernel and OMS remain unchanged external authorities.
+
+The runner has 10 focused tests and produces an append-only research root at
+`artifacts/phase4/signal-policy-research/20260812T192000Z-ttm-r2-development-policy-v1/`.
+The evidence SHA-256 is
+`8b7ce10d0beba1562abb9f46fda3906b9094d427ffb289329297157c804e3c48`.
+Working-tree code hashes bound by that evidence are
+`signal_policy.py=35884c97b5d37e6b2e3d6adeab455bcc8cc65edb599fad65d1553a5b94a88af5`
+and
+`evaluate_phase4_signal_policies.py=1f69538c8520f20be769d5833caf5ee4b070ad6d34a8f01c5794d1edf795700d`.
+
+The policy contract permits only six reviewed families and 13 candidates. It
+keeps forecast policy state independent per instrument, applies thresholds and
+cooldowns causally, accounts for direction changes separately from turnover
+units, and exposes modeled fee/spread/slippage components, regime slices,
+BTC/ETH slices, primary-only path comparisons, prediction/error distributions,
+and break-even all-in cost. It does not consume realized outcomes while
+generating a signal.
+
+The research partition is chronological: 32 tuning and 16 validation
+observations per symbol. The final 16 per symbol are frozen as consumed and are
+not scored as candidate policies or used to choose a policy; the full-input
+decomposition is explicitly diagnostic-only. All 13 policy attempts failed to produce
+positive conservative-cost incremental validation utility; the best flat policy
+was exactly `0` bps and was not frozen. This is evidence against the current
+restricted policy search, not a Phase-4 pass. The formal gate remains pending
+and requires independent future/PIT evidence before any candidate can be
+re-reviewed.
+
 ## Current corrected Phase-4 reviewer audit — 2026-08-12T16:25:00Z
+
+Historical checkpoint superseded by the current signal-policy audit above; PR
+#184 was subsequently merged.
 
 The Phase-4 formal reviewer correction is committed at
 `52342b1093dc95dd0358257cdd8999cb2935479b` on draft PR #184; main remains

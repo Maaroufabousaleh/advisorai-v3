@@ -13,6 +13,21 @@ from .paper_utility import (
     build_preparation_manifest,
     evaluate_paper_utility,
 )
+from .signal_policy import (
+    PolicyPathComparison,
+    PolicySignal,
+    PolicySliceMetric,
+    PolicyUtilityMetrics,
+    PredictionDistributionSummary,
+    SignalCostScenario,
+    SignalPolicyFamily,
+    SignalPolicySpec,
+    apply_signal_policy,
+    candidate_policy_specs,
+    compare_policy_paths,
+    evaluate_policy_signals,
+    summarize_prediction_distribution,
+)
 
 __all__ = [
     "CANDIDATE_MODELS",
@@ -26,4 +41,17 @@ __all__ = [
     "Phase4UtilityResult",
     "build_preparation_manifest",
     "evaluate_paper_utility",
+    "PolicyPathComparison",
+    "PolicySignal",
+    "PolicySliceMetric",
+    "PolicyUtilityMetrics",
+    "PredictionDistributionSummary",
+    "SignalCostScenario",
+    "SignalPolicyFamily",
+    "SignalPolicySpec",
+    "apply_signal_policy",
+    "candidate_policy_specs",
+    "compare_policy_paths",
+    "evaluate_policy_signals",
+    "summarize_prediction_distribution",
 ]
