@@ -3,6 +3,8 @@
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 - Implementation/evidence anchor: `cd2b09066096977ac38ddb6dd756339fea9a4330`.
+- Merged main at checkpoint start: `b6a72834398465271f9be08e372d292286671fb8`
+  (PR #182).
 - Verification: full pytest `687 passed` with 28 warnings; acceptance suites
   `134/152/126/117/34/34/10/11/27/18/5`; Ruff, format, lock, compilation,
   dashboard build, diff hygiene, and tracked-secret/model-weight checks passed.
