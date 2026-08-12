@@ -49,6 +49,7 @@ def test_formal_gate_entrypoint_help_is_offline_and_explicit():
     assert completed.returncode == 0
     assert "Evaluate the formal Phase-3 gate" in completed.stdout
     assert "--phase2-gate-record" in completed.stdout
+    assert "--phase2-gate" in completed.stdout
     assert completed.stderr == ""
 
 
