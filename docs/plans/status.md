@@ -63,6 +63,17 @@ forward/Phase-3 admission flags validate; it writes a new immutable
 `V3CoreEvaluationInput` and never changes the acquisition root or makes a
 network call. It has not been run because the active root is incomplete.
 
+The pre-outcome baseline ledger worker is running separately under PID
+`173057` at
+`artifacts/phase4/v3core-forward-predictions/20260812T211500Z-baseline-ledger-r2/`.
+It reads only the normalized spool, emits naive, drift, seasonal-7, linear,
+and LightGBM predictions before their cutoff, and uses a hash-chained typed
+ledger plus a separate outcome-link schema. Its manifest records
+`network_calls = 0`, `credentials_loaded = false`, and
+`order_writes_attempted = false`. TTM-R2 is not silently replaced; it remains
+an ungenerated challenger pending its separate runtime worker boundary, while
+Chronos remains quarantined for its identity mismatch.
+
 Phase 4 remains `PENDING` on fresh independent V3-Core cadence evidence. The
 collector is durable, append-only, restartable only with matching immutable
 configuration/code identity, and does not grant any model or agent execution

@@ -40,6 +40,12 @@
   roots and writes the typed evaluation input only after the frozen 64-per-
   symbol target is reached. Its 2 focused refusal tests pass. It has not read
   or modified the active root.
+- A separate offline baseline prediction worker is running as PID `173057` at
+  `artifacts/phase4/v3core-forward-predictions/20260812T211500Z-baseline-ledger-r2/`.
+  It reads only the normalized spool and records pre-cutoff naive, drift,
+  seasonal-7, linear, and LightGBM predictions. TTM-R2 remains ungenerated
+  pending its distinct runtime worker boundary; Chronos remains quarantined.
+  The ledger has no network, credential, or order capability.
 
 ## Historical forward PIT collector checkpoint — 2026-08-12T20:33:06Z
 

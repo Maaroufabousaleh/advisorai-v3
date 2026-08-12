@@ -81,6 +81,14 @@ from .v3core_forward import (
     parse_binance_klines,
     source_snapshot_hash,
 )
+from .v3core_prediction_ledger import (
+    OUTCOME_LINK_SCHEMA,
+    PREDICTION_LEDGER_SCHEMA,
+    ForwardPredictionLedger,
+    ForwardPredictionLedgerEntry,
+    ForwardPredictionOutcomeLink,
+    ForwardPredictionOutcomeLinkLedger,
+)
 
 __all__ = [
     "CANDIDATE_MODELS",
@@ -129,6 +137,12 @@ __all__ = [
     "build_forward_cases",
     "parse_binance_klines",
     "source_snapshot_hash",
+    "OUTCOME_LINK_SCHEMA",
+    "PREDICTION_LEDGER_SCHEMA",
+    "ForwardPredictionLedger",
+    "ForwardPredictionLedgerEntry",
+    "ForwardPredictionOutcomeLink",
+    "ForwardPredictionOutcomeLinkLedger",
     "CADENCE_CONTRACT_VERSION",
     "EVALUATION_INPUT_SCHEMA",
     "PREREGISTRATION_SCHEMA",

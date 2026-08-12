@@ -56,6 +56,17 @@ terminal target and frozen source/gate identities, and emits the typed
 no credential, network, model, or execution dependency and has not yet been
 run against the incomplete r2 root.
 
+The pre-outcome mandatory-baseline ledger is implemented by
+`scripts/run_phase4_v3core_baseline_predictions.py` and
+`src/advisorai/phase4/v3core_prediction_ledger.py`. It is a separate offline
+process reading only normalized bars; it generates the five pre-registered
+baseline paths only when all 48 context bars are locally present and the
+current time is not beyond the cutoff. It records a missed cutoff rather than
+backdating. Prediction entries are immutable hash-chain records, and later
+outcome associations use a separate append-only link ledger. TTM-R2 and
+Chronos are explicitly recorded as separate candidate states, not replaced by
+a baseline. The focused baseline and ledger tests pass.
+
 ## Historical V3-Core forward PIT collector audit — 2026-08-12T20:33:06Z
 
 PR #186 is merged at main `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
