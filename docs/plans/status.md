@@ -4,6 +4,65 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
+
+The current implementation/evidence anchor is `cd2b09066096977ac38ddb6dd756339fea9a4330`.
+Phase-0 selected model roles remain qualified; global Phase 0 remains separate
+and pending its private-route/archive prerequisites. No timed stability root,
+Phase-3 durability root, or Binance order was reopened or created.
+
+Verification for this continuation passed full pytest (`687 passed`, 28
+warnings), all eleven acceptance suites
+(`134/152/126/117/34/34/10/11/27/18/5`), Ruff, format, lock, compilation,
+dashboard build, `git diff --check`, tracked-secret/model-weight checks, and
+the offline Phase-2–4 focused suites. These are implementation and measurement
+checks; they do not open Phase 5, Phase 6, Phase 7, or live capital.
+
+Phase 2 is formally `PASSED` from the existing Binance Spot Testnet
+authenticated-read and supervised no-fill/cancel evidence. Its checklist is
+`artifacts/phase2/formal-admission/20260812T013500Z-post-phase2-commit/phase2-admission-checklist.json`
+(SHA-256 `c417e52d8a38e496b234c397fe2a1600ccca00d6bdfc70a7f60e93445300a2e8`),
+and its immutable gate record is
+`artifacts/phase2/formal-admission/20260812T013500Z-post-phase2-commit/phase2-gate-record.json`
+(SHA-256 `efb9d678e72f9785c3d9162660ead6cd434af6108249de73a42a08dd9a64bdae`,
+canonical hash `5ea9a4ff9a51b3e5f79eab3946a34cc0eca65df9717b2d8b01189dc2a64171fc`).
+The no-fill/cancel path remains Phase-2 venue qualification; real fill and
+external attribution remain Phase 6.
+
+Phase 3 was re-evaluated offline against that passed predecessor and is
+formally `PASSED`. The latest checklist is
+`artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-admission-checklist.json`
+(SHA-256 `57b3c32984320d53cf889fb77d4238907c13a38c93727bc7f7d0d55dc5dbee45`),
+and the gate record is
+`artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json`
+(SHA-256 `4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232`,
+canonical hash `a8f646d49edf716f201b9da015080872b0f14170128138d569446ec63119c4e3`).
+The required Binance public BTC/ETH source passed; Coinbase Sandbox ETH-USD
+absence and GDELT HTTP 429 remain preserved non-gating external outcomes.
+
+Phase 4 is `OPEN_FOR_MEASUREMENT`, not admitted. The dependency decision is
+`artifacts/phase4/formal-dependency/20260812T014100Z-phase3-and-role-contract-v2/phase4-predecessor-dependency.json`
+(SHA-256 `8c2154feac271a9f6e6744d755a90d4c56873a784498ad6ff5b77d710c25dd28`).
+It requires the passed Phase-3 record, the qualified selected roles, and the
+mandatory baseline roster; it does not silently require the unrelated global
+Phase-0 route/archive gate for measurement.
+
+The canonical real, offline-after-acquisition utility measurement uses 64 frozen
+point-in-time BTC/ETH observations and 448 predictions (mandatory baselines,
+TTM-R2 control, and TTM-R3 challenger). The input is
+`artifacts/phase4/real-utility-input/20260812T023000Z-btc-eth-daily-snapshot-ttm-r2-r3-v3/phase4-paper-utility-input.json`
+(SHA-256 `e95d3937e966902f452754f764ea50c59add4852158bf4457607c66fab36a036`); the
+report is
+`artifacts/phase4/utility-evaluation/20260812T023015Z-btc-eth-daily-ttm-r2-r3-baselines-v3/phase4-paper-utility-evidence.json`
+(SHA-256 `2da6b6576a4679fa688920de41a360a8d5f865664e3f608e3ba4410e2c26a2aa`).
+It is `measured_pending_review`, with `phase4_admission_opened=false`, no
+network calls, and no execution writes. TTM-R2 net utility was `5248.14` bps,
+above the strongest measured baseline at `2485.98` bps; TTM-R3 measured
+`1468.25` bps and did not add incremental utility. The cost scenario is
+conservative rather than historical tick-level measurement. Runtime latency was
+measured, but interval calibration, latency sensitivity, and formal review
+remain pending. No model is promoted and Phase 5–7 remain closed.
+
 ## Current formal-admission checkpoint — 2026-08-12T00:45:13Z
 
 Clean `main` before this docs refresh is

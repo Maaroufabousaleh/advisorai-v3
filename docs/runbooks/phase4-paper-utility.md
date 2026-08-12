@@ -1,5 +1,71 @@
 # Phase-4 paper utility evidence
 
+## Current admitted predecessors and measured evidence
+
+Phase 2 is formally passed from the existing Binance Spot Testnet
+read-only/no-fill/cancel evidence. The immutable record is:
+
+```text
+artifacts/phase2/formal-admission/20260812T013500Z-post-phase2-commit/phase2-gate-record.json
+SHA-256: efb9d678e72f9785c3d9162660ead6cd434af6108249de73a42a08dd9a64bdae
+```
+
+Phase 3 is formally passed by offline re-evaluation against that record. The
+immutable predecessor for this runbook is:
+
+```text
+artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json
+SHA-256: 4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232
+```
+
+The Phase-4 dependency decision is `OPEN_FOR_MEASUREMENT` at
+`artifacts/phase4/formal-dependency/20260812T014100Z-phase3-and-role-contract-v2/`.
+It permits measurement from qualified selected roles and mandatory baselines;
+it does not admit Phase 4 or silently close the separate global Phase-0
+private-route/archive gates.
+
+The reproducible preparation boundary consumes the frozen public snapshot and
+does not acquire data, credentials, or orders:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/prepare_phase4_real_utility_input.py \
+  --forecast-snapshot /home/maaro/.cache/advisorai-v3/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot.json \
+  --snapshot-manifest artifacts/phase0/model-runtime-qualification/benchmark-data/public-daily-0f84a34fb0537ecb/forecast-snapshot-manifest.json \
+  --phase3-gate-record artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json \
+  --forecast-candidate ttm-r2 \
+  --forecast-candidate ttm-r3 \
+  --candidate-admission-root ttm-r3=artifacts/phase0/model-runtime-qualification/runtime-admission-phase4-ttm-r3-20260812 \
+  --output-root artifacts/phase4/real-utility-input/<new-run-id>
+```
+
+The first control-only input has 64 BTC/ETH observations and 384 predictions.
+The canonical current input explicitly adds the pinned TTM-R3 challenger and
+has 448 predictions. Its SHA-256 is
+`e95d3937e966902f452754f764ea50c59add4852158bf4457607c66fab36a036` at
+`artifacts/phase4/real-utility-input/20260812T023000Z-btc-eth-daily-snapshot-ttm-r2-r3-v3/phase4-paper-utility-input.json`.
+The TTM-R3 local admission root used for this measurement is
+`artifacts/phase0/model-runtime-qualification/runtime-admission-phase4-ttm-r3-20260812/`;
+its admission record SHA-256 is `9e5bfe2efa90d745a286a5d6fb739b4ca08025c2ea20ec4ba04391b0718609cb`.
+The measurement command is:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/run_phase4_paper_utility.py \
+  --input artifacts/phase4/real-utility-input/<run-id>/phase4-paper-utility-input.json \
+  --phase3-gate-record artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json \
+  --output-root artifacts/phase4/utility-evaluation/<new-run-id>
+```
+
+The canonical current report is
+`artifacts/phase4/utility-evaluation/20260812T023015Z-btc-eth-daily-ttm-r2-r3-baselines-v3/phase4-paper-utility-evidence.json`
+(SHA-256 `2da6b6576a4679fa688920de41a360a8d5f865664e3f608e3ba4410e2c26a2aa`).
+It is `measured_pending_review` with `phase4_admission_opened=false`. TTM-R2
+adds net utility over the strongest measured baseline in this historical
+window; TTM-R3 does not. No model is promoted and no Phase-4 gate is created.
+Interval calibration, latency sensitivity, and the authoritative review remain
+open.
+
 The Phase-4 utility entrypoint is an offline, measurement-only boundary:
 
 ```bash
@@ -23,5 +89,5 @@ loading, promotion, gate recording, or execution. It writes one immutable
 `measured_pending_review`; `phase4_admission_opened` remains false. The report
 records the input and gate file hashes, the gate canonical hash, baseline and
 candidate utility results, and the unchanged RiskKernel/OMS authority
-boundary. A real Phase-3 gate and real admitted paper observations are still
-required before this command can produce operational Phase-4 evidence.
+boundary. This is measurement evidence, not Phase-4 admission or paper/live
+execution evidence.

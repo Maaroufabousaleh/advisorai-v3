@@ -5,6 +5,44 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
+
+The implementation anchor is `cd2b09066096977ac38ddb6dd756339fea9a4330`.
+The continuation verification passed full pytest (`687 passed`, 28 warnings),
+all eleven acceptance suites (`134/152/126/117/34/34/10/11/27/18/5`), Ruff,
+format, lock, compilation, dashboard build, diff hygiene, and tracked-secret/
+model-weight checks.
+The new offline Phase-2 formalizer (`scripts/evaluate_phase2_gate.py`) validates
+the existing Binance Spot Testnet read-only and no-fill/cancel evidence without
+secrets, network, or writes. Its passed checklist and `PhaseGateRecord` are
+preserved under
+`artifacts/phase2/formal-admission/20260812T013500Z-post-phase2-commit/`;
+the record SHA-256 is `efb9d678e72f9785c3d9162660ead6cd434af6108249de73a42a08dd9a64bdae`.
+The record explicitly leaves filled-order attribution to Phase 6.
+
+The existing r7 Phase-3 evidence was re-evaluated offline with that passed
+predecessor. The passed Phase-3 checklist and record are preserved under
+`artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/`;
+the record SHA-256 is `4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232`.
+No r8/r9 durability root was launched. Coinbase Sandbox ETH-USD product absence
+and GDELT HTTP 429 remain external, non-gating outcomes with no substitution.
+
+The Phase-4 predecessor evaluator records
+`OPEN_FOR_MEASUREMENT` at
+`artifacts/phase4/formal-dependency/20260812T014100Z-phase3-and-role-contract-v2/`.
+It confirms that Phase 4 measurement requires the passed Phase-3 record,
+qualified selected roles, and mandatory baselines, while global Phase-0
+private-route/archive blockers remain separate. The canonical real utility input
+and measurement are preserved under
+`artifacts/phase4/real-utility-input/20260812T023000Z-btc-eth-daily-snapshot-ttm-r2-r3-v3/`
+and `artifacts/phase4/utility-evaluation/20260812T023015Z-btc-eth-daily-ttm-r2-r3-baselines-v3/`:
+64 point-in-time BTC/ETH observations and 448 predictions. TTM-R2 beat the
+strongest measured baseline in the recorded conservative cost scenario, while
+TTM-R3 did not add incremental utility in this window. Both pinned runtimes
+passed their resource check and made no network attempt. The report remains
+`measured_pending_review`; interval calibration, latency sensitivity, and
+formal review are still required, so no admission or promotion is claimed.
+
 ## Current formal-admission checkpoint — 2026-08-12T00:45:13Z
 
 From clean main `d9f2bb9d6738b3850ebd7798821b31e662b1d263`, the offline

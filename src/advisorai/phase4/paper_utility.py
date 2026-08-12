@@ -126,6 +126,7 @@ class Phase4Prediction(BaseModel):
     model_artifact_hash: str
     past_only: bool = True
     resource_limit_passed: bool = True
+    latency_ms: Decimal | None = Field(default=None, ge=0)
 
     @field_validator("predicted_return_bps")
     @classmethod
@@ -142,6 +143,11 @@ class Phase4Prediction(BaseModel):
     def require_model_hash(cls, value: str, info: object) -> str:
         field_name = getattr(info, "field_name", "model hash")
         return _digest(value, field_name)
+
+    @field_validator("latency_ms")
+    @classmethod
+    def require_finite_latency(cls, value: Decimal | None) -> Decimal | None:
+        return _finite_decimal(value, "prediction latency") if value is not None else None
 
     @model_validator(mode="after")
     def validate_interval(self) -> Phase4Prediction:
@@ -189,6 +195,8 @@ class Phase4UtilityResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model_name: str = Field(min_length=1)
+    mae_bps: Decimal = Field(ge=0)
+    rmse_bps: Decimal = Field(ge=0)
     observations: int = Field(ge=1)
     trade_count: int = Field(ge=0)
     abstention_count: int = Field(ge=0)
@@ -296,6 +304,7 @@ def _model_result(
     active_correct = 0
     active_count = 0
     confidence_brier_total = Decimal("0")
+    forecast_errors: list[Decimal] = []
     calibration_hits = 0
     calibration_count = 0
     trade_count = 0
@@ -304,6 +313,7 @@ def _model_result(
     for observation, prediction in ordered:
         if prediction.observation_id not in by_id:
             raise ValueError("prediction refers to an unknown observation")
+        forecast_errors.append(prediction.predicted_return_bps - observation.realized_return_bps)
         position = _position(prediction.predicted_return_bps)
         if position == 0:
             abstention_count += 1
@@ -394,6 +404,10 @@ def _model_result(
         )
     return Phase4UtilityResult(
         model_name=model_name,
+        mae_bps=sum(abs(value) for value in forecast_errors) / Decimal(observations_count),
+        rmse_bps=(
+            sum(value * value for value in forecast_errors) / Decimal(observations_count)
+        ).sqrt(),
         observations=observations_count,
         trade_count=trade_count,
         abstention_count=abstention_count,

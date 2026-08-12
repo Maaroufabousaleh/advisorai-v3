@@ -1,5 +1,44 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
+
+- Implementation/evidence anchor: `cd2b09066096977ac38ddb6dd756339fea9a4330`.
+- Verification: full pytest `687 passed` with 28 warnings; acceptance suites
+  `134/152/126/117/34/34/10/11/27/18/5`; Ruff, format, lock, compilation,
+  dashboard build, diff hygiene, and tracked-secret/model-weight checks passed.
+- Phase 2 is formally `PASSED` from the existing Binance Spot Testnet
+  authenticated-read and supervised no-fill/cancel roots. The passed record is
+  `artifacts/phase2/formal-admission/20260812T013500Z-post-phase2-commit/phase2-gate-record.json`
+  (SHA-256 `efb9d678e72f9785c3d9162660ead6cd434af6108249de73a42a08dd9a64bdae`,
+  canonical hash `5ea9a4ff9a51b3e5f79eab3946a34cc0eca65df9717b2d8b01189dc2a64171fc`).
+  No fill was manufactured; real fill/TCA/attribution remains Phase 6.
+- Phase 3 is formally `PASSED` after offline re-evaluation with the Phase-2
+  predecessor. Its record is
+  `artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json`
+  (SHA-256 `4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232`,
+  canonical hash `a8f646d49edf716f201b9da015080872b0f14170128138d569446ec63119c4e3`).
+  The r7 root was not reopened, and Coinbase ETH-USD absence/GDELT HTTP 429
+  remain preserved non-gating external outcomes.
+- Phase 4 dependency evaluation is
+  `OPEN_FOR_MEASUREMENT` at
+  `artifacts/phase4/formal-dependency/20260812T014100Z-phase3-and-role-contract-v2/`
+  (decision SHA-256 `8c2154feac271a9f6e6744d755a90d4c56873a784498ad6ff5b77d710c25dd28`).
+  Global Phase-0 private-route/archive blockers remain separate and are not
+  silently closed.
+- The canonical real measurement uses the frozen Binance public BTC/ETH
+  snapshot: 64 point-in-time observations and 448 baseline/TTM-R2/TTM-R3
+  predictions. Input SHA-256 is
+  `e95d3937e966902f452754f764ea50c59add4852158bf4457607c66fab36a036`; report
+  SHA-256 is `2da6b6576a4679fa688920de41a360a8d5f865664e3f608e3ba4410e2c26a2aa`.
+  It is `measured_pending_review`; TTM-R2 exceeded the strongest measured
+  baseline, TTM-R3 did not add incremental utility, and interval calibration,
+  latency sensitivity, and Phase-4 admission remain pending.
+- Next legal work: review and extend the Phase-4 real utility evidence as
+  required by the authoritative exit gate, without promoting a model; then
+  implement the real typed council only after Phase 4 is admitted. Preserve the
+  selected-model stability evidence, do not work archive/rclone, do not submit
+  another Binance order merely for a fill, and do not open Phase 7 early.
+
 ## Current formal-admission checkpoint — 2026-08-12T00:45:13Z
 
 - Clean `main` before this checkpoint is

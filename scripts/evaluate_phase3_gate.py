@@ -871,7 +871,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--r7-validation", type=Path, default=R7_VALIDATION)
     parser.add_argument("--r7-admission", type=Path, default=R7_ADMISSION)
     parser.add_argument("--broader-source", type=Path, default=BROAD_SOURCE)
-    parser.add_argument("--phase2-gate-record", type=Path)
+    parser.add_argument(
+        "--phase2-gate-record",
+        "--phase2-gate",
+        dest="phase2_gate_record",
+        type=Path,
+        help="current passed Phase-2 PhaseGateRecord used as the formal predecessor",
+    )
     parser.add_argument("--output-root", type=Path, required=True)
     return parser
 
