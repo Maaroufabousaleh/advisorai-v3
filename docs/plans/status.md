@@ -4,7 +4,48 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current Phase-4 signal-policy research — 2026-08-12T19:00:00Z
+
+PR #184 is merged at main `4b9ca30353132804eff559abd9220821493b9366`. This
+continuation adds only an offline, deterministic forecast-to-signal research
+boundary; Phase 2 and Phase 3 were not reopened, no data was acquired, no
+credential was loaded, and no order was submitted.
+
+The immutable research root is
+`artifacts/phase4/signal-policy-research/20260812T192000Z-ttm-r2-development-policy-v1/`.
+Its evidence SHA-256 is
+`8b7ce10d0beba1562abb9f46fda3906b9094d427ffb289329297157c804e3c48`.
+The evidence binds the frozen input SHA-256
+`38fa4aef19d9e3c030749083e3c85cb1b7ba9fec99e86ea01d5a59b798e0067c`, the
+measurement SHA-256
+`2a79d08314717f18c4d4286f40e623c90ddf800a2dbbc06a7b25f89ae369d7fe`, and the
+corrected pending-review SHA-256
+`c5117a011dc118687bfa2b1aea55e5b0cc76c42929e6e360ce86fb063880c867`.
+
+The bounded policy search contains 13 typed candidates: sign-only, magnitude,
+edge-over-cost, hysteresis, cooldown, and confidence families. It uses 32
+chronological tuning observations plus 16 validation observations per symbol;
+the existing final 16 observations per symbol are explicitly
+`CONSUMED_AND_NOT_REUSED` and were not scored as a candidate policy or used for
+selection; the full-input economic decomposition is separately labeled
+diagnostic-only. No
+candidate produced positive conservative-cost incremental value on validation;
+the best result was the flat confidence policy at `0` bps, so no policy was
+frozen or promoted. Full diagnostic decomposition records TTM-R2's 108 turnover
+units, 55 signal changes, 49.243883 bps modeled break-even all-in cost, BTC/ETH
+and regime slices, and primary-only turnover versus LightGBM and drift.
+
+Phase 4 remains `PENDING` solely on `robust_candidate_admission`; TTM-R2 remains
+`CHALLENGER` and TTM-R3 remains `RESEARCH_ONLY`. The study cannot support a
+PhaseGateRecord because the old holdout is consumed and no independent future/PIT
+window was acquired. Chronos-2-small, Kronos-mini, and Kronos-small remain
+quarantined on their preserved runtime-admission evidence; no ensemble was
+evaluated. Phase 5–7 remain closed.
+
 ## Current corrected Phase-4 reviewer audit — 2026-08-12T16:25:00Z
+
+Historical checkpoint superseded by the current signal-policy checkpoint above;
+PR #184 was subsequently merged.
 
 PR #184 remains draft and unmerged. The corrected reviewer/test implementation
 is at `52342b1093dc95dd0358257cdd8999cb2935479b`; `main` remains

@@ -1,6 +1,32 @@
 # AdvisorAI V3 gate matrix
 
+## Current Phase-4 signal-policy research — 2026-08-12T19:00:00Z
+
+The current merged main anchor is `4b9ca30353132804eff559abd9220821493b9366`
+(PR #184). The new offline policy research is implemented on a focused
+continuation branch and does not alter Phase 2, Phase 3, execution, credentials,
+RiskKernel, OMS, or the consumed Phase-4 holdout.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Deterministic restricted forecast-to-signal boundary | IMPLEMENTED / TESTED | `src/advisorai/phase4/signal_policy.py`; 10 focused tests; no order or portfolio authority |
+| TTM-R2 economic decomposition | REAL_MEASURED / DIAGNOSTIC_ONLY | Immutable root `artifacts/phase4/signal-policy-research/20260812T192000Z-ttm-r2-development-policy-v1/`, evidence SHA-256 `8b7ce10d0beba1562abb9f46fda3906b9094d427ffb289329297157c804e3c48` |
+| Chronological policy development/validation | SATISFIED FOR RESEARCH | 32 tuning + 16 validation observations per BTC/ETH symbol; 13 pre-registered policies; no holdout selection |
+| Conservative-cost policy improvement | UNSATISFIED | Best validation incremental utility is `0` bps from a flat confidence policy; no policy was frozen |
+| Existing final holdout reuse | SATISFIED SAFETY CONDITION | 32 observations are `CONSUMED_AND_NOT_REUSED`; no holdout-only policy score or selection metric was produced; full-input decomposition is diagnostic-only |
+| Independent candidate family | QUARANTINED | Chronos-2-small/Kronos-mini/Kronos-small runtime evidence remains quarantined; no mismatch bypass or ensemble |
+| Phase-4 robust candidate admission | PENDING | Sole blocker remains `robust_candidate_admission`; independent future/PIT evidence is required |
+
+TTM-R2's full-input diagnostic records 108 turnover units, 55 signal changes,
+conservative net utility `2834.3394` bps, and modeled net-zero break-even
+`49.243883` bps/turnover. The diagnostic includes the consumed holdout only as
+non-selection decomposition; it does not change the formal review or admit a
+policy. Phase 5–7 remain closed.
+
 ## Current corrected Phase-4 reviewer audit — 2026-08-12T16:25:00Z
+
+Historical checkpoint superseded by the current signal-policy row above; PR
+#184 was subsequently merged.
 
 Draft PR #184 remains unmerged; `main` remains at
 `056a39d5641c81330dd89668e117108e1fa1bf5c`. The reviewer correction is

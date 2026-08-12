@@ -1,6 +1,39 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current Phase-4 signal-policy checkpoint — 2026-08-12T19:00:00Z
+
+- PR #184 is merged; the clean main base for this continuation is
+  `4b9ca30353132804eff559abd9220821493b9366`. Work is on a focused branch and
+  must remain separate until final verification.
+- Phase 2 and Phase 3 remain `PASSED`. No Phase-3 durability run, selected-model
+  stability process, data acquisition, credential load, or Binance order was
+  started or changed. The laptop remains running.
+- The new deterministic signal-policy contracts are in
+  `src/advisorai/phase4/signal_policy.py`; the offline runner is
+  `scripts/evaluate_phase4_signal_policies.py`; focused tests pass `10`.
+- Immutable evidence is
+  `artifacts/phase4/signal-policy-research/20260812T192000Z-ttm-r2-development-policy-v1/`
+  with evidence SHA-256
+  `8b7ce10d0beba1562abb9f46fda3906b9094d427ffb289329297157c804e3c48`.
+- Policy search uses 32 tuning + 16 validation observations per BTC/ETH symbol.
+  The final 16 per symbol are `CONSUMED_AND_NOT_REUSED`; `holdout_used=false`
+  and `holdout_scored=false`. The 13-policy search has no positive conservative
+  incremental result; no policy is frozen. TTM-R2 remains `CHALLENGER`, TTM-R3
+  remains `RESEARCH_ONLY`, and Phase 4 remains `PENDING` on
+  `robust_candidate_admission`.
+- Full diagnostic: TTM-R2 has 108 turnover units and 55 signal changes; its
+  modeled all-in break-even is `49.243883` bps/turnover. The costs remain
+  modeled assumptions, not Binance fills. Chronos/Kronos challengers remain
+  quarantined and no ensemble was evaluated.
+- Next legal work: preserve this negative policy result, do not tune the
+  consumed holdout, do not open Phase 5–7, and obtain an independent future/PIT
+  evaluation only when an admissible source exists. No archive/rclone work is
+  part of this continuation.
+
 ## Current corrected Phase-4 reviewer checkpoint — 2026-08-12T16:25:00Z
+
+Historical checkpoint superseded by the current signal-policy checkpoint above;
+PR #184 was subsequently merged.
 
 - Draft PR #184 remains open and unmerged. Main remains
   `056a39d5641c81330dd89668e117108e1fa1bf5c`; the corrected reviewer/tests

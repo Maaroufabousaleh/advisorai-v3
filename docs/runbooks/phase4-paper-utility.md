@@ -1,5 +1,37 @@
 # Phase-4 paper utility evidence
 
+## Signal-policy research boundary
+
+The current Phase-4 candidate remains `CHALLENGER` when modeled conservative
+costs remove its incremental advantage. A restricted offline research runner
+may explain that result without consuming the final holdout:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/evaluate_phase4_signal_policies.py \
+  --input artifacts/phase4/real-utility-input/<run-id>/phase4-paper-utility-input.json \
+  --measurement artifacts/phase4/utility-evaluation/<run-id>/phase4-paper-utility-evidence.json \
+  --formal-review artifacts/phase4/formal-review/<run-id>/phase4-formal-review-evidence.json \
+  --output-root artifacts/phase4/signal-policy-research/<new-run-id>
+```
+
+The runner is offline and measurement-only. Its bounded v1 search uses 32
+chronological tuning and 16 validation observations per instrument. The final
+16 observations per instrument from the current 128-observation review input
+are consumed evidence: they must not be scored as a candidate policy or used to
+select thresholds. Full-input diagnostics, if retained, must remain explicitly
+non-selection evidence.
+The runner creates target-direction signals only; it cannot call RiskKernel,
+mutate the OMS, or submit an order. A positive development result would still
+require an independent future/PIT evaluation and a fresh formal Phase-4 review.
+
+The 2026-08-12 run is preserved at
+`artifacts/phase4/signal-policy-research/20260812T192000Z-ttm-r2-development-policy-v1/`
+(evidence SHA-256
+`8b7ce10d0beba1562abb9f46fda3906b9094d427ffb289329297157c804e3c48`). It found
+no positive conservative-cost incremental policy and did not create a gate
+record.
+
 ## Current corrected formal review — 2026-08-12T16:25:00Z
 
 The old `robustness-v2` review remains immutable and is not rewritten. The
