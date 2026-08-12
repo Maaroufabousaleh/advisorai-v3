@@ -230,6 +230,8 @@ def run_collection(
             "poll_seconds": poll_seconds,
             "provider_identity": V3_CORE_MARKET_DATA_PROVIDER,
             "endpoint": V3_CORE_MARKET_DATA_REST_ENDPOINT,
+            "code_commit": code_commit,
+            **code_files,
             "credentials_loaded": False,
             "order_writes_attempted": False,
         }
