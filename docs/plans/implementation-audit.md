@@ -5,6 +5,91 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current V3-Core PIT provenance audit — 2026-08-12T19:58:26Z
+
+PR #186 remains draft from main
+`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; the contract correction is
+`6b2ed741650f9de0f51e8db921aefb507979d0d3`.
+
+The cadence boundary is now a versioned v2 contract. `V3CoreBarProvenance`
+records interval end, provider availability, actual local collection, optional
+provider event time, availability basis, evidence class, source health, and
+content hashes. `V3CoreForecastCase` validates one evidence class throughout,
+keeps context/future bars source- and snapshot-local, requires provider
+availability under a reviewed historical contract for development evidence,
+and requires actual local collection no later than cutoff for forward admission
+evidence. The builder retains rejected cutoffs instead of filling gaps or
+silently switching sources.
+
+`V3CoreMarketDataSurface` pins the Phase-4 acquisition boundary to Binance's
+public market-data-only REST/WSS hosts and rejects production trading, Spot
+Testnet execution, arbitrary, non-secure, credential-bearing, or write-capable
+configuration. This is a Phase-4 surface correction; prior Phase-3 evidence is
+not rewritten.
+
+The corrected preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T195826Z-v3core-1h-5m-provenance-v2/`
+with evidence SHA-256
+`ca09ee9d62eccbd017287eebc8864e34d339d8e2a3eb2168826853a7fdd0fed8` and
+manifest SHA-256
+`6962c7a882a11969262484e03b3c6cdb7627e27e3d23d1ffab7ffde23f8883fd`.
+It is a pre-outcome contract only and remains pending fresh forward PIT data.
+
+Contract-correction verification passes full pytest (`731 passed`, 28 warnings),
+all eleven acceptance suites (`134/152/126/117/78/34/10/11/27/18/5`), Ruff,
+format, lock, compileall, dashboard build, diff hygiene, and tracked
+secret/model-weight checks. No data acquisition, credential loading, model
+promotion, or order write occurred.
+
+## Current V3-Core cadence Phase-4 audit — 2026-08-12T18:58:28Z
+
+PR #185 is merged at main `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. The
+focused continuation commit is
+`53cdc9eba5f57ce54e87348f04320b138d82fa8d` on
+`agent/phase4-v3core-cadence`.
+
+The new `v3core_cadence.py` boundary is typed and deterministic. It encodes the
+V3-Core operating contract rather than adapting the contract to the consumed
+daily experiment: 5-minute bars, a 4-hour (48-bar) context, a 1-hour (12-bar)
+outcome, and BTCUSDT/ETHUSDT. It binds provider/source identity, availability
+time, snapshot identity, point-in-time cutoff, and raw/provenance hashes. Case
+construction is fail-closed for missing, duplicate, non-contiguous, future,
+cross-source, and invalid bars. Regime labels use context only. The builder
+does not acquire data, load credentials, fill gaps, switch sources, run models,
+or call execution.
+
+The offline preregistration runner and input builder are:
+
+- `scripts/preregister_phase4_v3core_cadence.py`;
+- `scripts/build_phase4_v3core_cadence_input.py`.
+
+The preregistration root is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T185716Z-v3core-1h-5m-prereg-v1/`
+with evidence SHA-256
+`1bbe362240a1fb136a074117f734e270afcef3cf0be6f6af34e81dc3c2631e00` and
+manifest SHA-256
+`ffce302f99e27317f5a9c38520d5170fb0a39b8e7332657e6c9aad87324a085c`.
+It is an immutable contract, not a utility result: the status is
+`PENDING_FRESH_PIT_DATA` because no existing immutable root supplies the
+required case set. The daily Phase-4 input is explicitly consumed and r7's
+source-qualification telemetry is explicitly ineligible.
+
+The first independent Chronos identity audit is preserved at
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-identity-audit/20260812T185828.820414Z/chronos-2-small.json`
+(SHA-256
+`62b971745a7536cf45fd30944a14919b570200a0382ed1dd54512a2570f9785b`). It
+remains quarantined due to the exact worker/runner hash mismatch against the
+preserved measured identity; no runtime mismatch was bypassed. There is no
+Phase-4 utility measurement, promotion, or formal PhaseGateRecord for this
+cadence yet. Phase 2/3 remain passed; Phase 4 remains pending on
+`robust_candidate_admission`; Phase 5–7 remain closed.
+
+Focused verification passed full pytest (`719 passed`, 28 warnings), all eleven
+acceptance suites (`134/152/126/117/66/34/10/11/27/18/5`), Ruff, format, lock,
+compileall, dashboard build, diff hygiene, and tracked secret/model-weight
+checks. These are implementation checks only; they do not create a Phase-4
+admission record.
+
 ## Current Phase-4 signal-policy research audit — 2026-08-12T19:00:00Z
 
 The focused continuation from merged main `4b9ca30353132804eff559abd9220821493b9366`

@@ -1,5 +1,95 @@
 # Phase-4 paper utility evidence
 
+## Frozen v2 PIT provenance contract
+
+Before any Phase-4 cadence acquisition, use the corrected v2 contract. The
+active preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T195826Z-v3core-1h-5m-provenance-v2/`
+(evidence SHA-256
+`ca09ee9d62eccbd017287eebc8864e34d339d8e2a3eb2168826853a7fdd0fed8`). The
+earlier v1 root is historical and must not be rewritten.
+
+The credential-free Phase-4 Binance surface is fixed to the official public
+market-data-only REST endpoint
+`https://data-api.binance.vision/api/v3/klines` and WSS endpoint
+`wss://data-stream.binance.vision/ws`. The official Spot REST documentation
+directs public-only market-data requests to `data-api.binance.vision`; the
+official stream documentation identifies `data-stream.binance.vision` as
+market-data-only and states that user-data streams are unavailable there.
+The collector must not load `secrets.env`, use `CredentialResolver`, send
+account/user-data requests, or expose POST/DELETE/order/transfer/withdrawal
+methods.
+
+Each `V3CoreBar` contains a `V3CoreBarProvenance` record. For
+`forward_pit_admission`, `availability_basis=forward_observed`, provider
+availability must precede or equal actual local collection, and context
+collection must be no later than the cutoff. For
+`historical_development`, `availability_basis=historical_backfill` and a
+reviewed availability-contract identifier plus SHA-256 are required; the late
+local collection timestamp is not historical possession evidence.
+
+The builder requires an explicit evidence class:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/build_phase4_v3core_cadence_input.py \
+  --bars <immutable-v3core-bars.json> \
+  --phase3-gate artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json \
+  --output-root artifacts/phase4/v3core-cadence-input/<new-run-id> \
+  --evidence-class forward_pit_admission \
+  --source-id binance_spot_public_market_data \
+  --provider-identity binance_spot_public_market_data \
+  --endpoint https://data-api.binance.vision/api/v3/klines
+```
+
+## V3-Core cadence preregistration and case construction
+
+The configured V3-Core evaluation contract is fixed at BTCUSDT/ETHUSDT, 5-minute
+observations, a 4-hour context, and a 1-hour outcome. Do not adapt the contract
+to the consumed daily Phase-4 input. The offline preregistration runner is:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/preregister_phase4_v3core_cadence.py \
+  --output-root artifacts/phase4/v3core-cadence-preregistration/<new-run-id>
+```
+
+The immutable preregistration currently records
+`PENDING_FRESH_PIT_DATA` at
+`artifacts/phase4/v3core-cadence-preregistration/20260812T185716Z-v3core-1h-5m-prereg-v1/`
+(evidence SHA-256
+`1bbe362240a1fb136a074117f734e270afcef3cf0be6f6af34e81dc3c2631e00`). Existing
+r7 source-qualification telemetry is not a 5-minute OHLCV case set with four
+hours of prior context and one-hour future outcomes, and the consumed daily
+input must not be reused or concatenated with another root.
+
+After a reviewed independent PIT bars artifact exists, build typed cases with:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/build_phase4_v3core_cadence_input.py \
+  --bars <immutable-v3core-bars.json> \
+  --phase3-gate artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json \
+  --output-root artifacts/phase4/v3core-cadence-input/<new-run-id> \
+  --source-id <reviewed-source-id> \
+  --provider-identity <reviewed-provider> \
+  --endpoint https://<reviewed-read-only-market-data-host>
+```
+
+The bars input must identify one provider/source, endpoint, snapshot,
+availability time, and provenance hash for each bar. The builder rejects gaps,
+duplicates, source switches, future context, invalid OHLC values, and cases
+without the full 4-hour context or 1-hour outcome. The outcome is evaluation
+only and is never supplied to features, normalization, regime assignment, or
+model context. The builder is offline and cannot load credentials or submit
+orders.
+
+Chronos-2-small remains quarantined until its exact worker/runtime identity is
+re-established. The fresh audit is
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-identity-audit/20260812T185828.820414Z/chronos-2-small.json`
+(SHA-256
+`62b971745a7536cf45fd30944a14919b570200a0382ed1dd54512a2570f9785b`).
+
 ## Signal-policy research boundary
 
 The current Phase-4 candidate remains `CHALLENGER` when modeled conservative

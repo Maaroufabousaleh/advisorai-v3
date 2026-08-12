@@ -1,5 +1,70 @@
 # AdvisorAI V3 gate matrix
 
+## Current V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+
+PR #186 remains draft on top of main
+`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; contract code is at
+`6b2ed741650f9de0f51e8db921aefb507979d0d3`. The prior v1 preregistration is
+preserved; the corrected v2 preregistration is the active contract.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Market-data-only Phase-4 surface | IMPLEMENTED / TESTED | Exact Binance REST `https://data-api.binance.vision/api/v3/klines` and WSS `wss://data-stream.binance.vision/ws`; credentials/write capability false; standard production and testnet execution hosts rejected |
+| Timestamp provenance | IMPLEMENTED / TESTED | `V3CoreBarProvenance` separates interval end, provider availability, local collection, provider event time, and availability basis |
+| Forward PIT classification | IMPLEMENTED / TESTED | `forward_observed` requires provider availability `<=` collection; context requires local collection `<=` cutoff; late backfill is rejected |
+| Historical development classification | IMPLEMENTED / TESTED | `historical_backfill` requires a reviewed availability-contract identifier and SHA-256; collection time is never used as historical possession proof |
+| Raw/normalized/source-health lineage | IMPLEMENTED / TESTED | Every bar provenance record requires source snapshot, raw-record, normalized-record hashes, and typed source-health state |
+| Causal case construction | IMPLEMENTED / TESTED | 18 focused cadence/provenance tests; missing/gapped, duplicate, source substitution, unavailable context, and future leakage fail closed |
+| Corrected preregistration | LOCALLY MEASURED / IMMUTABLE | `artifacts/phase4/v3core-cadence-preregistration/20260812T195826Z-v3core-1h-5m-provenance-v2/`; evidence SHA-256 `ca09ee9d62eccbd017287eebc8864e34d339d8e2a3eb2168826853a7fdd0fed8`; manifest SHA-256 `6962c7a882a11969262484e03b3c6cdb7627e27e3d23d1ffab7ffde23f8883fd` |
+| Fresh independent 5m PIT cases | EXTERNALLY BLOCKED | No collection has started; status remains `PENDING_FRESH_PIT_DATA` |
+| Phase-4 robust candidate admission | PENDING | `robust_candidate_admission`; no model or policy admitted |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | Existing formal records and immutable evidence remain authoritative |
+| Phase 5–7 | CLOSED | No downstream council, fill, attribution, or soak started |
+
+The active contract is frozen before acquisition. The next legal implementation
+step after PR #186 merges is a dedicated credential-free collector that writes
+raw records first and normalizes them offline; no `CredentialResolver`, secrets,
+account route, order route, transfer route, or withdrawal route may exist in
+that collector.
+
+Contract-correction verification passes full pytest (`731 passed`, 28 warnings),
+all eleven acceptance suites (`134/152/126/117/78/34/10/11/27/18/5`), Ruff,
+format, lock, compileall, dashboard build, diff hygiene, and tracked
+secret/model-weight checks. No Phase-4 admission record was created.
+
+## Current V3-Core cadence Phase-4 continuation — 2026-08-12T18:58:28Z
+
+The current merged main anchor is `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`
+(PR #185). The focused implementation is on
+`agent/phase4-v3core-cadence` at
+`53cdc9eba5f57ce54e87348f04320b138d82fa8d`. This work preserves the consumed
+daily Phase-4 evidence and does not reopen Phase 2 or Phase 3.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| V3-Core cadence contract | IMPLEMENTED / TESTED | `src/advisorai/phase4/v3core_cadence.py`; 6 focused tests; exact 5m observations, 4h context, 1h outcome, BTCUSDT/ETHUSDT |
+| Causal case construction | IMPLEMENTED / TESTED | `build_v3core_cases` rejects missing, duplicate, non-contiguous, source-switch, and future/unavailable bars; no gap filling or silent source switch |
+| Pre-registered 1h evaluation | LOCALLY MEASURED / IMMUTABLE | `artifacts/phase4/v3core-cadence-preregistration/20260812T185716Z-v3core-1h-5m-prereg-v1/`; evidence SHA-256 `1bbe362240a1fb136a074117f734e270afcef3cf0be6f6af34e81dc3c2631e00`; manifest SHA-256 `ffce302f99e27317f5a9c38520d5170fb0a39b8e7332657e6c9aad87324a085c` |
+| Fresh 5m PIT case input | EXTERNALLY BLOCKED | Existing r7 samples are source-health/order-book telemetry, not a contiguous OHLCV case set with 4h context and 1h outcomes; consumed daily input is not reused |
+| Chronos-2-small runtime identity | QUARANTINED | Fresh offline audit SHA-256 `62b971745a7536cf45fd30944a14919b570200a0382ed1dd54512a2570f9785b`; worker/runner hash mismatch preserved, no waiver |
+| TTM-R2 at V3-Core cadence | PENDING DATA | No 5m/1h cases exist; TTM-R2 remains `CHALLENGER` from the negative daily policy result |
+| Mandatory baselines | PRE-REGISTERED / NOT MEASURED | naive, drift, seasonal-7, linear, LightGBM are fixed in the preregistration; measurement awaits eligible cases |
+| Phase-4 robust candidate admission | PENDING | `robust_candidate_admission`; no model is admitted |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | Existing formal gate records remain authoritative |
+| Phase 5–7 | CLOSED | Phase 4 has not passed; no council, fill, or soak started |
+
+No network calls, credentials, model weights, or order writes were used by the
+preregistration or input-builder implementation. The next admissible action is
+to obtain or accumulate a reviewed independent 5m PIT window, then build cases
+with `scripts/build_phase4_v3core_cadence_input.py`. The archive/rclone and
+private-route gates remain separate and are not changed here.
+
+Focused verification passed full pytest (`719 passed`, 28 warnings), all eleven
+acceptance suites (`134/152/126/117/66/34/10/11/27/18/5`), Ruff, format, lock,
+compileall, dashboard build, diff hygiene, and tracked secret/model-weight
+checks. These checks validate implementation only; no Phase-4 gate record was
+created.
+
 ## Current Phase-4 signal-policy research — 2026-08-12T19:00:00Z
 
 The current merged main anchor is `4b9ca30353132804eff559abd9220821493b9366`
