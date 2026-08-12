@@ -24,11 +24,12 @@ from advisorai.phase4 import (
     EVALUATION_INPUT_SCHEMA,
     V3CoreBar,
     V3CoreEvaluationInput,
+    V3CoreEvidenceClass,
     build_v3core_cases,
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-BAR_INPUT_SCHEMA = "advisorai.phase4.v3-core-bars.v1"
+BAR_INPUT_SCHEMA = "advisorai.phase4.v3-core-bars.v2"
 
 
 def _sha256(path: Path) -> str:
@@ -72,10 +73,18 @@ def _load_bars(path: Path) -> tuple[dict[str, Any], tuple[V3CoreBar, ...]]:
     raw_bars = payload.get("bars")
     if not isinstance(source, dict) or not isinstance(raw_bars, list) or not raw_bars:
         raise ValueError("bar input requires a source object and non-empty bars")
-    required = ("source_id", "provider_identity", "endpoint", "source_snapshot_hash")
+    required = (
+        "source_id",
+        "provider_identity",
+        "endpoint",
+        "source_snapshot_hash",
+        "evidence_class",
+    )
     if any(not isinstance(source.get(key), str) for key in required):
         raise ValueError("bar input source identity is incomplete")
     bars = tuple(V3CoreBar.model_validate(item) for item in raw_bars)
+    if any(bar.evidence_class != source["evidence_class"] for bar in bars):
+        raise ValueError("bar evidence class does not match source evidence class")
     return source, bars
 
 
@@ -93,6 +102,7 @@ def build_input(
     bars_path: Path,
     phase3_gate_path: Path,
     output_root: Path,
+    evidence_class: V3CoreEvidenceClass,
     source_id: str,
     provider_identity: str,
     endpoint: str,
@@ -108,11 +118,13 @@ def build_input(
         source["source_id"] != source_id
         or source["provider_identity"] != provider_identity
         or source["endpoint"] != endpoint
+        or source["evidence_class"] != evidence_class
     ):
         raise ValueError("requested source identity does not match the bar artifact")
     gate, gate_sha256 = _load_phase3_gate(phase3_gate_path.resolve(), at=generated_at)
     build = build_v3core_cases(
         bars,
+        evidence_class=evidence_class,
         source_id=source_id,
         provider_identity=provider_identity,
         endpoint=endpoint,
@@ -122,7 +134,7 @@ def build_input(
         phase3_admitted=phase3_admitted,
     )
     typed = V3CoreEvaluationInput(
-        plan_id="phase4-v3-core-1h-5m-v1",
+        plan_id="phase4-v3-core-1h-5m-v2",
         phase3_gate_record_sha256=gate_sha256,
         build=build,
     )
@@ -176,6 +188,11 @@ def main() -> int:
     parser.add_argument("--bars", type=Path, required=True)
     parser.add_argument("--phase3-gate", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument(
+        "--evidence-class",
+        choices=("historical_development", "forward_pit_admission"),
+        required=True,
+    )
     parser.add_argument("--source-id", required=True)
     parser.add_argument("--provider-identity", required=True)
     parser.add_argument("--endpoint", required=True)
@@ -187,6 +204,7 @@ def main() -> int:
             bars_path=args.bars,
             phase3_gate_path=args.phase3_gate,
             output_root=args.output_root.resolve(),
+            evidence_class=args.evidence_class,
             source_id=args.source_id,
             provider_identity=args.provider_identity,
             endpoint=args.endpoint,

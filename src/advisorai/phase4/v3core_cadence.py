@@ -14,17 +14,30 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 from hashlib import sha256
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CADENCE_CONTRACT_VERSION = "advisorai.phase4.v3-core-cadence.v1"
-PREREGISTRATION_SCHEMA = "advisorai.phase4.v3-core-preregistration.v1"
-EVALUATION_INPUT_SCHEMA = "advisorai.phase4.v3-core-cadence-input.v1"
+CADENCE_CONTRACT_VERSION = "advisorai.phase4.v3-core-cadence.v2"
+PREREGISTRATION_SCHEMA = "advisorai.phase4.v3-core-preregistration.v2"
+EVALUATION_INPUT_SCHEMA = "advisorai.phase4.v3-core-cadence-input.v2"
 V3_CORE_SYMBOLS = ("BTCUSDT", "ETHUSDT")
 V3_CORE_BASELINES = ("naive", "drift", "seasonal-7", "linear", "lightgbm")
 V3_CORE_CANDIDATES = ("ttm-r2", "chronos-2-small")
 REGIME_POLICY_VERSION = "v3-core-context-regime-v1"
+V3_CORE_MARKET_DATA_PROVIDER = "binance_spot_public_market_data"
+V3_CORE_MARKET_DATA_REST_BASE = "https://data-api.binance.vision"
+V3_CORE_MARKET_DATA_REST_ENDPOINT = f"{V3_CORE_MARKET_DATA_REST_BASE}/api/v3/klines"
+V3_CORE_MARKET_DATA_WS_ENDPOINT = "wss://data-stream.binance.vision/ws"
 HEX = frozenset("0123456789abcdef")
+
+V3CoreEvidenceClass = Literal["historical_development", "forward_pit_admission"]
+V3CoreAvailabilityBasis = Literal[
+    "forward_observed", "provider_close_semantics", "historical_backfill"
+]
+V3CoreSourceHealthState = Literal[
+    "HEALTHY", "DEGRADED", "STALE", "DISCONNECTED", "RECOVERING", "QUARANTINED"
+]
 
 
 def _digest(value: str, field_name: str) -> str:
@@ -97,6 +110,116 @@ class V3CoreCadencePolicy(BaseModel):
         return self.context_horizon_seconds // self.observation_interval_seconds
 
 
+class V3CoreMarketDataSurface(BaseModel):
+    """The exact credential-free Binance market-data-only surface."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider_identity: str = V3_CORE_MARKET_DATA_PROVIDER
+    rest_base_url: str = V3_CORE_MARKET_DATA_REST_BASE
+    klines_path: str = "/api/v3/klines"
+    websocket_url: str = V3_CORE_MARKET_DATA_WS_ENDPOINT
+    symbols: tuple[str, ...] = V3_CORE_SYMBOLS
+    credentials_required: bool = False
+    write_capability: bool = False
+    market_data_only: bool = True
+
+    @field_validator("provider_identity", "rest_base_url", "klines_path", "websocket_url")
+    @classmethod
+    def nonblank(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("symbols")
+    @classmethod
+    def normalize_symbols(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        normalized = tuple(item.strip().upper() for item in value)
+        if normalized != V3_CORE_SYMBOLS:
+            raise ValueError("V3-Core market-data symbols must remain BTCUSDT and ETHUSDT")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_fixed_surface(self) -> V3CoreMarketDataSurface:
+        if self.provider_identity != V3_CORE_MARKET_DATA_PROVIDER:
+            raise ValueError("unsupported V3-Core market-data provider identity")
+        if self.rest_base_url != V3_CORE_MARKET_DATA_REST_BASE:
+            raise ValueError("V3-Core REST must use the reviewed market-data-only host")
+        if self.klines_path != "/api/v3/klines":
+            raise ValueError("V3-Core REST path must remain the public klines path")
+        if self.websocket_url != V3_CORE_MARKET_DATA_WS_ENDPOINT:
+            raise ValueError("V3-Core WebSocket must use the reviewed market-data-only host")
+        if self.credentials_required or self.write_capability or not self.market_data_only:
+            raise ValueError(
+                "V3-Core market-data surface must remain credential-free and read-only"
+            )
+        return self
+
+    @property
+    def klines_url(self) -> str:
+        return f"{self.rest_base_url}{self.klines_path}"
+
+
+class V3CoreBarProvenance(BaseModel):
+    """Timestamp and evidence provenance for one closed market bar."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    interval_end: datetime
+    provider_available_at: datetime
+    collected_at: datetime
+    provider_event_at: datetime | None = None
+    availability_basis: V3CoreAvailabilityBasis
+    evidence_class: V3CoreEvidenceClass
+    source_snapshot_hash: str
+    raw_record_hash: str
+    normalized_record_hash: str
+    source_health_state: V3CoreSourceHealthState
+    historical_availability_contract_id: str | None = None
+    historical_availability_contract_sha256: str | None = None
+
+    @field_validator("interval_end", "provider_available_at", "collected_at", "provider_event_at")
+    @classmethod
+    def aware_timestamp(cls, value: datetime | None, info: object) -> datetime | None:
+        if value is None:
+            return None
+        return _aware(value, getattr(info, "field_name", "provenance timestamp"))
+
+    @field_validator(
+        "source_snapshot_hash",
+        "raw_record_hash",
+        "normalized_record_hash",
+        "historical_availability_contract_sha256",
+    )
+    @classmethod
+    def valid_hash(cls, value: str | None, info: object) -> str | None:
+        if value is None:
+            return None
+        return _digest(value, getattr(info, "field_name", "hash"))
+
+    @model_validator(mode="after")
+    def validate_provenance(self) -> V3CoreBarProvenance:
+        _aligned(self.interval_end, 300, "interval_end")
+        if self.provider_available_at < self.interval_end:
+            raise ValueError("provider availability cannot precede closed interval end")
+        if self.evidence_class == "forward_pit_admission":
+            if self.availability_basis != "forward_observed":
+                raise ValueError("forward PIT bars require forward_observed availability")
+            if self.provider_available_at > self.collected_at:
+                raise ValueError("forward collection cannot precede provider availability")
+            if (
+                self.historical_availability_contract_id is not None
+                or self.historical_availability_contract_sha256 is not None
+            ):
+                raise ValueError("forward PIT bars cannot carry historical availability claims")
+        else:
+            if self.availability_basis != "historical_backfill":
+                raise ValueError("historical development bars require historical_backfill")
+            if not self.historical_availability_contract_id:
+                raise ValueError("historical bars require a reviewed availability contract")
+            if not self.historical_availability_contract_sha256:
+                raise ValueError("historical bars require an availability contract hash")
+        return self
+
+
 class V3CoreCostScenario(BaseModel):
     """Versioned modeled friction; this is not observed fill economics."""
 
@@ -123,9 +246,7 @@ class V3CoreBar(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     instrument: str = Field(min_length=1)
-    interval_end: datetime
-    available_at: datetime
-    provider_event_at: datetime | None = None
+    provenance: V3CoreBarProvenance
     open: Decimal = Field(gt=0)
     high: Decimal = Field(gt=0)
     low: Decimal = Field(gt=0)
@@ -145,14 +266,6 @@ class V3CoreBar(BaseModel):
             raise ValueError("V3-Core bars are restricted to BTCUSDT and ETHUSDT")
         return normalized
 
-    @field_validator("interval_end", "available_at", "provider_event_at")
-    @classmethod
-    def aware_timestamp(cls, value: datetime | None, info: object) -> datetime | None:
-        if value is None:
-            return None
-        field_name = getattr(info, "field_name", "bar timestamp")
-        return _aware(value, field_name)
-
     @field_validator("open", "high", "low", "close", "volume")
     @classmethod
     def finite_market_value(cls, value: Decimal, info: object) -> Decimal:
@@ -165,18 +278,41 @@ class V3CoreBar(BaseModel):
 
     @model_validator(mode="after")
     def validate_bar(self) -> V3CoreBar:
-        _aligned(self.interval_end, 300, "interval_end")
-        if self.interval_end > self.available_at:
-            raise ValueError("a closed bar cannot be available before its interval ends")
         if self.high < max(self.open, self.close) or self.low > min(self.open, self.close):
             raise ValueError("bar OHLC bounds are inconsistent")
         if self.source_id != self.provider_identity:
             raise ValueError("source and provider identity must remain explicit and equal")
-        if not self.endpoint.startswith("https://"):
+        if self.source_snapshot_hash != self.provenance.source_snapshot_hash:
+            raise ValueError("bar and provenance snapshot hashes must match")
+        if self.provider_identity == V3_CORE_MARKET_DATA_PROVIDER:
+            if self.endpoint not in {
+                V3_CORE_MARKET_DATA_REST_ENDPOINT,
+                V3_CORE_MARKET_DATA_WS_ENDPOINT,
+            }:
+                raise ValueError(
+                    "Binance V3-Core bars must use a reviewed market-data-only endpoint"
+                )
+        elif not self.endpoint.startswith("https://"):
             raise ValueError("V3-Core bar endpoint must be a reviewed HTTPS endpoint")
         if self.quality.lower() not in {"validated", "gold"}:
             raise ValueError("V3-Core bars require validated or gold quality")
         return self
+
+    @property
+    def interval_end(self) -> datetime:
+        return self.provenance.interval_end
+
+    @property
+    def provider_available_at(self) -> datetime:
+        return self.provenance.provider_available_at
+
+    @property
+    def collected_at(self) -> datetime:
+        return self.provenance.collected_at
+
+    @property
+    def evidence_class(self) -> V3CoreEvidenceClass:
+        return self.provenance.evidence_class
 
 
 class V3CoreForecastCase(BaseModel):
@@ -197,6 +333,7 @@ class V3CoreForecastCase(BaseModel):
     provider_identity: str = Field(min_length=1)
     endpoint: str = Field(min_length=1)
     source_snapshot_hash: str
+    evidence_class: V3CoreEvidenceClass
     regime: str = Field(min_length=1)
     regime_policy_version: str = REGIME_POLICY_VERSION
     phase3_admitted: bool = False
@@ -260,6 +397,7 @@ class V3CoreForecastCase(BaseModel):
                 or bar.provider_identity != self.provider_identity
                 or bar.endpoint != self.endpoint
                 or bar.source_snapshot_hash != self.source_snapshot_hash
+                or bar.evidence_class != self.evidence_class
             ):
                 raise ValueError("case cannot silently substitute source identity or snapshot")
         context_times = tuple(bar.interval_end for bar in self.context_bars)
@@ -275,8 +413,11 @@ class V3CoreForecastCase(BaseModel):
         )
         if context_times != expected_context or future_times != expected_future:
             raise ValueError("case bars must be contiguous around the decision cutoff")
-        if any(bar.available_at > self.cutoff for bar in self.context_bars):
-            raise ValueError("context contains a bar unavailable at the decision cutoff")
+        if self.evidence_class == "forward_pit_admission":
+            if any(bar.collected_at > self.cutoff for bar in self.context_bars):
+                raise ValueError("forward context was collected after the decision cutoff")
+        elif any(bar.provider_available_at > self.cutoff for bar in self.context_bars):
+            raise ValueError("historical context was unavailable under the provider contract")
         if self.realized_at != self.future_bars[-1].interval_end:
             raise ValueError("realized_at must equal the end of the one-hour outcome")
         if self.realized_at <= self.cutoff:
@@ -303,6 +444,7 @@ class V3CoreCaseBuild(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: str = EVALUATION_INPUT_SCHEMA
+    evidence_class: V3CoreEvidenceClass
     source_id: str
     provider_identity: str
     endpoint: str
@@ -315,6 +457,12 @@ class V3CoreCaseBuild(BaseModel):
     @classmethod
     def valid_build_hash(cls, value: str) -> str:
         return _digest(value, "source_snapshot_hash")
+
+    @model_validator(mode="after")
+    def validate_case_classes(self) -> V3CoreCaseBuild:
+        if any(case.evidence_class != self.evidence_class for case in self.cases):
+            raise ValueError("case evidence class must match the build evidence class")
+        return self
 
 
 class V3CoreEvaluationInput(BaseModel):
@@ -339,6 +487,8 @@ class V3CoreEvaluationInput(BaseModel):
         if self.build.schema_version != EVALUATION_INPUT_SCHEMA:
             raise ValueError("case build schema does not match evaluation input")
         for case in self.build.cases:
+            if case.evidence_class != self.build.evidence_class:
+                raise ValueError("evaluation case evidence class does not match its build")
             if not case.phase3_admitted:
                 raise ValueError("evaluation cases must carry Phase-3 admission")
         return self
@@ -355,6 +505,9 @@ class V3CoreEvaluationInput(BaseModel):
             counts[symbol] >= per_symbol for symbol in V3_CORE_SYMBOLS
         )
 
+    def is_forward_admission_input(self) -> bool:
+        return self.build.evidence_class == "forward_pit_admission"
+
 
 class V3CorePhase4Prereadiness(StrEnum):
     READY_FOR_MEASUREMENT = "READY_FOR_MEASUREMENT"
@@ -367,11 +520,12 @@ class V3CorePhase4Preregistration(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: str = PREREGISTRATION_SCHEMA
-    plan_id: str = "phase4-v3-core-1h-5m-v1"
+    plan_id: str = "phase4-v3-core-1h-5m-v2"
     cadence: V3CoreCadencePolicy = V3CoreCadencePolicy()
-    market_data_provider_identity: str = "binance_spot_public_market_data"
-    market_data_rest_endpoint: str = "https://api.binance.com/api/v3/klines"
-    market_data_websocket_endpoint: str = "wss://stream.binance.com:9443/ws"
+    market_data_surface: V3CoreMarketDataSurface = V3CoreMarketDataSurface()
+    market_data_provider_identity: str = V3_CORE_MARKET_DATA_PROVIDER
+    market_data_rest_endpoint: str = V3_CORE_MARKET_DATA_REST_ENDPOINT
+    market_data_websocket_endpoint: str = V3_CORE_MARKET_DATA_WS_ENDPOINT
     execution_venue: str = "binance_spot_testnet"
     candidate_models: tuple[str, ...] = V3_CORE_CANDIDATES
     mandatory_baselines: tuple[str, ...] = V3_CORE_BASELINES
@@ -408,10 +562,12 @@ class V3CorePhase4Preregistration(BaseModel):
             raise ValueError("unsupported Phase-4 preregistration schema")
         if self.market_data_provider_identity == self.execution_venue:
             raise ValueError("market-data and execution identities must remain explicit")
-        if not self.market_data_rest_endpoint.startswith("https://"):
-            raise ValueError("market-data REST endpoint must be HTTPS")
-        if not self.market_data_websocket_endpoint.startswith("wss://"):
-            raise ValueError("market-data WebSocket endpoint must be WSS")
+        if self.market_data_provider_identity != self.market_data_surface.provider_identity:
+            raise ValueError("market-data provider identity must match the reviewed surface")
+        if self.market_data_rest_endpoint != self.market_data_surface.klines_url:
+            raise ValueError("market-data REST endpoint must match the reviewed klines surface")
+        if self.market_data_websocket_endpoint != self.market_data_surface.websocket_url:
+            raise ValueError("market-data WebSocket endpoint must match the reviewed surface")
         if self.candidate_models != V3_CORE_CANDIDATES:
             raise ValueError("the first independent challenger set is fixed to TTM-R2 and Chronos")
         if self.mandatory_baselines != V3_CORE_BASELINES:
@@ -453,6 +609,7 @@ def derive_regime_from_context(closes: Sequence[Decimal]) -> str:
 def build_v3core_cases(
     bars: Sequence[V3CoreBar],
     *,
+    evidence_class: V3CoreEvidenceClass,
     source_id: str,
     provider_identity: str,
     endpoint: str,
@@ -468,6 +625,7 @@ def build_v3core_cases(
     normalized_hash = _digest(source_snapshot_hash, "source_snapshot_hash")
     if not bars:
         return V3CoreCaseBuild(
+            evidence_class=evidence_class,
             source_id=source_id,
             provider_identity=provider_identity,
             endpoint=endpoint,
@@ -479,6 +637,7 @@ def build_v3core_cases(
         or bar.provider_identity != provider_identity
         or bar.endpoint != endpoint
         or bar.source_snapshot_hash != normalized_hash
+        or bar.evidence_class != evidence_class
         for bar in bars
     ):
         raise ValueError("case input contains a source identity or snapshot substitution")
@@ -520,12 +679,18 @@ def build_v3core_cases(
                 continue
             context = tuple(timeline[item] for item in context_times)
             future = tuple(timeline[item] for item in future_times)
-            if any(bar.available_at > cutoff for bar in context):
+            if evidence_class == "forward_pit_admission":
+                unavailable = any(bar.collected_at > cutoff for bar in context)
+                rejection_reason = "context_not_collected_at_cutoff"
+            else:
+                unavailable = any(bar.provider_available_at > cutoff for bar in context)
+                rejection_reason = "context_not_available_under_provider_contract"
+            if unavailable:
                 rejected.append(
                     V3CoreCaseRejection(
                         instrument=instrument,
                         cutoff=cutoff,
-                        reason="context_not_available_at_cutoff",
+                        reason=rejection_reason,
                     )
                 )
                 continue
@@ -544,11 +709,13 @@ def build_v3core_cases(
                 provider_identity=provider_identity,
                 endpoint=endpoint,
                 source_snapshot_hash=normalized_hash,
+                evidence_class=evidence_class,
                 regime=derive_regime_from_context(tuple(bar.close for bar in context)),
                 phase3_admitted=phase3_admitted,
             )
             cases.append(case)
     return V3CoreCaseBuild(
+        evidence_class=evidence_class,
         source_id=source_id,
         provider_identity=provider_identity,
         endpoint=endpoint,
@@ -573,10 +740,18 @@ __all__ = [
     "EVALUATION_INPUT_SCHEMA",
     "PREREGISTRATION_SCHEMA",
     "REGIME_POLICY_VERSION",
+    "V3CoreAvailabilityBasis",
+    "V3CoreEvidenceClass",
+    "V3CoreSourceHealthState",
     "V3_CORE_BASELINES",
     "V3_CORE_CANDIDATES",
+    "V3_CORE_MARKET_DATA_PROVIDER",
+    "V3_CORE_MARKET_DATA_REST_BASE",
+    "V3_CORE_MARKET_DATA_REST_ENDPOINT",
+    "V3_CORE_MARKET_DATA_WS_ENDPOINT",
     "V3_CORE_SYMBOLS",
     "V3CoreBar",
+    "V3CoreBarProvenance",
     "V3CoreCadencePolicy",
     "V3CoreCaseBuild",
     "V3CoreCaseRejection",
@@ -585,6 +760,7 @@ __all__ = [
     "V3CoreForecastCase",
     "V3CorePhase4Prereadiness",
     "V3CorePhase4Preregistration",
+    "V3CoreMarketDataSurface",
     "build_v3core_cases",
     "derive_regime_from_context",
     "sha256_json",
