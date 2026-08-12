@@ -50,7 +50,7 @@
   The ledger has no network, credential, or order capability.
 - Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
   with 28 warnings; acceptance phases passed
-  `134/152/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+  `134/152/126/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
   compilation, dashboard build, diff hygiene, and tracked secret/weight checks
   passed. These checks do not close the time-dependent forward PIT gate.
 
