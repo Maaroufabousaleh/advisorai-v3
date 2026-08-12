@@ -11,6 +11,13 @@ Phase-0 selected model roles remain qualified; global Phase 0 remains separate
 and pending its private-route/archive prerequisites. No timed stability root,
 Phase-3 durability root, or Binance order was reopened or created.
 
+Verification for this continuation passed full pytest (`687 passed`, 28
+warnings), all eleven acceptance suites
+(`134/152/126/117/34/34/10/11/27/18/5`), Ruff, format, lock, compilation,
+dashboard build, `git diff --check`, tracked-secret/model-weight checks, and
+the offline Phase-2–4 focused suites. These are implementation and measurement
+checks; they do not open Phase 5, Phase 6, Phase 7, or live capital.
+
 Phase 2 is formally `PASSED` from the existing Binance Spot Testnet
 authenticated-read and supervised no-fill/cancel evidence. Its checklist is
 `artifacts/phase2/formal-admission/20260812T013500Z-post-phase2-commit/phase2-admission-checklist.json`

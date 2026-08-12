@@ -3,6 +3,9 @@
 ## Current Phase-2/3 admission and Phase-4 measurement checkpoint — 2026-08-12T01:42:00Z
 
 - Implementation/evidence anchor: `cd2b09066096977ac38ddb6dd756339fea9a4330`.
+- Verification: full pytest `687 passed` with 28 warnings; acceptance suites
+  `134/152/126/117/34/34/10/11/27/18/5`; Ruff, format, lock, compilation,
+  dashboard build, diff hygiene, and tracked-secret/model-weight checks passed.
 - Phase 2 is formally `PASSED` from the existing Binance Spot Testnet
   authenticated-read and supervised no-fill/cancel roots. The passed record is
   `artifacts/phase2/formal-admission/20260812T013500Z-post-phase2-commit/phase2-gate-record.json`

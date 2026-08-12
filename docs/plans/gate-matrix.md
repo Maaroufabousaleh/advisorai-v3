@@ -7,6 +7,11 @@ The implementation/evidence source anchor for this checkpoint is
 reopened, no selected-model stability process was changed, and no additional
 Binance order was submitted.
 
+Verification after this implementation boundary passed full pytest (`687
+passed`, 28 warnings), acceptance suites
+`134/152/126/117/34/34/10/11/27/18/5`, Ruff, format, lock, compilation,
+dashboard build, diff hygiene, and tracked-secret/model-weight checks.
+
 Phase 2 is formally `PASSED` from the existing Binance Spot Testnet evidence;
 the no-fill/cancel lifecycle remains Phase-2 evidence and real fill attribution
 remains Phase 6. The machine-readable checklist has 21 mandatory rows, all
