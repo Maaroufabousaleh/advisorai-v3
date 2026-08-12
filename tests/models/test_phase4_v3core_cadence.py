@@ -277,7 +277,7 @@ def test_historical_backfill_is_distinct_and_uses_reviewed_provider_availability
     assert case.context_bars[-1].collected_at > case.cutoff
     assert case.context_bars[-1].provider_available_at <= case.cutoff
     typed = V3CoreEvaluationInput(
-        plan_id="phase4-v3-core-1h-5m-v1",
+        plan_id="phase4-v3-core-1h-5m-v2",
         phase3_gate_record_sha256=HASH,
         build=result,
     )

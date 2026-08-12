@@ -4,6 +4,55 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+
+PR #186 remains the focused draft continuation from merged main
+`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. The contract-hardening commit is
+`6b2ed741650f9de0f51e8db921aefb507979d0d3`; it changes no Phase-2/3 gate,
+execution adapter, credential scope, or model role.
+
+The cadence contract is now version `advisorai.phase4.v3-core-cadence.v2` and
+requires a nested `V3CoreBarProvenance` record containing distinct
+`interval_end`, `provider_available_at`, `collected_at`, optional provider event
+time, availability basis, evidence class, source-health state, source snapshot
+hash, raw-record hash, and normalized-record hash. Forward admission bars must
+be `forward_observed` and prove provider availability no later than local
+collection; context is admissible only when local collection is at or before
+the cutoff. Historical development bars must be `historical_backfill` and carry
+a separately reviewed availability-contract identifier and SHA-256; their late
+local collection timestamp cannot masquerade as forward PIT possession.
+
+The Phase-4 public data surface is pinned to Binance's credential-free
+market-data-only endpoints: REST
+`https://data-api.binance.vision/api/v3/klines` and WSS
+`wss://data-stream.binance.vision/ws`. The surface is explicitly read-only,
+credential-free, limited to BTCUSDT/ETHUSDT, and rejects the standard Binance
+production API host, Spot Testnet execution host, arbitrary hosts, non-HTTPS/WSS
+URLs, credentials, and write capability. Existing historical Phase-3 evidence
+using its then-reviewed source endpoints is preserved unchanged.
+
+The corrected immutable preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T195826Z-v3core-1h-5m-provenance-v2/`:
+evidence SHA-256
+`ca09ee9d62eccbd017287eebc8864e34d339d8e2a3eb2168826853a7fdd0fed8` and
+manifest SHA-256
+`6962c7a882a11969262484e03b3c6cdb7627e27e3d23d1ffab7ffde23f8883fd`.
+The earlier v1 preregistration remains immutable and is superseded by this
+versioned correction. Status remains `PENDING_FRESH_PIT_DATA`; no data was
+acquired, no credentials were loaded, and no order was submitted.
+
+The input builder now requires an explicit `--evidence-class` and rejects
+mixed-source, mixed-class, duplicate, missing, unavailable-at-cutoff, and
+future-leaking cases. Focused provenance/endpoint coverage passes 18 tests.
+Chronos-2-small remains quarantined on the preserved worker/runtime identity
+mismatch. Phase 4 remains `PENDING` on `robust_candidate_admission`; TTM-R2 is
+still `CHALLENGER`, TTM-R3 is `RESEARCH_ONLY`, and Phase 5–7 remain closed.
+
+Contract-correction verification passes full pytest (`731 passed`, 28 warnings),
+all eleven acceptance suites (`134/152/126/117/78/34/10/11/27/18/5`), Ruff,
+format, lock, compileall, dashboard build, `git diff --check`, tracked-secret
+hygiene, and tracked-model-weight hygiene. These checks do not admit Phase 4.
+
 ## Current V3-Core cadence Phase-4 continuation — 2026-08-12T18:58:28Z
 
 PR #185 is merged at main `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. This

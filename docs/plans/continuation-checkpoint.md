@@ -1,5 +1,40 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current V3-Core PIT provenance checkpoint — 2026-08-12T19:58:26Z
+
+- PR #186 remains draft. Its base is main
+  `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; the contract-hardening commit is
+  `6b2ed741650f9de0f51e8db921aefb507979d0d3`.
+- The active cadence contract is v2: 5m observations, 4h context, 1h outcome,
+  BTCUSDT/ETHUSDT, and separate `historical_development` versus
+  `forward_pit_admission` evidence classes.
+- Forward bars require `provider_available_at <= collected_at` and actual local
+  `collected_at <= cutoff` for context. Historical bars require a reviewed
+  provider-availability contract; late collection cannot prove historical PIT
+  possession. Raw-record, normalized-record, source snapshot, and source-health
+  provenance are mandatory.
+- The exact Phase-4 market-data-only surface is REST
+  `https://data-api.binance.vision/api/v3/klines` plus WSS
+  `wss://data-stream.binance.vision/ws`. No credentials, account routes, write
+  routes, or execution hosts are permitted.
+- Corrected preregistration:
+  `artifacts/phase4/v3core-cadence-preregistration/20260812T195826Z-v3core-1h-5m-provenance-v2/`;
+  evidence SHA-256
+  `ca09ee9d62eccbd017287eebc8864e34d339d8e2a3eb2168826853a7fdd0fed8`;
+  manifest SHA-256
+  `6962c7a882a11969262484e03b3c6cdb7627e27e3d23d1ffab7ffde23f8883fd`.
+- Status remains `PENDING_FRESH_PIT_DATA`; no acquisition, credentials, or
+  orders have occurred. After PR #186 merges, implement the dedicated raw-first
+  credential-free collector and keep historical development evidence separate
+  from prospective admission evidence.
+- Chronos-2-small remains quarantined for the preserved worker/runtime mismatch;
+  Phase 4 remains pending, and Phase 5–7 remain closed. The laptop remains
+  running.
+- Verification: full pytest `731 passed` with 28 warnings; acceptance suites
+  `134/152/126/117/78/34/10/11/27/18/5`; Ruff, format, lock, compileall,
+  dashboard build, diff hygiene, tracked-secret, and tracked-model-weight checks
+  pass. These are implementation checks only.
+
 ## Current V3-Core cadence Phase-4 checkpoint — 2026-08-12T18:58:28Z
 
 - PR #185 is merged; the current clean main base is

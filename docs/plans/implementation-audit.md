@@ -5,6 +5,42 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current V3-Core PIT provenance audit — 2026-08-12T19:58:26Z
+
+PR #186 remains draft from main
+`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; the contract correction is
+`6b2ed741650f9de0f51e8db921aefb507979d0d3`.
+
+The cadence boundary is now a versioned v2 contract. `V3CoreBarProvenance`
+records interval end, provider availability, actual local collection, optional
+provider event time, availability basis, evidence class, source health, and
+content hashes. `V3CoreForecastCase` validates one evidence class throughout,
+keeps context/future bars source- and snapshot-local, requires provider
+availability under a reviewed historical contract for development evidence,
+and requires actual local collection no later than cutoff for forward admission
+evidence. The builder retains rejected cutoffs instead of filling gaps or
+silently switching sources.
+
+`V3CoreMarketDataSurface` pins the Phase-4 acquisition boundary to Binance's
+public market-data-only REST/WSS hosts and rejects production trading, Spot
+Testnet execution, arbitrary, non-secure, credential-bearing, or write-capable
+configuration. This is a Phase-4 surface correction; prior Phase-3 evidence is
+not rewritten.
+
+The corrected preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T195826Z-v3core-1h-5m-provenance-v2/`
+with evidence SHA-256
+`ca09ee9d62eccbd017287eebc8864e34d339d8e2a3eb2168826853a7fdd0fed8` and
+manifest SHA-256
+`6962c7a882a11969262484e03b3c6cdb7627e27e3d23d1ffab7ffde23f8883fd`.
+It is a pre-outcome contract only and remains pending fresh forward PIT data.
+
+Contract-correction verification passes full pytest (`731 passed`, 28 warnings),
+all eleven acceptance suites (`134/152/126/117/78/34/10/11/27/18/5`), Ruff,
+format, lock, compileall, dashboard build, diff hygiene, and tracked
+secret/model-weight checks. No data acquisition, credential loading, model
+promotion, or order write occurred.
+
 ## Current V3-Core cadence Phase-4 audit — 2026-08-12T18:58:28Z
 
 PR #185 is merged at main `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. The
