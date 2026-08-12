@@ -4,8 +4,9 @@
 
 - PR #185 is merged; the current clean main base is
   `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. The focused implementation is on
-  `agent/phase4-v3core-cadence` at
-  `53cdc9eba5f57ce54e87348f04320b138d82fa8d`; it is not yet merged.
+  `agent/phase4-v3core-cadence`, whose current head is
+  `b4f76934129a92d21c6b8c9e9b57840560cb2545` (code commit
+  `53cdc9eba5f57ce54e87348f04320b138d82fa8d`); it is not yet merged.
 - Phase 2 and Phase 3 remain passed. Phase 4 remains pending solely on
   `robust_candidate_admission`; TTM-R2 is `CHALLENGER`, TTM-R3 is
   `RESEARCH_ONLY`, and Phase 5–7 remain closed.
