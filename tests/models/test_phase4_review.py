@@ -12,6 +12,7 @@ from advisorai.phase4 import MANDATORY_BASELINES, Phase4MarketObservation, Phase
 from scripts.review_phase4_utility import (
     Phase4ReviewPolicy,
     Phase4ReviewRefused,
+    _coverage_metrics,
     _delayed,
     _prediction_index,
     _rolling_calibration,
@@ -66,6 +67,37 @@ def _predictions(
     )
 
 
+def _single_instrument_observations(
+    realized: tuple[str, ...],
+) -> tuple[Phase4MarketObservation, ...]:
+    base = _observations(len(realized))[: len(realized)]
+    return tuple(
+        observation.model_copy(update={"realized_return_bps": Decimal(value)})
+        for observation, value in zip(base, realized, strict=True)
+    )
+
+
+def _predictions_for_values(
+    observations: tuple[Phase4MarketObservation, ...],
+    values: tuple[str, ...],
+    model_name: str = "ttm-r2",
+) -> tuple[Phase4Prediction, ...]:
+    return tuple(
+        prediction
+        for prediction in (
+            Phase4Prediction(
+                observation_id=observation.observation_id,
+                model_name=model_name,
+                predicted_return_bps=Decimal(value),
+                confidence=Decimal("0.5"),
+                model_code_hash=HASH,
+                model_artifact_hash=HASH,
+            )
+            for observation, value in zip(observations, values, strict=True)
+        )
+    )
+
+
 def _phase3_gate(path: Path) -> None:
     evidence = GateEvidence(
         name="phase3-source",
@@ -107,6 +139,198 @@ def test_rolling_calibration_uses_only_prior_residuals():
     assert by_id[observations[2].observation_id].interval_upper_bps == Decimal("10")
     assert stats["ttm-r2"]["past_only"] is True
     assert stats["ttm-r2"]["derived_interval_count"] == 2
+
+
+@pytest.mark.parametrize(
+    ("realized", "predicted", "expected_width"),
+    [
+        (("10", "10", "10", "10"), ("0", "0", "0", "0"), Decimal("10")),
+        (("-10", "-10", "-10", "-10"), ("0", "0", "0", "0"), Decimal("10")),
+        (("0", "10", "-20", "40"), ("0", "0", "0", "0"), Decimal("10")),
+        (("0", "0", "0", "0"), ("0", "0", "0", "0"), Decimal("0")),
+    ],
+)
+def test_rolling_calibration_uses_nonnegative_absolute_history(
+    realized: tuple[str, ...],
+    predicted: tuple[str, ...],
+    expected_width: Decimal,
+):
+    observations = _single_instrument_observations(realized)
+    predictions = _predictions_for_values(observations, predicted)
+
+    calibrated, stats = _rolling_calibration(
+        observations,
+        predictions,
+        Phase4ReviewPolicy(minimum_calibration_history=2),
+    )
+    point = next(
+        item for item in calibrated if item.observation_id == observations[2].observation_id
+    )
+
+    assert point.interval_lower_bps == point.predicted_return_bps - expected_width
+    assert point.interval_upper_bps == point.predicted_return_bps + expected_width
+    assert point.interval_lower_bps <= point.predicted_return_bps <= point.interval_upper_bps
+    assert stats["ttm-r2"]["residual_definition"].startswith("abs(")
+
+
+def test_rolling_calibration_is_deterministic_before_minimum_history_and_at_first_eligible():
+    observations = _single_instrument_observations(("10", "20", "30"))
+    predictions = _predictions_for_values(observations, ("0", "0", "0"))
+
+    calibrated, stats = _rolling_calibration(
+        observations,
+        predictions,
+        Phase4ReviewPolicy(minimum_calibration_history=4),
+    )
+    assert all(item.interval_lower_bps is None for item in calibrated)
+    assert stats["ttm-r2"]["interval_count"] == 0
+
+    observations = _single_instrument_observations(("10", "20", "30", "40", "50"))
+    predictions = _predictions_for_values(observations, ("0", "0", "0", "0", "0"))
+    calibrated, stats = _rolling_calibration(
+        observations,
+        predictions,
+        Phase4ReviewPolicy(minimum_calibration_history=4),
+    )
+    point = next(
+        item for item in calibrated if item.observation_id == observations[4].observation_id
+    )
+    assert point.interval_lower_bps == Decimal("-40")
+    assert point.interval_upper_bps == Decimal("40")
+    assert stats["ttm-r2"]["derived_interval_count"] == 1
+
+
+def test_rolling_calibration_does_not_use_future_outcomes():
+    observations = _single_instrument_observations(("10", "20", "30", "40"))
+    predictions = _predictions_for_values(observations, ("0", "0", "0", "0"))
+    first, _ = _rolling_calibration(
+        observations,
+        predictions,
+        Phase4ReviewPolicy(minimum_calibration_history=2),
+    )
+
+    changed_future = observations[3].model_copy(update={"realized_return_bps": Decimal("9999")})
+    second, _ = _rolling_calibration(
+        (*observations[:3], changed_future),
+        predictions,
+        Phase4ReviewPolicy(minimum_calibration_history=2),
+    )
+    first_point = next(
+        item for item in first if item.observation_id == observations[2].observation_id
+    )
+    second_point = next(
+        item for item in second if item.observation_id == observations[2].observation_id
+    )
+    assert first_point.interval_lower_bps == second_point.interval_lower_bps
+    assert first_point.interval_upper_bps == second_point.interval_upper_bps
+
+
+def test_rolling_calibration_excludes_same_cutoff_from_prior_history():
+    observations = _single_instrument_observations(("10", "20", "100"))
+    observations = (
+        observations[0],
+        observations[1].model_copy(update={"cutoff": observations[0].cutoff}),
+        observations[2],
+    )
+    predictions = _predictions_for_values(observations, ("0", "0", "0"))
+
+    calibrated, _ = _rolling_calibration(
+        observations,
+        predictions,
+        Phase4ReviewPolicy(minimum_calibration_history=1),
+    )
+    by_id = {item.observation_id: item for item in calibrated}
+
+    assert by_id[observations[0].observation_id].interval_lower_bps is None
+    assert by_id[observations[1].observation_id].interval_lower_bps is None
+    assert by_id[observations[2].observation_id].interval_lower_bps == Decimal("-20")
+    assert by_id[observations[2].observation_id].interval_upper_bps == Decimal("20")
+
+
+def test_rolling_calibration_keeps_btc_and_eth_history_separate():
+    observations = _observations(4)
+    realized = tuple(
+        Decimal("10") if item.instrument == "BTCUSDT" else Decimal("100") for item in observations
+    )
+    observations = tuple(
+        item.model_copy(update={"realized_return_bps": value})
+        for item, value in zip(observations, realized, strict=True)
+    )
+    predictions = _predictions(observations, "ttm-r2", Decimal("0"))
+
+    calibrated, _ = _rolling_calibration(
+        observations,
+        predictions,
+        Phase4ReviewPolicy(minimum_calibration_history=2),
+    )
+    by_id = {item.observation_id: item for item in calibrated}
+    assert by_id["BTCUSDT-2"].interval_upper_bps == Decimal("10")
+    assert by_id["ETHUSDT-2"].interval_upper_bps == Decimal("100")
+
+
+def test_rolling_calibration_preserves_valid_native_intervals_and_rejects_invalid_ones():
+    observations = _single_instrument_observations(("10", "10", "10"))
+    predictions = list(_predictions_for_values(observations, ("0", "0", "0")))
+    predictions[2] = predictions[2].model_copy(
+        update={"interval_lower_bps": Decimal("-5"), "interval_upper_bps": Decimal("5")}
+    )
+    calibrated, stats = _rolling_calibration(
+        observations,
+        tuple(predictions),
+        Phase4ReviewPolicy(minimum_calibration_history=2),
+    )
+    native = next(
+        item for item in calibrated if item.observation_id == observations[2].observation_id
+    )
+    assert native.interval_lower_bps == Decimal("-5")
+    assert native.interval_upper_bps == Decimal("5")
+    assert stats["ttm-r2"]["native_interval_count"] == 1
+    assert stats["ttm-r2"]["derived_interval_count"] == 0
+
+    predictions[2] = predictions[2].model_copy(
+        update={"interval_lower_bps": Decimal("1"), "interval_upper_bps": Decimal("5")}
+    )
+    with pytest.raises(Phase4ReviewRefused, match="native prediction interval"):
+        _rolling_calibration(
+            observations,
+            tuple(predictions),
+            Phase4ReviewPolicy(minimum_calibration_history=2),
+        )
+
+    predictions[2] = predictions[2].model_copy(
+        update={"interval_lower_bps": Decimal("-5"), "interval_upper_bps": None}
+    )
+    with pytest.raises(Phase4ReviewRefused, match="bounds must be supplied together"):
+        _rolling_calibration(
+            observations,
+            tuple(predictions),
+            Phase4ReviewPolicy(minimum_calibration_history=2),
+        )
+
+
+def test_daily_latency_policy_separates_operational_proxy_from_bar_stress():
+    policy = Phase4ReviewPolicy()
+
+    assert policy.data_cadence == "1d"
+    assert policy.operational_latency_scenarios == ("normal_10s", "degraded_1h")
+    assert "next_bar_stress" not in policy.operational_latency_scenarios
+    assert "next_bar_stress" in policy.severe_signal_decay_scenarios
+
+
+def test_calibration_metrics_expose_signed_and_absolute_coverage_error():
+    metrics = _coverage_metrics(
+        {"calibration_coverage": "0.75"},
+        Phase4ReviewPolicy(),
+        interval_count=32,
+    )
+
+    assert metrics == {
+        "nominal_coverage": "0.80",
+        "observed_coverage": "0.75",
+        "coverage_error": "-0.05",
+        "absolute_coverage_error": "0.05",
+        "interval_count": 32,
+    }
 
 
 def test_delay_reuses_only_an_earlier_cutoff_prediction():

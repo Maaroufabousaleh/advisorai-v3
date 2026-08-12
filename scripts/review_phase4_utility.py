@@ -3,10 +3,10 @@
 
 The measurement runner deliberately stops before admission.  This reviewer is
 the separate decision boundary: it verifies the immutable measurement, builds
-past-only calibration and causal delay/cost-stress views, evaluates chronology,
-symbols and regimes, and writes a checklist plus a pending or passed
-``PhaseGateRecord``.  It never acquires data, loads credentials, loads model
-weights, promotes a roster entry, or submits an order.
+past-only rolling absolute-residual calibration and causal delay/cost-stress
+views, evaluates chronology, symbols and regimes, and writes a checklist plus
+a pending or passed ``PhaseGateRecord``.  It never acquires data, loads
+credentials, loads model weights, promotes a roster entry, or submits an order.
 """
 
 from __future__ import annotations
@@ -41,9 +41,10 @@ from advisorai.phase4 import (
 )
 from scripts.run_phase4_paper_utility import INPUT_SCHEMA
 
-REVIEW_SCHEMA = "advisorai.phase4.formal-review.v1"
-CHECKLIST_SCHEMA = "advisorai.phase4.formal-admission-checklist.v1"
-REVIEWER_VERSION = "phase4-formal-review-v1"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+REVIEW_SCHEMA = "advisorai.phase4.formal-review.v2"
+CHECKLIST_SCHEMA = "advisorai.phase4.formal-admission-checklist.v2"
+REVIEWER_VERSION = "phase4-formal-review-v2"
 REVIEWED_PHASE3_GATE = (
     "artifacts/phase3/formal-admission/"
     "20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json"
@@ -72,7 +73,7 @@ class Phase4ReviewPolicy(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_version: str = "phase4-formal-review-v1"
+    policy_version: str = "phase4-formal-review-v2"
     minimum_total_observations: int = Field(default=128, ge=1)
     minimum_observations_per_symbol: int = Field(default=48, ge=1)
     holdout_fraction: Decimal = Field(default=Decimal("0.20"), gt=0, lt=0.5)
@@ -81,6 +82,12 @@ class Phase4ReviewPolicy(BaseModel):
     calibration_nominal_coverage: Decimal = Field(default=Decimal("0.80"), gt=0, lt=1)
     calibration_tolerance: Decimal = Field(default=Decimal("0.10"), ge=0, lt=1)
     calibration_method: str = "rolling_abs_residual_quantile_v1"
+    data_cadence: str = "1d"
+    operational_latency_scenarios: tuple[str, ...] = ("normal_10s", "degraded_1h")
+    severe_signal_decay_scenarios: tuple[str, ...] = (
+        "next_bar_stress",
+        "two_bar_severe_stress",
+    )
     delay_scenarios: tuple[tuple[str, int, int], ...] = (
         ("control", 0, 0),
         ("normal_10s", 0, 10_000),
@@ -148,6 +155,23 @@ def _git_head() -> str:
     except (OSError, subprocess.SubprocessError) as exc:
         raise Phase4ReviewRefused("cannot identify repository code revision") from exc
     return result.stdout.strip().lower()
+
+
+def _git_blob_sha256(commit: str, path: Path) -> str:
+    """Hash a tracked source file exactly as it existed at a recorded commit."""
+
+    try:
+        relative = path.resolve().relative_to(REPOSITORY_ROOT).as_posix()
+        result = subprocess.run(
+            ["git", "show", f"{commit}:{relative}"],
+            cwd=REPOSITORY_ROOT,
+            check=True,
+            capture_output=True,
+            timeout=10,
+        )
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        raise Phase4ReviewRefused("cannot verify the Phase-4 generation source revision") from exc
+    return hashlib.sha256(result.stdout).hexdigest()
 
 
 def _digest(value: str) -> str:
@@ -260,6 +284,130 @@ def _validate_measurement(
     }
 
 
+def _validate_generation_audit(
+    input_path: Path,
+    *,
+    observations: tuple[Phase4MarketObservation, ...],
+) -> dict[str, Any]:
+    """Bind the input to its point-in-time case-generation methodology.
+
+    This is intentionally an audit of the existing immutable generation
+    artifact, not a new acquisition or model run.  The generator builds each
+    case from a context ending at its cutoff.  The simple baselines and the
+    LightGBM baseline receive only that context; TTM candidates use frozen
+    pinned-checkpoint inference and are not retrained during this evaluation.
+    """
+
+    generation_path = input_path.parent / "phase4-input-generation.json"
+    if not generation_path.is_file():
+        return {
+            "status": "unavailable",
+            "path": str(generation_path),
+            "reason": "generation artifact is not present beside the input",
+        }
+    payload = _load_json(generation_path)
+    if not isinstance(payload, dict):
+        raise Phase4ReviewRefused("Phase-4 generation evidence is not an object")
+    if payload.get("schema") != "advisorai.phase4.real-utility-input-generation.v1":
+        raise Phase4ReviewRefused("Phase-4 generation evidence has an unexpected schema")
+    if payload.get("input", {}).get("sha256") != _sha256(input_path):
+        raise Phase4ReviewRefused("Phase-4 generation evidence does not bind the input hash")
+    source = payload.get("source", {})
+    cases = payload.get("cases", {})
+    models = payload.get("models", {})
+    mandatory_baselines = models.get("mandatory_baselines") if isinstance(models, dict) else None
+    if (
+        payload.get("network_calls") != 0
+        or payload.get("credentials_loaded") is not False
+        or payload.get("order_writes_attempted") is not False
+        or source.get("point_in_time") is not True
+        or source.get("market_data_only") is not True
+        or cases.get("observation_count") != len(observations)
+        or not isinstance(mandatory_baselines, list)
+        or set(mandatory_baselines) != set(MANDATORY_BASELINES)
+    ):
+        raise Phase4ReviewRefused("Phase-4 generation evidence violates the offline PIT contract")
+
+    source_paths = {
+        "case_builder": REPOSITORY_ROOT / "src/advisorai/phase0/model_bakeoff.py",
+        "input_preparation": REPOSITORY_ROOT / "scripts/prepare_phase4_real_utility_input.py",
+        "simple_baselines": REPOSITORY_ROOT / "src/advisorai/models/forecasting.py",
+        "lightgbm_baseline": REPOSITORY_ROOT / "src/advisorai/phase0/runtime_qualification.py",
+    }
+    missing = [name for name, path in source_paths.items() if not path.is_file()]
+    if missing:
+        raise Phase4ReviewRefused(f"walk-forward source audit files are missing: {missing}")
+    current_source_hashes = {name: _sha256(path) for name, path in source_paths.items()}
+    recorded_source_hashes = payload.get("source_sha256")
+    if isinstance(recorded_source_hashes, dict):
+        expected_source_hashes = recorded_source_hashes
+        source_hash_basis = "generation_artifact_source_sha256"
+        if expected_source_hashes != current_source_hashes:
+            raise Phase4ReviewRefused(
+                "walk-forward generation source hashes do not match the current implementation"
+            )
+    else:
+        generation_commit = payload.get("repository_commit")
+        if not isinstance(generation_commit, str) or not generation_commit:
+            raise Phase4ReviewRefused(
+                "Phase-4 generation evidence has no source hashes or repository commit"
+            )
+        generation_commit_hashes = {
+            name: _git_blob_sha256(generation_commit, path) for name, path in source_paths.items()
+        }
+        methodology_source_names = ("case_builder", "simple_baselines", "lightgbm_baseline")
+        if any(
+            generation_commit_hashes[name] != current_source_hashes[name]
+            for name in methodology_source_names
+        ):
+            raise Phase4ReviewRefused(
+                "walk-forward case/baseline source hashes do not match the generation revision"
+            )
+        source_hash_basis = (
+            "generation_repository_commit_for_case_and_baseline_methodology;"
+            " current_source_audit_for_input_preparation"
+        )
+        expected_source_hashes = generation_commit_hashes
+    return {
+        "status": "verified",
+        "path": str(generation_path),
+        "sha256": _sha256(generation_path),
+        "input_sha256": _sha256(input_path),
+        "repository_commit": payload.get("repository_commit"),
+        "cases_per_series": cases.get("cases_per_series"),
+        "observation_count": cases.get("observation_count"),
+        "source_hash_basis": source_hash_basis,
+        "generation_source_sha256": expected_source_hashes,
+        "current_source_sha256": current_source_hashes,
+        "source_identity_note": (
+            "The immutable generation artifact predates the input-preparation metadata extension; "
+            "case construction and learned-baseline methodology sources match its recorded commit, "
+            "and the current input-preparation source hash is retained for review provenance."
+            if source_hash_basis.startswith("generation_repository_commit")
+            else "The immutable generation artifact carries exact source hashes."
+        ),
+        "methodology": {
+            "case_construction": (
+                "each context ends at its forecast cutoff and each realized horizon starts after it"
+            ),
+            "simple_baselines": (
+                "naive, drift, seasonal-7, and linear are computed from each cutoff context"
+            ),
+            "lightgbm": (
+                "LightGBMBaseline.predict trains a fresh bounded model from each cutoff context"
+            ),
+            "frozen_candidates": (
+                "TTM-R2/TTM-R3 use pinned checkpoint inference; no candidate retraining occurs"
+            ),
+            "review_holdout": (
+                "the reviewer partitions chronologically and does not tune or retrain on the holdout"
+            ),
+        },
+        "source_sha256": current_source_hashes,
+        "candidate_reports": models.get("candidate_reports", {}),
+    }
+
+
 def _prediction_index(
     predictions: Iterable[Phase4Prediction],
 ) -> dict[str, dict[str, Phase4Prediction]]:
@@ -288,6 +436,28 @@ def _evaluate(
         evaluated_at=datetime.now(UTC),
     )
     return {item.model_name: item.model_dump(mode="json") for item in report.results}
+
+
+def _coverage_metrics(
+    result: dict[str, Any] | None,
+    policy: Phase4ReviewPolicy,
+    *,
+    interval_count: int,
+) -> dict[str, Any]:
+    nominal = policy.calibration_nominal_coverage
+    observed = (
+        Decimal(str(result["calibration_coverage"]))
+        if result is not None and result.get("calibration_coverage") is not None
+        else None
+    )
+    signed_error = observed - nominal if observed is not None else None
+    return {
+        "nominal_coverage": str(nominal),
+        "observed_coverage": str(observed) if observed is not None else None,
+        "coverage_error": str(signed_error) if signed_error is not None else None,
+        "absolute_coverage_error": str(abs(signed_error)) if signed_error is not None else None,
+        "interval_count": interval_count,
+    }
 
 
 def _predictions_for(
@@ -321,6 +491,8 @@ def _subset(
 def _quantile(values: list[Decimal], quantile: Decimal) -> Decimal:
     if not values:
         raise ValueError("cannot calculate a quantile from an empty history")
+    if any(value < 0 for value in values):
+        raise ValueError("absolute residual history cannot contain negative values")
     ordered = sorted(values)
     rank = max(0, min(len(ordered) - 1, math.ceil(float(quantile) * len(ordered)) - 1))
     return ordered[rank]
@@ -344,6 +516,11 @@ def _rolling_calibration(
             "native_interval_count": 0,
             "derived_interval_count": 0,
             "past_only": True,
+            "residual_definition": "abs(predicted_return_bps - realized_return_bps)",
+            "history_scope": "same_instrument_and_model_only",
+            "minimum_history_behavior": "no_interval_before_minimum_history",
+            "native_interval_policy": "preserve_and_validate; never replace",
+            "residual_count": 0,
         }
         for instrument in sorted({item.instrument for item in observations}):
             rows = sorted(
@@ -351,31 +528,57 @@ def _rolling_calibration(
                 key=lambda item: (item.cutoff, item.observation_id),
             )
             errors: list[Decimal] = []
-            for observation in rows:
-                prediction = index[model_name][observation.observation_id]
-                lower = prediction.interval_lower_bps
-                upper = prediction.interval_upper_bps
-                if lower is not None and upper is not None:
-                    model_stats["native_interval_count"] += 1
-                    model_stats["interval_count"] += 1
-                elif len(errors) >= policy.minimum_calibration_history:
-                    width = _quantile(errors, policy.calibration_nominal_coverage)
-                    lower = prediction.predicted_return_bps - width
-                    upper = prediction.predicted_return_bps + width
-                    model_stats["derived_interval_count"] += 1
-                    model_stats["interval_count"] += 1
-                calibrated.append(
-                    prediction.model_copy(
-                        update={
-                            "interval_lower_bps": lower,
-                            "interval_upper_bps": upper,
-                        }
+            row_index = 0
+            while row_index < len(rows):
+                cutoff = rows[row_index].cutoff
+                same_cutoff: list[Phase4MarketObservation] = []
+                while row_index < len(rows) and rows[row_index].cutoff == cutoff:
+                    same_cutoff.append(rows[row_index])
+                    row_index += 1
+                for observation in same_cutoff:
+                    prediction = index[model_name][observation.observation_id]
+                    lower = prediction.interval_lower_bps
+                    upper = prediction.interval_upper_bps
+                    if (lower is None) != (upper is None):
+                        raise Phase4ReviewRefused(
+                            "native prediction interval bounds must be supplied together"
+                        )
+                    if lower is not None and upper is not None:
+                        if not (lower <= prediction.predicted_return_bps <= upper):
+                            raise Phase4ReviewRefused(
+                                "native prediction interval does not contain its point forecast"
+                            )
+                        model_stats["native_interval_count"] += 1
+                        model_stats["interval_count"] += 1
+                    elif len(errors) >= policy.minimum_calibration_history:
+                        width = _quantile(errors, policy.calibration_nominal_coverage)
+                        if width < 0:
+                            raise Phase4ReviewRefused("derived interval width cannot be negative")
+                        lower = prediction.predicted_return_bps - width
+                        upper = prediction.predicted_return_bps + width
+                        if not (lower <= prediction.predicted_return_bps <= upper):
+                            raise Phase4ReviewRefused(
+                                "derived interval does not contain its point forecast"
+                            )
+                        model_stats["derived_interval_count"] += 1
+                        model_stats["interval_count"] += 1
+                    calibrated.append(
+                        prediction.model_copy(
+                            update={
+                                "interval_lower_bps": lower,
+                                "interval_upper_bps": upper,
+                            }
+                        )
                     )
-                )
-                errors.append(
-                    prediction.predicted_return_bps
-                    - observation_by_id[observation.observation_id].realized_return_bps
-                )
+                for observation in same_cutoff:
+                    prediction = index[model_name][observation.observation_id]
+                    errors.append(
+                        abs(
+                            prediction.predicted_return_bps
+                            - observation_by_id[observation.observation_id].realized_return_bps
+                        )
+                    )
+                    model_stats["residual_count"] += 1
         stats[model_name] = model_stats
     calibrated.sort(key=lambda item: (item.model_name, item.observation_id))
     return tuple(calibrated), stats
@@ -527,6 +730,7 @@ def review_phase4(
     if at.tzinfo is None or at.utcoffset() is None:
         raise Phase4ReviewRefused("review timestamp must include a timezone")
     observations, predictions = _load_typed_input(input_path)
+    generation_audit = _validate_generation_audit(input_path, observations=observations)
     predecessor, phase3_sha256 = _validate_predecessor(phase3_gate_path, at=at)
     measurement = _validate_measurement(
         measurement_path,
@@ -555,6 +759,22 @@ def review_phase4(
         calibration_predictions,
         phase3_sha256=phase3_sha256,
     )
+    calibration_metrics = {
+        model_name: _coverage_metrics(
+            calibration_results.get(model_name),
+            policy,
+            interval_count=calibration_stats[model_name]["interval_count"],
+        )
+        for model_name in calibration_stats
+    }
+    for model_name, metrics in calibration_metrics.items():
+        calibration_stats[model_name].update(
+            {
+                "observed_coverage": metrics["observed_coverage"],
+                "coverage_error": metrics["coverage_error"],
+                "absolute_coverage_error": metrics["absolute_coverage_error"],
+            }
+        )
     training, holdout, windows = _holdout_split(observations, policy)
     holdout_results = _evaluate(
         holdout, _predictions_for(holdout, index), phase3_sha256=phase3_sha256
@@ -598,9 +818,25 @@ def review_phase4(
     delay_results: dict[str, dict[str, Any]] = {}
     for name, bars, milliseconds in policy.delay_scenarios:
         delayed_observations, delayed_predictions = _delayed(observations, index, bars)
+        if name in policy.operational_latency_scenarios:
+            semantic_role = "operational_latency_proxy"
+            signal_decay_observable = False
+            admission_use = "runtime_latency_and_proxy_coverage_only"
+        elif name in policy.severe_signal_decay_scenarios:
+            semantic_role = "severe_signal_decay_stress"
+            signal_decay_observable = bars > 0
+            admission_use = "reported_stress_not_operational_latency_gate"
+        else:
+            semantic_role = "control"
+            signal_decay_observable = False
+            admission_use = "control"
         delay_results[name] = {
             "delay_bars": bars,
             "delay_milliseconds": milliseconds,
+            "data_cadence": policy.data_cadence,
+            "semantic_role": semantic_role,
+            "signal_decay_observable": signal_decay_observable,
+            "admission_use": admission_use,
             "causal_prediction_source": "earlier_observation_cutoff"
             if bars
             else "same_observation_cutoff",
@@ -618,6 +854,7 @@ def review_phase4(
     base_cost = cost_results["base"]["results"]
     conservative_cost = cost_results["conservative"]["results"]
     next_bar = delay_results["next_bar_stress"]["results"]
+    holdout_ids = {item.observation_id for item in holdout}
     for model_name in candidate_models:
         full = base_results.get(model_name)
         holdout_result = holdout_results.get(model_name)
@@ -625,12 +862,30 @@ def review_phase4(
         calibration_holdout = calibrated_holdout.get(model_name)
         conservative = conservative_cost.get(model_name)
         delayed = next_bar.get(model_name)
+        runtime_latencies = [
+            prediction.latency_ms
+            for prediction in index[model_name].values()
+            if prediction.latency_ms is not None
+        ]
+        operational_latency_measured = bool(runtime_latencies) and all(
+            name in delay_results
+            and delay_results[name]["semantic_role"] == "operational_latency_proxy"
+            for name in policy.operational_latency_scenarios
+        )
         baseline_full = full["strongest_baseline_net_utility_bps"] if full else None
         baseline_holdout = (
             holdout_result["strongest_baseline_net_utility_bps"] if holdout_result else None
         )
         coverage = calibration.get("calibration_coverage") if calibration else None
         interval_count = calibration_stats.get(model_name, {}).get("interval_count", 0)
+        holdout_interval_count = sum(
+            int(
+                prediction.interval_lower_bps is not None
+                and prediction.interval_upper_bps is not None
+            )
+            for observation_id, prediction in calibration_index[model_name].items()
+            if observation_id in holdout_ids
+        )
         coverage_ok = (
             interval_count >= policy.minimum_calibration_history
             and coverage is not None
@@ -651,11 +906,15 @@ def review_phase4(
             "conservative_cost_incremental_positive": bool(
                 conservative and Decimal(str(conservative["incremental_net_utility_bps"])) > 0
             ),
-            "next_bar_delay_nonnegative_incremental": bool(
-                delayed and Decimal(str(delayed["incremental_net_utility_bps"])) >= 0
-            ),
+            "operational_latency_measured": operational_latency_measured,
         }
         robust = all(checks.values())
+        break_even_cost = (
+            Decimal(str(full["gross_utility_bps"]))
+            / (Decimal(str(full["turnover"])) * Decimal(str(full["observations"])))
+            if full and Decimal(str(full["turnover"])) > 0
+            else None
+        )
         role_decision = (
             "ADMITTED"
             if robust
@@ -674,6 +933,12 @@ def review_phase4(
                 "result": _model_summary(calibration),
                 "holdout_result": _model_summary(calibration_holdout),
                 "stats": calibration_stats.get(model_name, {}),
+                "metrics": calibration_metrics.get(model_name, {}),
+                "holdout_metrics": _coverage_metrics(
+                    calibration_holdout,
+                    policy,
+                    interval_count=holdout_interval_count,
+                ),
                 "native_intervals_available": calibration_stats.get(model_name, {}).get(
                     "native_interval_count", 0
                 )
@@ -685,28 +950,51 @@ def review_phase4(
                 "coverage_acceptable": coverage_ok,
             },
             "cost_stress": {
+                "all_in_cost_bps_per_turnover": {
+                    name: str(fee + spread + slippage)
+                    for name, fee, spread, slippage in policy.cost_scenarios
+                },
                 "base": _model_summary(base_cost.get(model_name)),
                 "conservative": _model_summary(conservative),
                 "severe_plausible": _model_summary(
                     cost_results["severe_plausible"]["results"].get(model_name)
                 ),
                 "break_even_all_in_cost_bps_per_turnover": (
+                    str(break_even_cost) if break_even_cost is not None else None
+                ),
+                "break_even_headroom_vs_conservative_bps": (
                     str(
-                        Decimal(str(full["gross_utility_bps"]))
-                        / (Decimal(str(full["turnover"])) * Decimal(str(full["observations"])))
+                        break_even_cost
+                        - next(
+                            fee + spread + slippage
+                            for name, fee, spread, slippage in policy.cost_scenarios
+                            if name == "conservative"
+                        )
                     )
-                    if full and Decimal(str(full["turnover"])) > 0
+                    if break_even_cost is not None
                     else None
+                ),
+                "incremental_edge_cost_robustness": (
+                    "passes_conservative"
+                    if conservative
+                    and Decimal(str(conservative["incremental_net_utility_bps"])) > 0
+                    else "fails_conservative_cost_stress"
                 ),
             },
             "latency": {
-                "runtime_latency_ms": sorted(
-                    {
-                        str(p.latency_ms)
-                        for p in index[model_name].values()
-                        if p.latency_ms is not None
+                "runtime_latency_ms": sorted({str(value) for value in runtime_latencies}),
+                "operational_latency_scenarios": {
+                    name: {
+                        "semantic_role": delay_results[name]["semantic_role"],
+                        "signal_decay_observable": delay_results[name]["signal_decay_observable"],
+                        "result": _model_summary(delay_results[name]["results"].get(model_name)),
                     }
-                ),
+                    for name in policy.operational_latency_scenarios
+                },
+                "severe_signal_decay_stress": {
+                    name: _model_summary(delay_results[name]["results"].get(model_name))
+                    for name in policy.severe_signal_decay_scenarios
+                },
                 "next_bar_stress": _model_summary(delayed),
                 "next_bar_incremental_decay_bps": (
                     str(
@@ -742,6 +1030,20 @@ def review_phase4(
         for item in model_decisions.values()
         if item["decision"] != "RESEARCH_ONLY"
     )
+    chronology_audit_ok = generation_audit.get("status") == "verified"
+    latency_evaluation_ok = (
+        set(delay_results) == {item[0] for item in policy.delay_scenarios}
+        and all(
+            delay_results[name]["semantic_role"] == "operational_latency_proxy"
+            for name in policy.operational_latency_scenarios
+        )
+        and all(
+            delay_results[name]["semantic_role"] == "severe_signal_decay_stress"
+            for name in policy.severe_signal_decay_scenarios
+        )
+    )
+    generation_evidence = (str(generation_audit["path"]),) if generation_audit.get("path") else ()
+    generation_hashes = (generation_audit["sha256"],) if generation_audit.get("sha256") else ()
     requirements = [
         _requirement(
             "phase3_formal_predecessor",
@@ -771,14 +1073,20 @@ def review_phase4(
             else "",
         ),
         _requirement(
-            "walk_forward_and_holdout",
-            "Chronological windows and a final untouched holdout are evaluated without shuffling.",
-            RequirementStatus.SATISFIED if chronology_ok else RequirementStatus.UNSATISFIED,
-            evidence=(str(input_path),),
-            evidence_sha256=(_sha256(input_path),),
-            details="Window boundaries and holdout identities are recorded in this review.",
-            next_action="Create non-overlapping chronological windows."
-            if not chronology_ok
+            "chronological_pit_evaluation_and_holdout",
+            "Chronological point-in-time cases, causal baseline construction, and a final untouched holdout are verified.",
+            RequirementStatus.SATISFIED
+            if chronology_ok and chronology_audit_ok
+            else RequirementStatus.UNSATISFIED,
+            evidence=(str(input_path), *generation_evidence),
+            evidence_sha256=(_sha256(input_path), *generation_hashes),
+            details=(
+                "Simple baselines and LightGBM are constructed from each cutoff context; "
+                "TTM candidates use frozen checkpoint inference without retraining; "
+                "the reviewer does not tune or retrain on the holdout."
+            ),
+            next_action="Preserve and bind the immutable generation artifact and causal methodology."
+            if not (chronology_ok and chronology_audit_ok)
             else "",
         ),
         _requirement(
@@ -830,12 +1138,15 @@ def review_phase4(
         _requirement(
             "causal_latency_sensitivity",
             "Measured latency and causal delay scenarios are evaluated without future observations.",
-            RequirementStatus.SATISFIED
-            if set(delay_results) == {item[0] for item in policy.delay_scenarios}
-            else RequirementStatus.UNSATISFIED,
+            RequirementStatus.SATISFIED if latency_evaluation_ok else RequirementStatus.UNSATISFIED,
             evidence=(str(input_path), str(measurement_path)),
             evidence_sha256=(_sha256(input_path), _sha256(measurement_path)),
-            details="Sub-bar delays are bounded by the daily data cadence; next-bar and two-bar shifts are causal stress tests.",
+            details=(
+                "Runtime latency plus same-bar operational proxies are measured. "
+                "With daily data, 10-second/1-hour signal decay is not observable; "
+                "next-bar/two-bar shifts are severe signal-decay stress only and are "
+                "not represented as normal operational latency."
+            ),
         ),
         _requirement(
             "cost_stress_and_break_even",
@@ -870,6 +1181,18 @@ def review_phase4(
             next_action="Keep the strongest candidate in challenger status until all robustness checks pass."
             if not any_admitted
             else "",
+        ),
+        _requirement(
+            "intraday_latency_resolution",
+            "Intraday observations are available to measure sub-bar signal decay directly.",
+            RequirementStatus.EXTERNALLY_BLOCKED,
+            gating=False,
+            evidence=(str(input_path),),
+            evidence_sha256=(_sha256(input_path),),
+            details=(
+                "The reviewed input is daily. No sub-bar latency claim is made and no new data "
+                "was acquired for this reviewer correction."
+            ),
         ),
         _requirement(
             "execution_authority_boundary",
@@ -915,8 +1238,18 @@ def review_phase4(
         "measurement": str(measurement_path),
         "phase3_gate": str(phase3_gate_path),
         "phase4_dependency": str(dependency_path),
+        "phase4_generation": str(generation_audit["path"]),
         "phase4_code": "src/advisorai/phase4/paper_utility.py",
         "review_script": "scripts/review_phase4_utility.py",
+    }
+    source_files = {
+        "input": input_path,
+        "measurement": measurement_path,
+        "phase3_gate": phase3_gate_path,
+        "phase4_dependency": dependency_path,
+        "phase4_generation": Path(generation_audit["path"]),
+        "phase4_code": REPOSITORY_ROOT / "src/advisorai/phase4/paper_utility.py",
+        "review_script": REPOSITORY_ROOT / "scripts/review_phase4_utility.py",
     }
     review_payload = {
         "schema": REVIEW_SCHEMA,
@@ -937,7 +1270,7 @@ def review_phase4(
         "measurement": measurement,
         "source_paths": source_paths,
         "source_sha256": {
-            name: _sha256(Path(path)) for name, path in source_paths.items() if Path(path).is_file()
+            name: _sha256(path) for name, path in source_files.items() if path.is_file()
         },
         "sample": {
             "observation_count": len(observations),
@@ -950,12 +1283,14 @@ def review_phase4(
             "chronological_windows": windows,
             "source_snapshot_hashes": sorted({item.source_snapshot_hash for item in observations}),
         },
+        "walk_forward_audit": generation_audit,
         "base_results": base_results,
         "holdout_results": holdout_results,
         "holdout_calibrated_results": holdout_calibration_results,
         "calibration": {
             "method": policy.calibration_method,
             "stats": calibration_stats,
+            "metrics": calibration_metrics,
             "results": calibration_results,
         },
         "symbol_results": symbol_results,
