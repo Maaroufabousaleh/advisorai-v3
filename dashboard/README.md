@@ -5,6 +5,11 @@ for a private local/LAN deployment and defaults to a synthetic paper snapshot
 when the API is unavailable. Synthetic values are labelled in the interface;
 they are not trading evidence.
 
+The repository-level [operator console guide](../docs/guides/operator-console.md)
+covers the screens, projection sources, guarded commands, and screenshot set.
+The [dashboard API reference](../docs/reference/api.md) documents the current
+routes and authentication boundary.
+
 ## Local development
 
 From the repository root, launch both services with one command:

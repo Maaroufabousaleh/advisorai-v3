@@ -16,3 +16,7 @@ The canonical names, ownership, dependencies, and mode admission rules are
 executable in `advisorai.services.ServiceRegistry`.  Deployments should use that
 registry as the process-boundary manifest; it does not create a second account,
 risk, OMS, or ledger authority.
+
+See the repository [components reference](../docs/reference/components.md) for
+the current ownership table and [architecture](../docs/concepts/architecture.md)
+for the distinction between this target topology and the local launcher.
