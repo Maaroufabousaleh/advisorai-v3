@@ -49,27 +49,37 @@ This makes the repository useful as a safety-oriented foundation and testbed. It
 ## Architecture at a glance
 
 ```mermaid
-flowchart LR
-    UI[React operator console] --> API[Optional FastAPI dashboard API]
-    API --> PROJ[DashboardProjection]
-    PROJ --> LEDGER[(SQLite WAL ledgers)]
+flowchart TD
+    OP[Operator or local script] --> API[Dashboard API / Python services]
 
-    COL[Collectors and source health] --> LAKE[(Manifest-managed Parquet lake)]
-    LAKE --> SNAP[Point-in-time SnapshotBuilder]
-    SNAP --> ADV[AdvisorService]
-    ADV --> ROUTE[MissionRouter]
-    ROUTE --> COUNCIL[EvidenceCouncil + EvidenceGraph]
-    COUNCIL --> TARGET[TargetPortfolio]
-    TARGET --> RISK[RiskKernel + kill switch]
-    RISK --> OMS[OrderManager + execution policy]
-    OMS --> PAPER[Paper venue / reviewed testnet adapter]
-    PAPER --> ACCOUNT[AccountLedger + fills]
-    ACCOUNT --> REC[Reconciliation + attribution]
-    REC --> LEDGER
+    subgraph DATA["Point-in-time data"]
+        SRC[Collectors] --> LAKE[Immutable Parquet lake]
+        LAKE --> SNAP[SnapshotBuilder]
+    end
 
-    GOVERN[ResourceGovernor + phase gates] -. admission .-> ADV
-    GOVERN -. admission .-> PAPER
-    MODEL[Optional model gateway / local candidates] -. typed evidence only .-> COUNCIL
+    API --> SNAP
+    SNAP --> EVID[Evidence council + graph]
+    MODEL[Optional models / gateways] -. typed evidence only .-> EVID
+    EVID --> TARGET[Typed target portfolio]
+
+    subgraph AUTH["Deterministic authority"]
+        TARGET --> RISK[RiskKernel + kill switch]
+        RISK --> OMS[Paper OMS]
+        OMS --> VENUE[Paper / testnet adapter]
+        VENUE --> RECON[Account + reconciliation]
+    end
+
+    LEDGER[(SQLite WAL ledgers)]
+    API --> LEDGER
+    OMS --> LEDGER
+    RECON --> LEDGER
+    GATES[Resource and phase gates] -. admission .-> EVID
+    GATES -. admission .-> VENUE
+
+    classDef authority fill:#0b3d91,color:#fff,stroke:#8bb8ff
+    classDef durable fill:#14532d,color:#fff,stroke:#86efac
+    class RISK,OMS,VENUE authority
+    class LAKE,SNAP,LEDGER durable
 ```
 
 The detailed current-implementation view, ownership table, and target process boundaries are in [Architecture](docs/concepts/architecture.md). The end-to-end lifecycle is in [Execution model](docs/concepts/execution-model.md).

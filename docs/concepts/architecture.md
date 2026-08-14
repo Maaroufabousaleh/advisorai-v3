@@ -16,34 +16,43 @@ AdvisorAI V3 is organized around a small set of boundaries:
 ## Current implementation at a glance
 
 ```mermaid
-flowchart LR
-    U[Operator or local script] --> API[AdvisorService / Dashboard API]
-    API --> R[MissionRouter]
-    R --> C[EvidenceCouncil]
-    C --> G[EvidenceGraph gate]
-    G --> T[TargetPortfolio]
-    T --> RK[RiskKernel]
-    RK --> RT[PaperRuntime]
-    RT --> OMS[OrderManager]
-    OMS --> PV[Paper or admitted testnet adapter]
+flowchart TD
+    OP[Operator or local script] --> API[Dashboard API / AdvisorService]
 
-    Sources[Collectors and optional provider transports] --> Bronze[Bronze]
-    Bronze --> Silver[Silver]
-    Silver --> Gold[Gold]
-    Gold --> PIT[SnapshotBuilder]
+    subgraph DATA["Point-in-time data"]
+        SOURCES[Collectors] --> BRONZE[Bronze]
+        BRONZE --> SILVER[Silver]
+        SILVER --> GOLD[Gold]
+        GOLD --> PIT[SnapshotBuilder]
+    end
+
     PIT --> API
+    API --> ROUTE[MissionRouter]
+    ROUTE --> EVID[Evidence council + graph]
+    EVID --> TARGET[Typed target portfolio]
+    MODEL[Optional model gateway] -. typed evidence only .-> EVID
 
-    API --> Ledger[(SQLite WAL ledgers)]
-    RT --> Ledger
-    OMS --> Ledger
-    Dashboard[React operator console] --> API
-    Ledger --> Projection[DashboardProjection]
-    Projection --> Dashboard
+    subgraph AUTH["Deterministic authority"]
+        TARGET --> RISK[RiskKernel + kill switch]
+        RISK --> RUNTIME[PaperRuntime]
+        RUNTIME --> OMS[OrderManager]
+        OMS --> VENUE[Paper / testnet adapter]
+        VENUE --> RECON[Reconciliation]
+    end
 
-    style RK fill:#0b3d91,color:#fff
-    style OMS fill:#0b3d91,color:#fff
-    style Ledger fill:#14532d,color:#fff
-    style PIT fill:#14532d,color:#fff
+    LEDGER[(SQLite WAL ledgers)]
+    API --> LEDGER
+    RUNTIME --> LEDGER
+    OMS --> LEDGER
+    RECON --> LEDGER
+    DASH[React operator console] --> API
+    PROJ[DashboardProjection] --> DASH
+    LEDGER --> PROJ
+
+    classDef authority fill:#0b3d91,color:#fff,stroke:#8bb8ff
+    classDef durable fill:#14532d,color:#fff,stroke:#86efac
+    class RISK,RUNTIME,OMS,VENUE authority
+    class BRONZE,SILVER,GOLD,PIT,LEDGER durable
 ```
 
 The diagram shows the authority path, not a promise of a permanently running distributed deployment. The local launcher starts the dashboard API and Vite UI only. `ServiceRegistry` describes ownership and dependency order for the broader topology; it is not a process supervisor.
