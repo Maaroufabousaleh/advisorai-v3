@@ -5,13 +5,106 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current V3-Core PIT provenance audit — 2026-08-12T19:58:26Z
+## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
-PR #186 remains draft from main
+Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
+`5856b35`; its active collector executable remains bound to
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`. PR #186 remains merged at main
+`5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+
+The first forward attempt is preserved under
+`artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/` and
+classified as `IMPLEMENTATION_FAILURE`, not external provider failure: the
+collector compared later local receipt metadata for an unchanged closed bar as
+part of normalized identity. The raw public response and sanitized failure
+ledgers remain untouched. The machine-readable classification is preserved in
+`artifacts/phase4/v3core-forward-incidents/20260812T204700Z-repeated-closed-bar-normalization/incident-classification.json`.
+
+The correction at `4949b5cc5b494ab6ff79c0ff40118219773d6277` makes normalized
+bar append idempotent for repeated closed-bar observations while retaining all
+raw receipts. The follow-up at
+`eeb62f0af2ecba6cfb21f79d81793963241252e0` prevents a resumed root from mixing
+collector/module/code identities. The regression suite covers a later receipt
+with changed `collected_at`, and the focused forward/cadence tests pass 27.
+
+The fresh v5 pre-outcome contract is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`
+(evidence SHA-256
+`5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd`). It
+binds the corrected module and collector hashes, but still records zero
+credentials, zero order writes, and zero network calls at preregistration.
+
+The active public-only r2 acquisition is
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`
+under PID `160717`, with resource observation isolated in
+`artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`
+under PID `161130`. The collector started at
+`2026-08-12T20:45:11.984069Z` and is allowed to run until
+`2026-08-17T20:45:11.984069Z`. It has no credential-loading import or
+execution-capable method; the exact reviewed surface is the Binance public
+market-data klines GET. No case is eligible until its 4-hour context and
+following 1-hour outcome are both present.
+
+No Phase-4 admission, model promotion, Phase-5 council, Phase-6 fill, or
+Phase-7 soak has been created. Phase 2/3 are unchanged and passed; archive and
+private-route work remain outside this continuation.
+
+The offline completion boundary is
+`scripts/materialize_phase4_v3core_forward_input.py`. It revalidates the
+completed-case hash ledger and `V3CoreForecastCase` objects, requires the
+terminal target and frozen source/gate identities, and emits the typed
+`V3CoreEvaluationInput` only after all 128 cases (64 per symbol) exist. It has
+no credential, network, model, or execution dependency and has not yet been
+run against the incomplete r2 root.
+
+The pre-outcome mandatory-baseline ledger is implemented by
+`scripts/run_phase4_v3core_baseline_predictions.py` and
+`src/advisorai/phase4/v3core_prediction_ledger.py`. It is a separate offline
+process reading only normalized bars; it generates the five pre-registered
+baseline paths only when all 48 context bars are locally present and the
+current time is not beyond the cutoff. It records a missed cutoff rather than
+backdating. Prediction entries are immutable hash-chain records, and later
+outcome associations use a separate append-only link ledger. TTM-R2 and
+Chronos are explicitly recorded as separate candidate states, not replaced by
+a baseline. The focused baseline and ledger tests pass.
+
+Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+with 28 warnings; acceptance phases passed
+`134/152/126/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+passed. These checks do not constitute Phase-4 admission.
+
+## Historical V3-Core forward PIT collector audit — 2026-08-12T20:33:06Z
+
+PR #186 is merged at main `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+The follow-on implementation is commit
+`80b3c5eb6c0055b81e224bbc833b8a9e240906eb` on
+`agent/phase4-forward-pit-collector` and is not yet merged.
+
+The v3 cadence contract corrects a real forward-PIT availability defect: a
+five-minute interval ending at an hourly cutoff cannot be locally collected by
+that cutoff. Cases therefore use context interval ends
+`cutoff - 4h` through `cutoff - 5m`, and future outcome ends `cutoff + 5m`
+through `cutoff + 1h`. This is a contract correction, not a relaxation of
+look-ahead rules. The v2 contract and its preregistration remain immutable
+historical evidence.
+
+The collector is a dedicated read-only acquisition boundary. It uses the
+existing safe HTTPS client with an exact reviewed host, does not import the
+credential resolver, and has no order-capable method. Raw responses are
+fsync'd before parsing; normalized bars, rejected case cutoffs, failure
+classes, health transitions, and completed cases are independently append-only
+and hash-linked where applicable. No acquisition has started yet, so no
+external measurement or Phase-4 admission is claimed.
+
+## Historical V3-Core PIT provenance audit — 2026-08-12T19:58:26Z
+
+PR #186 was then draft from main
 `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; the contract correction is
 `6b2ed741650f9de0f51e8db921aefb507979d0d3`.
 
-The cadence boundary is now a versioned v2 contract. `V3CoreBarProvenance`
+The cadence boundary at that historical checkpoint was a versioned v2 contract.
+`V3CoreBarProvenance`
 records interval end, provider availability, actual local collection, optional
 provider event time, availability basis, evidence class, source health, and
 content hashes. `V3CoreForecastCase` validates one evidence class throughout,

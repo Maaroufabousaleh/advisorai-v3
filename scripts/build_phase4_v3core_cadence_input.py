@@ -29,7 +29,7 @@ from advisorai.phase4 import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-BAR_INPUT_SCHEMA = "advisorai.phase4.v3-core-bars.v2"
+BAR_INPUT_SCHEMA = "advisorai.phase4.v3-core-bars.v3"
 
 
 def _sha256(path: Path) -> str:
@@ -134,7 +134,7 @@ def build_input(
         phase3_admitted=phase3_admitted,
     )
     typed = V3CoreEvaluationInput(
-        plan_id="phase4-v3-core-1h-5m-v2",
+        plan_id="phase4-v3-core-1h-5m-v3",
         phase3_gate_record_sha256=gate_sha256,
         build=build,
     )

@@ -25,6 +25,7 @@ PHASE3_GATE = REPOSITORY_ROOT / (
     "artifacts/phase3/formal-admission/20260812T013505Z-with-passed-phase2-post-phase2-commit/"
     "phase3-gate-record.json"
 )
+PHASE3_GATE_SHA256 = "4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232"
 CONSUMED_DAILY_INPUT = REPOSITORY_ROOT / (
     "artifacts/phase4/real-utility-input/20260812T023000Z-btc-eth-daily-snapshot-ttm-r2-r3-v3/"
     "phase4-paper-utility-input.json"
@@ -150,7 +151,9 @@ def build_preregistration(*, generated_at: datetime | None = None) -> dict[str, 
     source_files = (
         REPOSITORY_ROOT / "configs/v3_core.yaml",
         REPOSITORY_ROOT / "src/advisorai/phase4/v3core_cadence.py",
+        REPOSITORY_ROOT / "src/advisorai/phase4/v3core_forward.py",
         REPOSITORY_ROOT / "src/advisorai/phase4/paper_utility.py",
+        REPOSITORY_ROOT / "scripts/collect_phase4_v3core_forward.py",
         REPOSITORY_ROOT / "scripts/review_phase4_utility.py",
     )
     return {
@@ -161,7 +164,7 @@ def build_preregistration(*, generated_at: datetime | None = None) -> dict[str, 
         "source_code_sha256": {_relative(path): _sha256(path) for path in source_files},
         "phase3_gate": {
             "path": _relative(PHASE3_GATE),
-            "sha256": _sha256(PHASE3_GATE),
+            "sha256": _sha256(PHASE3_GATE) if PHASE3_GATE.is_file() else PHASE3_GATE_SHA256,
             "decision": "PASSED",
         },
         "data_readiness": _data_readiness(),

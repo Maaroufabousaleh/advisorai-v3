@@ -18,9 +18,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CADENCE_CONTRACT_VERSION = "advisorai.phase4.v3-core-cadence.v2"
-PREREGISTRATION_SCHEMA = "advisorai.phase4.v3-core-preregistration.v2"
-EVALUATION_INPUT_SCHEMA = "advisorai.phase4.v3-core-cadence-input.v2"
+CADENCE_CONTRACT_VERSION = "advisorai.phase4.v3-core-cadence.v3"
+PREREGISTRATION_SCHEMA = "advisorai.phase4.v3-core-preregistration.v3"
+EVALUATION_INPUT_SCHEMA = "advisorai.phase4.v3-core-cadence-input.v3"
 V3_CORE_SYMBOLS = ("BTCUSDT", "ETHUSDT")
 V3_CORE_BASELINES = ("naive", "drift", "seasonal-7", "linear", "lightgbm")
 V3_CORE_CANDIDATES = ("ttm-r2", "chronos-2-small")
@@ -402,9 +402,14 @@ class V3CoreForecastCase(BaseModel):
                 raise ValueError("case cannot silently substitute source identity or snapshot")
         context_times = tuple(bar.interval_end for bar in self.context_bars)
         future_times = tuple(bar.interval_end for bar in self.future_bars)
+        # A forward-observed bar ending exactly at the cutoff is not locally
+        # available at that cutoff: its provider close and local receipt occur
+        # after the interval closes.  The causal context therefore ends one
+        # observation before the decision cutoff.  The one-hour outcome begins
+        # after the cutoff and remains a separate, future-only segment.
         expected_context = tuple(
             self.cutoff
-            - timedelta(seconds=policy.observation_interval_seconds * (len(context_times) - 1 - i))
+            - timedelta(seconds=policy.observation_interval_seconds * (len(context_times) - i))
             for i in range(len(context_times))
         )
         expected_future = tuple(
@@ -520,7 +525,7 @@ class V3CorePhase4Preregistration(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: str = PREREGISTRATION_SCHEMA
-    plan_id: str = "phase4-v3-core-1h-5m-v2"
+    plan_id: str = "phase4-v3-core-1h-5m-v3"
     cadence: V3CoreCadencePolicy = V3CoreCadencePolicy()
     market_data_surface: V3CoreMarketDataSurface = V3CoreMarketDataSurface()
     market_data_provider_identity: str = V3_CORE_MARKET_DATA_PROVIDER
@@ -655,7 +660,7 @@ def build_v3core_cases(
             if int(cutoff.timestamp()) % cadence.decision_horizon_seconds:
                 continue
             context_times = tuple(
-                cutoff - interval * (cadence.observations_per_context - 1 - index)
+                cutoff - interval * (cadence.observations_per_context - index)
                 for index in range(cadence.observations_per_context)
             )
             future_times = tuple(

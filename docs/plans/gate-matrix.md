@@ -1,11 +1,82 @@
 # AdvisorAI V3 gate matrix
 
-## Current V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
-PR #186 remains draft on top of main
-`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; contract code is at
+The follow-on implementation is draft PR #187 on
+`agent/phase4-forward-pit-collector` at branch head `5856b35`. The active
+collector executable remains bound to code commit
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`; later commits add only offline
+ledger/materialization code and documentation. The first attempted forward root
+is preserved and classified as an implementation failure caused by comparing
+receipt-varying metadata as normalized bar identity; it is not concatenated or
+used for admission. The classification artifact is
+`artifacts/phase4/v3core-forward-incidents/20260812T204700Z-repeated-closed-bar-normalization/incident-classification.json`.
+
+The corrected v5 preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`
+with evidence SHA-256
+`5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd` and
+manifest SHA-256
+`1aec860d56e9cf5d78ebb441ba5077bc93da157239c092682a76ca49be76910e`.
+
+The fresh r2 collector is running from
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`
+under PID `160717`; its separate resource sidecar is PID `161130` at
+`artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`.
+The source is credential-free Binance public market data only, and the root is
+bound to code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`, source
+snapshot `f41af27a93dfbee5b4c67cff2570cb80de09004133b84e2eb0f0ffd2546b0b9a`,
+and the frozen preregistration. At the first checkpoint: 0 completed cases per
+symbol, 0 failures, 2 normalized bars, and no writes.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Prior root integrity | QUARANTINED / IMPLEMENTATION_FAILURE | `artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/`; repeated closed-bar receipt bug preserved unchanged; no admission use |
+| Corrected repeated-receipt handling | IMPLEMENTED / TESTED | `4949b5cc5b494ab6ff79c0ff40118219773d6277`; 27 focused tests pass; raw receipt history remains separate from normalized identity |
+| Resumable code identity binding | IMPLEMENTED / TESTED | `eeb62f0af2ecba6cfb21f79d81793963241252e0`; resumed roots reject code/module/collector hash changes |
+| Fresh independent forward cases | PENDING / RUNNING | r2 root above; target 64 completed cases per BTCUSDT and ETHUSDT, target end `2026-08-17T20:45:11.984069Z` |
+| Resource qualification sidecar | LOCALLY MEASURED / RUNNING | sidecar root above; PID identity and command hash bound; no admission claim before terminal review |
+| Offline completed-root materializer | IMPLEMENTED / TESTED | `scripts/materialize_phase4_v3core_forward_input.py`; 2 refusal tests; requires target-reached status, frozen preregistration/Phase-3 hashes, validated case hashes, source identity, and forward admission flags; no network/credential/write path |
+| Pre-outcome mandatory-baseline ledger | IMPLEMENTED / TESTED / RUNNING | `scripts/run_phase4_v3core_baseline_predictions.py`; PID `173057`; typed hash-chained predictions and separate outcome links; 0 network calls, credentials false, order writes false; TTM-R2/Chronos are not silently substituted |
+| Phase-4 robust candidate admission | PENDING | no utility evaluation or model promotion |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | no predecessor gate or Phase-3 evidence reopened |
+| Phase 5–7 | CLOSED | no council, fill, attribution, or soak started |
+
+The next legal work while the time-dependent root runs is offline preparation
+of the frozen baseline/prediction-ledger path and Chronos identity review; no
+holdout tuning, arbitrary order, credential use, or source substitution is
+permitted.
+
+Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+with 28 warnings; acceptance phases passed
+`134/152/126/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+passed. These checks do not close the time-dependent forward PIT gate.
+
+## Historical V3-Core forward PIT collector contract — 2026-08-12T20:33:06Z
+
+Main is `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after PR #186. The unmerged
+collector follow-on is `80b3c5eb6c0055b81e224bbc833b8a9e240906eb` on
+`agent/phase4-forward-pit-collector`.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Causal v3 cadence contract | IMPLEMENTED / TESTED / FROZEN | Context is 48 bars ending one 5m interval before cutoff; outcome is the next 12 bars; v3 schemas and adversarial tests preserve the correction |
+| Credential-free acquisition boundary | IMPLEMENTED / TESTED | `scripts/collect_phase4_v3core_forward.py`; exact `data-api.binance.vision` klines GET only; no secrets, account, user-data, write, transfer, or withdrawal path |
+| Raw-first immutable receipts | IMPLEMENTED / TESTED | `ForwardRawSpool` retains every receipt with payload hash and append-only hash chain; normalization occurs only after raw fsync |
+| Normalized bars / rejected cutoffs | IMPLEMENTED / TESTED | `ForwardNormalizedBarSpool`, `ForwardRejectionSpool`, strict close semantics, duplicate rejection, no synthetic bars |
+| Fresh independent forward cases | PENDING / NOT YET MEASURED | No network collection has started; target is 64 completed cases per BTCUSDT and ETHUSDT, with a 120-hour maximum window |
+| Phase-4 robust candidate admission | PENDING | No utility evaluation or model promotion; TTM-R2 remains `CHALLENGER`, TTM-R3 `RESEARCH_ONLY` |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | No predecessor gate or Phase-3 evidence was reopened |
+| Phase 5–7 | CLOSED | No council, fill, attribution, or soak may start before formal Phase-4 passage |
+
+## Historical V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+
+PR #186 was then draft on top of main
+`13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; its contract code was at
 `6b2ed741650f9de0f51e8db921aefb507979d0d3`. The prior v1 preregistration is
-preserved; the corrected v2 preregistration is the active contract.
+preserved; the corrected v2 preregistration was active at that historical
+checkpoint, and the causal v3 preregistration above is active now.
 
 | Requirement | State | Evidence/result |
 | --- | --- | --- |

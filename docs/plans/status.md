@@ -4,15 +4,138 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
-PR #186 remains the focused draft continuation from merged main
+PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+Draft PR #187 is on `agent/phase4-forward-pit-collector` at
+`5856b35`; it remains unmerged. The active collector executable is bound to
+its unchanged code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`; later
+commits add only offline ledger/materialization code and documentation.
+
+The first real forward attempt is preserved as an implementation-failure
+root, not admission evidence:
+`artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/`.
+Its manifest SHA-256 is
+`5a774eed7f27d71e8fdead35e661d826bfc080abbcb950a452c7d8250edab4e9`, and its
+status SHA-256 is
+`077b4a8b70dc4a67103c9499ec44610c94ff1fc49c621b890f9d9920d8f7c83a`.
+The collector correctly reached public Binance data, but incorrectly treated
+the later receipt of an unchanged closed bar as a conflicting normalized bar
+because receipt metadata was included in identity comparison. The sanitized
+classification is preserved at
+`artifacts/phase4/v3core-forward-incidents/20260812T204700Z-repeated-closed-bar-normalization/incident-classification.json`.
+The root was not edited, concatenated, or reused.
+
+Commit `4949b5cc5b494ab6ff79c0ff40118219773d6277` fixes that defect: raw
+receipts remain append-only, while unchanged closed bars are normalized
+idempotently. Commit `eeb62f0af2ecba6cfb21f79d81793963241252e0` additionally
+requires resumed roots to match the original collector/module/code hashes.
+The focused forward/cadence suite passes 27 tests after the fix.
+
+The corrected v5 preregistration is frozen at
+`artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`:
+evidence SHA-256
+`5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd` and
+manifest SHA-256
+`1aec860d56e9cf5d78ebb441ba5077bc93da157239c092682a76ca49be76910e`.
+It remains pre-outcome, with `network_calls = 0`,
+`credentials_loaded = false`, and `order_writes_attempted = false`.
+
+A fresh independent root is now running at
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`.
+The collector is PID `160717`, started at
+`2026-08-12T20:45:11.984069Z`, with target end
+`2026-08-17T20:45:11.984069Z`; its manifest binds code commit
+`eeb62f0af2ecba6cfb21f79d81793963241252e0`, source snapshot hash
+`f41af27a93dfbee5b4c67cff2570cb80de09004133b84e2eb0f0ffd2546b0b9a`, and
+preregistration SHA above. It uses only the reviewed public
+`data-api.binance.vision` klines GET for BTCUSDT/ETHUSDT, with credentials and
+order writes disabled. The separate resource sidecar is PID `161130` at
+`artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`;
+it is bound to process start ticks `6203958` and command SHA-256
+`51f51380cd07cedbc531a04eb835889c1f814b3788a24a0bb40e74ad499d4874`.
+At launch review it had two normalized bars, zero failures, and zero completed
+cases; no outcome is counted before its one-hour horizon closes.
+
+The offline completion boundary is implemented in
+`scripts/materialize_phase4_v3core_forward_input.py` and covered by two
+focused refusal tests. It accepts only a terminal `target_reached` root whose
+per-symbol minimum, manifest hashes, case hashes, source identity, and
+forward/Phase-3 admission flags validate; it writes a new immutable
+`V3CoreEvaluationInput` and never changes the acquisition root or makes a
+network call. It has not been run because the active root is incomplete.
+
+The pre-outcome baseline ledger worker is running separately under PID
+`173057` at
+`artifacts/phase4/v3core-forward-predictions/20260812T211500Z-baseline-ledger-r2/`.
+It reads only the normalized spool, emits naive, drift, seasonal-7, linear,
+and LightGBM predictions before their cutoff, and uses a hash-chained typed
+ledger plus a separate outcome-link schema. Its manifest records
+`network_calls = 0`, `credentials_loaded = false`, and
+`order_writes_attempted = false`. TTM-R2 is not silently replaced; it remains
+an ungenerated challenger pending its separate runtime worker boundary, while
+Chronos remains quarantined for its identity mismatch.
+
+Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+with 28 warnings; acceptance phases passed
+`134/152/126/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+passed. These checks do not close the time-dependent forward PIT gate.
+
+Phase 4 remains `PENDING` on fresh independent V3-Core cadence evidence. The
+collector is durable, append-only, restartable only with matching immutable
+configuration/code identity, and does not grant any model or agent execution
+authority. Phase 2/3 remain passed; Phase 5–7 remain closed; archive/rclone is
+untouched.
+
+## Historical V3-Core forward PIT collector contract — 2026-08-12T20:33:06Z
+
+PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+The focused follow-on implementation is on branch
+`agent/phase4-forward-pit-collector` at commit
+`80b3c5eb6c0055b81e224bbc833b8a9e240906eb`; it has not been merged.
+
+The v3 cadence correction is frozen before acquisition. A forward case now
+uses the 48 closed five-minute bars ending one observation before the hourly
+cutoff, because a bar ending exactly at the cutoff cannot have been locally
+received by that cutoff. The following 12 bars are the future one-hour outcome.
+This prevents actual receipt timestamps from making every forward case
+impossible while preserving strict causal availability.
+
+The new immutable preregistration is
+`artifacts/phase4/v3core-cadence-preregistration/20260812T203306Z-v3core-1h-5m-causal-v3/`:
+evidence SHA-256
+`fa7920ac365c63ea73ffb2a446d0ba5f19b7af5a0c1d92552ac7af891b0cded4` and
+manifest SHA-256
+`58a73993997009239252764b698bd082c857a4605f7c3423abb1f35740f4429d`.
+It binds `advisorai.phase4.v3-core-cadence.v3`, plan
+`phase4-v3-core-1h-5m-v3`, the credential-free Binance market-data-only REST
+surface, BTCUSDT/ETHUSDT, 5m observations, 4h context, and a 1h horizon.
+
+The dedicated collector is
+`scripts/collect_phase4_v3core_forward.py`. It has no secrets or credential
+resolver, permits only public GET klines on
+`https://data-api.binance.vision/api/v3/klines`, writes each raw response
+before normalization, preserves repeated receipts in a hash chain, records
+sanitized failures and health transitions, and records rejected cutoffs rather
+than filling gaps. No forward network data has been acquired yet; the durable
+64-valid-cases-per-symbol collection remains the next operational action.
+
+Focused forward/cadence tests pass `27`; full pytest after the v3 correction
+passes `740` with 28 warnings. Phase 4 remains `PENDING` on
+`fresh_independent_v3core_cadence_pit_evidence`; no model is promoted and
+Phase 5–7 remain closed.
+
+## Historical V3-Core PIT provenance hardening — 2026-08-12T19:58:26Z
+
+PR #186 was the focused draft continuation from merged main
 `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`. The contract-hardening commit is
 `6b2ed741650f9de0f51e8db921aefb507979d0d3`; it changes no Phase-2/3 gate,
 execution adapter, credential scope, or model role.
 
-The cadence contract is now version `advisorai.phase4.v3-core-cadence.v2` and
-requires a nested `V3CoreBarProvenance` record containing distinct
+At that historical checkpoint the cadence contract was version
+`advisorai.phase4.v3-core-cadence.v2`; it was superseded by the causal v3
+correction above. It required a nested `V3CoreBarProvenance` record containing distinct
 `interval_end`, `provider_available_at`, `collected_at`, optional provider event
 time, availability basis, evidence class, source-health state, source snapshot
 hash, raw-record hash, and normalized-record hash. Forward admission bars must

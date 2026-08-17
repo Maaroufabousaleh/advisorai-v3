@@ -1,11 +1,90 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current V3-Core PIT provenance checkpoint — 2026-08-12T19:58:26Z
+## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
-- PR #186 remains draft. Its base is main
+- Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.
+- Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
+  `5856b35`; it is not merged. The active collector executable remains bound
+  to code commit `eeb62f0af2ecba6cfb21f79d81793963241252e0`; later commits add
+  only offline ledger/materialization code and documentation.
+- The initial forward root
+  `artifacts/phase4/v3core-forward/20260812T203740Z-first-independent-pit/`
+  is preserved unchanged and quarantined as an implementation-failure root.
+  A repeated valid closed Binance bar received later had a different local
+  receipt timestamp, and the old normalized spool incorrectly treated that as
+  a conflicting identity. Its manifest SHA-256 is
+  `5a774eed7f27d71e8fdead35e661d826bfc080abbcb950a452c7d8250edab4e9`.
+- The defect fix is `4949b5cc5b494ab6ff79c0ff40118219773d6277`; resumed-root
+  identity binding is `eeb62f0af2ecba6cfb21f79d81793963241252e0`. The focused
+  forward/cadence suite passes 27 tests.
+- New frozen preregistration:
+  `artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/`
+  with evidence SHA-256
+  `5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd` and
+  manifest SHA-256
+  `1aec860d56e9cf5d78ebb441ba5077bc93da157239c092682a76ca49be76910e`.
+- Fresh independent r2 collection is running at
+  `artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`.
+  Collector PID `160717`; start `2026-08-12T20:45:11.984069Z`; target end
+  `2026-08-17T20:45:11.984069Z`; target 64 completed cases per BTCUSDT and
+  ETHUSDT. It is credential-free, public-GET-only, and order-write-free.
+- Resource sidecar PID `161130` is at
+  `artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`.
+  It is bound to process start ticks `6203958` and command SHA-256
+  `51f51380cd07cedbc531a04eb835889c1f814b3788a24a0bb40e74ad499d4874`.
+- At checkpoint: 0 completed cases per symbol, 0 failures, 2 normalized bars;
+  no case is counted before its future one-hour outcome closes. Phase 4 is
+  still pending fresh independent cadence evidence. Phase 2/3 remain passed;
+  Phase 5–7 remain closed; archive/rclone remains deferred. The laptop remains
+  running.
+- Offline materialization is prepared in
+  `scripts/materialize_phase4_v3core_forward_input.py`; it refuses incomplete
+  roots and writes the typed evaluation input only after the frozen 64-per-
+  symbol target is reached. Its 2 focused refusal tests pass. It has not read
+  or modified the active root.
+- A separate offline baseline prediction worker is running as PID `173057` at
+  `artifacts/phase4/v3core-forward-predictions/20260812T211500Z-baseline-ledger-r2/`.
+  It reads only the normalized spool and records pre-cutoff naive, drift,
+  seasonal-7, linear, and LightGBM predictions. TTM-R2 remains ungenerated
+  pending its distinct runtime worker boundary; Chronos remains quarantined.
+  The ledger has no network, credential, or order capability.
+- Implementation verification at code head `ef1ec1c`: full pytest `746 passed`
+  with 28 warnings; acceptance phases passed
+  `134/152/126/117/93/34/10/11/27/18/5`; Ruff, repository format, lock check,
+  compilation, dashboard build, diff hygiene, and tracked secret/weight checks
+  passed. These checks do not close the time-dependent forward PIT gate.
+
+## Historical forward PIT collector checkpoint — 2026-08-12T20:33:06Z
+
+- PR #186 is merged; clean main is
+  `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
+- Follow-on branch `agent/phase4-forward-pit-collector` is at
+  `80b3c5eb6c0055b81e224bbc833b8a9e240906eb`; it is not merged.
+- The causal v3 contract is frozen. Its preregistration is
+  `artifacts/phase4/v3core-cadence-preregistration/20260812T203306Z-v3core-1h-5m-causal-v3/`
+  with evidence SHA-256
+  `fa7920ac365c63ea73ffb2a446d0ba5f19b7af5a0c1d92552ac7af891b0cded4` and
+  manifest SHA-256
+  `58a73993997009239252764b698bd082c857a4605f7c3423abb1f35740f4429d`.
+- Context bars now end one 5m interval before the decision cutoff; the next
+  12 bars are the future 1h outcome. This was corrected before any acquisition.
+- `scripts/collect_phase4_v3core_forward.py` is implemented and tested but no
+  network data, credentials, or orders have been used. The next legal action is
+  to launch its durable public-only collector for 64 completed BTCUSDT and 64
+  completed ETHUSDT cases, with the existing Phase-3 gate hash bound in its
+  manifest.
+- Phase 2 and Phase 3 remain passed; Phase 4 remains pending on fresh
+  independent cadence evidence; TTM-R2 remains challenger; Chronos remains
+  quarantined; Phase 5–7 remain closed. Archive/rclone is untouched.
+- Full pytest after this correction: `740 passed`, 28 warnings. The laptop
+  remains running.
+
+## Historical V3-Core PIT provenance checkpoint — 2026-08-12T19:58:26Z
+
+- PR #186 was then draft. Its base was main
   `13323cd2ad1fd8ae0f8690b10f5909c87ccc31ae`; the contract-hardening commit is
   `6b2ed741650f9de0f51e8db921aefb507979d0d3`.
-- The active cadence contract is v2: 5m observations, 4h context, 1h outcome,
+- The historical cadence contract was v2: 5m observations, 4h context, 1h outcome,
   BTCUSDT/ETHUSDT, and separate `historical_development` versus
   `forward_pit_admission` evidence classes.
 - Forward bars require `provider_available_at <= collected_at` and actual local

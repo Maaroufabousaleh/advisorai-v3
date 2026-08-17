@@ -1,13 +1,13 @@
 # Phase-4 paper utility evidence
 
-## Frozen v2 PIT provenance contract
+## Frozen v3 PIT provenance contract
 
-Before any Phase-4 cadence acquisition, use the corrected v2 contract. The
+Before any Phase-4 cadence acquisition, use the corrected v3 contract. The
 active preregistration is
-`artifacts/phase4/v3core-cadence-preregistration/20260812T195826Z-v3core-1h-5m-provenance-v2/`
+`artifacts/phase4/v3core-cadence-preregistration/20260812T203306Z-v3core-1h-5m-causal-v3/`
 (evidence SHA-256
-`ca09ee9d62eccbd017287eebc8864e34d339d8e2a3eb2168826853a7fdd0fed8`). The
-earlier v1 root is historical and must not be rewritten.
+`fa7920ac365c63ea73ffb2a446d0ba5f19b7af5a0c1d92552ac7af891b0cded4`). The
+earlier v1 and v2 roots are historical and must not be rewritten.
 
 The credential-free Phase-4 Binance surface is fixed to the official public
 market-data-only REST endpoint
@@ -23,7 +23,10 @@ methods.
 Each `V3CoreBar` contains a `V3CoreBarProvenance` record. For
 `forward_pit_admission`, `availability_basis=forward_observed`, provider
 availability must precede or equal actual local collection, and context
-collection must be no later than the cutoff. For
+collection must be no later than the cutoff. The 48-bar context ends one
+five-minute interval before the cutoff; a bar ending exactly at the cutoff is
+not locally available at that cutoff. The following 12 bars form the future
+one-hour outcome. For
 `historical_development`, `availability_basis=historical_backfill` and a
 reviewed availability-contract identifier plus SHA-256 are required; the late
 local collection timestamp is not historical possession evidence.
@@ -56,10 +59,11 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
 
 The immutable preregistration currently records
 `PENDING_FRESH_PIT_DATA` at
-`artifacts/phase4/v3core-cadence-preregistration/20260812T185716Z-v3core-1h-5m-prereg-v1/`
+`artifacts/phase4/v3core-cadence-preregistration/20260812T203306Z-v3core-1h-5m-causal-v3/`
 (evidence SHA-256
-`1bbe362240a1fb136a074117f734e270afcef3cf0be6f6af34e81dc3c2631e00`). Existing
-r7 source-qualification telemetry is not a 5-minute OHLCV case set with four
+`fa7920ac365c63ea73ffb2a446d0ba5f19b7af5a0c1d92552ac7af891b0cded4`). The
+prior v1/v2 roots remain historical evidence. Existing r7
+source-qualification telemetry is not a 5-minute OHLCV case set with four
 hours of prior context and one-hour future outcomes, and the consumed daily
 input must not be reused or concatenated with another root.
 
@@ -83,6 +87,33 @@ without the full 4-hour context or 1-hour outcome. The outcome is evaluation
 only and is never supplied to features, normalization, regime assignment, or
 model context. The builder is offline and cannot load credentials or submit
 orders.
+
+## Durable forward collection
+
+After the v3 preregistration is frozen and the collector code is reviewed, the
+credential-free forward run is:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/collect_phase4_v3core_forward.py \
+  --real \
+  --run-directory artifacts/phase4/v3core-forward/20260812T203306Z-first-independent-pit \
+  --repository-root /mnt/c/projects/advisorai-v3 \
+  --preregistration artifacts/phase4/v3core-cadence-preregistration/20260812T203306Z-v3core-1h-5m-causal-v3/phase4-v3core-cadence-preregistration.json \
+  --phase3-gate-sha256 4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232 \
+  --target-cases-per-symbol 64 \
+  --max-duration-hours 120 \
+  --poll-seconds 30
+```
+
+The command loads no secrets and issues only public GET requests to
+`data-api.binance.vision`. It records `manifest.json`, `heartbeat.json`,
+`status.json`, `raw-responses.jsonl`, `normalized-bars.jsonl`,
+`completed-cases.jsonl`, `case-rejections.jsonl`, `failures.jsonl`, and
+`source-health.jsonl`. It must run under a durable supervisor or detached
+session. A case is counted only after its 12 future bars have closed; missing
+bars are rejected and never synthesized. The run must not be used for model,
+threshold, policy, or candidate selection.
 
 Chronos-2-small remains quarantined until its exact worker/runtime identity is
 re-established. The fresh audit is
