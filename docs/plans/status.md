@@ -56,9 +56,9 @@ The compatible Chronos challenger is now running prospectively in a separate
 isolated worktree under draft PR #189. PID `80779` uses commit
 `7503db435d36f3ba8638a11ab995a79c79b33326` and the fresh source-bound root
 `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`.
-Its manifest SHA-256 is
+Its immutable manifest SHA-256 is
 `2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88`; the
-current status SHA-256 is
+status snapshot SHA-256 recorded with this checkpoint is
 `9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`.
 The worker has made zero predictions and recorded two missed cutoffs rather
 than backfilling them; it has zero network calls, no credentials, and no order
