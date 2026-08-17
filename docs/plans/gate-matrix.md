@@ -1,5 +1,56 @@
 # AdvisorAI V3 gate matrix
 
+## Fresh replacement forward run — 2026-08-17
+
+The prior root is preserved as `OPERATOR_INTERRUPTED / INCOMPLETE` after the
+operator intentionally stopped the laptop; this is not a crash, provider, or
+implementation failure. Classification evidence is
+`artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+(SHA-256
+`678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). It was
+not resumed, extended, backfilled, concatenated, or rewritten.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Fresh forward collector | RUNNING / PENDING TERMINAL REVIEW | `artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`; PID `59671`; commit `0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5`; target end `2026-08-22T19:35:06.869338Z`; credential-free public Binance market-data GET; no writes |
+| Fresh resource qualification | RUNNING / LOCALLY MEASURED | `artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/`; PID `61721`; first identity-matched sample; start ticks `811168`; command SHA-256 `a52212826f1a367d10589b0f0624ac53d8d98a8306f05db2d915148b04a5cd40` |
+| Sidecar launch attempt | PRESERVED / NON-COLLECTOR ORCHESTRATION ERROR | A pre-created evidence directory caused `FileExistsError` before sampling; no collector evidence was touched. Classification: `artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json` (SHA-256 `b652681c71c9e7e34c2ffa0a2572986877207e0e7891659bdfcc0c556e1461e`); corrected sidecar is running in a new root |
+| Fresh mandatory baseline ledger | RUNNING / PENDING CASES | `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/`; PID `60814`; same source/config/code identity; zero predictions before first eligible cutoff |
+| Fresh TTM-R2 boundary | QUARANTINED / INCOMPATIBLE | `.../20260817T193400Z-operator-interrupted-replacement-r1-ttm-r2/`; exact qualified runner requires 512 values versus frozen 48 bars; zero predictions, zero network calls, credentials false |
+| Chronos-2-small runtime identity | REQUALIFIED / V3-CORE COMPATIBLE / UTILITY PENDING | `artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json` (SHA-256 `c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`); current runner hash `c78b8e...`; native context 32–8192 and output 30; isolated 48-value smoke passed; no utility predictions or promotion |
+| Chronos-2-small prospective worker | RUNNING / PENDING PROSPECTIVE COVERAGE | Draft PR #189 branch `agent/phase4-chronos-forward-worker`, commit `7503db435d36f3ba8638a11ab995a79c79b33326`, PID `80779`; root `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`; immutable manifest SHA-256 `2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88`, checkpoint status snapshot SHA-256 `9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`; 0 predictions, 2 missed cutoffs, network 0, credentials false, order writes false |
+| Active raw/normalized integrity | PENDING TERMINAL REVIEW | Read-only inspection observed BTCUSDT closed-row revision at interval end `2026-08-17T22:15:00Z`; 9 `schema_or_normalization` failures and `DEGRADED -> HEALTHY` recovery. Classification `artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json` (SHA-256 `0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`); no root mutation, crash claim, or provider-failure claim |
+| Phase 4 | PENDING | Fresh 64-per-symbol forward cases and robust candidate admission are not yet available; no promotion or downstream gate was opened |
+
+## Current post-merge forward-run continuation — 2026-08-17
+
+PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`; the TTM follow-up
+is isolated on `agent/phase4-ttm-r2-followup` at implementation commit
+`4b75dd7`. The operator confirmed that the recorded collector, resource-sidecar,
+and baseline-ledger processes were intentionally stopped before the prior
+continuation. The preserved root is `OPERATOR_INTERRUPTED / INCOMPLETE`, not a
+crash, provider failure, or implementation failure. Existing append-only roots
+were not checked out, restarted, edited, backfilled, concatenated, or extended.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Preserved forward collector root | PRESERVED / OPERATOR_INTERRUPTED / INCOMPLETE | `artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`; validated 734 raw records, 86 normalized bars (43 per symbol), 2 health transitions, 8 rejections, 0 failures, and 0 completed cases; no terminal admission record was manufactured |
+| Preserved resource sidecar | PRESERVED / OPERATOR_INTERRUPTED / INCOMPLETE | `artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`; last preserved heartbeat had 398 samples; operator stopped it intentionally and no restart or repair was attempted |
+| Preserved baseline ledger | PRESERVED / OPERATOR_INTERRUPTED / INCOMPLETE | `artifacts/phase4/v3core-forward-predictions/20260812T211500Z-baseline-ledger-r2/`; last preserved status had 0 predictions and 5 missed cutoffs; no append was made |
+| Shared prediction record identity | IMPLEMENTED / TESTED | `ForwardPredictionRecord` now carries optional source/model/checkpoint/runner/preprocessing/runtime provenance while outcome links remain a separate append-only ledger |
+| Future baseline resume identity | IMPLEMENTED / TESTED | `scripts/run_phase4_v3core_baseline_predictions.py` rejects any source, preregistration, Phase-3 gate, repository, forecasting, LightGBM, roster, cadence, or horizon identity mismatch; the active root was not resumed |
+| Prospective TTM-R2 worker | IMPLEMENTED / TESTED / QUARANTINED | `scripts/run_phase4_v3core_ttm_predictions.py` and `src/advisorai/phase4/v3core_ttm.py` read only normalized bars and the immutable runtime admission; the qualified runner requires 512 input values while V3-Core freezes 48, so no prediction is generated or adapted silently |
+| Qualified TTM-R2 runtime identity | LOCALLY MEASURED | `artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260810/ttm-r2/local-admission.json`; checkpoint SHA-256 `a706726a7eb01bbcb42994b7dcb3c06ea9557898dbae8d480eb04fe8ccb89710`, runner SHA-256 `5c4e3ca38512bbf4ccea3929c17b578b9d88cf80298d991c739124abc126c7b2`, runner script SHA-256 `358150e0544bb416d42eaa6ef0fc3862d69d5a3c475ef1c537cb0ba60d0c9550`; local artifact/launcher/lock identity verification passed |
+| Phase 4 | PENDING | The prior root is operator-interrupted and incomplete; a fresh forward cadence generation is required. TTM-R2 remains `CHALLENGER / INCOMPATIBLE_WITH_48_BAR_ROLE`; no Phase-4 promotion or formal re-review was started |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | No predecessor evidence was reopened |
+| Phase 5–7 | CLOSED | No council, fill, attribution, or soak was started |
+
+The TTM worker has no credential resolver, network client, account operation,
+order operation, or OMS access. A separate 48-bar runtime qualification is
+required before it can create prospective TTM-R2 admission records; padding,
+interpolation, direct-model fallback, and running against the protected root
+are prohibited.
+
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 The follow-on implementation is draft PR #187 on

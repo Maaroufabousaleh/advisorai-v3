@@ -1,5 +1,132 @@
 # Phase-4 paper utility evidence
 
+## Fresh replacement forward generation — 2026-08-17
+
+The previous forward generation was intentionally stopped by the operator when
+the laptop was shut down. It is preserved as
+`OPERATOR_INTERRUPTED / INCOMPLETE` at
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`;
+classification evidence is
+`artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+(SHA-256
+`678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). Do not
+resume, extend, backfill, concatenate, or rewrite it.
+
+The replacement generation is:
+
+```text
+collector:
+  root: artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/
+  pid: 59671
+  started: 2026-08-17T19:35:06.869338Z
+  target_end: 2026-08-22T19:35:06.869338Z
+  commit: 0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5
+  endpoint: https://data-api.binance.vision/api/v3/klines
+resource_sidecar:
+  root: artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/
+  pid: 61721
+baseline_ledger:
+  root: artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/
+  pid: 60814
+```
+
+All three surfaces are credential-free and order-write-free. The matching TTM
+worker was run as an offline boundary check and recorded zero predictions
+because the qualified TTM-R2 runtime requires 512 values while the frozen
+V3-Core role requires 48 closed five-minute bars. That quarantine is preserved;
+the new run must not adapt or pad the context.
+
+The first resource-sidecar launch attempt failed before sampling because its
+evidence directory had been pre-created, contrary to the sidecar's atomic
+directory-creation contract. This did not affect the collector. The sanitized
+classification is
+`artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json`
+(SHA-256
+`b652681c71c9e7e34c2ffa0a2572986877207e0e7891659bdfcc0c556e1461e`); the
+corrected sidecar root above is the authoritative resource evidence.
+
+## Chronos challenger runtime checkpoint — 2026-08-17
+
+Chronos-2-small's prior worker-hash quarantine was requalified offline using
+the pinned local checkpoint and current worker identity. The immutable record
+is
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json`
+(SHA-256
+`c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`). Its
+native context range is 32–8192 values and its output is 30 values, so it is
+compatible with the frozen 48 x 5-minute context and 12 x 5-minute horizon.
+The isolated 48-value smoke passed with no network access and deterministic
+identity. This only permits future prospective challenger predictions; it does
+not admit utility, promote Chronos, or alter the frozen preregistration.
+
+The prospective Chronos worker is running separately from draft PR #189's
+isolated worktree at commit `7503db435d36f3ba8638a11ab995a79c79b33326`. PID
+`80779` uses the fresh source-bound root
+`artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`;
+its immutable manifest SHA-256 is
+`2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88` and its
+status snapshot SHA-256 recorded with this checkpoint is
+`9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`.
+At this checkpoint it has recorded two missed cutoffs and zero predictions;
+it does not backfill, use credentials, make network calls, or expose order
+operations. Its fixed target end remains
+`2026-08-22T19:35:06.869338Z`.
+
+The active generation currently has a separate pending integrity review. A
+read-only inspection found 9 `schema_or_normalization` failures while the
+BTCUSDT interval ending `2026-08-17T22:15:00Z` changed across successive
+HTTP-200 responses. The collector recorded `DEGRADED` and then `HEALTHY`; no
+crash or provider-failure conclusion is made. Preserve the root and defer the
+admission decision until terminal raw-versus-normalized comparison. The
+classification is
+`artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+(SHA-256
+`0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`).
+
+## Prospective TTM-R2 prediction boundary — current continuation
+
+The prior forward acquisition root
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`
+is sealed as `OPERATOR_INTERRUPTED / INCOMPLETE` after intentional operator
+shutdown. It must not be resumed, extended, backfilled, or concatenated. Start
+the collector, baseline ledger, and any compatible candidate worker only from a
+new evidence generation with a new frozen identity.
+
+The baseline and candidate ledgers share `ForwardPredictionRecord`; outcomes
+are linked later through the separate append-only outcome-link ledger. Future
+baseline resumes must match the exact source manifest/snapshot,
+preregistration, Phase-3 gate, repository and model-code hashes, roster,
+context, and horizon. The currently protected baseline root must not be
+resumed or changed while its evidence identity is under operator protection.
+
+The TTM worker is an offline, credential-free process over
+`normalized-bars.jsonl` only. A future run template is:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/run_phase4_v3core_ttm_predictions.py \
+  --admission artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260810/ttm-r2/local-admission.json \
+  --source-root artifacts/phase4/v3core-forward/<sealed-root> \
+  --run-root artifacts/phase4/v3core-forward-predictions/<ttm-run-id> \
+  --repository-root /mnt/c/projects/advisorai-v3 \
+  --preregistration-sha256 <frozen-preregistration-sha256> \
+  --phase3-gate-sha256 <passed-phase3-gate-sha256> \
+  --until <utc-deadline>
+```
+
+The command must use a new run root and may not backfill the protected
+collector. It records a missed cutoff rather than creating a retrospective
+prediction. It refuses resume when any frozen identity differs and exposes no
+network, credential, account, order, transfer, withdrawal, RiskKernel, or OMS
+operation.
+
+The currently approved TTM-R2 runtime admission was verified read-only. Its
+exact runner requires 512 input values, while the frozen V3-Core contract
+requires 48 closed five-minute context bars. The worker therefore quarantines
+itself before inference and creates no prediction. Padding, interpolation,
+direct-model fallback, or a new runtime identity would require a separate
+reviewed 48-bar runtime qualification.
+
 ## Frozen v3 PIT provenance contract
 
 Before any Phase-4 cadence acquisition, use the corrected v3 contract. The

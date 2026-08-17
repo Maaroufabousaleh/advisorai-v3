@@ -1,5 +1,141 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Fresh replacement forward run — 2026-08-17
+
+- The prior forward root remains immutable `OPERATOR_INTERRUPTED / INCOMPLETE`
+  after the operator intentionally shut down the laptop. Its machine-readable
+  classification is
+  `artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+  (SHA-256
+  `678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). No
+  crash, provider failure, implementation failure, backfill, concatenation, or
+  deadline extension is inferred.
+- A new evidence generation is running at
+  `artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`.
+  It is bound to executable commit
+  `0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5`, the frozen v5 preregistration
+  SHA-256
+  `5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd`, and
+  Phase-3 gate SHA-256
+  `4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232`.
+  Collector PID `59671` started at `2026-08-17T19:35:06.869338Z` and has a
+  fixed target end of `2026-08-22T19:35:06.869338Z`; its public endpoint is
+  `https://data-api.binance.vision/api/v3/klines`, with credentials and order
+  writes disabled.
+- The corrected resource sidecar is PID `61721`, with evidence root
+  `artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/`.
+  It is bound to collector start ticks `811168` and command SHA-256
+  `a52212826f1a367d10589b0f0624ac53d8d98a8306f05db2d915148b04a5cd40`.
+  Its first sample confirms the collector identity and records no credential or
+  order capability.
+- A first sidecar launch attempt created only a sanitized pre-sample error log
+  because its directory had been pre-created against the sidecar's atomic
+  `exist_ok=false` contract. It did not touch the collector; the preserved
+  classification is
+  `artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json`
+  (SHA-256
+  `b652681c71c9e7e34c2ffa0a2572986877207e0e7891659b9dfcc0c556e1461e`). The
+  corrected sidecar root above has identity-matched observations.
+- The matching baseline ledger is PID `60814` at
+  `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/`.
+  It is bound to the same source snapshot, preregistration, Phase-3 gate,
+  repository commit, model roster, 48-bar context, and 12-bar horizon; it has
+  no predictions yet because the fresh source has not reached an eligible
+  hourly cutoff.
+- A separate TTM-R2 run against the fresh source recorded
+  `QUALIFIED_RUNNER_CONTEXT_CONTRACT_MISMATCH`: the qualified runtime requires
+  512 values and frozen V3-Core supplies 48. It emitted zero predictions,
+  loaded no credentials, made zero network calls, and remains quarantined. No
+  padding, interpolation, alternate checkpoint, or direct fallback was used.
+- Chronos-2-small was requalified offline in a separate GPU-family wave. Its
+  exact current worker identity is runner hash
+  `c78b8e34950fb98c66cb52cb3019fb940f19a2bf474f5c2304ef81404b2ee23a` for
+  checkpoint revision `ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a`. The
+  compatibility record is
+  `artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json`
+  (SHA-256
+  `c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`). The
+  isolated 48-value smoke returned 30 forecast values, used no network, and
+  passed deterministic identity checks. Chronos is a compatible challenger for
+  future prospective coverage, not a utility-admitted or promoted model.
+- A separate Chronos prospective worker is running from draft PR #189's
+  isolated branch `agent/phase4-chronos-forward-worker` at commit
+  `7503db435d36f3ba8638a11ab995a79c79b33326`. PID `80779` is bound to the
+  fresh source root
+  `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`,
+  whose manifest SHA-256 is
+  `2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88`.
+  Its status SHA-256 at this checkpoint is
+  `9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`:
+  `RUNNING`, zero predictions, two honest missed cutoffs, zero network calls,
+  no credentials, and no order capability. The fixed generation deadline is
+  `2026-08-22T19:35:06.869338Z`; no cutoff is backfilled and no utility or
+  promotion decision is made.
+- A read-only health inspection observed a pending data-integrity incident in
+  the active root: Binance returned the BTCUSDT interval ending
+  `2026-08-17T22:15:00Z` with different closed-row content across two HTTP-200
+  responses. The collector recorded 9 `schema_or_normalization` failures,
+  entered `DEGRADED`, and recovered to `HEALTHY`; no process crash or provider
+  failure is claimed. The sanitized classification is
+  `artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+  (SHA-256
+  `0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`). The
+  active root remains untouched and is not admission-eligible until terminal
+  raw-versus-normalized integrity review.
+- Phase 4 remains `PENDING`; Phase 2 and Phase 3 remain passed; Phase 5–7
+  remain closed. These durable processes must not be stopped or restarted
+  unnecessarily. The laptop remains running.
+
+## Current post-merge TTM-R2 continuation — 2026-08-17
+
+- PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The TTM
+  follow-up is isolated in `/mnt/c/projects/advisorai-v3-ttm-followup`, branch
+  `agent/phase4-ttm-r2-followup`, currently at implementation commit `4b75dd7`
+  before this documentation checkpoint.
+- The operator confirmed that collector PID `160717`, resource-sidecar PID
+  `161130`, and baseline-ledger PID `173057` were intentionally stopped before
+  the prior continuation. The preserved forward root is therefore classified
+  `OPERATOR_INTERRUPTED / INCOMPLETE`, not as a collector crash, provider
+  failure, or implementation failure. No root was checked out, restarted,
+  repaired, appended to, backfilled, concatenated, or deadline-extended.
+- The collector root retains 734 valid raw records, 86 normalized bars (43 per
+  symbol), 2 health transitions, 8 rejected cutoffs, 0 failures, and 0
+  completed cases. Its manifest/status hashes are
+  `f5661f1f098b265113bc1349419edbd605ddee0ad63eae17dc4e6e463b17a7ea` /
+  `781250ea49d06ec6a3d061f900c4851334f75dbf2a597cd789bbf1546913f7c4`.
+- The fixed root target was 64 completed cases per BTCUSDT/ETHUSDT through
+  `2026-08-17T20:45:11.984069Z`; a fresh evidence generation is required.
+- The baseline root remains preserved with 0 predictions and 5 missed cutoffs;
+  its manifest/status hashes are
+  `da1bc9da2e9a4b1dad76c69782db552d354705827693c07d744840f80985078d` /
+  `deb98748eca1ac9d48b9af2d1184fd8429d067a699252568639e755e02ff6ffa`.
+- Future baseline resume validation now binds exact source manifest/snapshot,
+  preregistration, Phase-3 gate, repository and forecasting/LightGBM code,
+  roster, context bars, and horizon bars. The active baseline root was not
+  resumed. The shared `ForwardPredictionLedger` rejects conflicting duplicate
+  payloads, while outcome linkage remains a separate immutable ledger.
+- The new TTM-R2 worker reads only normalized bars and an immutable local runtime
+  admission. The actual approved admission was verified read-only: checkpoint
+  `ibm-granite/granite-timeseries-ttm-r2` revision
+  `d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f`, model artifact SHA-256
+  `a706726a7eb01bbcb42994b7dcb3c06ea9557898dbae8d480eb04fe8ccb89710`, runner
+  SHA-256 `5c4e3ca38512bbf4ccea3929c17b578b9d88cf80298d991c739124abc126c7b2`,
+  and runner-script SHA-256
+  `358150e0544bb416d42eaa6ef0fc3862d69d5a3c475ef1c537cb0ba60d0c9550`.
+- The qualified runner requires an exact 512-value input, while frozen V3-Core
+  prospective cases require 48 closed 5-minute bars. The worker therefore
+  quarantines the candidate and generates no admission prediction; it does not
+  pad/interpolate, call the direct model path, load credentials, make network
+  calls, backfill a cutoff, or submit orders. A separate 48-bar runtime
+  qualification is the next legitimate TTM prerequisite.
+- Target state: Phase 2 and Phase 3 remain `PASSED`; Phase 4 remains `PENDING`
+  on fresh independent cadence evidence and robust candidate admission; Phase
+  5–7 remain `CLOSED`; archive/rclone remains deferred; live capital remains
+  prohibited; the laptop remains running.
+- Focused verification: baseline/ledger/TTM tests pass (`26` tests); the merged
+  collector head passed `746` full pytest tests with 28 warnings, plus Ruff,
+  format, lock, compilation, diff, tracked-secret, and tracked-weight checks.
+
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.

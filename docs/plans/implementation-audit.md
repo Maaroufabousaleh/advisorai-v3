@@ -5,6 +5,102 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Fresh replacement forward run — 2026-08-17
+
+The former forward root is intentionally interrupted evidence, not a crash
+incident: the operator shut down the laptop before continuation. Its exact
+classification is preserved at
+`artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+(SHA-256
+`678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). The
+root remains unchanged and is not eligible for backfill or admission.
+
+The replacement collector is running from a new evidence generation at
+`artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`
+(PID `59671`, commit
+`0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5`, fixed target end
+`2026-08-22T19:35:06.869338Z`). Its market-data-only Binance endpoint is
+credential-free and has no order capability. Resource observation is isolated
+under
+`artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/`
+(PID `61721`), and the matching baseline ledger is under
+`artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/`
+(PID `60814`).
+An initial sidecar launch attempt failed before sampling due solely to a
+pre-created evidence directory; this did not touch the collector and is
+preserved as
+`artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json`
+(SHA-256
+`b652681c71c9e7e34c2ffa0a2572986877207e0e7891659bdfcc0c556e1461e`).
+
+The TTM-R2 boundary has been exercised separately and correctly quarantined the
+approved 512-value runner against the frozen 48-bar V3-Core context. This is a
+model/role incompatibility, not an inference crash; no padding, alternate
+checkpoint, credentials, network calls, or orders were used. Phase 4 remains
+pending fresh completed cases and robust candidate admission.
+
+The previously quarantined Chronos-2-small identity was separately requalified
+from the pinned local checkpoint. Its native 32–8192 context range and 30-step
+output cover the frozen 48-bar / 12-bar V3-Core role, and an isolated 48-value
+worker smoke passed without network access. The immutable compatibility record
+is
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json`
+(SHA-256
+`c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`). This is
+runtime/contract qualification only; Chronos has no utility result or
+promotion side effect.
+
+A separate prospective Chronos worker is running from draft PR #189's isolated
+worktree at commit `7503db435d36f3ba8638a11ab995a79c79b33326`. PID `80779` is
+bound to
+`artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`;
+the immutable manifest SHA-256 is
+`2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88` and the
+status snapshot SHA-256 recorded with this checkpoint is
+`9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`.
+It has produced zero predictions and recorded two missed cutoffs without
+backfill. Network calls, credentials, and order writes remain zero. This
+worker adds no execution authority and cannot itself admit or promote Chronos.
+
+The active collector's read-only health snapshot at
+`2026-08-17T23:16:49Z` showed 90 normalized bars, 0 completed cases, 9
+`schema_or_normalization` failures, and 4 source-health transitions. Raw
+inspection found the BTCUSDT interval ending `2026-08-17T22:15:00Z` with
+different closed-row content in successive HTTP-200 responses. The collector
+entered `DEGRADED` and later recovered to `HEALTHY`; this is preserved as a
+pending data-integrity incident, not a crash or provider-failure conclusion:
+`artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+(SHA-256
+`0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`). The
+active evidence root remains immutable and no admission decision has been
+made.
+
+## Current post-merge forward-run continuation — 2026-08-17
+
+PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator
+confirmed that its recorded collector, resource-sidecar, and baseline-ledger
+processes were intentionally stopped before the prior continuation. Their roots
+are preserved unchanged and classified `OPERATOR_INTERRUPTED / INCOMPLETE`;
+there is no evidence of a collector crash, provider failure, or implementation
+failure. No replacement process or backfill was used.
+
+The baseline prediction boundary now has a complete future-resume identity,
+including source root and manifest hash, source snapshot, preregistration,
+Phase-3 gate, repository/code hashes, model roster, and cadence. The shared
+prediction record remains immutable before outcome linkage and now binds optional
+candidate runtime provenance. Conflicting reuse of a prediction ID is rejected.
+
+The TTM-R2 worker is a separate read-only boundary. It uses the qualified local
+admission record and exact isolated runtime identity, but fails closed before
+inference because that qualified worker requires 512 input values and the
+frozen V3-Core prospective contract provides 48. This is recorded as a runtime
+contract quarantine; no unqualified 48-bar adapter is claimed. The current
+qualified admission was independently verified without network or credentials.
+
+No model, worker, dashboard, Hermes task, or research process gained execution
+authority. Phase 4 remains pending a fresh forward root, and no downstream
+phase was opened.
+
 ## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
