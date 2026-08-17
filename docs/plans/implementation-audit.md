@@ -5,14 +5,14 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
-## Current protected forward-run continuation — 2026-08-17
+## Current post-merge forward-run continuation — 2026-08-17
 
-The implementation work is on the separate branch
-`agent/phase4-ttm-r2-worker`; the protected PR #187 collector worktree was not
-checked out or synchronized. Read-only inspection found no live process for the
-recorded collector, resource-sidecar, or baseline-ledger PIDs. Their roots are
-preserved unchanged with stale running markers and incomplete evidence; no
-replacement process or backfill was used.
+PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator
+confirmed that its recorded collector, resource-sidecar, and baseline-ledger
+processes were intentionally stopped before the prior continuation. Their roots
+are preserved unchanged and classified `OPERATOR_INTERRUPTED / INCOMPLETE`;
+there is no evidence of a collector crash, provider failure, or implementation
+failure. No replacement process or backfill was used.
 
 The baseline prediction boundary now has a complete future-resume identity,
 including source root and manifest hash, source snapshot, preregistration,
@@ -28,7 +28,8 @@ contract quarantine; no unqualified 48-bar adapter is claimed. The current
 qualified admission was independently verified without network or credentials.
 
 No model, worker, dashboard, Hermes task, or research process gained execution
-authority. Phase 4 remains pending, and no downstream phase was opened.
+authority. Phase 4 remains pending a fresh forward root, and no downstream
+phase was opened.
 
 ## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 

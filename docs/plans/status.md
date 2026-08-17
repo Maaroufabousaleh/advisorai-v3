@@ -4,16 +4,20 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
-## Current protected forward-run continuation — 2026-08-17
+## Current post-merge forward-run continuation — 2026-08-17
 
-Work remains isolated from the protected forward-acquisition worktree. The
-recorded collector PID `160717`, resource sidecar PID `161130`, and baseline
-ledger PID `173057` were inspected read-only and were not present at inspection;
-no process was restarted, no evidence root was edited, and no terminal result
-was inferred from stale `running` status files. The preserved collector root
-had 0 completed cases per symbol and 86 normalized bars; the preserved baseline
-root had 0 predictions and 5 missed cutoffs. These roots remain unresolved
-operational evidence, not admission evidence.
+PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator
+confirmed that collector PID `160717`, resource sidecar PID `161130`, and
+baseline ledger PID `173057` were intentionally stopped before the prior
+continuation. The preserved roots are classified
+`OPERATOR_INTERRUPTED / INCOMPLETE`, not as a crash, provider failure, or
+implementation failure. No root was restarted, edited, backfilled,
+concatenated, or deadline-extended.
+
+The forward root validated read-only with 734 raw records, 86 normalized bars
+(43 per symbol), 2 health transitions, 8 rejected cutoffs, 0 failures, and 0
+completed cases. The baseline root has 0 predictions and 5 missed cutoffs. A
+fresh root is required for the 64-per-symbol target.
 
 The isolated branch adds two future-run safeguards. Baseline resume now requires
 exact equality of source manifest/snapshot, preregistration, Phase-3 gate,
@@ -30,8 +34,9 @@ state and emits no predictions; it does not pad, interpolate, call an alternate
 model path, load credentials, make network calls, or submit orders.
 
 Phase 4 remains `PENDING` on fresh independent cadence evidence and robust
-candidate admission. Phase 2/3 remain passed; Phase 5–7 remain closed. Draft
-PR #187 remains unmerged. The laptop remains running.
+candidate admission. Phase 2/3 remain passed; Phase 5–7 remain closed. The TTM
+follow-up remains separate from the merged collector PR. The laptop remains
+running.
 
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 

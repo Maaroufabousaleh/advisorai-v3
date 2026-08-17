@@ -2,6 +2,13 @@
 
 ## Prospective TTM-R2 prediction boundary — current continuation
 
+The prior forward acquisition root
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`
+is sealed as `OPERATOR_INTERRUPTED / INCOMPLETE` after intentional operator
+shutdown. It must not be resumed, extended, backfilled, or concatenated. Start
+the collector, baseline ledger, and any compatible candidate worker only from a
+new evidence generation with a new frozen identity.
+
 The baseline and candidate ledgers share `ForwardPredictionRecord`; outcomes
 are linked later through the separate append-only outcome-link ledger. Future
 baseline resumes must match the exact source manifest/snapshot,

@@ -1,19 +1,28 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current isolated TTM-R2 continuation — 2026-08-17
+## Current post-merge TTM-R2 continuation — 2026-08-17
 
-- Protected roots were not checked out, restarted, repaired, or appended to.
-  Read-only process inspection found no live rows for recorded PIDs `160717`
-  (collector), `161130` (resource sidecar), or `173057` (baseline ledger).
-  Their status/evidence files remain preserved; the collector status still
-  reports 0 completed BTCUSDT/ETHUSDT cases and the baseline status reports 0
-  predictions. No terminal result, missed prediction, or Phase-4 conclusion was
-  inferred from those stale markers.
-- Implementation is isolated in worktree
-  `/mnt/c/projects/advisorai-v3-ttm-worker`, branch
-  `agent/phase4-ttm-r2-worker`, based on draft PR #187 executable head
-  `2e39bebebbec9c85faa4306949206f1355b3f097`. PR #187 remains draft/open and
-  unmerged.
+- PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The TTM
+  follow-up is isolated in `/mnt/c/projects/advisorai-v3-ttm-followup`, branch
+  `agent/phase4-ttm-r2-followup`, currently at implementation commit `4b75dd7`
+  before this documentation checkpoint.
+- The operator confirmed that collector PID `160717`, resource-sidecar PID
+  `161130`, and baseline-ledger PID `173057` were intentionally stopped before
+  the prior continuation. The preserved forward root is therefore classified
+  `OPERATOR_INTERRUPTED / INCOMPLETE`, not as a collector crash, provider
+  failure, or implementation failure. No root was checked out, restarted,
+  repaired, appended to, backfilled, concatenated, or deadline-extended.
+- The collector root retains 734 valid raw records, 86 normalized bars (43 per
+  symbol), 2 health transitions, 8 rejected cutoffs, 0 failures, and 0
+  completed cases. Its manifest/status hashes are
+  `f5661f1f098b265113bc1349419edbd605ddee0ad63eae17dc4e6e463b17a7ea` /
+  `781250ea49d06ec6a3d061f900c4851334f75dbf2a597cd789bbf1546913f7c4`.
+- The fixed root target was 64 completed cases per BTCUSDT/ETHUSDT through
+  `2026-08-17T20:45:11.984069Z`; a fresh evidence generation is required.
+- The baseline root remains preserved with 0 predictions and 5 missed cutoffs;
+  its manifest/status hashes are
+  `da1bc9da2e9a4b1dad76c69782db552d354705827693c07d744840f80985078d` /
+  `deb98748eca1ac9d48b9af2d1184fd8429d067a699252568639e755e02ff6ffa`.
 - Future baseline resume validation now binds exact source manifest/snapshot,
   preregistration, Phase-3 gate, repository and forecasting/LightGBM code,
   roster, context bars, and horizon bars. The active baseline root was not
@@ -37,11 +46,9 @@
   on fresh independent cadence evidence and robust candidate admission; Phase
   5–7 remain `CLOSED`; archive/rclone remains deferred; live capital remains
   prohibited; the laptop remains running.
-- Focused verification: baseline/ledger/TTM tests pass (`26` tests in the
-  isolated invocation); Ruff checks for changed files and diff hygiene pass.
-  The isolated worktree lacks the ignored historical artifact directories used
-  by some repository tests, so unrelated artifact-dependent tests must be run
-  from the canonical checkout or with its preserved read-only artifact view.
+- Focused verification: baseline/ledger/TTM tests pass (`26` tests); the merged
+  collector head passed `746` full pytest tests with 28 warnings, plus Ruff,
+  format, lock, compilation, diff, tracked-secret, and tracked-weight checks.
 
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
