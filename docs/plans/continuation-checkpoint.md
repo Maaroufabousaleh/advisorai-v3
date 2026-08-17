@@ -12,7 +12,8 @@
 - Implementation is isolated in worktree
   `/mnt/c/projects/advisorai-v3-ttm-worker`, branch
   `agent/phase4-ttm-r2-worker`, based on draft PR #187 executable head
-  `2e39bebebbec9c85faa4306949206f1355b3f097`. PR #187 remains draft/open and
+  `2e39bebebbec9c85faa4306949206f1355b3f097`; committed implementation head
+  `f644ba2274af1ab736bef64db4af74fd84134ba3`. PR #187 remains draft/open and
   unmerged.
 - Future baseline resume validation now binds exact source manifest/snapshot,
   preregistration, Phase-3 gate, repository and forecasting/LightGBM code,

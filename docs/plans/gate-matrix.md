@@ -4,7 +4,8 @@
 
 This continuation is implemented on the separate worktree branch
 `agent/phase4-ttm-r2-worker`, based on draft PR #187's executable head
-`2e39bebebbec9c85faa4306949206f1355b3f097`. The protected collector,
+`2e39bebebbec9c85faa4306949206f1355b3f097`; the committed isolated
+implementation is `f644ba2274af1ab736bef64db4af74fd84134ba3`. The protected collector,
 resource sidecar, and baseline-ledger worktree were not checked out, restarted,
 or edited. A read-only process inspection found no live rows for the recorded
 PIDs `160717`, `161130`, or `173057`; their append-only roots and stale
@@ -19,7 +20,7 @@ backfilled.
 | Protected baseline ledger | PRESERVED / OPERATIONAL_STATE_UNVERIFIED | `artifacts/phase4/v3core-forward-predictions/20260812T211500Z-baseline-ledger-r2/`; last preserved status had 0 predictions and 5 missed cutoffs; no append was made |
 | Shared prediction record identity | IMPLEMENTED / TESTED | `ForwardPredictionRecord` now carries optional source/model/checkpoint/runner/preprocessing/runtime provenance while outcome links remain a separate append-only ledger |
 | Future baseline resume identity | IMPLEMENTED / TESTED | `scripts/run_phase4_v3core_baseline_predictions.py` rejects any source, preregistration, Phase-3 gate, repository, forecasting, LightGBM, roster, cadence, or horizon identity mismatch; the active root was not resumed |
-| Prospective TTM-R2 worker | IMPLEMENTED / TESTED / QUARANTINED | `scripts/run_phase4_v3core_ttm_predictions.py` and `src/advisorai/phase4/v3core_ttm.py` read only normalized bars and the immutable runtime admission; the qualified runner requires 512 input values while V3-Core freezes 48, so no prediction is generated or adapted silently |
+| Prospective TTM-R2 worker | IMPLEMENTED / TESTED / QUARANTINED | `scripts/run_phase4_v3core_ttm_predictions.py` SHA-256 `f16890cec907b6c5da2e543dab305059acd5c934e14964d4f20512bfef04c8f9` and `src/advisorai/phase4/v3core_ttm.py` SHA-256 `2e5bffd03b987db560dcec1227459f0cec05330d3ee53b629428769c586f43f8`; reads only normalized bars and the immutable runtime admission; the qualified runner requires 512 input values while V3-Core freezes 48, so no prediction is generated or adapted silently |
 | Qualified TTM-R2 runtime identity | LOCALLY MEASURED | `artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260810/ttm-r2/local-admission.json`; checkpoint SHA-256 `a706726a7eb01bbcb42994b7dcb3c06ea9557898dbae8d480eb04fe8ccb89710`, runner SHA-256 `5c4e3ca38512bbf4ccea3929c17b578b9d88cf80298d991c739124abc126c7b2`, runner script SHA-256 `358150e0544bb416d42eaa6ef0fc3862d69d5a3c475ef1c537cb0ba60d0c9550`; local artifact/launcher/lock identity verification passed |
 | Phase 4 | PENDING | Fresh forward cadence evidence is incomplete; TTM-R2 remains `CHALLENGER`; no Phase-4 promotion or formal re-review was started |
 | Phase 2 / Phase 3 | PASSED / UNCHANGED | No predecessor evidence was reopened |

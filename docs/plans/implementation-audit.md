@@ -8,7 +8,8 @@ human gate into a unit-test claim.
 ## Current protected forward-run continuation — 2026-08-17
 
 The implementation work is on the separate branch
-`agent/phase4-ttm-r2-worker`; the protected PR #187 collector worktree was not
+`agent/phase4-ttm-r2-worker` at committed head
+`f644ba2274af1ab736bef64db4af74fd84134ba3`; the protected PR #187 collector worktree was not
 checked out or synchronized. Read-only inspection found no live process for the
 recorded collector, resource-sidecar, or baseline-ledger PIDs. Their roots are
 preserved unchanged with stale running markers and incomplete evidence; no

@@ -7,6 +7,9 @@ or 60-day operational gate.
 ## Current protected forward-run continuation — 2026-08-17
 
 Work remains isolated from the protected forward-acquisition worktree. The
+isolated implementation is committed at
+`f644ba2274af1ab736bef64db4af74fd84134ba3` on branch
+`agent/phase4-ttm-r2-worker`. The
 recorded collector PID `160717`, resource sidecar PID `161130`, and baseline
 ledger PID `173057` were inspected read-only and were not present at inspection;
 no process was restarted, no evidence root was edited, and no terminal result
