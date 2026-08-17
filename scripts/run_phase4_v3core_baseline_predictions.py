@@ -43,6 +43,20 @@ POLL_SECONDS = 5.0
 INTERVAL = timedelta(minutes=5)
 HORIZON_BARS = 12
 CONTEXT_BARS = 48
+RESUME_IDENTITY_FIELDS = (
+    "schema",
+    "source_root",
+    "source_manifest_sha256",
+    "source_snapshot_hash",
+    "preregistration_sha256",
+    "phase3_gate_record_sha256",
+    "repository_commit",
+    "forecasting_code_sha256",
+    "lightgbm_code_sha256",
+    "models",
+    "context_bars",
+    "horizon_bars",
+)
 
 
 def _canonical(payload: object) -> bytes:
@@ -131,6 +145,42 @@ def _identity_hash(
     )
 
 
+def _expected_manifest(
+    *,
+    source_root: Path,
+    source_manifest: dict[str, object],
+    repository_root: Path,
+    preregistration_sha256: str,
+    phase3_gate_sha256: str,
+) -> dict[str, object]:
+    """Return every immutable identity field required for a future resume."""
+
+    forecasting_path = repository_root / "src/advisorai/models/forecasting.py"
+    lightgbm_path = repository_root / "src/advisorai/phase0/runtime_qualification.py"
+    return {
+        "schema": RUN_SCHEMA,
+        "source_root": str(source_root),
+        "source_manifest_sha256": _sha256_file(source_root / "manifest.json"),
+        "source_snapshot_hash": _source_snapshot_hash(source_manifest),
+        "preregistration_sha256": preregistration_sha256,
+        "phase3_gate_record_sha256": phase3_gate_sha256,
+        "repository_commit": _git_head(repository_root),
+        "forecasting_code_sha256": _sha256_file(forecasting_path),
+        "lightgbm_code_sha256": _sha256_file(lightgbm_path),
+        "models": list(V3_CORE_BASELINES),
+        "context_bars": CONTEXT_BARS,
+        "horizon_bars": HORIZON_BARS,
+    }
+
+
+def _validate_resume_manifest(manifest: dict[str, object], expected: dict[str, object]) -> None:
+    mismatches = [
+        field for field in RESUME_IDENTITY_FIELDS if manifest.get(field) != expected.get(field)
+    ]
+    if mismatches:
+        raise ValueError("baseline prediction resume identity mismatch: " + ", ".join(mismatches))
+
+
 def _predict_prices(model: str, values: tuple[Decimal, ...]) -> tuple[Decimal, ...]:
     if model == "naive":
         forecaster = NaiveForecaster()
@@ -211,25 +261,20 @@ def run(
         raise ValueError("source root is bound to a different Phase-3 gate")
     run_root.mkdir(parents=True, exist_ok=True)
     manifest_path = run_root / "manifest.json"
-    forecasting_path = repository_root / "src/advisorai/models/forecasting.py"
-    lightgbm_path = repository_root / "src/advisorai/phase0/runtime_qualification.py"
+    expected_manifest = _expected_manifest(
+        source_root=source_root,
+        source_manifest=source_manifest,
+        repository_root=repository_root,
+        preregistration_sha256=preregistration_sha256,
+        phase3_gate_sha256=phase3_gate_sha256,
+    )
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("source_root") != str(source_root):
-            raise ValueError("prediction ledger source root cannot change on resume")
+        _validate_resume_manifest(manifest, expected_manifest)
     else:
         manifest = {
-            "schema": RUN_SCHEMA,
+            **expected_manifest,
             "started_at": datetime.now(UTC).isoformat(),
-            "source_root": str(source_root),
-            "source_manifest_sha256": _sha256_file(source_root / "manifest.json"),
-            "source_snapshot_hash": _source_snapshot_hash(source_manifest),
-            "preregistration_sha256": preregistration_sha256,
-            "phase3_gate_record_sha256": phase3_gate_sha256,
-            "repository_commit": _git_head(repository_root),
-            "forecasting_code_sha256": _sha256_file(forecasting_path),
-            "lightgbm_code_sha256": _sha256_file(lightgbm_path),
-            "models": list(V3_CORE_BASELINES),
             "candidate_models": {
                 "ttm-r2": "not_generated; runtime prediction worker is a separate admitted boundary",
                 "chronos-2-small": "quarantined; preserved worker/runtime identity mismatch",

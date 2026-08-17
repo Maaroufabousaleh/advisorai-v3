@@ -1,5 +1,36 @@
 # AdvisorAI V3 gate matrix
 
+## Current protected forward-run continuation — 2026-08-17
+
+This continuation is implemented on the separate worktree branch
+`agent/phase4-ttm-r2-worker`, based on draft PR #187's executable head
+`2e39bebebbec9c85faa4306949206f1355b3f097`. The protected collector,
+resource sidecar, and baseline-ledger worktree were not checked out, restarted,
+or edited. A read-only process inspection found no live rows for the recorded
+PIDs `160717`, `161130`, or `173057`; their append-only roots and stale
+`running` status files remain preserved and are not treated as terminal
+success. No replacement process was started and no missed prediction was
+backfilled.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Protected forward collector identity | PRESERVED / OPERATIONAL_STATE_UNVERIFIED | `artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`; read-only status had 0 completed BTCUSDT/ETHUSDT cases, 86 normalized bars, `credentials_loaded=false`, and `order_writes_attempted=false`; no terminal record was manufactured |
+| Protected resource sidecar | PRESERVED / OPERATIONAL_STATE_UNVERIFIED | `artifacts/phase4/v3core-forward-resource/20260812T204505Z-first-independent-pit-r2/`; last preserved heartbeat had 398 samples; no restart or repair was attempted |
+| Protected baseline ledger | PRESERVED / OPERATIONAL_STATE_UNVERIFIED | `artifacts/phase4/v3core-forward-predictions/20260812T211500Z-baseline-ledger-r2/`; last preserved status had 0 predictions and 5 missed cutoffs; no append was made |
+| Shared prediction record identity | IMPLEMENTED / TESTED | `ForwardPredictionRecord` now carries optional source/model/checkpoint/runner/preprocessing/runtime provenance while outcome links remain a separate append-only ledger |
+| Future baseline resume identity | IMPLEMENTED / TESTED | `scripts/run_phase4_v3core_baseline_predictions.py` rejects any source, preregistration, Phase-3 gate, repository, forecasting, LightGBM, roster, cadence, or horizon identity mismatch; the active root was not resumed |
+| Prospective TTM-R2 worker | IMPLEMENTED / TESTED / QUARANTINED | `scripts/run_phase4_v3core_ttm_predictions.py` and `src/advisorai/phase4/v3core_ttm.py` read only normalized bars and the immutable runtime admission; the qualified runner requires 512 input values while V3-Core freezes 48, so no prediction is generated or adapted silently |
+| Qualified TTM-R2 runtime identity | LOCALLY MEASURED | `artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260810/ttm-r2/local-admission.json`; checkpoint SHA-256 `a706726a7eb01bbcb42994b7dcb3c06ea9557898dbae8d480eb04fe8ccb89710`, runner SHA-256 `5c4e3ca38512bbf4ccea3929c17b578b9d88cf80298d991c739124abc126c7b2`, runner script SHA-256 `358150e0544bb416d42eaa6ef0fc3862d69d5a3c475ef1c537cb0ba60d0c9550`; local artifact/launcher/lock identity verification passed |
+| Phase 4 | PENDING | Fresh forward cadence evidence is incomplete; TTM-R2 remains `CHALLENGER`; no Phase-4 promotion or formal re-review was started |
+| Phase 2 / Phase 3 | PASSED / UNCHANGED | No predecessor evidence was reopened |
+| Phase 5–7 | CLOSED | No council, fill, attribution, or soak was started |
+
+The TTM worker has no credential resolver, network client, account operation,
+order operation, or OMS access. A separate 48-bar runtime qualification is
+required before it can create prospective TTM-R2 admission records; padding,
+interpolation, direct-model fallback, and running against the protected root
+are prohibited.
+
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 The follow-on implementation is draft PR #187 on

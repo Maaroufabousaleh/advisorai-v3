@@ -1,5 +1,42 @@
 # Phase-4 paper utility evidence
 
+## Prospective TTM-R2 prediction boundary — current continuation
+
+The baseline and candidate ledgers share `ForwardPredictionRecord`; outcomes
+are linked later through the separate append-only outcome-link ledger. Future
+baseline resumes must match the exact source manifest/snapshot,
+preregistration, Phase-3 gate, repository and model-code hashes, roster,
+context, and horizon. The currently protected baseline root must not be
+resumed or changed while its evidence identity is under operator protection.
+
+The TTM worker is an offline, credential-free process over
+`normalized-bars.jsonl` only. A future run template is:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/run_phase4_v3core_ttm_predictions.py \
+  --admission artifacts/phase0/model-runtime-qualification/runtime-admission-post-format-20260810/ttm-r2/local-admission.json \
+  --source-root artifacts/phase4/v3core-forward/<sealed-root> \
+  --run-root artifacts/phase4/v3core-forward-predictions/<ttm-run-id> \
+  --repository-root /mnt/c/projects/advisorai-v3 \
+  --preregistration-sha256 <frozen-preregistration-sha256> \
+  --phase3-gate-sha256 <passed-phase3-gate-sha256> \
+  --until <utc-deadline>
+```
+
+The command must use a new run root and may not backfill the protected
+collector. It records a missed cutoff rather than creating a retrospective
+prediction. It refuses resume when any frozen identity differs and exposes no
+network, credential, account, order, transfer, withdrawal, RiskKernel, or OMS
+operation.
+
+The currently approved TTM-R2 runtime admission was verified read-only. Its
+exact runner requires 512 input values, while the frozen V3-Core contract
+requires 48 closed five-minute context bars. The worker therefore quarantines
+itself before inference and creates no prediction. Padding, interpolation,
+direct-model fallback, or a new runtime identity would require a separate
+reviewed 48-bar runtime qualification.
+
 ## Frozen v3 PIT provenance contract
 
 Before any Phase-4 cadence acquisition, use the corrected v3 contract. The

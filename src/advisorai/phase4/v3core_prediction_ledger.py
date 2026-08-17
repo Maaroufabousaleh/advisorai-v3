@@ -20,6 +20,21 @@ from advisorai.phase4.v3core_forward import ForwardPredictionRecord
 
 PREDICTION_LEDGER_SCHEMA = "advisorai.phase4.v3-core-forward.prediction-ledger.v1"
 OUTCOME_LINK_SCHEMA = "advisorai.phase4.v3-core-forward.prediction-outcome-link.v1"
+_LEGACY_PREDICTION_FIELDS = frozenset(
+    {
+        "schema_version",
+        "prediction_id",
+        "instrument",
+        "model",
+        "model_identity_hash",
+        "cutoff",
+        "input_snapshot_hash",
+        "predicted_return_bps",
+        "generated_at",
+        "runtime_latency_ms",
+        "outcome_case_id",
+    }
+)
 
 
 def _canonical(payload: object) -> bytes:
@@ -67,7 +82,16 @@ class ForwardPredictionLedgerEntry(BaseModel):
             raise ValueError("unsupported forward prediction ledger schema")
         unsigned = self.model_dump(mode="json", exclude={"record_hash"})
         if _hash_payload(unsigned) != self.record_hash:
-            raise ValueError("forward prediction ledger hash is inconsistent")
+            # Optional candidate identity fields were added after the first
+            # ledger roots existed. Accept their exact legacy serialization so
+            # a schema extension does not invalidate preserved append-only
+            # evidence; newly appended entries always use the full payload.
+            legacy_prediction = self.prediction.model_dump(
+                mode="json", include=_LEGACY_PREDICTION_FIELDS
+            )
+            unsigned["prediction"] = legacy_prediction
+            if _hash_payload(unsigned) != self.record_hash:
+                raise ValueError("forward prediction ledger hash is inconsistent")
         return self
 
 
@@ -79,6 +103,7 @@ class ForwardPredictionLedger:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.records: list[ForwardPredictionLedgerEntry] = []
         self.prediction_ids: set[str] = set()
+        self._by_prediction_id: dict[str, ForwardPredictionLedgerEntry] = {}
         if self.path.exists():
             previous: str | None = None
             for line_number, line in enumerate(
@@ -100,6 +125,7 @@ class ForwardPredictionLedger:
                     raise RuntimeError("forward prediction ledger chain or identity is invalid")
                 self.records.append(record)
                 self.prediction_ids.add(record.prediction.prediction_id)
+                self._by_prediction_id[record.prediction.prediction_id] = record
                 previous = record.record_hash
 
     @property
@@ -108,6 +134,9 @@ class ForwardPredictionLedger:
 
     def append(self, prediction: ForwardPredictionRecord) -> bool:
         if prediction.prediction_id in self.prediction_ids:
+            existing = self._by_prediction_id[prediction.prediction_id]
+            if existing.prediction != prediction:
+                raise RuntimeError("forward prediction identity has conflicting payload")
             return False
         unsigned = {
             "schema_version": PREDICTION_LEDGER_SCHEMA,
@@ -122,6 +151,7 @@ class ForwardPredictionLedger:
             os.fsync(handle.fileno())
         self.records.append(record)
         self.prediction_ids.add(prediction.prediction_id)
+        self._by_prediction_id[prediction.prediction_id] = record
         return True
 
 

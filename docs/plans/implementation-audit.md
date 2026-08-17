@@ -5,6 +5,31 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current protected forward-run continuation — 2026-08-17
+
+The implementation work is on the separate branch
+`agent/phase4-ttm-r2-worker`; the protected PR #187 collector worktree was not
+checked out or synchronized. Read-only inspection found no live process for the
+recorded collector, resource-sidecar, or baseline-ledger PIDs. Their roots are
+preserved unchanged with stale running markers and incomplete evidence; no
+replacement process or backfill was used.
+
+The baseline prediction boundary now has a complete future-resume identity,
+including source root and manifest hash, source snapshot, preregistration,
+Phase-3 gate, repository/code hashes, model roster, and cadence. The shared
+prediction record remains immutable before outcome linkage and now binds optional
+candidate runtime provenance. Conflicting reuse of a prediction ID is rejected.
+
+The TTM-R2 worker is a separate read-only boundary. It uses the qualified local
+admission record and exact isolated runtime identity, but fails closed before
+inference because that qualified worker requires 512 input values and the
+frozen V3-Core prospective contract provides 48. This is recorded as a runtime
+contract quarantine; no unqualified 48-bar adapter is claimed. The current
+qualified admission was independently verified without network or credentials.
+
+No model, worker, dashboard, Hermes task, or research process gained execution
+authority. Phase 4 remains pending, and no downstream phase was opened.
+
 ## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head
