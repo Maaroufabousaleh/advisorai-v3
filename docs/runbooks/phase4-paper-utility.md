@@ -59,6 +59,19 @@ The isolated 48-value smoke passed with no network access and deterministic
 identity. This only permits future prospective challenger predictions; it does
 not admit utility, promote Chronos, or alter the frozen preregistration.
 
+The prospective Chronos worker is running separately from draft PR #189's
+isolated worktree at commit `7503db435d36f3ba8638a11ab995a79c79b33326`. PID
+`80779` uses the fresh source-bound root
+`artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`;
+its manifest SHA-256 is
+`2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88` and its
+current status SHA-256 is
+`9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`.
+At this checkpoint it has recorded two missed cutoffs and zero predictions;
+it does not backfill, use credentials, make network calls, or expose order
+operations. Its fixed target end remains
+`2026-08-22T19:35:06.869338Z`.
+
 ## Prospective TTM-R2 prediction boundary — current continuation
 
 The prior forward acquisition root

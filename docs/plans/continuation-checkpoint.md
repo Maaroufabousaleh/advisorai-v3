@@ -58,6 +58,19 @@
   isolated 48-value smoke returned 30 forecast values, used no network, and
   passed deterministic identity checks. Chronos is a compatible challenger for
   future prospective coverage, not a utility-admitted or promoted model.
+- A separate Chronos prospective worker is running from draft PR #189's
+  isolated branch `agent/phase4-chronos-forward-worker` at commit
+  `7503db435d36f3ba8638a11ab995a79c79b33326`. PID `80779` is bound to the
+  fresh source root
+  `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`,
+  whose manifest SHA-256 is
+  `2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88`.
+  Its status SHA-256 at this checkpoint is
+  `9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`:
+  `RUNNING`, zero predictions, two honest missed cutoffs, zero network calls,
+  no credentials, and no order capability. The fixed generation deadline is
+  `2026-08-22T19:35:06.869338Z`; no cutoff is backfilled and no utility or
+  promotion decision is made.
 - Phase 4 remains `PENDING`; Phase 2 and Phase 3 remain passed; Phase 5–7
   remain closed. These durable processes must not be stopped or restarted
   unnecessarily. The laptop remains running.

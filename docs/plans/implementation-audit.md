@@ -50,6 +50,18 @@ is
 runtime/contract qualification only; Chronos has no utility result or
 promotion side effect.
 
+A separate prospective Chronos worker is running from draft PR #189's isolated
+worktree at commit `7503db435d36f3ba8638a11ab995a79c79b33326`. PID `80779` is
+bound to
+`artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1/`;
+the manifest SHA-256 is
+`2787c4e5cecc140e4acc5d33c25089bee8e068c120303b1134f3192de301fc88` and the
+current status SHA-256 is
+`9be8759c0fddf40fa4a07c34358cfb2df4a388fd782658cf2610d0c479bb522d`.
+It has produced zero predictions and recorded two missed cutoffs without
+backfill. Network calls, credentials, and order writes remain zero. This
+worker adds no execution authority and cannot itself admit or promote Chronos.
+
 ## Current post-merge forward-run continuation — 2026-08-17
 
 PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator
