@@ -1,5 +1,48 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current isolated TTM-R2 continuation — 2026-08-17
+
+- Protected roots were not checked out, restarted, repaired, or appended to.
+  Read-only process inspection found no live rows for recorded PIDs `160717`
+  (collector), `161130` (resource sidecar), or `173057` (baseline ledger).
+  Their status/evidence files remain preserved; the collector status still
+  reports 0 completed BTCUSDT/ETHUSDT cases and the baseline status reports 0
+  predictions. No terminal result, missed prediction, or Phase-4 conclusion was
+  inferred from those stale markers.
+- Implementation is isolated in worktree
+  `/mnt/c/projects/advisorai-v3-ttm-worker`, branch
+  `agent/phase4-ttm-r2-worker`, based on draft PR #187 executable head
+  `2e39bebebbec9c85faa4306949206f1355b3f097`. PR #187 remains draft/open and
+  unmerged.
+- Future baseline resume validation now binds exact source manifest/snapshot,
+  preregistration, Phase-3 gate, repository and forecasting/LightGBM code,
+  roster, context bars, and horizon bars. The active baseline root was not
+  resumed. The shared `ForwardPredictionLedger` rejects conflicting duplicate
+  payloads, while outcome linkage remains a separate immutable ledger.
+- The new TTM-R2 worker reads only normalized bars and an immutable local runtime
+  admission. The actual approved admission was verified read-only: checkpoint
+  `ibm-granite/granite-timeseries-ttm-r2` revision
+  `d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f`, model artifact SHA-256
+  `a706726a7eb01bbcb42994b7dcb3c06ea9557898dbae8d480eb04fe8ccb89710`, runner
+  SHA-256 `5c4e3ca38512bbf4ccea3929c17b578b9d88cf80298d991c739124abc126c7b2`,
+  and runner-script SHA-256
+  `358150e0544bb416d42eaa6ef0fc3862d69d5a3c475ef1c537cb0ba60d0c9550`.
+- The qualified runner requires an exact 512-value input, while frozen V3-Core
+  prospective cases require 48 closed 5-minute bars. The worker therefore
+  quarantines the candidate and generates no admission prediction; it does not
+  pad/interpolate, call the direct model path, load credentials, make network
+  calls, backfill a cutoff, or submit orders. A separate 48-bar runtime
+  qualification is the next legitimate TTM prerequisite.
+- Target state: Phase 2 and Phase 3 remain `PASSED`; Phase 4 remains `PENDING`
+  on fresh independent cadence evidence and robust candidate admission; Phase
+  5–7 remain `CLOSED`; archive/rclone remains deferred; live capital remains
+  prohibited; the laptop remains running.
+- Focused verification: baseline/ledger/TTM tests pass (`26` tests in the
+  isolated invocation); Ruff checks for changed files and diff hygiene pass.
+  The isolated worktree lacks the ignored historical artifact directories used
+  by some repository tests, so unrelated artifact-dependent tests must be run
+  from the canonical checkout or with its preserved read-only artifact view.
+
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.

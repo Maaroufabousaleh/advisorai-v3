@@ -4,6 +4,35 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current protected forward-run continuation — 2026-08-17
+
+Work remains isolated from the protected forward-acquisition worktree. The
+recorded collector PID `160717`, resource sidecar PID `161130`, and baseline
+ledger PID `173057` were inspected read-only and were not present at inspection;
+no process was restarted, no evidence root was edited, and no terminal result
+was inferred from stale `running` status files. The preserved collector root
+had 0 completed cases per symbol and 86 normalized bars; the preserved baseline
+root had 0 predictions and 5 missed cutoffs. These roots remain unresolved
+operational evidence, not admission evidence.
+
+The isolated branch adds two future-run safeguards. Baseline resume now requires
+exact equality of source manifest/snapshot, preregistration, Phase-3 gate,
+repository and forecasting code, LightGBM code, model roster, context, and
+horizon. The shared prediction schema carries candidate runtime identity and
+provenance, rejects outcome mutation, and rejects conflicting duplicate payloads.
+
+The separate TTM-R2 worker consumes only normalized forward bars and the exact
+approved local runtime admission. The admission files were verified read-only,
+including the checkpoint, lock, environment, launcher, pyvenv, and runner
+hashes. The approved runner's 512-value input contract does not match the frozen
+48-bar V3-Core context. The worker therefore records a sanitized quarantine
+state and emits no predictions; it does not pad, interpolate, call an alternate
+model path, load credentials, make network calls, or submit orders.
+
+Phase 4 remains `PENDING` on fresh independent cadence evidence and robust
+candidate admission. Phase 2/3 remain passed; Phase 5–7 remain closed. Draft
+PR #187 remains unmerged. The laptop remains running.
+
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
