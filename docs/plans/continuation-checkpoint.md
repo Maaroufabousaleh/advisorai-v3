@@ -1,5 +1,56 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Fresh replacement forward run — 2026-08-17
+
+- The prior forward root remains immutable `OPERATOR_INTERRUPTED / INCOMPLETE`
+  after the operator intentionally shut down the laptop. Its machine-readable
+  classification is
+  `artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+  (SHA-256
+  `678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). No
+  crash, provider failure, implementation failure, backfill, concatenation, or
+  deadline extension is inferred.
+- A new evidence generation is running at
+  `artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`.
+  It is bound to executable commit
+  `0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5`, the frozen v5 preregistration
+  SHA-256
+  `5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd`, and
+  Phase-3 gate SHA-256
+  `4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232`.
+  Collector PID `59671` started at `2026-08-17T19:35:06.869338Z` and has a
+  fixed target end of `2026-08-22T19:35:06.869338Z`; its public endpoint is
+  `https://data-api.binance.vision/api/v3/klines`, with credentials and order
+  writes disabled.
+- The corrected resource sidecar is PID `61721`, with evidence root
+  `artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/`.
+  It is bound to collector start ticks `811168` and command SHA-256
+  `a52212826f1a367d10589b0f0624ac53d8d98a8306f05db2d915148b04a5cd40`.
+  Its first sample confirms the collector identity and records no credential or
+  order capability.
+- A first sidecar launch attempt created only a sanitized pre-sample error log
+  because its directory had been pre-created against the sidecar's atomic
+  `exist_ok=false` contract. It did not touch the collector; the preserved
+  classification is
+  `artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json`
+  (SHA-256
+  `b652681c71c9e7e34c2ffa0a2572986877207e0e7891659b9dfcc0c556e1461e`). The
+  corrected sidecar root above has identity-matched observations.
+- The matching baseline ledger is PID `60814` at
+  `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/`.
+  It is bound to the same source snapshot, preregistration, Phase-3 gate,
+  repository commit, model roster, 48-bar context, and 12-bar horizon; it has
+  no predictions yet because the fresh source has not reached an eligible
+  hourly cutoff.
+- A separate TTM-R2 run against the fresh source recorded
+  `QUALIFIED_RUNNER_CONTEXT_CONTRACT_MISMATCH`: the qualified runtime requires
+  512 values and frozen V3-Core supplies 48. It emitted zero predictions,
+  loaded no credentials, made zero network calls, and remains quarantined. No
+  padding, interpolation, alternate checkpoint, or direct fallback was used.
+- Phase 4 remains `PENDING`; Phase 2 and Phase 3 remain passed; Phase 5–7
+  remain closed. These durable processes must not be stopped or restarted
+  unnecessarily. The laptop remains running.
+
 ## Current post-merge TTM-R2 continuation — 2026-08-17
 
 - PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The TTM

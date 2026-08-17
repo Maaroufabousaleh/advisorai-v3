@@ -4,6 +4,48 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Fresh replacement forward run — 2026-08-17
+
+The earlier forward root is preserved as `OPERATOR_INTERRUPTED / INCOMPLETE`
+because the operator intentionally shut down the laptop. The classification is
+recorded at
+`artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+(SHA-256
+`678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). No
+collector crash, provider failure, or implementation failure is claimed, and
+the old root is not resumed, extended, backfilled, or concatenated.
+
+A new credential-free forward generation is running at
+`artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`
+under PID `59671`, bound to commit
+`0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5`, the frozen v5 preregistration,
+and the passed Phase-3 gate. Its fixed target end is
+`2026-08-22T19:35:06.869338Z`; public Binance market-data GET is the only
+network surface, with `credentials_loaded=false` and
+`order_writes_attempted=false`.
+
+The resource sidecar is PID `61721` at
+`artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/`;
+the baseline ledger is PID `60814` at
+`artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/`.
+Both are separate from the collector and bound to the same frozen generation.
+The first sidecar launch attempt failed before its first observation because an
+orchestration command pre-created the directory required to be created
+atomically. It did not affect the collector or any source evidence. The
+sanitized classification is
+`artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json`
+(SHA-256
+`b652681c71c9e7e34c2ffa0a2572986877207e0e7891659b9dfcc0c556e1461e`); the
+corrected sidecar root has identity-matched samples.
+The TTM-R2 worker was run once against this source and correctly recorded the
+qualified 512-value runner versus 48-bar V3-Core mismatch, with zero
+predictions, zero network calls, and no credentials. TTM-R2 remains
+`QUARANTINED / INCOMPATIBLE_WITH_48_BAR_ROLE`.
+
+Phase 4 remains `PENDING` until the fresh forward root reaches its target and
+passes immutable audit/materialization. Phase 2/3 remain passed, Phase 5–7
+remain closed, and the laptop remains running.
+
 ## Current post-merge forward-run continuation — 2026-08-17
 
 PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator

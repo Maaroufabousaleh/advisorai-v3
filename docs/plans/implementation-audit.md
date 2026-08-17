@@ -5,6 +5,40 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Fresh replacement forward run — 2026-08-17
+
+The former forward root is intentionally interrupted evidence, not a crash
+incident: the operator shut down the laptop before continuation. Its exact
+classification is preserved at
+`artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+(SHA-256
+`678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). The
+root remains unchanged and is not eligible for backfill or admission.
+
+The replacement collector is running from a new evidence generation at
+`artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`
+(PID `59671`, commit
+`0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5`, fixed target end
+`2026-08-22T19:35:06.869338Z`). Its market-data-only Binance endpoint is
+credential-free and has no order capability. Resource observation is isolated
+under
+`artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/`
+(PID `61721`), and the matching baseline ledger is under
+`artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/`
+(PID `60814`).
+An initial sidecar launch attempt failed before sampling due solely to a
+pre-created evidence directory; this did not touch the collector and is
+preserved as
+`artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json`
+(SHA-256
+`b652681c71c9e7e34c2ffa0a2572986877207e0e7891659bdfcc0c556e1461e`).
+
+The TTM-R2 boundary has been exercised separately and correctly quarantined the
+approved 512-value runner against the frozen 48-bar V3-Core context. This is a
+model/role incompatibility, not an inference crash; no padding, alternate
+checkpoint, credentials, network calls, or orders were used. Phase 4 remains
+pending fresh completed cases and robust candidate admission.
+
 ## Current post-merge forward-run continuation — 2026-08-17
 
 PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator

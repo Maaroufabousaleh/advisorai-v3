@@ -1,5 +1,50 @@
 # Phase-4 paper utility evidence
 
+## Fresh replacement forward generation — 2026-08-17
+
+The previous forward generation was intentionally stopped by the operator when
+the laptop was shut down. It is preserved as
+`OPERATOR_INTERRUPTED / INCOMPLETE` at
+`artifacts/phase4/v3core-forward/20260812T204505Z-first-independent-pit-r2/`;
+classification evidence is
+`artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+(SHA-256
+`678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). Do not
+resume, extend, backfill, concatenate, or rewrite it.
+
+The replacement generation is:
+
+```text
+collector:
+  root: artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/
+  pid: 59671
+  started: 2026-08-17T19:35:06.869338Z
+  target_end: 2026-08-22T19:35:06.869338Z
+  commit: 0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5
+  endpoint: https://data-api.binance.vision/api/v3/klines
+resource_sidecar:
+  root: artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/
+  pid: 61721
+baseline_ledger:
+  root: artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/
+  pid: 60814
+```
+
+All three surfaces are credential-free and order-write-free. The matching TTM
+worker was run as an offline boundary check and recorded zero predictions
+because the qualified TTM-R2 runtime requires 512 values while the frozen
+V3-Core role requires 48 closed five-minute bars. That quarantine is preserved;
+the new run must not adapt or pad the context.
+
+The first resource-sidecar launch attempt failed before sampling because its
+evidence directory had been pre-created, contrary to the sidecar's atomic
+directory-creation contract. This did not affect the collector. The sanitized
+classification is
+`artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json`
+(SHA-256
+`b652681c71c9e7e34c2ffa0a2572986877207e0e7891659bdfcc0c556e1461e`); the
+corrected sidecar root above is the authoritative resource evidence.
+
 ## Prospective TTM-R2 prediction boundary — current continuation
 
 The prior forward acquisition root

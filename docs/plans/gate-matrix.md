@@ -1,5 +1,24 @@
 # AdvisorAI V3 gate matrix
 
+## Fresh replacement forward run — 2026-08-17
+
+The prior root is preserved as `OPERATOR_INTERRUPTED / INCOMPLETE` after the
+operator intentionally stopped the laptop; this is not a crash, provider, or
+implementation failure. Classification evidence is
+`artifacts/phase4/v3core-forward-incidents/20260817T192126Z-operator-interrupted/classification.json`
+(SHA-256
+`678450a5d5e1b4c8cd79a75303ffc174e6c29ef85de9d75c2cb664f4f78fd970`). It was
+not resumed, extended, backfilled, concatenated, or rewritten.
+
+| Requirement | State | Evidence/result |
+| --- | --- | --- |
+| Fresh forward collector | RUNNING / PENDING TERMINAL REVIEW | `artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`; PID `59671`; commit `0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5`; target end `2026-08-22T19:35:06.869338Z`; credential-free public Binance market-data GET; no writes |
+| Fresh resource qualification | RUNNING / LOCALLY MEASURED | `artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1/`; PID `61721`; first identity-matched sample; start ticks `811168`; command SHA-256 `a52212826f1a367d10589b0f0624ac53d8d98a8306f05db2d915148b04a5cd40` |
+| Sidecar launch attempt | PRESERVED / NON-COLLECTOR ORCHESTRATION ERROR | A pre-created evidence directory caused `FileExistsError` before sampling; no collector evidence was touched. Classification: `artifacts/phase4/v3core-forward-resource-incidents/20260817T193725Z-sidecar-launch-directory-protocol/classification.json` (SHA-256 `b652681c71c9e7e34c2ffa0a2572986877207e0e7891659bdfcc0c556e1461e`); corrected sidecar is running in a new root |
+| Fresh mandatory baseline ledger | RUNNING / PENDING CASES | `artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1/`; PID `60814`; same source/config/code identity; zero predictions before first eligible cutoff |
+| Fresh TTM-R2 boundary | QUARANTINED / INCOMPATIBLE | `.../20260817T193400Z-operator-interrupted-replacement-r1-ttm-r2/`; exact qualified runner requires 512 values versus frozen 48 bars; zero predictions, zero network calls, credentials false |
+| Phase 4 | PENDING | Fresh 64-per-symbol forward cases and robust candidate admission are not yet available; no promotion or downstream gate was opened |
+
 ## Current post-merge forward-run continuation — 2026-08-17
 
 PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`; the TTM follow-up
