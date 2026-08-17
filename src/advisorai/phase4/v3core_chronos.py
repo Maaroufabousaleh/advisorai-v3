@@ -805,6 +805,7 @@ def _status(
         "schema": f"{CHRONOS_RUN_SCHEMA}.status",
         "state": state,
         "updated_at": (updated_at or datetime.now(UTC)).isoformat(),
+        "pid": os.getpid(),
         "model": CHRONOS_MODEL,
         "model_identity_hash": identity.model_identity_hash,
         "prediction_count": len(ledger.records),
