@@ -62,6 +62,19 @@ It has produced zero predictions and recorded two missed cutoffs without
 backfill. Network calls, credentials, and order writes remain zero. This
 worker adds no execution authority and cannot itself admit or promote Chronos.
 
+The active collector's read-only health snapshot at
+`2026-08-17T23:16:49Z` showed 90 normalized bars, 0 completed cases, 9
+`schema_or_normalization` failures, and 4 source-health transitions. Raw
+inspection found the BTCUSDT interval ending `2026-08-17T22:15:00Z` with
+different closed-row content in successive HTTP-200 responses. The collector
+entered `DEGRADED` and later recovered to `HEALTHY`; this is preserved as a
+pending data-integrity incident, not a crash or provider-failure conclusion:
+`artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+(SHA-256
+`0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`). The
+active evidence root remains immutable and no admission decision has been
+made.
+
 ## Current post-merge forward-run continuation — 2026-08-17
 
 PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator

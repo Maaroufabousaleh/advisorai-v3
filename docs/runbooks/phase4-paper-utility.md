@@ -72,6 +72,17 @@ it does not backfill, use credentials, make network calls, or expose order
 operations. Its fixed target end remains
 `2026-08-22T19:35:06.869338Z`.
 
+The active generation currently has a separate pending integrity review. A
+read-only inspection found 9 `schema_or_normalization` failures while the
+BTCUSDT interval ending `2026-08-17T22:15:00Z` changed across successive
+HTTP-200 responses. The collector recorded `DEGRADED` and then `HEALTHY`; no
+crash or provider-failure conclusion is made. Preserve the root and defer the
+admission decision until terminal raw-versus-normalized comparison. The
+classification is
+`artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+(SHA-256
+`0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`).
+
 ## Prospective TTM-R2 prediction boundary — current continuation
 
 The prior forward acquisition root

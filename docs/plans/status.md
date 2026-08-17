@@ -64,6 +64,19 @@ The worker has made zero predictions and recorded two missed cutoffs rather
 than backfilling them; it has zero network calls, no credentials, and no order
 capability. This is prospective coverage only, not utility admission.
 
+At the `2026-08-17T23:16:49Z` read-only health snapshot, the active collector
+had 90 normalized bars, 0 completed cases, 9 `schema_or_normalization`
+failures, 8 rejected cutoffs, and 4 source-health transitions. One BTCUSDT
+closed interval was returned with changed content across successive HTTP-200
+responses; the collector degraded and then recovered. The pending sanitized
+incident record is
+`artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+(SHA-256
+`0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`). This
+is not classified as a crash, provider failure, or final implementation
+failure. Terminal raw-versus-normalized audit must resolve its admission impact;
+the active root has not been changed.
+
 Phase 4 remains `PENDING` until the fresh forward root reaches its target and
 passes immutable audit/materialization. Phase 2/3 remain passed, Phase 5–7
 remain closed, and the laptop remains running.

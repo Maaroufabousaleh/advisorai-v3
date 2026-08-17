@@ -71,6 +71,17 @@
   no credentials, and no order capability. The fixed generation deadline is
   `2026-08-22T19:35:06.869338Z`; no cutoff is backfilled and no utility or
   promotion decision is made.
+- A read-only health inspection observed a pending data-integrity incident in
+  the active root: Binance returned the BTCUSDT interval ending
+  `2026-08-17T22:15:00Z` with different closed-row content across two HTTP-200
+  responses. The collector recorded 9 `schema_or_normalization` failures,
+  entered `DEGRADED`, and recovered to `HEALTHY`; no process crash or provider
+  failure is claimed. The sanitized classification is
+  `artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+  (SHA-256
+  `0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`). The
+  active root remains untouched and is not admission-eligible until terminal
+  raw-versus-normalized integrity review.
 - Phase 4 remains `PENDING`; Phase 2 and Phase 3 remain passed; Phase 5–7
   remain closed. These durable processes must not be stopped or restarted
   unnecessarily. The laptop remains running.
