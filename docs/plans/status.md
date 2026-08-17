@@ -42,6 +42,16 @@ qualified 512-value runner versus 48-bar V3-Core mismatch, with zero
 predictions, zero network calls, and no credentials. TTM-R2 remains
 `QUARANTINED / INCOMPATIBLE_WITH_48_BAR_ROLE`.
 
+Chronos-2-small was requalified offline against its existing pinned local
+checkpoint and current worker identity. The compatibility evidence is
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json`
+(SHA-256
+`c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`). The
+runtime accepts 32–8192 context values and returns 30 values; a real isolated
+48-value smoke passed with deterministic output, offline mode, and no
+credentials. This clears the old worker-hash quarantine for challenger
+coverage only. No prospective utility prediction or promotion was made.
+
 Phase 4 remains `PENDING` until the fresh forward root reaches its target and
 passes immutable audit/materialization. Phase 2/3 remain passed, Phase 5–7
 remain closed, and the laptop remains running.

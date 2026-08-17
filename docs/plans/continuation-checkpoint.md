@@ -47,6 +47,17 @@
   512 values and frozen V3-Core supplies 48. It emitted zero predictions,
   loaded no credentials, made zero network calls, and remains quarantined. No
   padding, interpolation, alternate checkpoint, or direct fallback was used.
+- Chronos-2-small was requalified offline in a separate GPU-family wave. Its
+  exact current worker identity is runner hash
+  `c78b8e34950fb98c66cb52cb3019fb940f19a2bf474f5c2304ef81404b2ee23a` for
+  checkpoint revision `ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a`. The
+  compatibility record is
+  `artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json`
+  (SHA-256
+  `c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`). The
+  isolated 48-value smoke returned 30 forecast values, used no network, and
+  passed deterministic identity checks. Chronos is a compatible challenger for
+  future prospective coverage, not a utility-admitted or promoted model.
 - Phase 4 remains `PENDING`; Phase 2 and Phase 3 remain passed; Phase 5–7
   remain closed. These durable processes must not be stopped or restarted
   unnecessarily. The laptop remains running.

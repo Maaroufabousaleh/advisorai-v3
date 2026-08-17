@@ -45,6 +45,20 @@ classification is
 `b652681c71c9e7e34c2ffa0a2572986877207e0e7891659bdfcc0c556e1461e`); the
 corrected sidecar root above is the authoritative resource evidence.
 
+## Chronos challenger runtime checkpoint — 2026-08-17
+
+Chronos-2-small's prior worker-hash quarantine was requalified offline using
+the pinned local checkpoint and current worker identity. The immutable record
+is
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json`
+(SHA-256
+`c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`). Its
+native context range is 32–8192 values and its output is 30 values, so it is
+compatible with the frozen 48 x 5-minute context and 12 x 5-minute horizon.
+The isolated 48-value smoke passed with no network access and deterministic
+identity. This only permits future prospective challenger predictions; it does
+not admit utility, promote Chronos, or alter the frozen preregistration.
+
 ## Prospective TTM-R2 prediction boundary — current continuation
 
 The prior forward acquisition root

@@ -39,6 +39,17 @@ model/role incompatibility, not an inference crash; no padding, alternate
 checkpoint, credentials, network calls, or orders were used. Phase 4 remains
 pending fresh completed cases and robust candidate admission.
 
+The previously quarantined Chronos-2-small identity was separately requalified
+from the pinned local checkpoint. Its native 32–8192 context range and 30-step
+output cover the frozen 48-bar / 12-bar V3-Core role, and an isolated 48-value
+worker smoke passed without network access. The immutable compatibility record
+is
+`artifacts/phase0/model-runtime-qualification/chronos-v3core-compatibility/20260817T194802.642906Z/chronos-2-small.json`
+(SHA-256
+`c282864ff939c1ea7bf7dc6dcf219bc4fb48cbd99fdfa0637f86aa0472d8471a`). This is
+runtime/contract qualification only; Chronos has no utility result or
+promotion side effect.
+
 ## Current post-merge forward-run continuation — 2026-08-17
 
 PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator
