@@ -247,6 +247,8 @@ def materialize(
             prediction_ledger_paths=tuple(path.resolve() for path in prediction_ledger_paths),
             outcome_link_ledger_paths=tuple(path.resolve() for path in outcome_link_ledger_paths),
         )
+        if raw_case_counts != integrity_report.raw_completed_case_counts:
+            raise MaterializationRefused("integrity report raw counts do not match case ledger")
         contaminated_ids = set(integrity_overlay.contaminated_case_ids)
         cases = tuple(case for case in cases if case.case_id not in contaminated_ids)
     counts = {
