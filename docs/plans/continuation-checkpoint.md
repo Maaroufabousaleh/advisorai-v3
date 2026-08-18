@@ -1,5 +1,39 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Protected Phase-4 prediction-contract audit — 2026-08-18T23:31:16Z
+
+- Main is `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The protected source
+  generation remains running under collector PID `59671`, resource sidecar
+  PID `61721`, and Chronos PID `80779`; none was stopped, restarted, or
+  reconfigured. The source root had 6,380 raw responses, 672 normalized bars,
+  and 46 completed cases (23 per symbol) at this read-only checkpoint. The
+  frozen target remains 64 completed BTCUSDT and 64 completed ETHUSDT cases.
+- The baseline root is frozen at 15 records (10 BTCUSDT / 5 ETHUSDT) and 8
+  missed cutoffs. The reproduced conflict had identical scientific identity
+  and differed only in `generated_at` and `runtime_latency_ms`; sanitized
+  evidence SHA-256 is
+  `e3ad285e5543919e03337e26137d038a85ad624ce0aa5eedeb25d3b3abde13dc`.
+  Future-run idempotency correction is commit `185c195`; no live root was
+  resumed or edited.
+- Chronos has 0 predictions and 56 rejections (48 output-contract errors and
+  8 missed cutoffs). Every output-contract error had a valid 48-bar healthy
+  context. The exact defect was shared-record `extra="forbid"` rejecting 14
+  provenance/native-interval/device/resource fields. Reproduction evidence
+  SHA-256 is
+  `fbef12797f6f23175c0d602ade117d66ce5c60079a568d924940035ce2e24a1f`;
+  isolated correction is commit `9c33fc4`, with PID `80779` untouched.
+- The live structural coverage report is preserved at
+  `artifacts/phase4/v3core-forward-coverage/20260818T233116Z-live-structural-diagnostic/phase4-forward-coverage-report.json`
+  (SHA-256
+  `95700fb356cc37ceef77855f17bbd8b8732855d70cd05f97640152dd071536f7f`).
+  The current preregistration/materializer requires the mandatory baseline
+  identities and 64-per-symbol sealed case minimum, but allows strict causal
+  baseline regeneration after sealing; it does not encode a separate
+  candidate-per-symbol minimum for Chronos. No terminal audit or scoring is
+  authorized while the root is running.
+- Phase 4 remains `PENDING`; Phase 2/3 remain `PASSED`; Phase 5–7 remain
+  closed. No credentials, orders, or production calls were used.
+
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.

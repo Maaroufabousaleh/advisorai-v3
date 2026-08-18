@@ -4,6 +4,52 @@ This record distinguishes implementation coverage from an architecture gate that
 requires external, time-based evidence. A green unit test does not claim a 24-hour
 or 60-day operational gate.
 
+## Current protected Phase-4 prediction-contract checkpoint — 2026-08-18T23:31:16Z
+
+Clean main is `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The protected
+forward generation remains running and must not be modified: collector PID
+`59671`, resource sidecar PID `61721`, and Chronos PID `80779`. The source
+root has 6,380 raw responses, 672 normalized bars, and 46 completed cases
+(23 BTCUSDT / 23 ETHUSDT) at the recorded checkpoint, against the frozen
+64-per-symbol target. It is credential-free and order-write-free. No terminal
+audit, utility scoring, or Phase-4 admission decision is permitted while it
+remains running.
+
+The baseline ledger is frozen at 15 prospective predictions (10 BTCUSDT / 5
+ETHUSDT) with 8 missed cutoffs. Its resume stopped on an identity conflict;
+reproduction showed that the scientific payload was unchanged and only
+`generated_at` and `runtime_latency_ms` differed. The sanitized reproduction
+evidence is
+`artifacts/phase4/v3core-forward-incidents/20260818T235000Z-baseline-resume-conflict-reproduction/baseline-resume-conflict-reproduction.json`
+(SHA-256
+`e3ad285e5543919e03337e26137d038a85ad624ce0aa5eedeb25d3b3abde13dc`). The
+future-run idempotency fix is isolated on commit `185c195`; the protected
+baseline root was not resumed or changed.
+
+Chronos has zero predictions and 56 preserved rejections: 48
+`INFERENCE_OUTPUT_CONTRACT_ERROR` and 8 missed cutoffs. All 48 contract-error
+cutoffs had valid 48-bar healthy contexts. Offline reproduction identified
+the precise defect: `ForwardPredictionRecord(extra="forbid")` rejected 14
+candidate provenance, native-interval, device, and resource fields emitted by
+the worker. The reproduction evidence is
+`artifacts/phase4/v3core-forward-incidents/20260818T232903Z-chronos-output-contract-reproduction/chronos-output-contract-reproduction.json`
+(SHA-256
+`fbef12797f6f23175c0d602ade117d66ce5c60079a568d924940035ce2e24a1f`). The
+schema correction is isolated on commit `9c33fc4`; PID `80779` and its root
+remain untouched.
+
+The nonterminal structural coverage report is
+`artifacts/phase4/v3core-forward-coverage/20260818T233116Z-live-structural-diagnostic/phase4-forward-coverage-report.json`
+(SHA-256
+`95700fb356cc37ceef77855f17bbd8b8732855d70cd05f97640152dd071536f7f`). The
+frozen preregistration requires the five mandatory baseline identities and
+the 64-per-symbol case minimum, but does not require those baseline
+predictions to have been prospectively persisted in the live ledger; the
+materializer permits strictly cutoff-causal baseline regeneration after a
+sealed root. Chronos predictions are required if Chronos is scored, but no
+separate candidate-per-symbol minimum is encoded. Phase 4 remains pending;
+Phases 5–7 remain closed.
+
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
