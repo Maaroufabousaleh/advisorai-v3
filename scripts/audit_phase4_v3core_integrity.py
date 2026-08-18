@@ -32,6 +32,15 @@ def _timestamp(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
+def _repository_commit(value: str) -> str:
+    normalized = value.strip().lower()
+    if len(normalized) != 40 or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        raise argparse.ArgumentTypeError("repository commit must be a 40-character Git SHA-1")
+    return normalized
+
+
 def _write_new(path: Path, payload: object) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     encoded = (json.dumps(payload, sort_keys=True, indent=2) + "\n").encode()
@@ -71,7 +80,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--minimum-cases-per-symbol", type=int, default=64)
     parser.add_argument(
         "--repository-commit",
-        help="optional immutable repository commit for the auditor provenance record",
+        type=_repository_commit,
+        required=True,
+        help="exact immutable repository commit for the auditor provenance record",
     )
     parser.add_argument(
         "--allow-unsealed",
