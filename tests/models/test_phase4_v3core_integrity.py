@@ -139,6 +139,22 @@ def test_terminal_stability_classification_is_deterministic(
     assert report.stability_rule_version == STABILITY_RULE_VERSION
 
 
+def test_audit_scientific_fingerprint_is_reproducible_across_output_runs(
+    tmp_path: Path,
+) -> None:
+    first, _raw_one, _normalized_one = _single_bar_audit(
+        tmp_path / "first",
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    second, _raw_two, _normalized_two = _single_bar_audit(
+        tmp_path / "second",
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    assert first.audit_fingerprint == second.audit_fingerprint
+
+
 def test_auditor_records_changed_fields_versions_and_repeated_observations(tmp_path: Path) -> None:
     report, _, _ = _single_bar_audit(
         tmp_path,
