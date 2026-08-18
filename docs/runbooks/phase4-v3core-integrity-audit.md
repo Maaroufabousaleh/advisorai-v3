@@ -102,9 +102,32 @@ the manifest's model identity and candidate runtime fields when present. A
 missing or unverifiable prediction manifest is an explicit integrity
 limitation and prevents `admission_evidence_ready`; it is never treated as
 implicit identity evidence.
+An admission-ready report also requires at least one non-empty prediction
+ledger; a data-only audit without prospective predictions remains
+`integrity_ready=false`.
 When prediction entries exist, every prediction must also have exactly one
 valid outcome link before `integrity_ready` or `admission_evidence_ready` can
 be true. An unlinked prediction is preserved but blocks admission readiness.
+
+## Post-outcome prediction links
+
+Prediction records are written before outcomes and are never edited afterward.
+Once the sealed root contains the completed cases, create a separate immutable
+outcome-link ledger from exact `(instrument, cutoff)` matches:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/link_phase4_v3core_prediction_outcomes.py \
+  --prediction-ledger artifacts/phase4/v3core-forward-predictions/<generation>/predictions.jsonl \
+  --completed-cases artifacts/phase4/v3core-forward/<sealed-root>/completed-cases.jsonl \
+  --output artifacts/phase4/v3core-integrity/<generation>/outcome-links.jsonl
+```
+
+The linker validates both input chains, refuses missing outcomes or duplicate
+identities, uses the case's deterministic `realized_at` as `linked_at`, and
+creates no output on failure. The sealed-root workflow performs this linking
+automatically for a target-reached root when no outcome-link ledger was
+provided; incomplete/deadline roots are preserved without attempting it.
 
 ## Sealed-root workflow
 
