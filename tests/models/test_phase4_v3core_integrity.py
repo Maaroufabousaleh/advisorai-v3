@@ -401,6 +401,36 @@ def test_prediction_source_identity_limitation_is_not_silently_passed(
     assert report.integrity_ready is False
 
 
+def test_prediction_model_identity_is_bound_to_manifest(tmp_path: Path) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, links_path = (
+        _write_multi_symbol_case_fixture(tmp_path)
+    )
+    source_manifest_path = tmp_path / "source-manifest.json"
+    source_manifest_path.write_text(json.dumps({"source_snapshot_hash": HASH}), encoding="utf-8")
+    prediction_manifest_path = tmp_path / "prediction-manifest.json"
+    prediction_manifest_path.write_text(
+        json.dumps(
+            {
+                "models": ["lightgbm"],
+                "model_identity_hashes": {"lightgbm": HASH},
+            }
+        ),
+        encoding="utf-8",
+    )
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        prediction_manifest_paths=(prediction_manifest_path,),
+        outcome_link_ledger_paths=(links_path,),
+        terminal_observed_at=START + timedelta(days=2),
+        source_manifest_path=source_manifest_path,
+    )
+    assert report.prediction_model_identity_valid is True
+    assert report.prediction_identity_limitations == ()
+
+
 def test_input_spools_are_byte_identical_after_audit_and_overlay_is_separate(
     tmp_path: Path,
 ) -> None:
