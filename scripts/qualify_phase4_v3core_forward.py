@@ -346,6 +346,7 @@ def run(
                 "overlay_path": _relative(exclusion_overlay_path, repo),
                 "overlay_sha256": exclusion_overlay_sha256,
                 "audit_fingerprint": integrity_report.audit_fingerprint,
+                "terminal_evidence_eligible": integrity_report.terminal_evidence_eligible,
                 "sample_minimum_met": integrity_report.sample_minimum_met,
                 "integrity_ready": integrity_report.integrity_ready,
                 "admission_evidence_ready": integrity_report.admission_evidence_ready,

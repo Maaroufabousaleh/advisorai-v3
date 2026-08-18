@@ -95,6 +95,10 @@ fail-closed compatibility alias for the latter and is not a Phase-4 model
 admission decision. An orphan normalized record, broken immutable input, bad
 prediction context, or failed identity check causes the audit to fail closed
 rather than inventing a preferred value.
+Reports also expose `terminal_evidence_eligible`. The normal sealed workflow
+sets it true; `--allow-unsealed` diagnostic reads set it false and therefore
+cannot produce `admission_evidence_ready` or `admission_minimum_met`, even if
+the other content checks happen to pass.
 
 Each prediction ledger must be paired, in argument order, with its frozen
 prediction-run manifest through `--prediction-manifest`. The auditor verifies
