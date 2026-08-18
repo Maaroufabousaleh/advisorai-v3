@@ -145,6 +145,10 @@ def _load_integrity_boundary(
         raise MaterializationRefused("exclusion overlay does not bind the integrity report")
     if overlay.audit_fingerprint != report.audit_fingerprint:
         raise MaterializationRefused("exclusion overlay fingerprint does not match the report")
+    if overlay.terminal_evidence_eligible != report.terminal_evidence_eligible:
+        raise MaterializationRefused("exclusion overlay terminal eligibility does not match report")
+    if overlay.admission_evidence_ready != report.admission_evidence_ready:
+        raise MaterializationRefused("exclusion overlay admission flag does not match report")
     if not report.admission_evidence_ready:
         raise MaterializationRefused("integrity audit is not ready for materialization")
     if report.raw_responses_sha256 != _sha256(raw_responses_path):
@@ -329,6 +333,7 @@ def materialize(
                 "overlay_path": str(exclusion_overlay_path.resolve()),
                 "overlay_sha256": integrity_overlay_sha256,
                 "audit_fingerprint": integrity_report.audit_fingerprint,
+                "terminal_evidence_eligible": integrity_report.terminal_evidence_eligible,
                 "sample_minimum_met": integrity_report.sample_minimum_met,
                 "integrity_ready": integrity_report.integrity_ready,
                 "admission_evidence_ready": integrity_report.admission_evidence_ready,
