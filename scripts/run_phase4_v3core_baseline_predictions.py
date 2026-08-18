@@ -54,6 +54,7 @@ RESUME_IDENTITY_FIELDS = (
     "forecasting_code_sha256",
     "lightgbm_code_sha256",
     "models",
+    "model_identity_hashes",
     "context_bars",
     "horizon_bars",
 )
@@ -157,6 +158,8 @@ def _expected_manifest(
 
     forecasting_path = repository_root / "src/advisorai/models/forecasting.py"
     lightgbm_path = repository_root / "src/advisorai/phase0/runtime_qualification.py"
+    forecasting_hash = _sha256_file(forecasting_path)
+    lightgbm_hash = _sha256_file(lightgbm_path)
     return {
         "schema": RUN_SCHEMA,
         "source_root": str(source_root),
@@ -165,9 +168,18 @@ def _expected_manifest(
         "preregistration_sha256": preregistration_sha256,
         "phase3_gate_record_sha256": phase3_gate_sha256,
         "repository_commit": _git_head(repository_root),
-        "forecasting_code_sha256": _sha256_file(forecasting_path),
-        "lightgbm_code_sha256": _sha256_file(lightgbm_path),
+        "forecasting_code_sha256": forecasting_hash,
+        "lightgbm_code_sha256": lightgbm_hash,
         "models": list(V3_CORE_BASELINES),
+        "model_identity_hashes": {
+            model: _identity_hash(
+                model=model,
+                repository_root=repository_root,
+                forecasting_hash=forecasting_hash,
+                lightgbm_hash=lightgbm_hash,
+            )
+            for model in V3_CORE_BASELINES
+        },
         "context_bars": CONTEXT_BARS,
         "horizon_bars": HORIZON_BARS,
     }
@@ -226,6 +238,7 @@ def _prediction(
     repository_root: Path,
     forecasting_hash: str,
     lightgbm_hash: str,
+    source_snapshot_hash: str,
 ) -> ForwardPredictionRecord:
     started = time.perf_counter()
     values = tuple(bar.close for bar in context)
@@ -244,6 +257,7 @@ def _prediction(
         ),
         cutoff=cutoff,
         input_snapshot_hash=_input_snapshot_hash(context, cutoff),
+        source_snapshot_hash=source_snapshot_hash,
         predicted_return_bps=predicted_return_bps,
         generated_at=generated_at,
         runtime_latency_ms=Decimal(str((time.perf_counter() - started) * 1000)),
@@ -361,6 +375,7 @@ def run(
                                 repository_root=repository_root,
                                 forecasting_hash=manifest["forecasting_code_sha256"],
                                 lightgbm_hash=manifest["lightgbm_code_sha256"],
+                                source_snapshot_hash=manifest["source_snapshot_hash"],
                             )
                         )
                     except QualificationError:
