@@ -698,6 +698,7 @@ class ForwardPredictionRecord(BaseModel):
     device: str | None = Field(default=None, min_length=1)
     native_interval_lower_bps: Decimal | None = None
     native_interval_upper_bps: Decimal | None = None
+    native_confidence: Decimal | None = None
     resource_peak_rss_mib: Decimal | None = Field(default=None, ge=0)
     resource_peak_cpu_percent: Decimal | None = Field(default=None, ge=0)
     resource_sample_count: int | None = Field(default=None, ge=1)
@@ -737,6 +738,7 @@ class ForwardPredictionRecord(BaseModel):
         "runtime_latency_ms",
         "native_interval_lower_bps",
         "native_interval_upper_bps",
+        "native_confidence",
         "resource_peak_rss_mib",
         "resource_peak_cpu_percent",
     )
