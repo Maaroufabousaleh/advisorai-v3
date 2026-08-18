@@ -82,7 +82,9 @@ instrument and interval, with matching OHLCV. Duplicate normalized intervals
 are invalid even when their content is identical. A terminal repeat must come
 from distinct raw HTTP response sequences; duplicate rows inside one response
 cannot establish stability. Receipt and response ordering are checked rather
-than inferred from file order.
+than inferred from file order. A syntactically valid HTTP-200 response with
+non-numeric or impossible OHLCV bounds is rejected fail-closed rather than
+being treated as a market-data version.
 
 The report separates `sample_minimum_met`, `integrity_ready`, and
 `admission_evidence_ready`. The legacy `admission_minimum_met` field is a
@@ -97,6 +99,9 @@ the manifest's model identity and candidate runtime fields when present. A
 missing or unverifiable prediction manifest is an explicit integrity
 limitation and prevents `admission_evidence_ready`; it is never treated as
 implicit identity evidence.
+When prediction entries exist, every prediction must also have exactly one
+valid outcome link before `integrity_ready` or `admission_evidence_ready` can
+be true. An unlinked prediction is preserved but blocks admission readiness.
 
 ## Integrity-aware materialization
 
