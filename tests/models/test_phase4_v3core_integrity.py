@@ -155,6 +155,13 @@ def test_audit_scientific_fingerprint_is_reproducible_across_output_runs(
     assert first.audit_fingerprint == second.audit_fingerprint
 
 
+def test_malformed_numeric_ohlcv_in_http_200_fails_closed(tmp_path: Path) -> None:
+    malformed = _row()
+    malformed[4] = "not-a-number"
+    with pytest.raises(IntegrityAuditError, match="non-numeric kline OHLCV"):
+        _single_bar_audit(tmp_path, [malformed], canonical_row=_row())
+
+
 def test_auditor_records_changed_fields_versions_and_repeated_observations(tmp_path: Path) -> None:
     report, _, _ = _single_bar_audit(
         tmp_path,
@@ -445,6 +452,31 @@ def test_prediction_model_identity_is_bound_to_manifest(tmp_path: Path) -> None:
     )
     assert report.prediction_model_identity_valid is True
     assert report.prediction_identity_limitations == ()
+
+
+def test_unlinked_prediction_blocks_admission_readiness(tmp_path: Path) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, _links_path = (
+        _write_multi_symbol_case_fixture(tmp_path)
+    )
+    source_manifest_path = tmp_path / "source-manifest.json"
+    source_manifest_path.write_text(json.dumps({"source_snapshot_hash": HASH}), encoding="utf-8")
+    prediction_manifest_path = tmp_path / "prediction-manifest.json"
+    prediction_manifest_path.write_text(
+        json.dumps({"models": ["lightgbm"], "model_identity_hashes": {"lightgbm": HASH}}),
+        encoding="utf-8",
+    )
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        prediction_manifest_paths=(prediction_manifest_path,),
+        source_manifest_path=source_manifest_path,
+        terminal_observed_at=START + timedelta(days=2),
+    )
+    assert report.prediction_outcome_link_complete is False
+    assert report.integrity_ready is False
+    assert report.admission_evidence_ready is False
 
 
 def test_input_spools_are_byte_identical_after_audit_and_overlay_is_separate(
