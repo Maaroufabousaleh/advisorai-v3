@@ -40,8 +40,8 @@ from advisorai.phase4.v3core_prediction_ledger import (
     ForwardPredictionOutcomeLink,
 )
 
-INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v2"
-INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v2"
+INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v3"
+INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v3"
 STABILITY_RULE_VERSION = "closed_terminal_repeat_v1"
 DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS = 2
 DEFAULT_MINIMUM_CASES_PER_SYMBOL = 64
@@ -117,6 +117,7 @@ class RawKlineObservation(BaseModel):
     raw_response_record_hash: str
     raw_response_payload_sha256: str
     row_index: int = Field(ge=0)
+    raw_row: tuple[object, ...]
     raw_row_content_hash: str
     raw_ohlcv_hash: str
     ohlcv: dict[str, str]
@@ -162,10 +163,12 @@ class RawKlineObservation(BaseModel):
 
 
 class RawKlineVersion(BaseModel):
-    """All receipts of one distinct OHLCV value for an interval."""
+    """All receipts of one distinct raw kline row for an interval."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    raw_row_content_hash: str
+    raw_row: tuple[object, ...]
     raw_ohlcv_hash: str
     ohlcv: dict[str, str]
     observation_count: int = Field(ge=1)
@@ -176,10 +179,10 @@ class RawKlineVersion(BaseModel):
     raw_response_payload_sha256s: tuple[str, ...]
     raw_row_content_hashes: tuple[str, ...]
 
-    @field_validator("raw_ohlcv_hash")
+    @field_validator("raw_row_content_hash", "raw_ohlcv_hash")
     @classmethod
-    def valid_ohlcv_digest(cls, value: str) -> str:
-        return _digest(value, "raw_ohlcv_hash")
+    def valid_content_digest(cls, value: str, info: object) -> str:
+        return _digest(value, getattr(info, "field_name", "raw content hash"))
 
     @field_validator("first_receipt_at", "last_receipt_at")
     @classmethod
@@ -189,6 +192,10 @@ class RawKlineVersion(BaseModel):
     @property
     def ohlcv_hash(self) -> str:
         return self.raw_ohlcv_hash
+
+    @property
+    def row_content_hash(self) -> str:
+        return self.raw_row_content_hash
 
     @property
     def raw_record_hashes(self) -> tuple[str, ...]:
@@ -491,6 +498,7 @@ def _decode_raw_observations(record: ForwardRawResponse) -> tuple[RawKlineObserv
                 raw_response_record_hash=record.record_hash,
                 raw_response_payload_sha256=record.response_sha256,
                 row_index=row_index,
+                raw_row=tuple(row),
                 raw_row_content_hash=_hash_payload(row),
                 raw_ohlcv_hash=_hash_payload(ohlcv),
                 ohlcv=ohlcv,
@@ -625,13 +633,15 @@ def _version_summary(observations: Sequence[RawKlineObservation]) -> tuple[RawKl
     grouped: dict[str, list[RawKlineObservation]] = {}
     order: list[str] = []
     for observation in observations:
-        if observation.ohlcv_hash not in grouped:
-            grouped[observation.ohlcv_hash] = []
-            order.append(observation.ohlcv_hash)
-        grouped[observation.ohlcv_hash].append(observation)
+        if observation.raw_row_content_hash not in grouped:
+            grouped[observation.raw_row_content_hash] = []
+            order.append(observation.raw_row_content_hash)
+        grouped[observation.raw_row_content_hash].append(observation)
     return tuple(
         RawKlineVersion(
-            raw_ohlcv_hash=version_hash,
+            raw_row_content_hash=version_hash,
+            raw_row=grouped[version_hash][0].raw_row,
+            raw_ohlcv_hash=grouped[version_hash][0].raw_ohlcv_hash,
             ohlcv=grouped[version_hash][0].ohlcv,
             observation_count=len(grouped[version_hash]),
             closed_observation_count=sum(
@@ -711,14 +721,17 @@ def _classify_bar(
     duplicate_raw_rows_within_response = any(count > 1 for count in response_row_counts.values())
     closed_version_sequence: list[str] = []
     for observation in closed:
-        if not closed_version_sequence or closed_version_sequence[-1] != observation.raw_ohlcv_hash:
-            closed_version_sequence.append(observation.raw_ohlcv_hash)
+        if (
+            not closed_version_sequence
+            or closed_version_sequence[-1] != observation.raw_row_content_hash
+        ):
+            closed_version_sequence.append(observation.raw_row_content_hash)
     terminal = closed[-1] if closed else None
     terminal_run = 0
     terminal_response_sequences: set[int] = set()
     if terminal is not None:
         for observation in reversed(closed):
-            if observation.raw_ohlcv_hash != terminal.raw_ohlcv_hash:
+            if observation.raw_row_content_hash != terminal.raw_row_content_hash:
                 break
             terminal_run += 1
             terminal_response_sequences.add(observation.raw_response_sequence)
@@ -804,11 +817,11 @@ def _classify_bar(
         closed_version_sequence=tuple(closed_version_sequence),
         terminal_closed_observation=terminal,
         final_observed_value=final_observed,
-        terminal_stable_version_hash=terminal.raw_ohlcv_hash if terminal_stable else None,
+        terminal_stable_version_hash=terminal.raw_row_content_hash if terminal_stable else None,
         terminal_consecutive_observations=terminal_run,
         terminal_distinct_response_count=len(terminal_response_sequences),
         repeated_identical_observation_count=len(observations)
-        - len({observation.raw_ohlcv_hash for observation in observations}),
+        - len({observation.raw_row_content_hash for observation in observations}),
         revision_count=max(0, len(closed_version_sequence) - 1),
         changed_ohlcv_fields=_changed_fields(observations),
         raw_receipt_order_valid=raw_receipt_order_valid,

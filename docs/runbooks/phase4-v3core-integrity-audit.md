@@ -71,6 +71,11 @@ semantically distinct:
 - `raw_ohlcv_hash` identifies only the normalized OHLCV values;
 - `normalized_record_hash` identifies the complete normalized collector record.
 
+Raw versions are grouped by the complete raw kline row content hash, not only
+by OHLCV. A provider revision to trade-count, quote-volume, or other raw-row
+metadata is therefore retained as a distinct version even when the normalized
+OHLCV is unchanged; `changed_ohlcv_fields` remains empty for that case.
+
 The normalized raw-row hash must correspond to an actual raw row for the same
 instrument and interval, with matching OHLCV. Duplicate normalized intervals
 are invalid even when their content is identical. A terminal repeat must come

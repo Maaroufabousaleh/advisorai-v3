@@ -156,6 +156,25 @@ def test_auditor_records_changed_fields_versions_and_repeated_observations(tmp_p
     assert record.first_normalized_observation is not None
 
 
+def test_metadata_only_raw_revision_is_recorded_separately_from_ohlcv(
+    tmp_path: Path,
+) -> None:
+    first = _row()
+    revised = _row()
+    revised[8] = 5  # Provider trade-count metadata changes; OHLCV does not.
+    report, _raw_path, _normalized_path = _single_bar_audit(
+        tmp_path,
+        [first, revised, revised],
+        canonical_row=first,
+    )
+    record = report.bar_records[0]
+    assert len(record.raw_versions) == 2
+    assert record.raw_versions[0].raw_ohlcv_hash == record.raw_versions[1].raw_ohlcv_hash
+    assert record.revision_count == 1
+    assert record.changed_ohlcv_fields == ()
+    assert record.classification == "REVISED_BUT_CANONICAL_FINAL"
+
+
 def test_open_observation_is_retained_but_does_not_prove_terminal_stability(tmp_path: Path) -> None:
     row = _row()
     raw_path = tmp_path / "raw.jsonl"
