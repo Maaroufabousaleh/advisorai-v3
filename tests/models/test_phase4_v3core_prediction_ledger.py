@@ -72,6 +72,7 @@ def test_candidate_runtime_metadata_round_trips_through_ledger(tmp_path: Path) -
             "device": "cuda",
             "native_interval_lower_bps": Decimal("-10"),
             "native_interval_upper_bps": Decimal("20"),
+            "native_confidence": Decimal("0.8"),
             "resource_peak_rss_mib": Decimal("100"),
             "resource_peak_cpu_percent": Decimal("20"),
             "resource_sample_count": 3,
@@ -85,6 +86,7 @@ def test_candidate_runtime_metadata_round_trips_through_ledger(tmp_path: Path) -
     restored = reopened.records[0].prediction
     assert restored.checkpoint_hash == HASH
     assert restored.native_interval_lower_bps == Decimal("-10")
+    assert restored.native_confidence == Decimal("0.8")
     assert restored.provenance == (("source", "binance_public"),)
 
 
