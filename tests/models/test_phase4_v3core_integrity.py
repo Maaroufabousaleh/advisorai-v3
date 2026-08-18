@@ -22,6 +22,7 @@ from advisorai.phase4 import (
     build_v3core_cases,
     parse_binance_klines,
 )
+from advisorai.phase4.v3core_integrity import _hash_payload, _normalized_identity_payload
 
 HASH = "a" * 64
 PHASE3_HASH = "b" * 64
@@ -353,3 +354,186 @@ def test_input_spools_are_byte_identical_after_audit_and_overlay_is_separate(
     assert normalized_path.read_bytes() == normalized_before
     assert overlay_path != raw_path
     assert overlay.contaminated_case_ids == ()
+
+
+def test_normalized_identity_matches_collector_golden_vector() -> None:
+    row = _row()
+    bar = parse_binance_klines(
+        json.dumps([row]).encode(),
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6),
+        source_snapshot_hash=HASH,
+    )[0]
+    expected = "d65c693e87027c814a35aba5d9dc12f9497ed3109cf3a19c73ec3290b10d6881"
+    assert _hash_payload(_normalized_identity_payload(bar)) == expected
+    assert bar.provenance.normalized_record_hash == expected
+
+
+def test_normalized_raw_row_identity_mismatch_is_unresolved(tmp_path: Path) -> None:
+    report, _raw_path, _normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(close="101"),
+    )
+    record = report.bar_records[0]
+    assert record.normalized_raw_row_identity_valid is False
+    assert record.classification == "UNRESOLVED"
+    assert "raw-row identity" in record.classification_reason
+    assert report.integrity_ready is False
+    assert report.admission_evidence_ready is False
+
+
+def test_duplicate_normalized_interval_is_invalid_even_when_content_matches(
+    tmp_path: Path,
+) -> None:
+    row = _row()
+    raw_path = tmp_path / "raw.jsonl"
+    normalized_path = tmp_path / "normalized.jsonl"
+    raw = ForwardRawSpool(raw_path)
+    raw.append(
+        _response(row, START + timedelta(minutes=6, seconds=1)),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    raw.append(
+        _response(row, START + timedelta(minutes=6, seconds=2)),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    bar = parse_binance_klines(
+        json.dumps([row]).encode(),
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6),
+        source_snapshot_hash=HASH,
+    )[0]
+    normalized_path.write_text(
+        bar.model_dump_json() + "\n" + bar.model_dump_json() + "\n",
+        encoding="utf-8",
+    )
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        terminal_observed_at=START + timedelta(minutes=10),
+    )
+    record = report.bar_records[0]
+    assert record.normalized_duplicate is True
+    assert record.normalized_conflict is False
+    assert record.normalized_provenance_conflict is False
+    assert record.classification == "UNRESOLVED"
+    assert report.normalized_duplicate_count == 1
+    assert report.normalized_input_valid is False
+
+
+def test_normalized_duplicate_with_provenance_difference_is_distinguished(
+    tmp_path: Path,
+) -> None:
+    row = _row()
+    raw_path = tmp_path / "raw.jsonl"
+    normalized_path = tmp_path / "normalized.jsonl"
+    raw = ForwardRawSpool(raw_path)
+    raw.append(
+        _response(row, START + timedelta(minutes=6, seconds=1)),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    raw.append(
+        _response(row, START + timedelta(minutes=6, seconds=2)),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    first = parse_binance_klines(
+        json.dumps([row]).encode(),
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6),
+        source_snapshot_hash=HASH,
+    )[0]
+    second = parse_binance_klines(
+        json.dumps([row]).encode(),
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6, seconds=3),
+        source_snapshot_hash=HASH,
+    )[0]
+    normalized_path.write_text(
+        first.model_dump_json() + "\n" + second.model_dump_json() + "\n",
+        encoding="utf-8",
+    )
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        terminal_observed_at=START + timedelta(minutes=10),
+    )
+    record = report.bar_records[0]
+    assert record.normalized_duplicate is True
+    assert record.normalized_conflict is False
+    assert record.normalized_provenance_conflict is True
+    assert record.classification == "UNRESOLVED"
+
+
+def test_same_response_duplicate_cannot_count_as_terminal_repeat(tmp_path: Path) -> None:
+    row = _row()
+    raw_path = tmp_path / "raw.jsonl"
+    normalized_path = tmp_path / "normalized.jsonl"
+    raw = ForwardRawSpool(raw_path)
+    raw.append(
+        HttpResponse(
+            status_code=200,
+            body=json.dumps([row, row]).encode(),
+            fetched_at=START + timedelta(minutes=6),
+            url=ENDPOINT,
+        ),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    raw.append(
+        _response(row, START + timedelta(minutes=6, seconds=1)),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    bar = parse_binance_klines(
+        json.dumps([row]).encode(),
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6),
+        source_snapshot_hash=HASH,
+    )[0]
+    assert ForwardNormalizedBarSpool(normalized_path).append(bar)
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        terminal_observed_at=START + timedelta(minutes=10),
+    )
+    record = report.bar_records[0]
+    assert record.duplicate_raw_rows_within_response is True
+    assert record.terminal_distinct_response_count == 2
+    assert record.classification == "UNRESOLVED"
+
+
+def test_backwards_receipt_order_is_fail_closed(tmp_path: Path) -> None:
+    row = _row()
+    raw_path = tmp_path / "raw.jsonl"
+    normalized_path = tmp_path / "normalized.jsonl"
+    raw = ForwardRawSpool(raw_path)
+    raw.append(
+        _response(row, START + timedelta(minutes=6, seconds=2)),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    raw.append(
+        _response(row, START + timedelta(minutes=6, seconds=1)),
+        symbol="BTCUSDT",
+        request_url=ENDPOINT,
+    )
+    bar = parse_binance_klines(
+        json.dumps([row]).encode(),
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6),
+        source_snapshot_hash=HASH,
+    )[0]
+    assert ForwardNormalizedBarSpool(normalized_path).append(bar)
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        terminal_observed_at=START + timedelta(minutes=10),
+    )
+    assert report.raw_receipt_order_valid is False
+    assert report.bar_records[0].classification == "UNRESOLVED"
+    assert report.admission_minimum_met is False
