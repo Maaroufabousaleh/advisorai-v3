@@ -1,5 +1,42 @@
 # AdvisorAI V3 continuation checkpoint
 
+## Current protected Phase-4 integrity-auditor checkpoint — 2026-08-18T07:03:45Z
+
+- Clean main remains `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The isolated
+  integrity-auditor branch is `agent/phase4-integrity-auditor` at pushed commit
+  `2c5be98e08a9468e3e7e1a421579fef5a849745c`; it is intentionally not merged
+  while the protected forward generation is running.
+- The authoritative active root is
+  `artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`.
+  Its immutable target end is `2026-08-22T19:35:06.869338Z`; status remains
+  `running`, with 2,662 raw responses, 276 normalized bars, and 7 completed
+  cases per BTCUSDT and ETHUSDT. The minimum has not been reached.
+- Collector PID `59671` and resource sidecar PID `61721` remain protected and
+  alive. Baseline PID `60814` is absent and was not restarted. Chronos PID
+  `80779` remains alive with zero prospective predictions and preserved
+  rejection evidence. No protected process was stopped, restarted, checked
+  out, rebased, or reconfigured.
+- The active manifest and status continue to record
+  `credentials_loaded=false` and `order_writes_attempted=false`. No orders or
+  broker credentials were used for this evidence generation. The laptop
+  remains running.
+- The BTCUSDT closed-bar revision incident remains immutable at
+  `artifacts/phase4/v3core-forward-incidents/20260817T231643Z-btc-closed-bar-revision/incident-classification.json`
+  (SHA-256
+  `0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`). It
+  remains `DATA_INTEGRITY_INCIDENT_OBSERVED` / `PENDING_TERMINAL_REVIEW`; no
+  crash, provider failure, or implementation failure is inferred.
+- The isolated auditor now binds every completed-case context/outcome bar to
+  audited normalized identity, raw-row identity, OHLCV content, and
+  source-health state. It refuses admission on a content mismatch and keeps
+  contaminated cases in a separate overlay. Full verification at this branch
+  passed 746 tests, 28 warnings; focused integrity tests passed 55.
+- No terminal raw-versus-normalized audit, exclusion overlay, materialization,
+  utility scoring, Phase-4 admission, or downstream phase has been started.
+  The next legal action after the root itself seals is the immutable terminal
+  audit, resource audit, integrity exclusion derivation, and only then
+  preregistered Phase-4 materialization.
+
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.
