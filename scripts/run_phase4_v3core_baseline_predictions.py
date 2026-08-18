@@ -150,6 +150,22 @@ def _predict_prices(model: str, values: tuple[Decimal, ...]) -> tuple[Decimal, .
         raise
 
 
+def _prediction_id(*, symbol: str, cutoff: datetime, model: str) -> str:
+    return f"{symbol}:{cutoff.isoformat()}:{model}"
+
+
+def _pending_baselines(
+    ledger: ForwardPredictionLedger, *, symbol: str, cutoff: datetime
+) -> tuple[str, ...]:
+    """Return only identities not already frozen in the append-only ledger."""
+
+    return tuple(
+        model
+        for model in V3_CORE_BASELINES
+        if _prediction_id(symbol=symbol, cutoff=cutoff, model=model) not in ledger.prediction_ids
+    )
+
+
 def _prediction(
     *,
     model: str,
@@ -167,7 +183,7 @@ def _prediction(
     last_close = values[-1]
     predicted_return_bps = (prices[-1] / last_close - Decimal("1")) * Decimal("10000")
     return ForwardPredictionRecord(
-        prediction_id=f"{symbol}:{cutoff.isoformat()}:{model}",
+        prediction_id=_prediction_id(symbol=symbol, cutoff=cutoff, model=model),
         instrument=symbol,
         model=model,
         model_identity_hash=_identity_hash(
@@ -288,7 +304,7 @@ def run(
                 context = _context_for_cutoff(bars, symbol=symbol, cutoff=cutoff, now=now)
                 if context is None:
                     continue
-                for model in V3_CORE_BASELINES:
+                for model in _pending_baselines(ledger, symbol=symbol, cutoff=cutoff):
                     try:
                         ledger.append(
                             _prediction(
