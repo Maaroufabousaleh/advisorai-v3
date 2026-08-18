@@ -11,6 +11,7 @@ import pytest
 from advisorai.collectors.sources import HttpResponse
 from advisorai.phase4 import (
     STABILITY_RULE_VERSION,
+    ForwardHealthLedger,
     ForwardNormalizedBarSpool,
     ForwardPredictionLedger,
     ForwardPredictionOutcomeLinkLedger,
@@ -56,6 +57,20 @@ def _response(row: list[object], received_at: datetime) -> HttpResponse:
         fetched_at=received_at,
         url=f"{ENDPOINT}?interval=5m&limit=2&symbol=BTCUSDT",
     )
+
+
+def _health_ledger(tmp_path: Path, *, state: str = "HEALTHY") -> Path:
+    path = tmp_path / "source-health.jsonl"
+    ledger = ForwardHealthLedger(path)
+    ledger.append(
+        symbol="BTCUSDT",
+        observed_at=START + timedelta(minutes=6),
+        to_state=state,
+        reason="closed_bar_received",
+        last_valid_interval_end=START + timedelta(minutes=5),
+        last_collected_at=START + timedelta(minutes=6),
+    )
+    return path
 
 
 def _single_bar_audit(
@@ -177,6 +192,38 @@ def test_auditor_records_changed_fields_versions_and_repeated_observations(tmp_p
     assert len(record.raw_versions) == 2
     assert record.final_observed_value.ohlcv["close"] == "101"
     assert record.first_normalized_observation is not None
+
+
+def test_source_health_chain_is_validated_and_bound_to_normalized_state(
+    tmp_path: Path,
+) -> None:
+    report, raw_path, normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    assert report.source_health_ledger_valid is False
+
+    health_path = _health_ledger(tmp_path, state="HEALTHY")
+    checked = audit_forward_root(
+        raw_path,
+        normalized_path,
+        source_health_path=health_path,
+        terminal_observed_at=START + timedelta(minutes=10),
+    )
+    assert checked.source_health_ledger_valid is True
+    assert checked.source_health_ledger_sha256 is not None
+
+    health_record = json.loads(health_path.read_text(encoding="utf-8"))
+    health_record["record_hash"] = "b" * 64
+    health_path.write_text(json.dumps(health_record) + "\n", encoding="utf-8")
+    with pytest.raises(IntegrityAuditError, match="source-health"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_health_path=health_path,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
 
 
 def test_metadata_only_raw_revision_is_recorded_separately_from_ohlcv(

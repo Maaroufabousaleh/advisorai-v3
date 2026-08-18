@@ -60,9 +60,12 @@ predictions remain in their original append-only ledger and are represented in
 the overlay as `EXCLUDED_DATA_INTEGRITY`; no prediction or completed case is
 deleted or rewritten.
 
-The report also validates raw and prediction hash chains, prediction timing and
-context identity, normalized-record identity hashes, repeated values, changed
-OHLCV fields, receipt timestamps, and source identity. Hash fields are kept
+The report also validates raw, source-health, and prediction hash chains,
+per-symbol source-health state continuity, prediction timing and context
+identity, normalized-record identity hashes, repeated values, changed OHLCV
+fields, receipt timestamps, and source identity. A normalized bar's recorded
+source-health state must match the latest source-health transition available at
+its collection time. Hash fields are kept
 semantically distinct:
 
 - `raw_response_record_hash` identifies the raw HTTP-response ledger record;

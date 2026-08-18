@@ -61,6 +61,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--exclusion-output", type=Path)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--status", type=Path)
+    parser.add_argument("--source-health", type=Path)
     parser.add_argument("--config", type=Path)
     parser.add_argument(
         "--minimum-terminal-closed-observations",
@@ -82,7 +83,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def _resolve_inputs(
     args: argparse.Namespace,
-) -> tuple[Path, Path, Path | None, Path | None, Path | None, Path | None]:
+) -> tuple[Path, Path, Path | None, Path | None, Path | None, Path | None, Path | None]:
     if args.run_directory is not None:
         run = args.run_directory.resolve()
         status_path = run / "status.json"
@@ -103,6 +104,9 @@ def _resolve_inputs(
             (args.status.resolve() if args.status else run / "status.json")
             if (args.status or (run / "status.json").is_file())
             else None,
+            (args.source_health.resolve() if args.source_health else run / "source-health.jsonl")
+            if (args.source_health or (run / "source-health.jsonl").is_file())
+            else None,
             (args.config.resolve() if args.config else run / "config.json")
             if (args.config or (run / "config.json").is_file())
             else None,
@@ -115,6 +119,7 @@ def _resolve_inputs(
         (args.completed_cases.resolve() if args.completed_cases is not None else None),
         args.manifest.resolve() if args.manifest is not None else None,
         args.status.resolve() if args.status is not None else None,
+        args.source_health.resolve() if args.source_health is not None else None,
         args.config.resolve() if args.config is not None else None,
     )
 
@@ -132,6 +137,7 @@ def main() -> int:
         cases_path,
         manifest_path,
         status_path,
+        source_health_path,
         config_path,
     ) = _resolve_inputs(args)
     input_paths = [
@@ -143,6 +149,7 @@ def main() -> int:
         *args.outcome_link_ledger,
         manifest_path,
         status_path,
+        source_health_path,
         config_path,
     ]
     _ensure_output_is_separate(args.output, input_paths)
@@ -162,6 +169,7 @@ def main() -> int:
         auditor_repository_commit=args.repository_commit,
         source_manifest_path=manifest_path,
         source_status_path=status_path,
+        source_health_path=source_health_path,
         source_config_path=config_path,
     )
     report_sha256 = _write_new(args.output, report.model_dump(mode="json"))
@@ -180,6 +188,7 @@ def main() -> int:
                 "integrity_ready": report.integrity_ready,
                 "admission_evidence_ready": report.admission_evidence_ready,
                 "admission_minimum_met": report.admission_minimum_met,
+                "source_health_ledger_valid": report.source_health_ledger_valid,
                 "prediction_model_identity_valid": report.prediction_model_identity_valid,
                 "prediction_identity_limitations": report.prediction_identity_limitations,
                 "audit_fingerprint": report.audit_fingerprint,

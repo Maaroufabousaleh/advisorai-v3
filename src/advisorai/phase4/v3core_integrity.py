@@ -34,6 +34,7 @@ from advisorai.phase4.v3core_cadence import (
 )
 from advisorai.phase4.v3core_forward import (
     FORWARD_CASE_SCHEMA,
+    ForwardHealthTransition,
     ForwardRawResponse,
 )
 from advisorai.phase4.v3core_prediction_ledger import (
@@ -41,8 +42,8 @@ from advisorai.phase4.v3core_prediction_ledger import (
     ForwardPredictionOutcomeLink,
 )
 
-INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v4"
-INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v4"
+INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v5"
+INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v5"
 STABILITY_RULE_VERSION = "closed_terminal_repeat_v1"
 DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS = 2
 DEFAULT_MINIMUM_CASES_PER_SYMBOL = 64
@@ -344,6 +345,7 @@ class IntegrityAuditReport(BaseModel):
     completed_cases_sha256: str | None = None
     source_manifest_sha256: str | None = None
     source_status_sha256: str | None = None
+    source_health_ledger_sha256: str | None = None
     source_config_sha256: str | None = None
     prediction_ledger_sha256s: tuple[str, ...] = ()
     outcome_link_ledger_sha256s: tuple[str, ...] = ()
@@ -358,6 +360,7 @@ class IntegrityAuditReport(BaseModel):
     normalized_provenance_conflict_count: int = Field(ge=0)
     raw_receipt_order_valid: bool
     raw_duplicate_response_count: int = Field(ge=0)
+    source_health_ledger_valid: bool
     completed_case_ledger_valid: bool
     prediction_ledgers_valid: bool
     prediction_timing_valid: bool
@@ -395,6 +398,7 @@ class IntegrityAuditReport(BaseModel):
         "auditor_cli_sha256",
         "source_manifest_sha256",
         "source_status_sha256",
+        "source_health_ledger_sha256",
         "source_config_sha256",
     )
     @classmethod
@@ -461,6 +465,39 @@ def _load_raw_records(path: Path) -> tuple[ForwardRawResponse, ...]:
             raise IntegrityAuditError("raw response hash chain is not continuous")
         records.append(record)
         previous = record.record_hash
+    return tuple(records)
+
+
+def _load_source_health_records(path: Path) -> tuple[ForwardHealthTransition, ...]:
+    """Validate the forward source-health append-only and per-symbol chains."""
+
+    records: list[ForwardHealthTransition] = []
+    previous_hash: str | None = None
+    previous_observed_at: datetime | None = None
+    last_state_by_symbol: dict[str, str | None] = {}
+    for line_number, line in enumerate(_read_lines(path), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = ForwardHealthTransition.model_validate_json(line)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise IntegrityAuditError(
+                f"source-health transition is invalid at line {line_number}"
+            ) from exc
+        if record.sequence != len(records) + 1 or record.previous_record_hash != previous_hash:
+            raise IntegrityAuditError("source-health ledger hash chain is not continuous")
+        if previous_observed_at is not None and record.observed_at < previous_observed_at:
+            raise IntegrityAuditError("source-health ledger timestamps are not monotonic")
+        if record.from_state != last_state_by_symbol.get(record.symbol):
+            raise IntegrityAuditError(
+                "source-health ledger state chain does not match the previous state"
+            )
+        records.append(record)
+        previous_hash = record.record_hash
+        previous_observed_at = record.observed_at
+        last_state_by_symbol[record.symbol] = record.to_state
+    if not records:
+        raise IntegrityAuditError("source-health ledger is empty")
     return tuple(records)
 
 
@@ -1198,6 +1235,7 @@ def audit_forward_root(
     auditor_repository_commit: str | None = None,
     source_manifest_path: Path | None = None,
     source_status_path: Path | None = None,
+    source_health_path: Path | None = None,
     source_config_path: Path | None = None,
 ) -> IntegrityAuditReport:
     """Audit immutable inputs without writing to any input path."""
@@ -1209,6 +1247,29 @@ def audit_forward_root(
         observation for record in raw_records for observation in _decode_raw_observations(record)
     )
     normalized_bars = _load_normalized_bars(normalized_bars_path)
+    source_health_records = (
+        _load_source_health_records(source_health_path) if source_health_path is not None else ()
+    )
+    source_health_ledger_valid = source_health_path is not None and bool(source_health_records)
+    if source_health_records:
+        health_symbols = {record.symbol for record in source_health_records}
+        normalized_symbols = {bar.instrument for bar in normalized_bars}
+        missing_symbols = normalized_symbols - health_symbols
+        if missing_symbols:
+            raise IntegrityAuditError(
+                "source-health ledger is missing normalized symbols: "
+                + ", ".join(sorted(missing_symbols))
+            )
+        for bar in normalized_bars:
+            applicable = tuple(
+                record
+                for record in source_health_records
+                if record.symbol == bar.instrument and record.observed_at <= bar.collected_at
+            )
+            if not applicable or applicable[-1].to_state != bar.provenance.source_health_state:
+                raise IntegrityAuditError(
+                    "normalized bar source-health state does not match the source-health ledger"
+                )
     cases = _load_cases(completed_cases_path)
     expected_source_snapshot_hash = _load_source_snapshot_hash(source_manifest_path)
     prediction_entries_by_path = _load_prediction_entries_by_path(tuple(prediction_ledger_paths))
@@ -1286,6 +1347,7 @@ def audit_forward_root(
         (
             raw_hash_chain_valid,
             raw_receipt_order_valid,
+            source_health_ledger_valid,
             normalized_input_valid,
             completed_case_ledger_valid,
             prediction_ledgers_valid,
@@ -1324,6 +1386,9 @@ def audit_forward_root(
         source_status_sha256=(
             _sha256_file(source_status_path) if source_status_path is not None else None
         ),
+        source_health_ledger_sha256=(
+            _sha256_file(source_health_path) if source_health_path is not None else None
+        ),
         source_config_sha256=(
             _sha256_file(source_config_path) if source_config_path is not None else None
         ),
@@ -1340,6 +1405,7 @@ def audit_forward_root(
         normalized_provenance_conflict_count=normalized_provenance_conflict_count,
         raw_receipt_order_valid=raw_receipt_order_valid,
         raw_duplicate_response_count=raw_duplicate_response_count,
+        source_health_ledger_valid=source_health_ledger_valid,
         completed_case_ledger_valid=completed_case_ledger_valid,
         prediction_ledgers_valid=prediction_ledgers_valid,
         prediction_timing_valid=prediction_timing_valid,
