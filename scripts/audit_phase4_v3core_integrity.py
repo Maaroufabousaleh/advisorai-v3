@@ -10,6 +10,7 @@ for diagnostic work and does not make the result admission evidence.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,6 +42,10 @@ def _write_new(path: Path, payload: object) -> str:
     return sha256(encoded).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
@@ -59,6 +64,10 @@ def _parser() -> argparse.ArgumentParser:
         default=2,
     )
     parser.add_argument("--minimum-cases-per-symbol", type=int, default=64)
+    parser.add_argument(
+        "--repository-commit",
+        help="optional immutable repository commit for the auditor provenance record",
+    )
     parser.add_argument(
         "--allow-unsealed",
         action="store_true",
@@ -119,6 +128,8 @@ def main() -> int:
         terminal_observed_at=args.terminal_observed_at,
         minimum_terminal_closed_observations=args.minimum_terminal_closed_observations,
         minimum_cases_per_symbol=args.minimum_cases_per_symbol,
+        auditor_cli_sha256=_sha256_file(Path(__file__).resolve()),
+        auditor_repository_commit=args.repository_commit,
     )
     report_sha256 = _write_new(args.output, report.model_dump(mode="json"))
     if args.exclusion_output is not None:
@@ -132,7 +143,11 @@ def main() -> int:
                 "classification_counts": report.classification_counts,
                 "raw_completed_case_counts": report.raw_completed_case_counts,
                 "integrity_eligible_case_counts": report.integrity_eligible_case_counts,
+                "sample_minimum_met": report.sample_minimum_met,
+                "integrity_ready": report.integrity_ready,
+                "admission_evidence_ready": report.admission_evidence_ready,
                 "admission_minimum_met": report.admission_minimum_met,
+                "audit_fingerprint": report.audit_fingerprint,
                 "contaminated_case_count": len(report.contaminated_cases),
                 "excluded_prediction_count": len(report.excluded_predictions),
             },

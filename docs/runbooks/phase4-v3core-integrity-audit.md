@@ -59,11 +59,37 @@ predictions remain in their original append-only ledger and are represented in
 the overlay as `EXCLUDED_DATA_INTEGRITY`; no prediction or completed case is
 deleted or rewritten.
 
-The report also validates raw and prediction hash chains, prediction timing,
-normalized-record identity hashes, repeated values, changed OHLCV fields,
-receipt timestamps, raw record hashes, and the normalized record hash. An
-orphan normalized record or broken immutable input causes the audit to fail
-closed rather than inventing a preferred value.
+The report also validates raw and prediction hash chains, prediction timing and
+context identity, normalized-record identity hashes, repeated values, changed
+OHLCV fields, receipt timestamps, and source identity. Hash fields are kept
+semantically distinct:
+
+- `raw_response_record_hash` identifies the raw HTTP-response ledger record;
+- `raw_response_payload_sha256` identifies its response payload;
+- `raw_row_content_hash` is the hash used by the collector in normalized-bar
+  provenance;
+- `raw_ohlcv_hash` identifies only the normalized OHLCV values;
+- `normalized_record_hash` identifies the complete normalized collector record.
+
+The normalized raw-row hash must correspond to an actual raw row for the same
+instrument and interval, with matching OHLCV. Duplicate normalized intervals
+are invalid even when their content is identical. A terminal repeat must come
+from distinct raw HTTP response sequences; duplicate rows inside one response
+cannot establish stability. Receipt and response ordering are checked rather
+than inferred from file order.
+
+The report separates `sample_minimum_met`, `integrity_ready`, and
+`admission_evidence_ready`. The legacy `admission_minimum_met` field is a
+fail-closed compatibility alias for the latter and is not a Phase-4 model
+admission decision. An orphan normalized record, broken immutable input, bad
+prediction context, or failed identity check causes the audit to fail closed
+rather than inventing a preferred value.
+
+Every report binds the auditor module hash, optional CLI hash and repository
+commit, input hashes, terminal boundary, frozen rule, and a deterministic
+`audit_fingerprint`. Report and overlay paths must be new paths: the CLI uses
+exclusive creation and refuses to overwrite an existing artifact or an input
+spool.
 
 ## Current revision incident
 

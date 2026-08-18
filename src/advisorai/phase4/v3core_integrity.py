@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import json
+import platform
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime, timedelta
@@ -39,11 +40,12 @@ from advisorai.phase4.v3core_prediction_ledger import (
     ForwardPredictionOutcomeLink,
 )
 
-INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v1"
-INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v1"
+INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v2"
+INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v2"
 STABILITY_RULE_VERSION = "closed_terminal_repeat_v1"
 DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS = 2
 DEFAULT_MINIMUM_CASES_PER_SYMBOL = 64
+AUDITOR_MODULE_SHA256 = sha256(Path(__file__).read_bytes()).hexdigest()
 
 BarStabilityClassification = Literal[
     "STABLE",
@@ -112,11 +114,11 @@ class RawKlineObservation(BaseModel):
     receipt_at: datetime
     closed_at_receipt: bool
     raw_response_sequence: int = Field(ge=1)
-    raw_record_hash: str
-    response_sha256: str
+    raw_response_record_hash: str
+    raw_response_payload_sha256: str
     row_index: int = Field(ge=0)
-    row_content_hash: str
-    ohlcv_hash: str
+    raw_row_content_hash: str
+    raw_ohlcv_hash: str
     ohlcv: dict[str, str]
 
     @field_validator("interval_end", "provider_event_at", "receipt_at")
@@ -124,10 +126,39 @@ class RawKlineObservation(BaseModel):
     def aware_time(cls, value: datetime, info: object) -> datetime:
         return _aware(value, getattr(info, "field_name", "timestamp"))
 
-    @field_validator("raw_record_hash", "response_sha256", "row_content_hash", "ohlcv_hash")
+    @field_validator(
+        "raw_response_record_hash",
+        "raw_response_payload_sha256",
+        "raw_row_content_hash",
+        "raw_ohlcv_hash",
+    )
     @classmethod
     def valid_digest(cls, value: str, info: object) -> str:
         return _digest(value, getattr(info, "field_name", "digest"))
+
+    @property
+    def raw_record_hash(self) -> str:
+        """Compatibility accessor; the serialized name is explicit."""
+
+        return self.raw_response_record_hash
+
+    @property
+    def response_sha256(self) -> str:
+        """Compatibility accessor; the serialized name is explicit."""
+
+        return self.raw_response_payload_sha256
+
+    @property
+    def row_content_hash(self) -> str:
+        """Compatibility accessor; the serialized name is explicit."""
+
+        return self.raw_row_content_hash
+
+    @property
+    def ohlcv_hash(self) -> str:
+        """Compatibility accessor; the serialized name is explicit."""
+
+        return self.raw_ohlcv_hash
 
 
 class RawKlineVersion(BaseModel):
@@ -135,24 +166,37 @@ class RawKlineVersion(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    ohlcv_hash: str
+    raw_ohlcv_hash: str
     ohlcv: dict[str, str]
     observation_count: int = Field(ge=1)
     closed_observation_count: int = Field(ge=0)
     first_receipt_at: datetime
     last_receipt_at: datetime
-    raw_record_hashes: tuple[str, ...]
-    response_sha256s: tuple[str, ...]
+    raw_response_record_hashes: tuple[str, ...]
+    raw_response_payload_sha256s: tuple[str, ...]
+    raw_row_content_hashes: tuple[str, ...]
 
-    @field_validator("ohlcv_hash")
+    @field_validator("raw_ohlcv_hash")
     @classmethod
     def valid_ohlcv_digest(cls, value: str) -> str:
-        return _digest(value, "ohlcv_hash")
+        return _digest(value, "raw_ohlcv_hash")
 
     @field_validator("first_receipt_at", "last_receipt_at")
     @classmethod
     def aware_time(cls, value: datetime, info: object) -> datetime:
         return _aware(value, getattr(info, "field_name", "receipt timestamp"))
+
+    @property
+    def ohlcv_hash(self) -> str:
+        return self.raw_ohlcv_hash
+
+    @property
+    def raw_record_hashes(self) -> tuple[str, ...]:
+        return self.raw_response_record_hashes
+
+    @property
+    def response_sha256s(self) -> tuple[str, ...]:
+        return self.raw_response_payload_sha256s
 
 
 class NormalizedBarObservation(BaseModel):
@@ -165,8 +209,8 @@ class NormalizedBarObservation(BaseModel):
     receipt_at: datetime
     normalized_record_hash: str
     normalized_hash_valid: bool
-    raw_record_hash: str
-    ohlcv_hash: str
+    normalized_raw_row_content_hash: str
+    raw_ohlcv_hash: str
     ohlcv: dict[str, str]
     source_health_state: str
 
@@ -175,10 +219,20 @@ class NormalizedBarObservation(BaseModel):
     def aware_time(cls, value: datetime, info: object) -> datetime:
         return _aware(value, getattr(info, "field_name", "timestamp"))
 
-    @field_validator("normalized_record_hash", "raw_record_hash", "ohlcv_hash")
+    @field_validator("normalized_record_hash", "normalized_raw_row_content_hash", "raw_ohlcv_hash")
     @classmethod
     def valid_digest(cls, value: str, info: object) -> str:
         return _digest(value, getattr(info, "field_name", "digest"))
+
+    @property
+    def raw_record_hash(self) -> str:
+        """Compatibility accessor for normalized provenance's raw-row hash."""
+
+        return self.normalized_raw_row_content_hash
+
+    @property
+    def ohlcv_hash(self) -> str:
+        return self.raw_ohlcv_hash
 
 
 class BarIntegrityRecord(BaseModel):
@@ -197,11 +251,19 @@ class BarIntegrityRecord(BaseModel):
     final_observed_value: RawKlineObservation
     terminal_stable_version_hash: str | None
     terminal_consecutive_observations: int = Field(ge=0)
+    terminal_distinct_response_count: int = Field(ge=0)
     repeated_identical_observation_count: int = Field(ge=0)
     revision_count: int = Field(ge=0)
     changed_ohlcv_fields: tuple[str, ...]
+    raw_receipt_order_valid: bool
+    duplicate_raw_rows_within_response: bool
     normalized_record_hash: str | None
     normalized_hash_valid: bool
+    normalized_observation_count: int = Field(ge=0)
+    normalized_record_hashes: tuple[str, ...]
+    normalized_raw_row_identity_valid: bool
+    normalized_provenance_conflict: bool
+    normalized_duplicate: bool
     normalized_conflict: bool
     classification: BarStabilityClassification
     classification_reason: str
@@ -261,6 +323,10 @@ class IntegrityAuditReport(BaseModel):
     generated_at: datetime
     terminal_observed_at: datetime
     stability_rule_version: str = STABILITY_RULE_VERSION
+    auditor_module_sha256: str = AUDITOR_MODULE_SHA256
+    auditor_cli_sha256: str | None = None
+    auditor_repository_commit: str | None = None
+    auditor_python_version: str = platform.python_version()
     minimum_terminal_closed_observations: int = Field(
         ge=2, default=DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS
     )
@@ -274,11 +340,22 @@ class IntegrityAuditReport(BaseModel):
     raw_hash_chain_valid: bool
     normalized_input_valid: bool
     normalized_hash_validation_failures: int = Field(ge=0)
+    normalized_duplicate_count: int = Field(ge=0)
+    normalized_provenance_conflict_count: int = Field(ge=0)
+    raw_receipt_order_valid: bool
+    raw_duplicate_response_count: int = Field(ge=0)
     completed_case_ledger_valid: bool
     prediction_ledgers_valid: bool
     prediction_timing_valid: bool
+    prediction_context_valid: bool
+    prediction_source_identity_valid: bool
     prediction_link_integrity_valid: bool
+    prediction_outcome_link_complete: bool
     prediction_count: int = Field(ge=0)
+    unlinked_prediction_count: int = Field(ge=0)
+    sample_minimum_met: bool
+    integrity_ready: bool
+    admission_evidence_ready: bool
     classification_counts: dict[str, int]
     bar_records: tuple[BarIntegrityRecord, ...]
     raw_completed_case_counts: dict[str, int]
@@ -286,6 +363,7 @@ class IntegrityAuditReport(BaseModel):
     contaminated_cases: tuple[CaseContamination, ...]
     excluded_predictions: tuple[PredictionIntegrityExclusion, ...]
     admission_minimum_met: bool
+    audit_fingerprint: str
     errors: tuple[str, ...] = ()
 
     @field_validator("generated_at", "terminal_observed_at")
@@ -297,10 +375,17 @@ class IntegrityAuditReport(BaseModel):
         "raw_responses_sha256",
         "normalized_bars_sha256",
         "completed_cases_sha256",
+        "auditor_module_sha256",
+        "auditor_cli_sha256",
     )
     @classmethod
     def valid_report_digest(cls, value: str | None, info: object) -> str | None:
         return None if value is None else _digest(value, getattr(info, "field_name", "digest"))
+
+    @field_validator("audit_fingerprint")
+    @classmethod
+    def valid_audit_fingerprint(cls, value: str) -> str:
+        return _digest(value, "audit_fingerprint")
 
 
 class IntegrityExclusionOverlay(BaseModel):
@@ -311,11 +396,15 @@ class IntegrityExclusionOverlay(BaseModel):
     schema_version: str = INTEGRITY_OVERLAY_SCHEMA
     generated_at: datetime
     audit_report_sha256: str
+    audit_fingerprint: str
     contaminated_case_ids: tuple[str, ...]
     contaminated_cases: tuple[CaseContamination, ...]
     excluded_predictions: tuple[PredictionIntegrityExclusion, ...]
     raw_completed_case_counts: dict[str, int]
     integrity_eligible_case_counts: dict[str, int]
+    sample_minimum_met: bool
+    integrity_ready: bool
+    admission_evidence_ready: bool
     admission_minimum_met: bool
     authority: str = "read_only_exclusion_overlay_no_mutation"
 
@@ -386,11 +475,11 @@ def _decode_raw_observations(record: ForwardRawResponse) -> tuple[RawKlineObserv
                 receipt_at=record.collected_at,
                 closed_at_receipt=record.collected_at >= interval_end,
                 raw_response_sequence=record.sequence,
-                raw_record_hash=record.record_hash,
-                response_sha256=record.response_sha256,
+                raw_response_record_hash=record.record_hash,
+                raw_response_payload_sha256=record.response_sha256,
                 row_index=row_index,
-                row_content_hash=_hash_payload(row),
-                ohlcv_hash=_hash_payload(ohlcv),
+                raw_row_content_hash=_hash_payload(row),
+                raw_ohlcv_hash=_hash_payload(ohlcv),
                 ohlcv=ohlcv,
             )
         )
@@ -529,7 +618,7 @@ def _version_summary(observations: Sequence[RawKlineObservation]) -> tuple[RawKl
         grouped[observation.ohlcv_hash].append(observation)
     return tuple(
         RawKlineVersion(
-            ohlcv_hash=version_hash,
+            raw_ohlcv_hash=version_hash,
             ohlcv=grouped[version_hash][0].ohlcv,
             observation_count=len(grouped[version_hash]),
             closed_observation_count=sum(
@@ -537,11 +626,14 @@ def _version_summary(observations: Sequence[RawKlineObservation]) -> tuple[RawKl
             ),
             first_receipt_at=grouped[version_hash][0].receipt_at,
             last_receipt_at=grouped[version_hash][-1].receipt_at,
-            raw_record_hashes=tuple(
-                observation.raw_record_hash for observation in grouped[version_hash]
+            raw_response_record_hashes=tuple(
+                observation.raw_response_record_hash for observation in grouped[version_hash]
             ),
-            response_sha256s=tuple(
-                observation.response_sha256 for observation in grouped[version_hash]
+            raw_response_payload_sha256s=tuple(
+                observation.raw_response_payload_sha256 for observation in grouped[version_hash]
+            ),
+            raw_row_content_hashes=tuple(
+                observation.raw_row_content_hash for observation in grouped[version_hash]
             ),
         )
         for version_hash in order
@@ -575,8 +667,8 @@ def _normalized_observation(
         receipt_at=bar.collected_at,
         normalized_record_hash=bar.provenance.normalized_record_hash,
         normalized_hash_valid=normalized_hash_valid,
-        raw_record_hash=bar.provenance.raw_record_hash,
-        ohlcv_hash=_hash_payload(ohlcv),
+        normalized_raw_row_content_hash=bar.provenance.raw_record_hash,
+        raw_ohlcv_hash=_hash_payload(ohlcv),
         ohlcv=ohlcv,
         source_health_state=bar.provenance.source_health_state,
     )
@@ -592,40 +684,102 @@ def _classify_bar(
         raise ValueError("a bar integrity record requires raw observations")
     first_normalized = normalized[0] if normalized else None
     closed = tuple(observation for observation in observations if observation.closed_at_receipt)
+    raw_receipt_order_valid = all(
+        previous.receipt_at <= current.receipt_at
+        for previous, current in zip(observations, observations[1:], strict=False)
+    ) and all(
+        (previous.raw_response_sequence, previous.row_index)
+        <= (current.raw_response_sequence, current.row_index)
+        for previous, current in zip(observations, observations[1:], strict=False)
+    )
+    response_row_counts: dict[int, int] = defaultdict(int)
+    for observation in observations:
+        response_row_counts[observation.raw_response_sequence] += 1
+    duplicate_raw_rows_within_response = any(count > 1 for count in response_row_counts.values())
     closed_version_sequence: list[str] = []
     for observation in closed:
-        if not closed_version_sequence or closed_version_sequence[-1] != observation.ohlcv_hash:
-            closed_version_sequence.append(observation.ohlcv_hash)
+        if not closed_version_sequence or closed_version_sequence[-1] != observation.raw_ohlcv_hash:
+            closed_version_sequence.append(observation.raw_ohlcv_hash)
     terminal = closed[-1] if closed else None
     terminal_run = 0
+    terminal_response_sequences: set[int] = set()
     if terminal is not None:
         for observation in reversed(closed):
-            if observation.ohlcv_hash != terminal.ohlcv_hash:
+            if observation.raw_ohlcv_hash != terminal.raw_ohlcv_hash:
                 break
             terminal_run += 1
-    canonical_hash = first_normalized.ohlcv_hash if first_normalized else None
+            terminal_response_sequences.add(observation.raw_response_sequence)
+    canonical_hash = first_normalized.raw_ohlcv_hash if first_normalized else None
     normalized_hash_valid = bool(
         first_normalized and all(item.normalized_hash_valid for item in normalized)
     )
-    normalized_conflict = len({item.ohlcv_hash for item in normalized}) > 1
-    terminal_stable = terminal is not None and terminal_run >= minimum_terminal_closed_observations
-
-    if not normalized or not normalized_hash_valid or normalized_conflict or not terminal_stable:
-        classification: BarStabilityClassification = "UNRESOLVED"
-        reason = (
-            "missing or conflicting normalized canonical record"
-            if not normalized or normalized_conflict or not normalized_hash_valid
-            else "terminal closed version lacks the required repeated observations"
+    normalized_conflict = len({item.raw_ohlcv_hash for item in normalized}) > 1
+    normalized_provenance_conflict = (
+        len(
+            {
+                (
+                    item.normalized_raw_row_content_hash,
+                    item.raw_ohlcv_hash,
+                    item.source_health_state,
+                    item.receipt_at,
+                    item.normalized_record_hash,
+                )
+                for item in normalized
+            }
         )
-    elif canonical_hash == terminal.ohlcv_hash and len(closed_version_sequence) == 1:
+        > 1
+    )
+    normalized_duplicate = len(normalized) > 1
+    raw_by_row_hash = {item.raw_row_content_hash: item for item in observations}
+    normalized_raw_row_identity_valid = bool(normalized) and all(
+        item.normalized_raw_row_content_hash in raw_by_row_hash
+        and raw_by_row_hash[item.normalized_raw_row_content_hash].raw_ohlcv_hash
+        == item.raw_ohlcv_hash
+        for item in normalized
+    )
+    terminal_stable = (
+        terminal is not None
+        and len(terminal_response_sequences) >= minimum_terminal_closed_observations
+        and not duplicate_raw_rows_within_response
+    )
+
+    invalid_reasons: list[str] = []
+    if not normalized:
+        invalid_reasons.append("missing normalized canonical record")
+    if not normalized_hash_valid:
+        invalid_reasons.append("normalized canonical hash is invalid")
+    if normalized_duplicate:
+        invalid_reasons.append("normalized interval appears more than once")
+    if normalized_conflict:
+        invalid_reasons.append("normalized canonical OHLCV values conflict")
+    if normalized_provenance_conflict:
+        invalid_reasons.append("normalized canonical provenance values conflict")
+    if not normalized_raw_row_identity_valid:
+        invalid_reasons.append("normalized raw-row identity does not match raw evidence")
+    if not raw_receipt_order_valid:
+        invalid_reasons.append("raw receipt or response ordering is not monotonic")
+    if duplicate_raw_rows_within_response:
+        invalid_reasons.append("same interval appears more than once in one raw response")
+    if not terminal_stable:
+        invalid_reasons.append("terminal closed version lacks distinct repeated receipts")
+
+    if invalid_reasons:
+        classification: BarStabilityClassification = "UNRESOLVED"
+        reason = "; ".join(invalid_reasons)
+    elif canonical_hash == terminal.raw_ohlcv_hash and len(closed_version_sequence) == 1:
         classification = "STABLE"
         reason = "all closed observations agree with the canonical normalized content"
-    elif canonical_hash == terminal.ohlcv_hash:
+    elif canonical_hash == terminal.raw_ohlcv_hash:
         classification = "REVISED_BUT_CANONICAL_FINAL"
         reason = "closed content was revised and the canonical content is terminally stable"
     else:
         classification = "REVISED_CANONICAL_DISAGREES"
         reason = "terminal stable closed content differs from the canonical normalized content"
+
+    final_observed = max(
+        observations,
+        key=lambda item: (item.receipt_at, item.raw_response_sequence, item.row_index),
+    )
 
     return BarIntegrityRecord(
         instrument=observations[0].instrument,
@@ -636,17 +790,25 @@ def _classify_bar(
         raw_versions=_version_summary(observations),
         closed_version_sequence=tuple(closed_version_sequence),
         terminal_closed_observation=terminal,
-        final_observed_value=observations[-1],
-        terminal_stable_version_hash=terminal.ohlcv_hash if terminal_stable else None,
+        final_observed_value=final_observed,
+        terminal_stable_version_hash=terminal.raw_ohlcv_hash if terminal_stable else None,
         terminal_consecutive_observations=terminal_run,
+        terminal_distinct_response_count=len(terminal_response_sequences),
         repeated_identical_observation_count=len(observations)
-        - len({observation.ohlcv_hash for observation in observations}),
+        - len({observation.raw_ohlcv_hash for observation in observations}),
         revision_count=max(0, len(closed_version_sequence) - 1),
         changed_ohlcv_fields=_changed_fields(observations),
+        raw_receipt_order_valid=raw_receipt_order_valid,
+        duplicate_raw_rows_within_response=duplicate_raw_rows_within_response,
         normalized_record_hash=(
             first_normalized.normalized_record_hash if first_normalized else None
         ),
         normalized_hash_valid=normalized_hash_valid,
+        normalized_observation_count=len(normalized),
+        normalized_record_hashes=tuple(item.normalized_record_hash for item in normalized),
+        normalized_raw_row_identity_valid=normalized_raw_row_identity_valid,
+        normalized_provenance_conflict=normalized_provenance_conflict,
+        normalized_duplicate=normalized_duplicate,
         normalized_conflict=normalized_conflict,
         classification=classification,
         classification_reason=reason,
@@ -770,6 +932,72 @@ def _prediction_exclusions(
     return tuple(exclusions)
 
 
+def _input_snapshot_hash(context: Sequence[object], cutoff: datetime) -> str:
+    return _hash_payload(
+        {
+            "schema": "advisorai.phase4.v3-core-forward.prediction-input.v1",
+            "cutoff": cutoff.isoformat(),
+            "context": [bar.model_dump(mode="json") for bar in context],
+        }
+    )
+
+
+def _prediction_integrity(
+    entries: Sequence[ForwardPredictionLedgerEntry],
+    links: Sequence[ForwardPredictionOutcomeLink],
+    cases: Sequence[V3CoreForecastCase],
+) -> tuple[tuple[bool, bool, bool, bool, int], bool]:
+    """Validate timing/context/source identity without reading future outcomes."""
+
+    by_identity = {(case.instrument, case.cutoff): case for case in cases}
+    prediction_timing_valid = True
+    prediction_context_valid = True
+    prediction_source_identity_valid = True
+    prediction_ids = {entry.prediction.prediction_id for entry in entries}
+    linked_prediction_ids: set[str] = set()
+    link_integrity_valid = True
+    for entry in entries:
+        prediction = entry.prediction
+        if prediction.generated_at > prediction.cutoff:
+            prediction_timing_valid = False
+        case = by_identity.get((prediction.instrument, prediction.cutoff))
+        if case is None:
+            prediction_context_valid = False
+            prediction_source_identity_valid = False
+            continue
+        expected_input_hash = _input_snapshot_hash(case.context_bars, case.cutoff)
+        if prediction.input_snapshot_hash != expected_input_hash:
+            prediction_context_valid = False
+        if (
+            prediction.source_snapshot_hash is not None
+            and prediction.source_snapshot_hash != case.source_snapshot_hash
+        ):
+            prediction_source_identity_valid = False
+    case_ids = {case.case_id for case in cases}
+    for link in links:
+        if link.prediction_id not in prediction_ids or link.outcome_case_id not in case_ids:
+            link_integrity_valid = False
+        if link.prediction_id in linked_prediction_ids:
+            link_integrity_valid = False
+        linked_prediction_ids.add(link.prediction_id)
+    for entry in entries:
+        prediction = entry.prediction
+        if prediction.outcome_case_id is not None:
+            if prediction.outcome_case_id not in case_ids:
+                link_integrity_valid = False
+            if prediction.prediction_id not in linked_prediction_ids:
+                link_integrity_valid = False
+    unlinked_count = len(prediction_ids - linked_prediction_ids)
+    outcome_link_complete = unlinked_count == 0 and len(links) == len(prediction_ids)
+    return (
+        prediction_timing_valid,
+        prediction_context_valid,
+        prediction_source_identity_valid,
+        link_integrity_valid,
+        unlinked_count,
+    ), outcome_link_complete
+
+
 def audit_forward_root(
     raw_responses_path: Path,
     normalized_bars_path: Path,
@@ -780,6 +1008,8 @@ def audit_forward_root(
     terminal_observed_at: datetime | None = None,
     minimum_terminal_closed_observations: int = DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS,
     minimum_cases_per_symbol: int = DEFAULT_MINIMUM_CASES_PER_SYMBOL,
+    auditor_cli_sha256: str | None = None,
+    auditor_repository_commit: str | None = None,
 ) -> IntegrityAuditReport:
     """Audit immutable inputs without writing to any input path."""
 
@@ -819,7 +1049,58 @@ def audit_forward_root(
         if record.first_normalized_observation
     )
     normalized_input_valid = normalized_hash_failures == 0 and not any(
-        record.normalized_conflict for record in bar_records
+        record.normalized_conflict
+        or record.normalized_provenance_conflict
+        or record.normalized_duplicate
+        or not record.normalized_raw_row_identity_valid
+        or not record.normalized_hash_valid
+        for record in bar_records
+    )
+    (
+        (
+            prediction_timing_valid,
+            prediction_context_valid,
+            prediction_source_identity_valid,
+            prediction_link_integrity_valid,
+            unlinked_prediction_count,
+        ),
+        prediction_outcome_link_complete,
+    ) = _prediction_integrity(
+        prediction_entries,
+        outcome_links,
+        cases,
+    )
+    sample_minimum_met = all(
+        eligible_counts[symbol] >= minimum_cases_per_symbol for symbol in V3_CORE_SYMBOLS
+    )
+    raw_receipt_order_valid = all(record.raw_receipt_order_valid for record in bar_records)
+    raw_duplicate_response_count = sum(
+        record.duplicate_raw_rows_within_response for record in bar_records
+    )
+    normalized_duplicate_count = sum(record.normalized_duplicate for record in bar_records)
+    normalized_provenance_conflict_count = sum(
+        record.normalized_provenance_conflict for record in bar_records
+    )
+    classifications_valid = not any(
+        record.classification in {"REVISED_CANONICAL_DISAGREES", "UNRESOLVED"}
+        for record in bar_records
+    )
+    raw_hash_chain_valid = True
+    completed_case_ledger_valid = True
+    prediction_ledgers_valid = True
+    integrity_ready = all(
+        (
+            raw_hash_chain_valid,
+            raw_receipt_order_valid,
+            normalized_input_valid,
+            completed_case_ledger_valid,
+            prediction_ledgers_valid,
+            prediction_timing_valid,
+            prediction_context_valid,
+            prediction_source_identity_valid,
+            prediction_link_integrity_valid,
+            classifications_valid,
+        )
     )
     observed_times = [observation.receipt_at for observation in raw_observations]
     terminal = _aware(
@@ -835,6 +1116,8 @@ def audit_forward_root(
         terminal_observed_at=terminal,
         minimum_terminal_closed_observations=minimum_terminal_closed_observations,
         minimum_cases_per_symbol=minimum_cases_per_symbol,
+        auditor_cli_sha256=auditor_cli_sha256,
+        auditor_repository_commit=auditor_repository_commit,
         raw_responses_sha256=_sha256_file(raw_responses_path),
         normalized_bars_sha256=_sha256_file(normalized_bars_path),
         completed_cases_sha256=(
@@ -843,30 +1126,39 @@ def audit_forward_root(
         raw_response_count=len(raw_records),
         raw_observation_count=len(raw_observations),
         normalized_bar_count=len(normalized_bars),
-        raw_hash_chain_valid=True,
+        raw_hash_chain_valid=raw_hash_chain_valid,
         normalized_input_valid=normalized_input_valid,
         normalized_hash_validation_failures=normalized_hash_failures,
-        completed_case_ledger_valid=True,
-        prediction_ledgers_valid=True,
-        prediction_timing_valid=all(
-            entry.prediction.generated_at <= entry.prediction.cutoff for entry in prediction_entries
-        ),
-        prediction_link_integrity_valid=all(
-            link.prediction_id in {entry.prediction.prediction_id for entry in prediction_entries}
-            for link in outcome_links
-        ),
+        normalized_duplicate_count=normalized_duplicate_count,
+        normalized_provenance_conflict_count=normalized_provenance_conflict_count,
+        raw_receipt_order_valid=raw_receipt_order_valid,
+        raw_duplicate_response_count=raw_duplicate_response_count,
+        completed_case_ledger_valid=completed_case_ledger_valid,
+        prediction_ledgers_valid=prediction_ledgers_valid,
+        prediction_timing_valid=prediction_timing_valid,
+        prediction_context_valid=prediction_context_valid,
+        prediction_source_identity_valid=prediction_source_identity_valid,
+        prediction_link_integrity_valid=prediction_link_integrity_valid,
+        prediction_outcome_link_complete=prediction_outcome_link_complete,
         prediction_count=len(prediction_entries),
+        unlinked_prediction_count=unlinked_prediction_count,
+        sample_minimum_met=sample_minimum_met,
+        integrity_ready=integrity_ready,
+        admission_evidence_ready=sample_minimum_met and integrity_ready,
         classification_counts=classification_counts,
         bar_records=bar_records,
         raw_completed_case_counts=raw_counts,
         integrity_eligible_case_counts=eligible_counts,
         contaminated_cases=contaminated,
         excluded_predictions=exclusions,
-        admission_minimum_met=all(
-            eligible_counts[symbol] >= minimum_cases_per_symbol for symbol in V3_CORE_SYMBOLS
-        ),
+        admission_minimum_met=sample_minimum_met and integrity_ready,
+        audit_fingerprint="0" * 64,
     )
-    return report
+    fingerprint_payload = report.model_dump(
+        mode="json",
+        exclude={"generated_at", "audit_fingerprint"},
+    )
+    return report.model_copy(update={"audit_fingerprint": _hash_payload(fingerprint_payload)})
 
 
 def build_exclusion_overlay(
@@ -877,11 +1169,15 @@ def build_exclusion_overlay(
     return IntegrityExclusionOverlay(
         generated_at=report.generated_at,
         audit_report_sha256=report_sha256,
+        audit_fingerprint=report.audit_fingerprint,
         contaminated_case_ids=tuple(case.case_id for case in report.contaminated_cases),
         contaminated_cases=report.contaminated_cases,
         excluded_predictions=report.excluded_predictions,
         raw_completed_case_counts=report.raw_completed_case_counts,
         integrity_eligible_case_counts=report.integrity_eligible_case_counts,
+        sample_minimum_met=report.sample_minimum_met,
+        integrity_ready=report.integrity_ready,
+        admission_evidence_ready=report.admission_evidence_ready,
         admission_minimum_met=report.admission_minimum_met,
     )
 
