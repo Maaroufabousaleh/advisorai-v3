@@ -667,7 +667,11 @@ class ForwardRejectionSpool:
 
 
 class ForwardPredictionRecord(BaseModel):
-    """Immutable prediction-side ledger record, before its outcome exists."""
+    """Immutable prediction-side ledger record, before its outcome exists.
+
+    Baseline records use the original fields. Candidate ledgers may carry
+    richer runtime/provenance identity without creating a second truth format.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -681,6 +685,21 @@ class ForwardPredictionRecord(BaseModel):
     predicted_return_bps: Decimal
     generated_at: datetime
     runtime_latency_ms: Decimal = Field(ge=0)
+    source_snapshot_hash: str | None = None
+    checkpoint_hash: str | None = None
+    runner_hash: str | None = None
+    preprocessing_identity: str | None = None
+    preprocessing_hash: str | None = None
+    dependency_lock_hash: str | None = None
+    runtime_environment_hash: str | None = None
+    device: str | None = None
+    native_interval_lower_bps: Decimal | None = None
+    native_interval_upper_bps: Decimal | None = None
+    native_confidence: Decimal | None = None
+    resource_peak_rss_mib: Decimal | None = None
+    resource_peak_cpu_percent: Decimal | None = None
+    resource_sample_count: int | None = Field(default=None, ge=0)
+    provenance: tuple[tuple[str, str], ...] = ()
     outcome_case_id: str | None = None
 
     @field_validator("instrument")
@@ -691,9 +710,20 @@ class ForwardPredictionRecord(BaseModel):
             raise ValueError("forward predictions are restricted to BTCUSDT and ETHUSDT")
         return normalized
 
-    @field_validator("model_identity_hash", "input_snapshot_hash")
+    @field_validator(
+        "model_identity_hash",
+        "input_snapshot_hash",
+        "source_snapshot_hash",
+        "checkpoint_hash",
+        "runner_hash",
+        "preprocessing_hash",
+        "dependency_lock_hash",
+        "runtime_environment_hash",
+    )
     @classmethod
-    def validate_prediction_hash(cls, value: str, info: object) -> str:
+    def validate_prediction_hash(cls, value: str | None, info: object) -> str | None:
+        if value is None:
+            return None
         return _digest(value, getattr(info, "field_name", "prediction hash"))
 
     @field_validator("cutoff", "generated_at")
@@ -701,14 +731,39 @@ class ForwardPredictionRecord(BaseModel):
     def validate_prediction_time(cls, value: datetime, info: object) -> datetime:
         return _aware(value, getattr(info, "field_name", "prediction timestamp"))
 
-    @field_validator("predicted_return_bps", "runtime_latency_ms")
+    @field_validator(
+        "predicted_return_bps",
+        "runtime_latency_ms",
+        "native_interval_lower_bps",
+        "native_interval_upper_bps",
+        "native_confidence",
+        "resource_peak_rss_mib",
+        "resource_peak_cpu_percent",
+    )
     @classmethod
-    def validate_prediction_decimal(cls, value: Decimal, info: object) -> Decimal:
-        if not value.is_finite() or (
-            getattr(info, "field_name", "") == "runtime_latency_ms" and value < 0
+    def validate_prediction_decimal(cls, value: Decimal | None, info: object) -> Decimal | None:
+        if value is not None and (
+            not value.is_finite()
+            or (
+                getattr(info, "field_name", "")
+                in {"runtime_latency_ms", "resource_peak_rss_mib", "resource_peak_cpu_percent"}
+                and value < 0
+            )
         ):
             raise ValueError("prediction numeric fields must be finite")
         return value
+
+    @field_validator("provenance")
+    @classmethod
+    def validate_provenance(cls, value: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
+        normalized = tuple((str(key).strip(), str(item).strip()) for key, item in value)
+        if any(not key or not item for key, item in normalized):
+            raise ValueError("prediction provenance entries must be non-empty")
+        if len({key for key, _item in normalized}) != len(normalized):
+            raise ValueError("prediction provenance keys must be unique")
+        if normalized != tuple(sorted(normalized)):
+            raise ValueError("prediction provenance must be deterministically sorted")
+        return normalized
 
     @model_validator(mode="after")
     def validate_prediction(self) -> ForwardPredictionRecord:
@@ -716,6 +771,16 @@ class ForwardPredictionRecord(BaseModel):
             raise ValueError("unsupported forward prediction schema")
         if self.generated_at > self.cutoff:
             raise ValueError("prediction cannot be generated after its cutoff")
+        if self.outcome_case_id is not None:
+            raise ValueError("prediction records cannot be mutated with an outcome link")
+        if (self.native_interval_lower_bps is None) != (self.native_interval_upper_bps is None):
+            raise ValueError("native prediction intervals require both bounds")
+        if (
+            self.native_interval_lower_bps is not None
+            and self.native_interval_upper_bps is not None
+            and self.native_interval_lower_bps > self.native_interval_upper_bps
+        ):
+            raise ValueError("native prediction interval lower bound exceeds upper bound")
         return self
 
 
