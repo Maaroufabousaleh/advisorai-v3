@@ -419,7 +419,9 @@ class IntegrityAuditReport(BaseModel):
             self.admission_evidence_ready or self.admission_minimum_met
         ):
             raise ValueError("unsealed integrity evidence cannot be admission-ready")
-        if self.admission_evidence_ready and not self.completed_case_content_valid:
+        if (
+            self.admission_evidence_ready or self.admission_minimum_met
+        ) and not self.completed_case_content_valid:
             raise ValueError("admission evidence requires validated case content")
         return self
 
@@ -471,7 +473,9 @@ class IntegrityExclusionOverlay(BaseModel):
             self.admission_evidence_ready or self.admission_minimum_met
         ):
             raise ValueError("unsealed exclusion evidence cannot be admission-ready")
-        if self.admission_evidence_ready and not self.completed_case_content_valid:
+        if (
+            self.admission_evidence_ready or self.admission_minimum_met
+        ) and not self.completed_case_content_valid:
             raise ValueError("admission overlay requires validated case content")
         return self
 

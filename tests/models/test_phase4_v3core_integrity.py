@@ -614,6 +614,20 @@ def test_report_rejects_inconsistent_unsealed_admission_flags(tmp_path: Path) ->
         IntegrityAuditReport.model_validate(payload)
 
 
+def test_legacy_admission_alias_also_requires_case_content_validation(tmp_path: Path) -> None:
+    report, _raw_path, _normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    payload = report.model_dump(mode="json")
+    payload["completed_case_content_valid"] = False
+    payload["admission_evidence_ready"] = False
+    payload["admission_minimum_met"] = True
+    with pytest.raises(ValueError, match="validated case content"):
+        IntegrityAuditReport.model_validate(payload)
+
+
 def test_case_content_must_match_audited_normalized_bars(tmp_path: Path) -> None:
     raw_path, normalized_path, cases_path, predictions_path, links_path = (
         _write_multi_symbol_case_fixture(tmp_path)
