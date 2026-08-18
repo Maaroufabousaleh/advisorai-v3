@@ -103,6 +103,37 @@ When prediction entries exist, every prediction must also have exactly one
 valid outcome link before `integrity_ready` or `admission_evidence_ready` can
 be true. An unlinked prediction is preserved but blocks admission readiness.
 
+## Sealed-root workflow
+
+The individual auditors can be composed through the offline terminal workflow
+after the collector and resource sidecar have both reached terminal states. It
+refuses a `running` root before creating an output directory, requires
+prediction-ledger/manifest pairing, audits the resource sidecar, and invokes
+the existing materializer only when the collector minimum, integrity report,
+and resource report all pass. It never invokes utility scoring:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/qualify_phase4_v3core_forward.py \
+  --run-directory artifacts/phase4/v3core-forward/<sealed-root> \
+  --resource-root artifacts/phase4/v3core-forward-resource/<sealed-root> \
+  --preregistration artifacts/phase4/v3core-cadence-preregistration/<frozen>/phase4-v3core-cadence-preregistration.json \
+  --phase3-gate-sha256 <passed-phase3-gate-sha256> \
+  --terminal-observed-at 2026-08-22T20:00:00Z \
+  --prediction-ledger artifacts/phase4/v3core-forward-predictions/<generation>/predictions.jsonl \
+  --prediction-manifest artifacts/phase4/v3core-forward-predictions/<generation>/manifest.json \
+  --outcome-link-ledger artifacts/phase4/v3core-forward-predictions/<generation>/outcome-links.jsonl \
+  --output-root artifacts/phase4/v3core-terminal-review/<generation>
+```
+
+The workflow writes create-new integrity, exclusion, resource, and workflow
+artifacts. A target-reached root with all checks passing is the only path that
+creates the nested materialization output. A deadline or incomplete root is
+audited and preserved but cannot be materialized. A refusal after output-root
+creation leaves a separate `workflow-refusal.json`; source evidence remains
+unchanged. The workflow is an input-preparation boundary, not a
+`PhaseGateRecord`, utility result, or model-promotion mechanism.
+
 ## Integrity-aware materialization
 
 After the root is sealed and the auditor reports
