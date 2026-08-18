@@ -24,7 +24,11 @@ from advisorai.phase4 import (
     build_v3core_cases,
     parse_binance_klines,
 )
-from advisorai.phase4.v3core_integrity import _hash_payload, _normalized_identity_payload
+from advisorai.phase4.v3core_integrity import (
+    IntegrityAuditReport,
+    _hash_payload,
+    _normalized_identity_payload,
+)
 from scripts.audit_phase4_v3core_integrity import (
     _ensure_output_is_separate,
 )
@@ -595,6 +599,19 @@ def test_allow_unsealed_cli_marks_report_diagnostic_only(
     assert payload["admission_minimum_met"] is False
     assert raw_path.read_bytes()
     assert normalized_path.read_bytes()
+
+
+def test_report_rejects_inconsistent_unsealed_admission_flags(tmp_path: Path) -> None:
+    report, _raw_path, _normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    payload = report.model_dump(mode="json")
+    payload["terminal_evidence_eligible"] = False
+    payload["admission_evidence_ready"] = True
+    with pytest.raises(ValueError, match="cannot be admission-ready"):
+        IntegrityAuditReport.model_validate(payload)
 
 
 def test_missing_prediction_source_snapshot_is_reported_with_manifest(

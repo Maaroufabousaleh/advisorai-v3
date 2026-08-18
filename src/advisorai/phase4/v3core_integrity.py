@@ -25,7 +25,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.phase4.v3core_cadence import (
     V3_CORE_SYMBOLS,
@@ -411,6 +411,14 @@ class IntegrityAuditReport(BaseModel):
     def valid_audit_fingerprint(cls, value: str) -> str:
         return _digest(value, "audit_fingerprint")
 
+    @model_validator(mode="after")
+    def validate_terminal_admission_flags(self) -> IntegrityAuditReport:
+        if not self.terminal_evidence_eligible and (
+            self.admission_evidence_ready or self.admission_minimum_met
+        ):
+            raise ValueError("unsealed integrity evidence cannot be admission-ready")
+        return self
+
     @field_validator(
         "prediction_ledger_sha256s",
         "outcome_link_ledger_sha256s",
@@ -451,6 +459,14 @@ class IntegrityExclusionOverlay(BaseModel):
     @classmethod
     def valid_overlay_digest(cls, value: str) -> str:
         return _digest(value, "audit_report_sha256")
+
+    @model_validator(mode="after")
+    def validate_terminal_admission_flags(self) -> IntegrityExclusionOverlay:
+        if not self.terminal_evidence_eligible and (
+            self.admission_evidence_ready or self.admission_minimum_met
+        ):
+            raise ValueError("unsealed exclusion evidence cannot be admission-ready")
+        return self
 
 
 def _load_raw_records(path: Path) -> tuple[ForwardRawResponse, ...]:
