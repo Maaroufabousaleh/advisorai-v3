@@ -117,6 +117,14 @@ When prediction entries exist, every prediction must also have exactly one
 valid outcome link before `integrity_ready` or `admission_evidence_ready` can
 be true. An unlinked prediction is preserved but blocks admission readiness.
 
+Completed cases are content-bound to the audited normalized bar evidence, not
+only to their own case-file hash. For every context and realized-outcome bar,
+the auditor compares the normalized-record hash, raw-row identity,
+source-health state, and OHLCV content against the corresponding audited
+normalized record. A self-consistent case ledger with substituted bar content
+therefore remains non-admissible; the report records the exact case/segment/bar
+limitations and `completed_case_content_valid=false`.
+
 ## Post-outcome prediction links
 
 Prediction records are written before outcomes and are never edited afterward.

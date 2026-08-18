@@ -42,8 +42,8 @@ from advisorai.phase4.v3core_prediction_ledger import (
     ForwardPredictionOutcomeLink,
 )
 
-INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v6"
-INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v6"
+INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v7"
+INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v7"
 STABILITY_RULE_VERSION = "closed_terminal_repeat_v1"
 DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS = 2
 DEFAULT_MINIMUM_CASES_PER_SYMBOL = 64
@@ -363,6 +363,8 @@ class IntegrityAuditReport(BaseModel):
     raw_duplicate_response_count: int = Field(ge=0)
     source_health_ledger_valid: bool
     completed_case_ledger_valid: bool
+    completed_case_content_valid: bool = False
+    completed_case_content_limitations: tuple[str, ...] = ()
     prediction_ledgers_valid: bool
     prediction_timing_valid: bool
     prediction_context_valid: bool
@@ -417,6 +419,8 @@ class IntegrityAuditReport(BaseModel):
             self.admission_evidence_ready or self.admission_minimum_met
         ):
             raise ValueError("unsealed integrity evidence cannot be admission-ready")
+        if self.admission_evidence_ready and not self.completed_case_content_valid:
+            raise ValueError("admission evidence requires validated case content")
         return self
 
     @field_validator(
@@ -444,6 +448,7 @@ class IntegrityExclusionOverlay(BaseModel):
     excluded_predictions: tuple[PredictionIntegrityExclusion, ...]
     raw_completed_case_counts: dict[str, int]
     integrity_eligible_case_counts: dict[str, int]
+    completed_case_content_valid: bool = False
     sample_minimum_met: bool
     integrity_ready: bool
     admission_evidence_ready: bool
@@ -466,6 +471,8 @@ class IntegrityExclusionOverlay(BaseModel):
             self.admission_evidence_ready or self.admission_minimum_met
         ):
             raise ValueError("unsealed exclusion evidence cannot be admission-ready")
+        if self.admission_evidence_ready and not self.completed_case_content_valid:
+            raise ValueError("admission overlay requires validated case content")
         return self
 
 
@@ -1133,6 +1140,52 @@ def _contaminate_cases(
     return tuple(contaminated)
 
 
+def _validate_case_content(
+    cases: Sequence[V3CoreForecastCase],
+    bar_records: Sequence[BarIntegrityRecord],
+) -> tuple[bool, tuple[str, ...]]:
+    """Bind every embedded case bar to the audited normalized record."""
+
+    normalized_by_key = {
+        (record.instrument, record.interval_end): record.first_normalized_observation
+        for record in bar_records
+    }
+    limitations: list[str] = []
+    for case in cases:
+        for segment, bars in (("context", case.context_bars), ("outcome", case.future_bars)):
+            for bar in bars:
+                key = (bar.instrument, bar.interval_end)
+                normalized = normalized_by_key.get(key)
+                if normalized is None:
+                    limitations.append(
+                        f"case {case.case_id} {segment} bar {bar.interval_end.isoformat()} "
+                        "is absent from normalized evidence"
+                    )
+                    continue
+                if bar.provenance.normalized_record_hash != normalized.normalized_record_hash:
+                    limitations.append(
+                        f"case {case.case_id} {segment} bar {bar.interval_end.isoformat()} "
+                        "normalized identity differs from audited evidence"
+                    )
+                if bar.provenance.raw_record_hash != normalized.normalized_raw_row_content_hash:
+                    limitations.append(
+                        f"case {case.case_id} {segment} bar {bar.interval_end.isoformat()} "
+                        "raw-row identity differs from audited evidence"
+                    )
+                if bar.provenance.source_health_state != normalized.source_health_state:
+                    limitations.append(
+                        f"case {case.case_id} {segment} bar {bar.interval_end.isoformat()} "
+                        "source-health identity differs from audited evidence"
+                    )
+                for field in ("open", "high", "low", "close", "volume"):
+                    if Decimal(str(getattr(bar, field))) != Decimal(normalized.ohlcv[field]):
+                        limitations.append(
+                            f"case {case.case_id} {segment} bar {bar.interval_end.isoformat()} "
+                            f"{field} differs from audited normalized evidence"
+                        )
+    return not limitations, tuple(dict.fromkeys(limitations))
+
+
 def _prediction_exclusions(
     entries: Sequence[ForwardPredictionLedgerEntry],
     links: Sequence[ForwardPredictionOutcomeLink],
@@ -1322,6 +1375,9 @@ def audit_forward_root(
         minimum_terminal_closed_observations=minimum_terminal_closed_observations,
     )
     contaminated = _contaminate_cases(cases, bar_records)
+    completed_case_content_valid, completed_case_content_limitations = _validate_case_content(
+        cases, bar_records
+    )
     exclusions = _prediction_exclusions(prediction_entries, outcome_links, contaminated)
     contaminated_ids = {case.case_id for case in contaminated}
     raw_counts = {
@@ -1389,6 +1445,7 @@ def audit_forward_root(
             source_health_ledger_valid,
             normalized_input_valid,
             completed_case_ledger_valid,
+            completed_case_content_valid,
             prediction_ledgers_valid,
             prediction_timing_valid,
             prediction_context_valid,
@@ -1447,6 +1504,8 @@ def audit_forward_root(
         raw_duplicate_response_count=raw_duplicate_response_count,
         source_health_ledger_valid=source_health_ledger_valid,
         completed_case_ledger_valid=completed_case_ledger_valid,
+        completed_case_content_valid=completed_case_content_valid,
+        completed_case_content_limitations=completed_case_content_limitations,
         prediction_ledgers_valid=prediction_ledgers_valid,
         prediction_timing_valid=prediction_timing_valid,
         prediction_context_valid=prediction_context_valid,
@@ -1488,6 +1547,7 @@ def build_exclusion_overlay(
     return IntegrityExclusionOverlay(
         generated_at=report.generated_at,
         terminal_evidence_eligible=report.terminal_evidence_eligible,
+        completed_case_content_valid=report.completed_case_content_valid,
         audit_report_sha256=report_sha256,
         audit_fingerprint=report.audit_fingerprint,
         contaminated_case_ids=tuple(case.case_id for case in report.contaminated_cases),
