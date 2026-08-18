@@ -84,6 +84,17 @@ def audit(resource_root: Path) -> dict[str, object]:
     config = _load_json(resource_root / "config.json")
     if config.get("schema") != f"{RESOURCE_SCHEMA}.config":
         raise ValueError("resource config has an unsupported schema")
+    configured_pid = config.get("pid")
+    if (
+        not isinstance(configured_pid, int)
+        or isinstance(configured_pid, bool)
+        or configured_pid <= 0
+    ):
+        raise ValueError("resource config has an invalid pid")
+    configured_start_ticks = config.get("expected_process_start_ticks")
+    if not isinstance(configured_start_ticks, int) or isinstance(configured_start_ticks, bool):
+        raise ValueError("resource config has invalid process start ticks")
+    _validate_digest(config.get("expected_command_sha256"), field="expected_command_sha256")
     rows: list[dict[str, Any]] = []
     previous: str | None = None
     for line_number, line in enumerate(
@@ -167,6 +178,20 @@ def audit(resource_root: Path) -> dict[str, object]:
             issues.append("invalid_resource_errors")
 
     running = [row for row in rows if row.get("process_status") == "running"]
+    if any(row["pid"] != configured_pid for row in rows):
+        issues.append("process_pid_config_mismatch")
+    if any(
+        row.get("process_start_ticks") is not None
+        and row["process_start_ticks"] != configured_start_ticks
+        for row in rows
+    ):
+        issues.append("process_start_ticks_config_mismatch")
+    if any(
+        row.get("command_sha256") is not None
+        and row["command_sha256"] != config["expected_command_sha256"]
+        for row in rows
+    ):
+        issues.append("process_command_hash_config_mismatch")
 
     def _maximum(field: str) -> float | int:
         values = [row[field] for row in running if row.get(field) is not None]
