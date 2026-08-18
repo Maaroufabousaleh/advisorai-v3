@@ -24,6 +24,10 @@ from advisorai.phase4 import (
     parse_binance_klines,
 )
 from advisorai.phase4.v3core_integrity import _hash_payload, _normalized_identity_payload
+from scripts.link_phase4_v3core_prediction_outcomes import (
+    OutcomeLinkRefused,
+    link_predictions_to_cases,
+)
 
 HASH = "a" * 64
 PHASE3_HASH = "b" * 64
@@ -226,6 +230,17 @@ def test_source_health_chain_is_validated_and_bound_to_normalized_state(
         )
 
 
+def test_missing_prediction_ledger_cannot_be_admission_ready(tmp_path: Path) -> None:
+    report, _raw_path, _normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    assert report.prediction_ledgers_valid is False
+    assert report.integrity_ready is False
+    assert report.admission_evidence_ready is False
+
+
 def test_metadata_only_raw_revision_is_recorded_separately_from_ohlcv(
     tmp_path: Path,
 ) -> None:
@@ -394,6 +409,41 @@ def _case_hash(payload: object) -> str:
     return sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
+
+
+def test_prediction_outcome_linker_creates_later_immutable_links(
+    tmp_path: Path,
+) -> None:
+    _raw, _normalized, cases_path, predictions_path, _links = _write_multi_symbol_case_fixture(
+        tmp_path
+    )
+    output_path = tmp_path / "new-outcome-links.jsonl"
+    result = link_predictions_to_cases(
+        prediction_ledger_paths=(predictions_path,),
+        completed_cases_path=cases_path,
+        output_path=output_path,
+    )
+    assert result["prediction_count"] == 2
+    assert result["linked_count"] == 2
+    assert len(output_path.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_prediction_outcome_linker_refuses_missing_case_without_output(
+    tmp_path: Path,
+) -> None:
+    _raw, _normalized, cases_path, predictions_path, _links = _write_multi_symbol_case_fixture(
+        tmp_path
+    )
+    first_case = cases_path.read_text(encoding="utf-8").splitlines()[0] + "\n"
+    cases_path.write_text(first_case, encoding="utf-8")
+    output_path = tmp_path / "missing-outcome-links.jsonl"
+    with pytest.raises(OutcomeLinkRefused, match="outcomes are not available"):
+        link_predictions_to_cases(
+            prediction_ledger_paths=(predictions_path,),
+            completed_cases_path=cases_path,
+            output_path=output_path,
+        )
+    assert not output_path.exists()
 
 
 def test_context_and_outcome_contamination_excludes_only_affected_predictions(

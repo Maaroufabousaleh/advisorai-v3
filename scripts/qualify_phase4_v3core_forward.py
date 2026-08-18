@@ -26,6 +26,7 @@ from advisorai.phase4.v3core_integrity import (
     build_exclusion_overlay,
 )
 from scripts.audit_phase4_v3core_resources import audit as audit_resources
+from scripts.link_phase4_v3core_prediction_outcomes import link_predictions_to_cases
 from scripts.materialize_phase4_v3core_forward_input import materialize
 
 WORKFLOW_SCHEMA = "advisorai.phase4.v3-core.forward-terminal-workflow.v1"
@@ -220,14 +221,30 @@ def run(
     output.mkdir(parents=True, exist_ok=False)
     integrity_dir = output / "integrity"
     resource_dir = output / "resources"
+    effective_outcome_link_paths = tuple(path.resolve() for path in outcome_link_ledger_paths)
+    outcome_links_generated = False
     try:
         cases_path = run / "completed-cases.jsonl"
+        if (
+            not effective_outcome_link_paths
+            and prediction_ledger_paths
+            and status.get("state") == "target_reached"
+            and cases_path.is_file()
+        ):
+            generated_outcome_links = output / "outcome-links" / "outcome-links.jsonl"
+            link_predictions_to_cases(
+                prediction_ledger_paths=tuple(path.resolve() for path in prediction_ledger_paths),
+                completed_cases_path=cases_path,
+                output_path=generated_outcome_links,
+            )
+            effective_outcome_link_paths = (generated_outcome_links.resolve(),)
+            outcome_links_generated = True
         integrity_report = audit_forward_root(
             run / "raw-responses.jsonl",
             run / "normalized-bars.jsonl",
             completed_cases_path=cases_path if cases_path.is_file() else None,
             prediction_ledger_paths=tuple(path.resolve() for path in prediction_ledger_paths),
-            outcome_link_ledger_paths=tuple(path.resolve() for path in outcome_link_ledger_paths),
+            outcome_link_ledger_paths=effective_outcome_link_paths,
             prediction_manifest_paths=tuple(path.resolve() for path in prediction_manifest_paths),
             terminal_observed_at=terminal_observed_at,
             minimum_terminal_closed_observations=minimum_terminal_closed_observations,
@@ -271,9 +288,7 @@ def run(
                 prediction_manifest_paths=tuple(
                     path.resolve() for path in prediction_manifest_paths
                 ),
-                outcome_link_ledger_paths=tuple(
-                    path.resolve() for path in outcome_link_ledger_paths
-                ),
+                outcome_link_ledger_paths=effective_outcome_link_paths,
             )
             decision = "MATERIALIZED"
             next_action = "run only the preregistered single-pass Phase-4 utility evaluation"
@@ -352,8 +367,9 @@ def run(
             ],
             "outcome_link_ledgers": [
                 {"path": _relative(path, repo), "sha256": _sha256_file(path)}
-                for path in outcome_link_ledger_paths
+                for path in effective_outcome_link_paths
             ],
+            "outcome_links_generated_by_workflow": outcome_links_generated,
             "decision": decision,
             "materialization_attempted": materialization_allowed,
             "materialization": materialization_result,

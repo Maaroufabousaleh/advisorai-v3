@@ -1341,8 +1341,8 @@ def audit_forward_root(
         record.normalized_provenance_conflict for record in bar_records
     )
     raw_hash_chain_valid = True
-    completed_case_ledger_valid = True
-    prediction_ledgers_valid = True
+    completed_case_ledger_valid = completed_cases_path is not None
+    prediction_ledgers_valid = bool(prediction_ledger_paths) and bool(prediction_entries)
     integrity_ready = all(
         (
             raw_hash_chain_valid,
