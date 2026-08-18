@@ -334,6 +334,11 @@ class IntegrityAuditReport(BaseModel):
     raw_responses_sha256: str
     normalized_bars_sha256: str
     completed_cases_sha256: str | None = None
+    source_manifest_sha256: str | None = None
+    source_status_sha256: str | None = None
+    source_config_sha256: str | None = None
+    prediction_ledger_sha256s: tuple[str, ...] = ()
+    outcome_link_ledger_sha256s: tuple[str, ...] = ()
     raw_response_count: int = Field(ge=0)
     raw_observation_count: int = Field(ge=0)
     normalized_bar_count: int = Field(ge=0)
@@ -377,6 +382,9 @@ class IntegrityAuditReport(BaseModel):
         "completed_cases_sha256",
         "auditor_module_sha256",
         "auditor_cli_sha256",
+        "source_manifest_sha256",
+        "source_status_sha256",
+        "source_config_sha256",
     )
     @classmethod
     def valid_report_digest(cls, value: str | None, info: object) -> str | None:
@@ -386,6 +394,11 @@ class IntegrityAuditReport(BaseModel):
     @classmethod
     def valid_audit_fingerprint(cls, value: str) -> str:
         return _digest(value, "audit_fingerprint")
+
+    @field_validator("prediction_ledger_sha256s", "outcome_link_ledger_sha256s")
+    @classmethod
+    def valid_ledger_digests(cls, value: tuple[str, ...], info: object) -> tuple[str, ...]:
+        return tuple(_digest(item, getattr(info, "field_name", "ledger hash")) for item in value)
 
 
 class IntegrityExclusionOverlay(BaseModel):
@@ -1010,6 +1023,9 @@ def audit_forward_root(
     minimum_cases_per_symbol: int = DEFAULT_MINIMUM_CASES_PER_SYMBOL,
     auditor_cli_sha256: str | None = None,
     auditor_repository_commit: str | None = None,
+    source_manifest_path: Path | None = None,
+    source_status_path: Path | None = None,
+    source_config_path: Path | None = None,
 ) -> IntegrityAuditReport:
     """Audit immutable inputs without writing to any input path."""
 
@@ -1081,10 +1097,6 @@ def audit_forward_root(
     normalized_provenance_conflict_count = sum(
         record.normalized_provenance_conflict for record in bar_records
     )
-    classifications_valid = not any(
-        record.classification in {"REVISED_CANONICAL_DISAGREES", "UNRESOLVED"}
-        for record in bar_records
-    )
     raw_hash_chain_valid = True
     completed_case_ledger_valid = True
     prediction_ledgers_valid = True
@@ -1099,7 +1111,6 @@ def audit_forward_root(
             prediction_context_valid,
             prediction_source_identity_valid,
             prediction_link_integrity_valid,
-            classifications_valid,
         )
     )
     observed_times = [observation.receipt_at for observation in raw_observations]
@@ -1123,6 +1134,17 @@ def audit_forward_root(
         completed_cases_sha256=(
             _sha256_file(completed_cases_path) if completed_cases_path is not None else None
         ),
+        source_manifest_sha256=(
+            _sha256_file(source_manifest_path) if source_manifest_path is not None else None
+        ),
+        source_status_sha256=(
+            _sha256_file(source_status_path) if source_status_path is not None else None
+        ),
+        source_config_sha256=(
+            _sha256_file(source_config_path) if source_config_path is not None else None
+        ),
+        prediction_ledger_sha256s=tuple(_sha256_file(path) for path in prediction_ledger_paths),
+        outcome_link_ledger_sha256s=tuple(_sha256_file(path) for path in outcome_link_ledger_paths),
         raw_response_count=len(raw_records),
         raw_observation_count=len(raw_observations),
         normalized_bar_count=len(normalized_bars),

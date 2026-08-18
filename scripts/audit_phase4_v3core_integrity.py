@@ -58,6 +58,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--terminal-observed-at", type=_timestamp, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--exclusion-output", type=Path)
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--status", type=Path)
+    parser.add_argument("--config", type=Path)
     parser.add_argument(
         "--minimum-terminal-closed-observations",
         type=int,
@@ -76,7 +79,9 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path | None]:
+def _resolve_inputs(
+    args: argparse.Namespace,
+) -> tuple[Path, Path, Path | None, Path | None, Path | None, Path | None]:
     if args.run_directory is not None:
         run = args.run_directory.resolve()
         status_path = run / "status.json"
@@ -91,6 +96,15 @@ def _resolve_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path | None]:
             run / "raw-responses.jsonl",
             run / "normalized-bars.jsonl",
             (run / "completed-cases.jsonl") if (run / "completed-cases.jsonl").is_file() else None,
+            (args.manifest.resolve() if args.manifest else run / "manifest.json")
+            if (args.manifest or (run / "manifest.json").is_file())
+            else None,
+            (args.status.resolve() if args.status else run / "status.json")
+            if (args.status or (run / "status.json").is_file())
+            else None,
+            (args.config.resolve() if args.config else run / "config.json")
+            if (args.config or (run / "config.json").is_file())
+            else None,
         )
     if args.normalized_bars is None:
         raise SystemExit("--normalized-bars is required without --run-directory")
@@ -98,6 +112,9 @@ def _resolve_inputs(args: argparse.Namespace) -> tuple[Path, Path, Path | None]:
         args.raw_responses.resolve(),
         args.normalized_bars.resolve(),
         (args.completed_cases.resolve() if args.completed_cases is not None else None),
+        args.manifest.resolve() if args.manifest is not None else None,
+        args.status.resolve() if args.status is not None else None,
+        args.config.resolve() if args.config is not None else None,
     )
 
 
@@ -108,13 +125,23 @@ def _ensure_output_is_separate(output: Path, inputs: list[Path]) -> None:
 
 def main() -> int:
     args = _parser().parse_args()
-    raw_path, normalized_path, cases_path = _resolve_inputs(args)
+    (
+        raw_path,
+        normalized_path,
+        cases_path,
+        manifest_path,
+        status_path,
+        config_path,
+    ) = _resolve_inputs(args)
     input_paths = [
         raw_path,
         normalized_path,
         cases_path,
         *args.prediction_ledger,
         *args.outcome_link_ledger,
+        manifest_path,
+        status_path,
+        config_path,
     ]
     _ensure_output_is_separate(args.output, input_paths)
     if args.exclusion_output is not None:
@@ -130,6 +157,9 @@ def main() -> int:
         minimum_cases_per_symbol=args.minimum_cases_per_symbol,
         auditor_cli_sha256=_sha256_file(Path(__file__).resolve()),
         auditor_repository_commit=args.repository_commit,
+        source_manifest_path=manifest_path,
+        source_status_path=status_path,
+        source_config_path=config_path,
     )
     report_sha256 = _write_new(args.output, report.model_dump(mode="json"))
     if args.exclusion_output is not None:
