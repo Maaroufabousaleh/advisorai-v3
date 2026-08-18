@@ -20,6 +20,7 @@ import platform
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import Path
 from typing import Literal
@@ -486,6 +487,27 @@ def _decode_raw_observations(record: ForwardRawResponse) -> tuple[RawKlineObserv
         if close_time + timedelta(milliseconds=1) != interval_end:
             raise IntegrityAuditError(
                 f"raw response {record.sequence} has invalid provider close semantics"
+            )
+        try:
+            open_value = Decimal(str(row[1]))
+            high_value = Decimal(str(row[2]))
+            low_value = Decimal(str(row[3]))
+            close_value = Decimal(str(row[4]))
+            volume_value = Decimal(str(row[5]))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise IntegrityAuditError(
+                f"raw response {record.sequence} contains non-numeric kline OHLCV"
+            ) from exc
+        values = (open_value, high_value, low_value, close_value, volume_value)
+        if (
+            any(not value.is_finite() for value in values)
+            or any(value <= 0 for value in (open_value, high_value, low_value, close_value))
+            or volume_value < 0
+            or high_value < max(open_value, close_value)
+            or low_value > min(open_value, close_value)
+        ):
+            raise IntegrityAuditError(
+                f"raw response {record.sequence} contains invalid kline OHLCV bounds"
             )
         ohlcv = {
             "open": str(row[1]),
@@ -1272,6 +1294,7 @@ def audit_forward_root(
             prediction_source_identity_valid,
             prediction_model_identity_valid,
             prediction_link_integrity_valid,
+            prediction_outcome_link_complete,
         )
     )
     observed_times = [observation.receipt_at for observation in raw_observations]
