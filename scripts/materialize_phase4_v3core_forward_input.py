@@ -129,6 +129,7 @@ def _load_integrity_boundary(
     raw_responses_path: Path,
     normalized_bars_path: Path,
     prediction_ledger_paths: tuple[Path, ...],
+    prediction_manifest_paths: tuple[Path, ...],
     outcome_link_ledger_paths: tuple[Path, ...],
 ) -> tuple[IntegrityAuditReport, IntegrityExclusionOverlay, str, str]:
     try:
@@ -154,6 +155,11 @@ def _load_integrity_boundary(
         raise MaterializationRefused("integrity report/completed case hash mismatch")
     if tuple(_sha256(path) for path in prediction_ledger_paths) != report.prediction_ledger_sha256s:
         raise MaterializationRefused("integrity report/prediction ledger hash mismatch")
+    if (
+        tuple(_sha256(path) for path in prediction_manifest_paths)
+        != report.prediction_manifest_sha256s
+    ):
+        raise MaterializationRefused("integrity report/prediction manifest hash mismatch")
     if (
         tuple(_sha256(path) for path in outcome_link_ledger_paths)
         != report.outcome_link_ledger_sha256s
@@ -190,6 +196,7 @@ def materialize(
     integrity_report_path: Path | None = None,
     exclusion_overlay_path: Path | None = None,
     prediction_ledger_paths: tuple[Path, ...] = (),
+    prediction_manifest_paths: tuple[Path, ...] = (),
     outcome_link_ledger_paths: tuple[Path, ...] = (),
 ) -> dict[str, str | int | bool]:
     run_directory = run_directory.resolve()
@@ -245,6 +252,7 @@ def materialize(
             raw_responses_path=raw_responses_path,
             normalized_bars_path=normalized_bars,
             prediction_ledger_paths=tuple(path.resolve() for path in prediction_ledger_paths),
+            prediction_manifest_paths=tuple(path.resolve() for path in prediction_manifest_paths),
             outcome_link_ledger_paths=tuple(path.resolve() for path in outcome_link_ledger_paths),
         )
         if raw_case_counts != integrity_report.raw_completed_case_counts:
@@ -333,6 +341,13 @@ def materialize(
             {"path": str(path.resolve()), "sha256": _sha256(path)}
             for path in prediction_ledger_paths
         ],
+        "prediction_manifests": [
+            {"path": str(path.resolve()), "sha256": _sha256(path)}
+            for path in prediction_manifest_paths
+        ],
+        "prediction_model_identity_valid": (
+            integrity_report.prediction_model_identity_valid if integrity_report else None
+        ),
         "outcome_link_ledgers": [
             {"path": str(path.resolve()), "sha256": _sha256(path)}
             for path in outcome_link_ledger_paths
@@ -381,6 +396,7 @@ def main() -> int:
     parser.add_argument("--integrity-report", type=Path)
     parser.add_argument("--exclusion-overlay", type=Path)
     parser.add_argument("--prediction-ledger", type=Path, action="append", default=[])
+    parser.add_argument("--prediction-manifest", type=Path, action="append", default=[])
     parser.add_argument("--outcome-link-ledger", type=Path, action="append", default=[])
     args = parser.parse_args()
     try:
@@ -394,6 +410,7 @@ def main() -> int:
                     integrity_report_path=args.integrity_report,
                     exclusion_overlay_path=args.exclusion_overlay,
                     prediction_ledger_paths=tuple(args.prediction_ledger),
+                    prediction_manifest_paths=tuple(args.prediction_manifest),
                     outcome_link_ledger_paths=tuple(args.outcome_link_ledger),
                 ),
                 sort_keys=True,
