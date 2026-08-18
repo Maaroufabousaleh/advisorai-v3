@@ -1163,19 +1163,26 @@ def _prediction_integrity(
     cases: Sequence[V3CoreForecastCase],
     *,
     expected_source_snapshot_hash: str | None,
-) -> tuple[tuple[bool, bool, bool, bool, int], bool]:
+) -> tuple[tuple[bool, bool, bool, bool, int], bool, tuple[str, ...]]:
     """Validate timing/context/source identity without reading future outcomes."""
 
     by_identity = {(case.instrument, case.cutoff): case for case in cases}
     prediction_timing_valid = True
     prediction_context_valid = True
     prediction_source_identity_valid = True
+    source_identity_limitations: list[str] = []
     if entries and expected_source_snapshot_hash is None:
         prediction_source_identity_valid = False
+        source_identity_limitations.append(
+            "prediction source identity cannot be verified without a source manifest"
+        )
     if expected_source_snapshot_hash is not None and any(
         case.source_snapshot_hash != expected_source_snapshot_hash for case in cases
     ):
         prediction_source_identity_valid = False
+        source_identity_limitations.append(
+            "completed-case source snapshot identity differs from the source manifest"
+        )
     prediction_ids = {entry.prediction.prediction_id for entry in entries}
     linked_prediction_ids: set[str] = set()
     link_integrity_valid = True
@@ -1191,7 +1198,12 @@ def _prediction_integrity(
         expected_input_hash = _input_snapshot_hash(case.context_bars, case.cutoff)
         if prediction.input_snapshot_hash != expected_input_hash:
             prediction_context_valid = False
-        if prediction.source_snapshot_hash is not None and prediction.source_snapshot_hash != (
+        if prediction.source_snapshot_hash is None:
+            prediction_source_identity_valid = False
+            source_identity_limitations.append(
+                f"prediction {prediction.prediction_id} lacks source_snapshot_hash"
+            )
+        elif prediction.source_snapshot_hash != (
             expected_source_snapshot_hash or case.source_snapshot_hash
         ):
             prediction_source_identity_valid = False
@@ -1212,12 +1224,16 @@ def _prediction_integrity(
     unlinked_count = len(prediction_ids - linked_prediction_ids)
     outcome_link_complete = unlinked_count == 0 and len(links) == len(prediction_ids)
     return (
-        prediction_timing_valid,
-        prediction_context_valid,
-        prediction_source_identity_valid,
-        link_integrity_valid,
-        unlinked_count,
-    ), outcome_link_complete
+        (
+            prediction_timing_valid,
+            prediction_context_valid,
+            prediction_source_identity_valid,
+            link_integrity_valid,
+            unlinked_count,
+        ),
+        outcome_link_complete,
+        tuple(dict.fromkeys(source_identity_limitations)),
+    )
 
 
 def audit_forward_root(
@@ -1323,11 +1339,15 @@ def audit_forward_root(
             unlinked_prediction_count,
         ),
         prediction_outcome_link_complete,
+        source_identity_limitations,
     ) = _prediction_integrity(
         prediction_entries,
         outcome_links,
         cases,
         expected_source_snapshot_hash=expected_source_snapshot_hash,
+    )
+    prediction_identity_limitations = tuple(
+        dict.fromkeys((*prediction_identity_limitations, *source_identity_limitations))
     )
     sample_minimum_met = all(
         eligible_counts[symbol] >= minimum_cases_per_symbol for symbol in V3_CORE_SYMBOLS
