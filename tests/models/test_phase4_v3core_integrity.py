@@ -587,6 +587,8 @@ def test_allow_unsealed_cli_marks_report_diagnostic_only(
             "--allow-unsealed",
             "--terminal-observed-at",
             (START + timedelta(minutes=10)).isoformat(),
+            "--repository-commit",
+            "a" * 40,
             "--output",
             str(output),
         ],
@@ -597,6 +599,7 @@ def test_allow_unsealed_cli_marks_report_diagnostic_only(
     assert payload["terminal_evidence_eligible"] is False
     assert payload["admission_evidence_ready"] is False
     assert payload["admission_minimum_met"] is False
+    assert payload["auditor_repository_commit"] == "a" * 40
     assert raw_path.read_bytes()
     assert normalized_path.read_bytes()
 

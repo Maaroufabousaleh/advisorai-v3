@@ -45,6 +45,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
   scripts/audit_phase4_v3core_integrity.py \
   --run-directory artifacts/phase4/v3core-forward/<sealed-root> \
   --terminal-observed-at 2026-08-22T20:00:00Z \
+  --repository-commit <sealed-root-code-commit> \
   --prediction-ledger artifacts/phase4/v3core-forward-predictions/<root>/predictions.jsonl \
   --prediction-manifest artifacts/phase4/v3core-forward-predictions/<root>/manifest.json \
   --outcome-link-ledger artifacts/phase4/v3core-forward-predictions/<root>/outcome-links.jsonl \
@@ -59,6 +60,10 @@ the overlay with its affected `context` or `outcome` segment. Linked
 predictions remain in their original append-only ledger and are represented in
 the overlay as `EXCLUDED_DATA_INTEGRITY`; no prediction or completed case is
 deleted or rewritten.
+
+The repository commit argument is required. It must be the exact code commit
+used for the sealed generation and auditor review; omission or a non-SHA-1
+value is refused.
 
 The report also validates raw, source-health, and prediction hash chains,
 per-symbol source-health state continuity, prediction timing and context

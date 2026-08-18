@@ -1,21 +1,26 @@
 # AdvisorAI V3 continuation checkpoint
 
-## Current protected Phase-4 integrity-auditor checkpoint — 2026-08-18T07:03:45Z
+## Current protected Phase-4 integrity-auditor checkpoint — 2026-08-18T14:58:48Z
 
 - Clean main remains `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The isolated
   integrity-auditor branch is `agent/phase4-integrity-auditor` at pushed commit
-  `4c90a5d`; it is intentionally not merged
+  `adcf13214937612fbf5092689cde9313d36a812d`; it is intentionally not merged
   while the protected forward generation is running.
 - The authoritative active root is
   `artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`.
   Its immutable target end is `2026-08-22T19:35:06.869338Z`; status remains
-  `running`, with 2,662 raw responses, 276 normalized bars, and 7 completed
+  `running`, with 4,452 raw responses, 466 normalized bars, and 14 completed
   cases per BTCUSDT and ETHUSDT. The minimum has not been reached.
 - Collector PID `59671` and resource sidecar PID `61721` remain protected and
-  alive. Baseline PID `60814` is absent and was not restarted. Chronos PID
-  `80779` remains alive with zero prospective predictions and preserved
-  rejection evidence. No protected process was stopped, restarted, checked
-  out, rebased, or reconfigured.
+  alive. Baseline PID `60814` is absent. Its frozen identity and five-record
+  chain passed read-only validation. A protected-environment resume produced
+  ten new prospective records for the 15:00Z cutoff, then stopped on the
+  existing deterministic conflicting-payload guard; no further resume is
+  permitted. The root now preserves 15 predictions and 8 missed cutoffs, and
+  its stale `running` marker is not treated as process health. Chronos PID
+  `80779` remains alive with zero prospective predictions and 40 preserved
+  rejection records. No collector, sidecar, or Chronos process was stopped,
+  restarted, checked out, rebased, or reconfigured.
 - The active manifest and status continue to record
   `credentials_loaded=false` and `order_writes_attempted=false`. No orders or
   broker credentials were used for this evidence generation. The laptop
@@ -26,12 +31,20 @@
   `0d6c402160d8bc09a763375f7e267a8ecd2afb2f5c1c7aa2f0e9fc90069004a5`). It
   remains `DATA_INTEGRITY_INCIDENT_OBSERVED` / `PENDING_TERMINAL_REVIEW`; no
   crash, provider failure, or implementation failure is inferred.
+- The absent baseline's initial cause remains
+  `POSSIBLE_EXTERNAL_PROCESS_OPTIMIZER_INTERRUPTION` only: Norton activity was
+  observed, but no timestamped Norton termination event correlates with the
+  original disappearance. The direct baseline identity-conflict exception is
+  preserved separately and is the reason the resumed root was not continued.
 - The isolated auditor now binds every completed-case context/outcome bar to
   audited normalized identity, raw-row identity, OHLCV content, and
   source-health state. It refuses admission on a content mismatch, rejects
   forged legacy admission aliases, and keeps contaminated cases in a separate
-  overlay. Full verification at this branch's canonical artifact view passed
-  746 tests, 28 warnings; focused integrity tests passed 34.
+  overlay. Terminal CLI reports now require a validated exact repository
+  commit in addition to module/CLI hashes, terminal boundary, rule version,
+  and source input hashes. Full verification at this branch's canonical
+  artifact view previously passed 746 tests, 28 warnings; focused integrity
+  tests passed 34 before this small CLI/test hardening change.
 - No terminal raw-versus-normalized audit, exclusion overlay, materialization,
   utility scoring, Phase-4 admission, or downstream phase has been started.
   The next legal action after the root itself seals is the immutable terminal
