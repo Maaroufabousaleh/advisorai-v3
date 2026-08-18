@@ -113,6 +113,27 @@ Its resulting metadata records raw and integrity-eligible counts and binds the
 audit/overlay fingerprints and ledger hashes. It remains an input-preparation
 boundary, not a PhaseGateRecord or Phase-4 admission decision.
 
+## Terminal resource-sidecar audit
+
+The resource sidecar is a separate append-only process/resource measurement
+surface. Audit it only after its `status.json` is terminal; the auditor refuses
+`state=running` and writes a new report without changing the sidecar:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/audit_phase4_v3core_resources.py \
+  --resource-root artifacts/phase4/v3core-forward-resource/<sealed-root> \
+  --output artifacts/phase4/v3core-resource-audit/<generation>/resource-audit.json
+```
+
+The report verifies the resource observation hash chain, process PID/start-tick
+and command identity continuity, monotonic sample timestamps, terminal
+status/summary bindings, resource-error absence, and the sidecar's recorded
+credentials/order-write invariants. It reports maxima and observed growth for
+RSS, virtual memory, CPU, threads, file descriptors, sockets, and target-root
+files/bytes. It does not invent percentile estimates and does not treat a
+running sidecar as terminal evidence.
+
 ## Revision-timing statistics
 
 After sealing, revision timing can be measured independently of the integrity
