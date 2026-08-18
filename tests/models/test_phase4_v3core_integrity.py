@@ -299,7 +299,9 @@ def test_terminal_boundary_cannot_exclude_later_raw_receipts(tmp_path: Path) -> 
         )
 
 
-def _write_multi_symbol_case_fixture(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
+def _write_multi_symbol_case_fixture(
+    tmp_path: Path, *, include_prediction_source_snapshot: bool = True
+) -> tuple[Path, Path, Path, Path, Path]:
     raw_path = tmp_path / "raw.jsonl"
     normalized_path = tmp_path / "normalized.jsonl"
     cases_path = tmp_path / "completed-cases.jsonl"
@@ -382,19 +384,20 @@ def _write_multi_symbol_case_fixture(tmp_path: Path) -> tuple[Path, Path, Path, 
     eth_case = eth_build.cases[0]
     prediction_ledger = ForwardPredictionLedger(predictions_path)
     for model, case in (("lightgbm", btc_case), ("lightgbm", eth_case)):
-        prediction_ledger.append(
-            ForwardPredictionRecord(
-                prediction_id=f"{case.case_id}:{model}",
-                instrument=case.instrument,
-                model=model,
-                model_identity_hash=HASH,
-                cutoff=case.cutoff,
-                input_snapshot_hash=HASH,
-                predicted_return_bps=Decimal("1"),
-                generated_at=case.cutoff - timedelta(seconds=1),
-                runtime_latency_ms=Decimal("1"),
-            )
-        )
+        prediction_fields = {
+            "prediction_id": f"{case.case_id}:{model}",
+            "instrument": case.instrument,
+            "model": model,
+            "model_identity_hash": HASH,
+            "cutoff": case.cutoff,
+            "input_snapshot_hash": HASH,
+            "predicted_return_bps": Decimal("1"),
+            "generated_at": case.cutoff - timedelta(seconds=1),
+            "runtime_latency_ms": Decimal("1"),
+        }
+        if include_prediction_source_snapshot:
+            prediction_fields["source_snapshot_hash"] = HASH
+        prediction_ledger.append(ForwardPredictionRecord(**prediction_fields))
     outcome_links = ForwardPredictionOutcomeLinkLedger(links_path)
     for entry, case in zip(prediction_ledger.records, (btc_case, eth_case), strict=True):
         outcome_links.append(
@@ -518,6 +521,30 @@ def test_prediction_source_identity_limitation_is_not_silently_passed(
         terminal_observed_at=START + timedelta(days=2),
     )
     assert report.prediction_source_identity_valid is False
+    assert report.integrity_ready is False
+
+
+def test_missing_prediction_source_snapshot_is_reported_with_manifest(
+    tmp_path: Path,
+) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, links_path = (
+        _write_multi_symbol_case_fixture(tmp_path, include_prediction_source_snapshot=False)
+    )
+    manifest_path = tmp_path / "source-manifest.json"
+    manifest_path.write_text(json.dumps({"source_snapshot_hash": HASH}), encoding="utf-8")
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        outcome_link_ledger_paths=(links_path,),
+        terminal_observed_at=START + timedelta(days=2),
+        source_manifest_path=manifest_path,
+    )
+    assert report.prediction_source_identity_valid is False
+    assert any(
+        "lacks source_snapshot_hash" in item for item in report.prediction_identity_limitations
+    )
     assert report.integrity_ready is False
 
 
