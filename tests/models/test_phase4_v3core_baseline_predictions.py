@@ -7,15 +7,72 @@ from pathlib import Path
 
 import pytest
 
-from advisorai.phase4 import ForwardPredictionLedger, ForwardPredictionRecord
+from advisorai.phase4 import (
+    ForwardPredictionLedger,
+    ForwardPredictionRecord,
+    V3CoreBar,
+    V3CoreBarProvenance,
+)
 from scripts.run_phase4_v3core_baseline_predictions import (
     RESUME_IDENTITY_FIELDS,
+    _context_for_cutoff,
     _expected_manifest,
+    _missed_cutoff_reason,
     _pending_baselines,
     _predict_prices,
     _prediction_id,
     _validate_resume_manifest,
 )
+
+HASH = "a" * 64
+CUTOFF = datetime(2026, 8, 18, 4, tzinfo=UTC)
+
+
+def _bar(
+    interval_end: datetime,
+    *,
+    source_health_state: str = "HEALTHY",
+    collected_at: datetime | None = None,
+) -> V3CoreBar:
+    collected = collected_at or interval_end + timedelta(seconds=1)
+    provenance = V3CoreBarProvenance(
+        interval_end=interval_end,
+        provider_available_at=interval_end,
+        collected_at=collected,
+        availability_basis="forward_observed",
+        evidence_class="forward_pit_admission",
+        source_snapshot_hash=HASH,
+        raw_record_hash=HASH,
+        normalized_record_hash=HASH,
+        source_health_state=source_health_state,
+    )
+    return V3CoreBar(
+        instrument="BTCUSDT",
+        provenance=provenance,
+        open=Decimal("100"),
+        high=Decimal("101"),
+        low=Decimal("99"),
+        close=Decimal("100"),
+        volume=Decimal("1"),
+        source_id="binance_spot_public_market_data",
+        provider_identity="binance_spot_public_market_data",
+        endpoint="https://data-api.binance.vision/api/v3/klines",
+        source_snapshot_hash=HASH,
+    )
+
+
+def _context_bars(*, missing_index: int | None = None, unhealthy_index: int | None = None):
+    bars = []
+    for index in range(48):
+        if index == missing_index:
+            continue
+        bars.append(
+            _bar(
+                CUTOFF - timedelta(minutes=5 * (48 - index)),
+                source_health_state="DEGRADED" if index == unhealthy_index else "HEALTHY",
+            )
+        )
+    return tuple(bars)
 
 
 def test_all_mandatory_baselines_produce_one_hour_price_paths() -> None:
@@ -97,3 +154,49 @@ def test_baseline_resume_rejects_missing_frozen_identity(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="resume identity mismatch.*context_bars"):
         _validate_resume_manifest(missing, expected)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [
+        ({"bars": _context_bars()[:47]}, "INSUFFICIENT_CONTEXT"),
+        (
+            {"bars": _context_bars(missing_index=10) + (_bar(CUTOFF - timedelta(minutes=245)),)},
+            "MISSING_BAR",
+        ),
+        ({"bars": _context_bars(unhealthy_index=10)}, "SOURCE_HEALTH_FAILURE"),
+        (
+            {"bars": _context_bars(), "worker_started_at": CUTOFF + timedelta(seconds=1)},
+            "WORKER_STARTED_TOO_LATE",
+        ),
+        (
+            {"bars": _context_bars(), "worker_started_at": CUTOFF - timedelta(minutes=1)},
+            "SCHEDULER_DELAY",
+        ),
+        ({"bars": _context_bars(), "inference_failed": True}, "INFERENCE_RUNTIME_FAILURE"),
+    ],
+)
+def test_missed_cutoff_reason_is_deterministic(kwargs: dict[str, object], expected: str) -> None:
+    assert (
+        _missed_cutoff_reason(
+            kwargs.pop("bars"),
+            symbol="BTCUSDT",
+            cutoff=CUTOFF,
+            now=CUTOFF + timedelta(seconds=2),
+            worker_started_at=kwargs.pop("worker_started_at", CUTOFF - timedelta(minutes=1)),
+            **kwargs,
+        )
+        == expected
+    )
+
+
+def test_context_requires_healthy_forward_observed_bars() -> None:
+    assert (
+        _context_for_cutoff(
+            _context_bars(unhealthy_index=10),
+            symbol="BTCUSDT",
+            cutoff=CUTOFF,
+            now=CUTOFF - timedelta(seconds=1),
+        )
+        is None
+    )
