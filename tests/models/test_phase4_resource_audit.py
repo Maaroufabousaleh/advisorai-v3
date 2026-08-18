@@ -12,6 +12,9 @@ def _write_sidecar(root: Path, *, state: str = "target_exited") -> None:
     root.mkdir()
     config = {
         "schema": "advisorai.phase3.resource-monitor.v2.config",
+        "pid": 123,
+        "expected_process_start_ticks": 456,
+        "expected_command_sha256": "a" * 64,
         "credentials_loaded": False,
         "order_writes_attempted": False,
         "target_root": str(root / "target"),
