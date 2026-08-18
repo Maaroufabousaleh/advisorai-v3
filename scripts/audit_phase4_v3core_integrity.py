@@ -54,6 +54,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--normalized-bars", type=Path)
     parser.add_argument("--completed-cases", type=Path)
     parser.add_argument("--prediction-ledger", type=Path, action="append", default=[])
+    parser.add_argument("--prediction-manifest", type=Path, action="append", default=[])
     parser.add_argument("--outcome-link-ledger", type=Path, action="append", default=[])
     parser.add_argument("--terminal-observed-at", type=_timestamp, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -138,6 +139,7 @@ def main() -> int:
         normalized_path,
         cases_path,
         *args.prediction_ledger,
+        *args.prediction_manifest,
         *args.outcome_link_ledger,
         manifest_path,
         status_path,
@@ -152,6 +154,7 @@ def main() -> int:
         completed_cases_path=cases_path,
         prediction_ledger_paths=tuple(path.resolve() for path in args.prediction_ledger),
         outcome_link_ledger_paths=tuple(path.resolve() for path in args.outcome_link_ledger),
+        prediction_manifest_paths=tuple(path.resolve() for path in args.prediction_manifest),
         terminal_observed_at=args.terminal_observed_at,
         minimum_terminal_closed_observations=args.minimum_terminal_closed_observations,
         minimum_cases_per_symbol=args.minimum_cases_per_symbol,
@@ -177,6 +180,8 @@ def main() -> int:
                 "integrity_ready": report.integrity_ready,
                 "admission_evidence_ready": report.admission_evidence_ready,
                 "admission_minimum_met": report.admission_minimum_met,
+                "prediction_model_identity_valid": report.prediction_model_identity_valid,
+                "prediction_identity_limitations": report.prediction_identity_limitations,
                 "audit_fingerprint": report.audit_fingerprint,
                 "contaminated_case_count": len(report.contaminated_cases),
                 "excluded_prediction_count": len(report.excluded_predictions),

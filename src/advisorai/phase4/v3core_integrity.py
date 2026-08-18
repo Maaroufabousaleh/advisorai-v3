@@ -40,8 +40,8 @@ from advisorai.phase4.v3core_prediction_ledger import (
     ForwardPredictionOutcomeLink,
 )
 
-INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v3"
-INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v3"
+INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v4"
+INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v4"
 STABILITY_RULE_VERSION = "closed_terminal_repeat_v1"
 DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS = 2
 DEFAULT_MINIMUM_CASES_PER_SYMBOL = 64
@@ -346,6 +346,7 @@ class IntegrityAuditReport(BaseModel):
     source_config_sha256: str | None = None
     prediction_ledger_sha256s: tuple[str, ...] = ()
     outcome_link_ledger_sha256s: tuple[str, ...] = ()
+    prediction_manifest_sha256s: tuple[str, ...] = ()
     raw_response_count: int = Field(ge=0)
     raw_observation_count: int = Field(ge=0)
     normalized_bar_count: int = Field(ge=0)
@@ -361,6 +362,8 @@ class IntegrityAuditReport(BaseModel):
     prediction_timing_valid: bool
     prediction_context_valid: bool
     prediction_source_identity_valid: bool
+    prediction_model_identity_valid: bool
+    prediction_identity_limitations: tuple[str, ...] = ()
     prediction_link_integrity_valid: bool
     prediction_outcome_link_complete: bool
     prediction_count: int = Field(ge=0)
@@ -402,7 +405,11 @@ class IntegrityAuditReport(BaseModel):
     def valid_audit_fingerprint(cls, value: str) -> str:
         return _digest(value, "audit_fingerprint")
 
-    @field_validator("prediction_ledger_sha256s", "outcome_link_ledger_sha256s")
+    @field_validator(
+        "prediction_ledger_sha256s",
+        "outcome_link_ledger_sha256s",
+        "prediction_manifest_sha256s",
+    )
     @classmethod
     def valid_ledger_digests(cls, value: tuple[str, ...], info: object) -> tuple[str, ...]:
         return tuple(_digest(item, getattr(info, "field_name", "ledger hash")) for item in value)
@@ -614,6 +621,113 @@ def _load_prediction_entries(paths: Sequence[Path]) -> tuple[ForwardPredictionLe
             entries.append(entry)
             previous = entry.record_hash
     return tuple(entries)
+
+
+def _load_prediction_entries_by_path(
+    paths: Sequence[Path],
+) -> tuple[tuple[ForwardPredictionLedgerEntry, ...], ...]:
+    return tuple(_load_prediction_entries((path,)) for path in paths)
+
+
+def _validate_prediction_identities(
+    entries_by_path: Sequence[Sequence[ForwardPredictionLedgerEntry]],
+    manifest_paths: Sequence[Path],
+) -> tuple[bool, tuple[str, ...]]:
+    """Bind each prediction ledger to its frozen model-run manifest."""
+
+    entries = tuple(entry for group in entries_by_path for entry in group)
+    if not entries:
+        return True, ()
+    if len(manifest_paths) != len(entries_by_path):
+        return False, ("prediction manifest count does not match prediction ledger count",)
+
+    limitations: list[str] = []
+    valid = True
+    for index, (entries, manifest_path) in enumerate(
+        zip(entries_by_path, manifest_paths, strict=True),
+        start=1,
+    ):
+        if not entries:
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, TypeError, json.JSONDecodeError):
+            valid = False
+            limitations.append(f"prediction manifest {index} is unreadable")
+            continue
+        if not isinstance(manifest, dict):
+            valid = False
+            limitations.append(f"prediction manifest {index} is not an object")
+            continue
+
+        allowed_models = manifest.get("models")
+        if isinstance(allowed_models, list) and any(
+            entry.prediction.model not in allowed_models for entry in entries
+        ):
+            valid = False
+            limitations.append(
+                f"prediction ledger {index} contains a model absent from its manifest"
+            )
+
+        identity_hashes = manifest.get("model_identity_hashes")
+        if isinstance(identity_hashes, dict):
+            for entry in entries:
+                expected = identity_hashes.get(entry.prediction.model)
+                if (
+                    not isinstance(expected, str)
+                    or entry.prediction.model_identity_hash != expected
+                ):
+                    valid = False
+                    limitations.append(
+                        f"prediction {entry.prediction.prediction_id} model identity mismatches manifest"
+                    )
+        elif isinstance(manifest.get("model_identity_hash"), str):
+            model_identity = manifest.get("model_identity")
+            manifest_model = manifest.get("model")
+            if not isinstance(manifest_model, str) and isinstance(model_identity, dict):
+                candidate_name = model_identity.get("candidate_name")
+                manifest_model = candidate_name if isinstance(candidate_name, str) else None
+            for entry in entries:
+                if manifest_model != entry.prediction.model or (
+                    entry.prediction.model_identity_hash != manifest["model_identity_hash"]
+                ):
+                    valid = False
+                    limitations.append(
+                        f"prediction {entry.prediction.prediction_id} model identity mismatches manifest"
+                    )
+        else:
+            valid = False
+            limitations.append(
+                f"prediction manifest {index} does not expose a verifiable model identity"
+            )
+
+        runtime_fields = {
+            "checkpoint_hash": "checkpoint_hash",
+            "runner_hash": "runner_hash",
+            "preprocessing_identity": "preprocessing_identity",
+            "preprocessing_hash": "preprocessing_hash",
+            "dependency_lock_hash": "lock_hash",
+            "runtime_environment_hash": "environment_fingerprint",
+            "device": "device",
+        }
+        for prediction_field, manifest_field in runtime_fields.items():
+            expected = manifest.get(manifest_field)
+            if expected is None and manifest_field == "lock_hash":
+                expected = manifest.get("dependency_lock_hash")
+            if expected is None and manifest_field == "environment_fingerprint":
+                expected = manifest.get("runtime_environment_hash")
+            if expected is None:
+                continue
+            for entry in entries:
+                actual = getattr(entry.prediction, prediction_field)
+                if actual is None or actual != expected:
+                    valid = False
+                    limitations.append(
+                        f"prediction {entry.prediction.prediction_id} {prediction_field} "
+                        "is absent or mismatched"
+                    )
+
+    return valid, tuple(dict.fromkeys(limitations))
 
 
 def _load_outcome_links(paths: Sequence[Path]) -> tuple[ForwardPredictionOutcomeLink, ...]:
@@ -1054,6 +1168,7 @@ def audit_forward_root(
     completed_cases_path: Path | None = None,
     prediction_ledger_paths: Sequence[Path] = (),
     outcome_link_ledger_paths: Sequence[Path] = (),
+    prediction_manifest_paths: Sequence[Path] = (),
     terminal_observed_at: datetime | None = None,
     minimum_terminal_closed_observations: int = DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS,
     minimum_cases_per_symbol: int = DEFAULT_MINIMUM_CASES_PER_SYMBOL,
@@ -1074,8 +1189,15 @@ def audit_forward_root(
     normalized_bars = _load_normalized_bars(normalized_bars_path)
     cases = _load_cases(completed_cases_path)
     expected_source_snapshot_hash = _load_source_snapshot_hash(source_manifest_path)
-    prediction_entries = _load_prediction_entries(tuple(prediction_ledger_paths))
+    prediction_entries_by_path = _load_prediction_entries_by_path(tuple(prediction_ledger_paths))
+    prediction_entries = tuple(entry for entries in prediction_entries_by_path for entry in entries)
     outcome_links = _load_outcome_links(tuple(outcome_link_ledger_paths))
+    prediction_model_identity_valid, prediction_identity_limitations = (
+        _validate_prediction_identities(
+            prediction_entries_by_path,
+            tuple(prediction_manifest_paths),
+        )
+    )
     bar_records = _audit_bars(
         raw_observations,
         normalized_bars,
@@ -1148,6 +1270,7 @@ def audit_forward_root(
             prediction_timing_valid,
             prediction_context_valid,
             prediction_source_identity_valid,
+            prediction_model_identity_valid,
             prediction_link_integrity_valid,
         )
     )
@@ -1183,6 +1306,7 @@ def audit_forward_root(
         ),
         prediction_ledger_sha256s=tuple(_sha256_file(path) for path in prediction_ledger_paths),
         outcome_link_ledger_sha256s=tuple(_sha256_file(path) for path in outcome_link_ledger_paths),
+        prediction_manifest_sha256s=tuple(_sha256_file(path) for path in prediction_manifest_paths),
         raw_response_count=len(raw_records),
         raw_observation_count=len(raw_observations),
         normalized_bar_count=len(normalized_bars),
@@ -1198,6 +1322,8 @@ def audit_forward_root(
         prediction_timing_valid=prediction_timing_valid,
         prediction_context_valid=prediction_context_valid,
         prediction_source_identity_valid=prediction_source_identity_valid,
+        prediction_model_identity_valid=prediction_model_identity_valid,
+        prediction_identity_limitations=prediction_identity_limitations,
         prediction_link_integrity_valid=prediction_link_integrity_valid,
         prediction_outcome_link_complete=prediction_outcome_link_complete,
         prediction_count=len(prediction_entries),

@@ -46,6 +46,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
   --run-directory artifacts/phase4/v3core-forward/<sealed-root> \
   --terminal-observed-at 2026-08-22T20:00:00Z \
   --prediction-ledger artifacts/phase4/v3core-forward-predictions/<root>/predictions.jsonl \
+  --prediction-manifest artifacts/phase4/v3core-forward-predictions/<root>/manifest.json \
   --outcome-link-ledger artifacts/phase4/v3core-forward-predictions/<root>/outcome-links.jsonl \
   --output artifacts/phase4/v3core-integrity/<generation>/integrity-audit.json \
   --exclusion-output artifacts/phase4/v3core-integrity/<generation>/exclusion-overlay.json
@@ -89,6 +90,13 @@ fail-closed compatibility alias for the latter and is not a Phase-4 model
 admission decision. An orphan normalized record, broken immutable input, bad
 prediction context, or failed identity check causes the audit to fail closed
 rather than inventing a preferred value.
+
+Each prediction ledger must be paired, in argument order, with its frozen
+prediction-run manifest through `--prediction-manifest`. The auditor verifies
+the manifest's model identity and candidate runtime fields when present. A
+missing or unverifiable prediction manifest is an explicit integrity
+limitation and prevents `admission_evidence_ready`; it is never treated as
+implicit identity evidence.
 
 ## Integrity-aware materialization
 
