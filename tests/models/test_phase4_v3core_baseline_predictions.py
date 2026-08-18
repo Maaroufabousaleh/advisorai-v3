@@ -66,6 +66,13 @@ def test_baseline_resume_requires_exact_frozen_identity(tmp_path: Path) -> None:
     expected = _resume_fixture(tmp_path)
 
     _validate_resume_manifest(copy.deepcopy(expected), expected)
+    assert set(expected["model_identity_hashes"]) == {
+        "naive",
+        "drift",
+        "seasonal-7",
+        "linear",
+        "lightgbm",
+    }
 
 
 @pytest.mark.parametrize("field", RESUME_IDENTITY_FIELDS)
