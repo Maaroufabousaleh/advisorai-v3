@@ -4,7 +4,7 @@
 
 - Clean main remains `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The isolated
   integrity-auditor branch is `agent/phase4-integrity-auditor` at pushed commit
-  `2c5be98e08a9468e3e7e1a421579fef5a849745c`; it is intentionally not merged
+  `4c90a5d`; it is intentionally not merged
   while the protected forward generation is running.
 - The authoritative active root is
   `artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1/`.
@@ -28,9 +28,10 @@
   crash, provider failure, or implementation failure is inferred.
 - The isolated auditor now binds every completed-case context/outcome bar to
   audited normalized identity, raw-row identity, OHLCV content, and
-  source-health state. It refuses admission on a content mismatch and keeps
-  contaminated cases in a separate overlay. Full verification at this branch
-  passed 746 tests, 28 warnings; focused integrity tests passed 55.
+  source-health state. It refuses admission on a content mismatch, rejects
+  forged legacy admission aliases, and keeps contaminated cases in a separate
+  overlay. Full verification at this branch's canonical artifact view passed
+  746 tests, 28 warnings; focused integrity tests passed 34.
 - No terminal raw-versus-normalized audit, exclusion overlay, materialization,
   utility scoring, Phase-4 admission, or downstream phase has been started.
   The next legal action after the root itself seals is the immutable terminal
