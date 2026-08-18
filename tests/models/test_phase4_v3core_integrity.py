@@ -614,6 +614,33 @@ def test_report_rejects_inconsistent_unsealed_admission_flags(tmp_path: Path) ->
         IntegrityAuditReport.model_validate(payload)
 
 
+def test_case_content_must_match_audited_normalized_bars(tmp_path: Path) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, links_path = (
+        _write_multi_symbol_case_fixture(tmp_path)
+    )
+    lines = [json.loads(line) for line in cases_path.read_text(encoding="utf-8").splitlines()]
+    lines[0]["case"]["context_bars"][0]["close"] = "99.5"
+    lines[0]["case_hash"] = _case_hash(lines[0]["case"])
+    cases_path.write_text(
+        "".join(json.dumps(line, sort_keys=True, separators=(",", ":")) + "\n" for line in lines),
+        encoding="utf-8",
+    )
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        outcome_link_ledger_paths=(links_path,),
+        terminal_observed_at=START + timedelta(days=2),
+    )
+    assert report.completed_case_content_valid is False
+    assert any(
+        "differs from audited normalized evidence" in item
+        for item in report.completed_case_content_limitations
+    )
+    assert report.integrity_ready is False
+
+
 def test_missing_prediction_source_snapshot_is_reported_with_manifest(
     tmp_path: Path,
 ) -> None:

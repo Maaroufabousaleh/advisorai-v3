@@ -347,6 +347,8 @@ def run(
                 "overlay_sha256": exclusion_overlay_sha256,
                 "audit_fingerprint": integrity_report.audit_fingerprint,
                 "terminal_evidence_eligible": integrity_report.terminal_evidence_eligible,
+                "completed_case_content_valid": integrity_report.completed_case_content_valid,
+                "completed_case_content_limitations": integrity_report.completed_case_content_limitations,
                 "sample_minimum_met": integrity_report.sample_minimum_met,
                 "integrity_ready": integrity_report.integrity_ready,
                 "admission_evidence_ready": integrity_report.admission_evidence_ready,
