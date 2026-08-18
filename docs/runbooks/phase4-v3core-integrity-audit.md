@@ -102,6 +102,10 @@ the manifest's model identity and candidate runtime fields when present. A
 missing or unverifiable prediction manifest is an explicit integrity
 limitation and prevents `admission_evidence_ready`; it is never treated as
 implicit identity evidence.
+When prediction entries exist, each record must also carry its own
+`source_snapshot_hash`; a run-level source manifest does not silently supply a
+missing per-record binding. Missing per-record source identity is reported as
+an integrity limitation and prevents readiness.
 An admission-ready report also requires at least one non-empty prediction
 ledger; a data-only audit without prospective predictions remains
 `integrity_ready=false`.
@@ -231,8 +235,8 @@ collector contract or make a finality/admission decision.
 Every report binds the auditor module hash, optional CLI hash and repository
 commit, input hashes, terminal boundary, frozen rule, and a deterministic
 `audit_fingerprint`. Report and overlay paths must be new paths: the CLI uses
-exclusive creation and refuses to overwrite an existing artifact or an input
-spool.
+exclusive creation and refuses to overwrite an existing artifact or any input
+evidence directory/file.
 
 ## Current revision incident
 

@@ -125,8 +125,18 @@ def _resolve_inputs(
 
 
 def _ensure_output_is_separate(output: Path, inputs: list[Path]) -> None:
-    if output.resolve() in {path.resolve() for path in inputs if path is not None}:
-        raise SystemExit("audit output must be separate from every evidence input")
+    output_path = output.resolve()
+    for input_path in inputs:
+        if input_path is None:
+            continue
+        evidence_path = input_path.resolve()
+        evidence_root = evidence_path if evidence_path.is_dir() else evidence_path.parent
+        if (
+            output_path == evidence_root
+            or output_path.is_relative_to(evidence_root)
+            or evidence_root.is_relative_to(output_path)
+        ):
+            raise SystemExit("audit output must be separate from every evidence input")
 
 
 def main() -> int:
