@@ -353,6 +353,54 @@ def test_context_and_outcome_contamination_excludes_only_affected_predictions(
     assert report.admission_minimum_met is False
 
 
+def test_prediction_source_identity_is_bound_to_source_manifest(tmp_path: Path) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, links_path = (
+        _write_multi_symbol_case_fixture(tmp_path)
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps({"source_snapshot_hash": HASH}), encoding="utf-8")
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        outcome_link_ledger_paths=(links_path,),
+        terminal_observed_at=START + timedelta(days=2),
+        source_manifest_path=manifest_path,
+    )
+    assert report.prediction_source_identity_valid is True
+
+    manifest_path.write_text(json.dumps({"source_snapshot_hash": "c" * 64}), encoding="utf-8")
+    mismatched = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        outcome_link_ledger_paths=(links_path,),
+        terminal_observed_at=START + timedelta(days=2),
+        source_manifest_path=manifest_path,
+    )
+    assert mismatched.prediction_source_identity_valid is False
+
+
+def test_prediction_source_identity_limitation_is_not_silently_passed(
+    tmp_path: Path,
+) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, links_path = (
+        _write_multi_symbol_case_fixture(tmp_path)
+    )
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        outcome_link_ledger_paths=(links_path,),
+        terminal_observed_at=START + timedelta(days=2),
+    )
+    assert report.prediction_source_identity_valid is False
+    assert report.integrity_ready is False
+
+
 def test_input_spools_are_byte_identical_after_audit_and_overlay_is_separate(
     tmp_path: Path,
 ) -> None:
