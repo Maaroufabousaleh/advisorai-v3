@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import copy
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from advisorai.phase4 import ForwardPredictionLedger, ForwardPredictionRecord
 from scripts.run_phase4_v3core_baseline_predictions import (
     RESUME_IDENTITY_FIELDS,
     _expected_manifest,
+    _pending_baselines,
     _predict_prices,
+    _prediction_id,
     _validate_resume_manifest,
 )
 
@@ -20,6 +24,27 @@ def test_all_mandatory_baselines_produce_one_hour_price_paths() -> None:
         predictions = _predict_prices(model, values)
         assert len(predictions) == 12
         assert all(value.is_finite() and value > 0 for value in predictions)
+
+
+def test_baseline_identity_is_stable_and_existing_models_are_not_recomputed(tmp_path: Path) -> None:
+    cutoff = datetime(2026, 8, 18, 0, tzinfo=UTC)
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    prediction = ForwardPredictionRecord(
+        prediction_id=_prediction_id(symbol="BTCUSDT", cutoff=cutoff, model="naive"),
+        instrument="BTCUSDT",
+        model="naive",
+        model_identity_hash="a" * 64,
+        cutoff=cutoff,
+        input_snapshot_hash="b" * 64,
+        predicted_return_bps=Decimal("0"),
+        generated_at=cutoff - timedelta(seconds=1),
+        runtime_latency_ms=Decimal("1"),
+    )
+    assert prediction.prediction_id == _prediction_id(
+        symbol="BTCUSDT", cutoff=cutoff, model="naive"
+    )
+    assert ledger.append(prediction)
+    assert "naive" not in _pending_baselines(ledger, symbol="BTCUSDT", cutoff=cutoff)
 
 
 def _resume_fixture(tmp_path: Path) -> dict[str, object]:
