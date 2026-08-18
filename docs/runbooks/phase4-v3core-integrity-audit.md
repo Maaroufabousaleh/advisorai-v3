@@ -121,6 +121,7 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
   --integrity-report artifacts/phase4/v3core-integrity/<generation>/integrity-audit.json \
   --exclusion-overlay artifacts/phase4/v3core-integrity/<generation>/exclusion-overlay.json \
   --prediction-ledger artifacts/phase4/v3core-forward-predictions/<generation>/predictions.jsonl \
+  --prediction-manifest artifacts/phase4/v3core-forward-predictions/<generation>/manifest.json \
   --outcome-link-ledger artifacts/phase4/v3core-forward-predictions/<generation>/outcome-links.jsonl \
   --output-root artifacts/phase4/v3core-materialized/<generation>
 ```
