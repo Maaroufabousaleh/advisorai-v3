@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
@@ -24,7 +25,12 @@ from advisorai.phase4 import (
     parse_binance_klines,
 )
 from advisorai.phase4.v3core_integrity import _hash_payload, _normalized_identity_payload
-from scripts.audit_phase4_v3core_integrity import _ensure_output_is_separate
+from scripts.audit_phase4_v3core_integrity import (
+    _ensure_output_is_separate,
+)
+from scripts.audit_phase4_v3core_integrity import (
+    main as audit_integrity_cli,
+)
 from scripts.link_phase4_v3core_prediction_outcomes import (
     OutcomeLinkRefused,
     link_predictions_to_cases,
@@ -535,6 +541,60 @@ def test_audit_output_cannot_overlap_an_evidence_root(tmp_path: Path) -> None:
 
     with pytest.raises(SystemExit, match="separate"):
         _ensure_output_is_separate(tmp_path, [raw_path])
+
+
+def test_unsealed_diagnostic_cannot_be_admission_evidence(tmp_path: Path) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, links_path = (
+        _write_multi_symbol_case_fixture(tmp_path)
+    )
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        completed_cases_path=cases_path,
+        prediction_ledger_paths=(predictions_path,),
+        outcome_link_ledger_paths=(links_path,),
+        terminal_observed_at=START + timedelta(days=2),
+        terminal_evidence_eligible=False,
+    )
+    assert report.terminal_evidence_eligible is False
+    assert report.admission_evidence_ready is False
+    assert report.admission_minimum_met is False
+
+
+def test_allow_unsealed_cli_marks_report_diagnostic_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run_root = tmp_path / "run"
+    report, raw_path, normalized_path = _single_bar_audit(
+        run_root,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    del report
+    (run_root / "status.json").write_text('{"state":"running"}\n', encoding="utf-8")
+    output = tmp_path / "diagnostic" / "audit.json"
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "audit_phase4_v3core_integrity.py",
+            "--run-directory",
+            str(run_root),
+            "--allow-unsealed",
+            "--terminal-observed-at",
+            (START + timedelta(minutes=10)).isoformat(),
+            "--output",
+            str(output),
+        ],
+    )
+
+    assert audit_integrity_cli() == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["terminal_evidence_eligible"] is False
+    assert payload["admission_evidence_ready"] is False
+    assert payload["admission_minimum_met"] is False
+    assert raw_path.read_bytes()
+    assert normalized_path.read_bytes()
 
 
 def test_missing_prediction_source_snapshot_is_reported_with_manifest(

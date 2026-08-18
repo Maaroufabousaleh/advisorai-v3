@@ -42,8 +42,8 @@ from advisorai.phase4.v3core_prediction_ledger import (
     ForwardPredictionOutcomeLink,
 )
 
-INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v5"
-INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v5"
+INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v6"
+INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v6"
 STABILITY_RULE_VERSION = "closed_terminal_repeat_v1"
 DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS = 2
 DEFAULT_MINIMUM_CASES_PER_SYMBOL = 64
@@ -331,6 +331,7 @@ class IntegrityAuditReport(BaseModel):
     schema_version: str = INTEGRITY_AUDIT_SCHEMA
     generated_at: datetime
     terminal_observed_at: datetime
+    terminal_evidence_eligible: bool = True
     stability_rule_version: str = STABILITY_RULE_VERSION
     auditor_module_sha256: str = AUDITOR_MODULE_SHA256
     auditor_cli_sha256: str | None = None
@@ -427,6 +428,7 @@ class IntegrityExclusionOverlay(BaseModel):
 
     schema_version: str = INTEGRITY_OVERLAY_SCHEMA
     generated_at: datetime
+    terminal_evidence_eligible: bool = True
     audit_report_sha256: str
     audit_fingerprint: str
     contaminated_case_ids: tuple[str, ...]
@@ -1253,6 +1255,7 @@ def audit_forward_root(
     source_status_path: Path | None = None,
     source_health_path: Path | None = None,
     source_config_path: Path | None = None,
+    terminal_evidence_eligible: bool = True,
 ) -> IntegrityAuditReport:
     """Audit immutable inputs without writing to any input path."""
 
@@ -1391,6 +1394,7 @@ def audit_forward_root(
     report = IntegrityAuditReport(
         generated_at=datetime.now(UTC),
         terminal_observed_at=terminal,
+        terminal_evidence_eligible=terminal_evidence_eligible,
         minimum_terminal_closed_observations=minimum_terminal_closed_observations,
         minimum_cases_per_symbol=minimum_cases_per_symbol,
         auditor_cli_sha256=auditor_cli_sha256,
@@ -1439,14 +1443,18 @@ def audit_forward_root(
         unlinked_prediction_count=unlinked_prediction_count,
         sample_minimum_met=sample_minimum_met,
         integrity_ready=integrity_ready,
-        admission_evidence_ready=sample_minimum_met and integrity_ready,
+        admission_evidence_ready=(
+            terminal_evidence_eligible and sample_minimum_met and integrity_ready
+        ),
         classification_counts=classification_counts,
         bar_records=bar_records,
         raw_completed_case_counts=raw_counts,
         integrity_eligible_case_counts=eligible_counts,
         contaminated_cases=contaminated,
         excluded_predictions=exclusions,
-        admission_minimum_met=sample_minimum_met and integrity_ready,
+        admission_minimum_met=(
+            terminal_evidence_eligible and sample_minimum_met and integrity_ready
+        ),
         audit_fingerprint="0" * 64,
     )
     fingerprint_payload = report.model_dump(
@@ -1463,6 +1471,7 @@ def build_exclusion_overlay(
 
     return IntegrityExclusionOverlay(
         generated_at=report.generated_at,
+        terminal_evidence_eligible=report.terminal_evidence_eligible,
         audit_report_sha256=report_sha256,
         audit_fingerprint=report.audit_fingerprint,
         contaminated_case_ids=tuple(case.case_id for case in report.contaminated_cases),

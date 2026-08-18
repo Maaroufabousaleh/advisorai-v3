@@ -150,6 +150,17 @@ def main() -> int:
         source_health_path,
         config_path,
     ) = _resolve_inputs(args)
+    unsealed_diagnostic = False
+    if args.allow_unsealed:
+        if status_path is None:
+            raise SystemExit("--allow-unsealed requires --status or --run-directory")
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise SystemExit("--allow-unsealed requires a readable status file") from exc
+        if not isinstance(status, dict):
+            raise SystemExit("--allow-unsealed requires an object status file")
+        unsealed_diagnostic = status.get("state") == "running"
     input_paths = [
         raw_path,
         normalized_path,
@@ -181,6 +192,7 @@ def main() -> int:
         source_status_path=status_path,
         source_health_path=source_health_path,
         source_config_path=config_path,
+        terminal_evidence_eligible=not unsealed_diagnostic,
     )
     report_sha256 = _write_new(args.output, report.model_dump(mode="json"))
     if args.exclusion_output is not None:
@@ -198,6 +210,7 @@ def main() -> int:
                 "integrity_ready": report.integrity_ready,
                 "admission_evidence_ready": report.admission_evidence_ready,
                 "admission_minimum_met": report.admission_minimum_met,
+                "terminal_evidence_eligible": report.terminal_evidence_eligible,
                 "source_health_ledger_valid": report.source_health_ledger_valid,
                 "prediction_model_identity_valid": report.prediction_model_identity_valid,
                 "prediction_identity_limitations": report.prediction_identity_limitations,
