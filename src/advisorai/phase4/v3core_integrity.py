@@ -572,6 +572,22 @@ def _load_cases(path: Path | None) -> tuple[V3CoreForecastCase, ...]:
     return tuple(cases)
 
 
+def _load_source_snapshot_hash(path: Path | None) -> str | None:
+    if path is None:
+        return None
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        value = manifest["source_snapshot_hash"]
+    except (KeyError, TypeError, OSError, json.JSONDecodeError) as exc:
+        raise IntegrityAuditError("source manifest has no readable snapshot identity") from exc
+    if not isinstance(value, str):
+        raise IntegrityAuditError("source manifest snapshot identity is not a string")
+    try:
+        return _digest(value, "source_snapshot_hash")
+    except ValueError as exc:
+        raise IntegrityAuditError("source manifest snapshot identity is invalid") from exc
+
+
 def _load_prediction_entries(paths: Sequence[Path]) -> tuple[ForwardPredictionLedgerEntry, ...]:
     entries: list[ForwardPredictionLedgerEntry] = []
     seen: set[str] = set()
@@ -972,6 +988,8 @@ def _prediction_integrity(
     entries: Sequence[ForwardPredictionLedgerEntry],
     links: Sequence[ForwardPredictionOutcomeLink],
     cases: Sequence[V3CoreForecastCase],
+    *,
+    expected_source_snapshot_hash: str | None,
 ) -> tuple[tuple[bool, bool, bool, bool, int], bool]:
     """Validate timing/context/source identity without reading future outcomes."""
 
@@ -979,6 +997,12 @@ def _prediction_integrity(
     prediction_timing_valid = True
     prediction_context_valid = True
     prediction_source_identity_valid = True
+    if entries and expected_source_snapshot_hash is None:
+        prediction_source_identity_valid = False
+    if expected_source_snapshot_hash is not None and any(
+        case.source_snapshot_hash != expected_source_snapshot_hash for case in cases
+    ):
+        prediction_source_identity_valid = False
     prediction_ids = {entry.prediction.prediction_id for entry in entries}
     linked_prediction_ids: set[str] = set()
     link_integrity_valid = True
@@ -994,9 +1018,8 @@ def _prediction_integrity(
         expected_input_hash = _input_snapshot_hash(case.context_bars, case.cutoff)
         if prediction.input_snapshot_hash != expected_input_hash:
             prediction_context_valid = False
-        if (
-            prediction.source_snapshot_hash is not None
-            and prediction.source_snapshot_hash != case.source_snapshot_hash
+        if prediction.source_snapshot_hash is not None and prediction.source_snapshot_hash != (
+            expected_source_snapshot_hash or case.source_snapshot_hash
         ):
             prediction_source_identity_valid = False
     case_ids = {case.case_id for case in cases}
@@ -1050,6 +1073,7 @@ def audit_forward_root(
     )
     normalized_bars = _load_normalized_bars(normalized_bars_path)
     cases = _load_cases(completed_cases_path)
+    expected_source_snapshot_hash = _load_source_snapshot_hash(source_manifest_path)
     prediction_entries = _load_prediction_entries(tuple(prediction_ledger_paths))
     outcome_links = _load_outcome_links(tuple(outcome_link_ledger_paths))
     bar_records = _audit_bars(
@@ -1098,6 +1122,7 @@ def audit_forward_root(
         prediction_entries,
         outcome_links,
         cases,
+        expected_source_snapshot_hash=expected_source_snapshot_hash,
     )
     sample_minimum_met = all(
         eligible_counts[symbol] >= minimum_cases_per_symbol for symbol in V3_CORE_SYMBOLS
