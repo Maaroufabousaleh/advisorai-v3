@@ -85,6 +85,52 @@ admission decision. An orphan normalized record, broken immutable input, bad
 prediction context, or failed identity check causes the audit to fail closed
 rather than inventing a preferred value.
 
+## Integrity-aware materialization
+
+After the root is sealed and the auditor reports
+`admission_evidence_ready=true`, the existing offline forward materializer may
+consume the report and its separate overlay. It filters only the case list used
+by the new evaluation input; it never edits the source case or prediction
+ledgers. The report and overlay must bind the exact raw, normalized, case,
+prediction, outcome-link, manifest, and status hashes supplied to the command.
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/materialize_phase4_v3core_forward_input.py \
+  --run-directory artifacts/phase4/v3core-forward/<sealed-root> \
+  --preregistration artifacts/phase4/v3core-cadence-preregistration/<frozen>/phase4-v3core-cadence-preregistration.json \
+  --phase3-gate-sha256 <passed-phase3-gate-sha256> \
+  --integrity-report artifacts/phase4/v3core-integrity/<generation>/integrity-audit.json \
+  --exclusion-overlay artifacts/phase4/v3core-integrity/<generation>/exclusion-overlay.json \
+  --prediction-ledger artifacts/phase4/v3core-forward-predictions/<generation>/predictions.jsonl \
+  --outcome-link-ledger artifacts/phase4/v3core-forward-predictions/<generation>/outcome-links.jsonl \
+  --output-root artifacts/phase4/v3core-materialized/<generation>
+```
+
+The materializer refuses an unready audit, a mismatched overlay, a hash
+mismatch, an incomplete pair of integrity inputs, or an existing output root.
+Its resulting metadata records raw and integrity-eligible counts and binds the
+audit/overlay fingerprints and ledger hashes. It remains an input-preparation
+boundary, not a PhaseGateRecord or Phase-4 admission decision.
+
+## Revision-timing statistics
+
+After sealing, revision timing can be measured independently of the integrity
+classification and without selecting a future grace period:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+  scripts/analyze_phase4_v3core_revision_timing.py \
+  --run-directory artifacts/phase4/v3core-forward/<sealed-root> \
+  --terminal-observed-at 2026-08-22T20:00:00Z \
+  --output artifacts/phase4/v3core-revision-timing/<generation>.json
+```
+
+The artifact reports first post-close, first/last revision, first repeated
+version, and second terminal-confirmation lags by symbol and interval. It is
+marked `STATISTICS_ONLY_NO_GRACE_SELECTED`; it cannot alter the current
+collector contract or make a finality/admission decision.
+
 Every report binds the auditor module hash, optional CLI hash and repository
 commit, input hashes, terminal boundary, frozen rule, and a deterministic
 `audit_fingerprint`. Report and overlay paths must be new paths: the CLI uses
