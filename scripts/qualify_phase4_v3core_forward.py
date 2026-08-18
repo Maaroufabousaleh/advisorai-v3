@@ -207,6 +207,7 @@ def run(
         run / "manifest.json",
         run / "status.json",
         run / "config.json",
+        run / "source-health.jsonl",
         resource,
         prereg,
         *prediction_ledger_paths,
@@ -237,6 +238,7 @@ def run(
             auditor_repository_commit=_git_head(repo),
             source_manifest_path=run / "manifest.json",
             source_status_path=run / "status.json",
+            source_health_path=run / "source-health.jsonl",
             source_config_path=run / "config.json",
         )
         integrity_report_path = integrity_dir / "integrity-audit.json"
@@ -312,6 +314,7 @@ def run(
                     "manifest": run / "manifest.json",
                     "status": run / "status.json",
                     "config": run / "config.json",
+                    "source_health": run / "source-health.jsonl",
                 }.items()
             },
             "collector_status": {
