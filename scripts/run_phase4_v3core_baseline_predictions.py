@@ -293,6 +293,49 @@ def _pending_baselines(
     )
 
 
+def _validate_existing_baseline_prediction(
+    ledger: ForwardPredictionLedger,
+    *,
+    symbol: str,
+    cutoff: datetime,
+    model: str,
+    context: tuple[V3CoreBar, ...],
+    expected_model_identity_hash: str,
+    expected_source_snapshot_hash: str,
+) -> None:
+    """Validate a frozen duplicate before allowing resume to skip inference.
+
+    Runtime metadata is intentionally excluded: a restart must not require the
+    old wall-clock or measured latency to be recreated.  Scientific identity is
+    not excluded: a ledger entry for the same deterministic ID must still bind
+    to the same instrument, cutoff, model identity, source snapshot, and input
+    context.  Any mismatch fails closed without rerunning the model.
+    """
+
+    prediction_id = _prediction_id(symbol=symbol, cutoff=cutoff, model=model)
+    existing = next(
+        (
+            entry.prediction
+            for entry in ledger.records
+            if entry.prediction.prediction_id == prediction_id
+        ),
+        None,
+    )
+    if existing is None:
+        raise RuntimeError("baseline prediction identity disappeared during resume")
+    expected = {
+        "instrument": symbol,
+        "model": model,
+        "model_identity_hash": expected_model_identity_hash,
+        "cutoff": cutoff,
+        "input_snapshot_hash": _input_snapshot_hash(context, cutoff),
+        "source_snapshot_hash": expected_source_snapshot_hash,
+    }
+    actual = {field: getattr(existing, field) for field in expected}
+    if actual != expected:
+        raise RuntimeError("existing baseline prediction has conflicting scientific identity")
+
+
 def _prediction(
     *,
     model: str,
@@ -438,6 +481,17 @@ def run(
                 if context is None:
                     continue
                 pending_models = _pending_baselines(ledger, symbol=symbol, cutoff=cutoff)
+                for model in V3_CORE_BASELINES:
+                    if model not in pending_models:
+                        _validate_existing_baseline_prediction(
+                            ledger,
+                            symbol=symbol,
+                            cutoff=cutoff,
+                            model=model,
+                            context=context,
+                            expected_model_identity_hash=manifest["model_identity_hashes"][model],
+                            expected_source_snapshot_hash=manifest["source_snapshot_hash"],
+                        )
                 failed_models = 0
                 for model in pending_models:
                     try:

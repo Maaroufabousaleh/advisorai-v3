@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from advisorai.phase4 import (
+    V3_CORE_BASELINES,
     ForwardPredictionLedger,
     ForwardPredictionRecord,
     V3CoreBar,
@@ -17,10 +18,12 @@ from scripts.run_phase4_v3core_baseline_predictions import (
     RESUME_IDENTITY_FIELDS,
     _context_for_cutoff,
     _expected_manifest,
+    _input_snapshot_hash,
     _missed_cutoff_reason,
     _pending_baselines,
     _predict_prices,
     _prediction_id,
+    _validate_existing_baseline_prediction,
     _validate_resume_manifest,
 )
 
@@ -75,6 +78,29 @@ def _context_bars(*, missing_index: int | None = None, unhealthy_index: int | No
     return tuple(bars)
 
 
+def _baseline_prediction(
+    model: str,
+    *,
+    context: tuple[V3CoreBar, ...] | None = None,
+    generated_at: datetime = CUTOFF - timedelta(seconds=1),
+    runtime_latency_ms: Decimal = Decimal("1"),
+    input_snapshot_hash: str | None = None,
+) -> ForwardPredictionRecord:
+    resolved_context = context or _context_bars()
+    return ForwardPredictionRecord(
+        prediction_id=_prediction_id(symbol="BTCUSDT", cutoff=CUTOFF, model=model),
+        instrument="BTCUSDT",
+        model=model,
+        model_identity_hash=HASH,
+        cutoff=CUTOFF,
+        input_snapshot_hash=input_snapshot_hash or _input_snapshot_hash(resolved_context, CUTOFF),
+        predicted_return_bps=Decimal("0"),
+        generated_at=generated_at,
+        runtime_latency_ms=runtime_latency_ms,
+        source_snapshot_hash=HASH,
+    )
+
+
 def test_all_mandatory_baselines_produce_one_hour_price_paths() -> None:
     values = tuple(Decimal(100 + index) for index in range(48))
     for model in ("naive", "drift", "seasonal-7", "linear", "lightgbm"):
@@ -83,25 +109,94 @@ def test_all_mandatory_baselines_produce_one_hour_price_paths() -> None:
         assert all(value.is_finite() and value > 0 for value in predictions)
 
 
-def test_baseline_identity_is_stable_and_existing_models_are_not_recomputed(tmp_path: Path) -> None:
-    cutoff = datetime(2026, 8, 18, 0, tzinfo=UTC)
+def test_resume_skips_fully_persisted_cutoff_without_inference(tmp_path: Path) -> None:
     ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
-    prediction = ForwardPredictionRecord(
-        prediction_id=_prediction_id(symbol="BTCUSDT", cutoff=cutoff, model="naive"),
-        instrument="BTCUSDT",
+    for model in V3_CORE_BASELINES:
+        assert ledger.append(_baseline_prediction(model))
+
+    pending = _pending_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF)
+    assert pending == ()
+    assert len(ledger.records) == len(V3_CORE_BASELINES)
+
+
+def test_resume_only_infers_missing_models_for_partial_cutoff(tmp_path: Path) -> None:
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    for model in ("naive", "drift"):
+        assert ledger.append(_baseline_prediction(model))
+
+    assert _pending_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF) == (
+        "seasonal-7",
+        "linear",
+        "lightgbm",
+    )
+
+
+def test_resume_accepts_runtime_metadata_differences_without_append(tmp_path: Path) -> None:
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    original = _baseline_prediction(model="naive")
+    assert ledger.append(original)
+
+    # A restart naturally has a different wall-clock and measured latency.  It
+    # must skip the ID before constructing or appending this equivalent payload.
+    assert _pending_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF) == (
+        "drift",
+        "seasonal-7",
+        "linear",
+        "lightgbm",
+    )
+    _validate_existing_baseline_prediction(
+        ledger,
+        symbol="BTCUSDT",
+        cutoff=CUTOFF,
         model="naive",
-        model_identity_hash="a" * 64,
-        cutoff=cutoff,
-        input_snapshot_hash="b" * 64,
-        predicted_return_bps=Decimal("0"),
-        generated_at=cutoff - timedelta(seconds=1),
-        runtime_latency_ms=Decimal("1"),
+        context=_context_bars(),
+        expected_model_identity_hash=HASH,
+        expected_source_snapshot_hash=HASH,
     )
-    assert prediction.prediction_id == _prediction_id(
-        symbol="BTCUSDT", cutoff=cutoff, model="naive"
+    attempted_duplicate = original.model_copy(
+        update={
+            "generated_at": CUTOFF - timedelta(seconds=2),
+            "runtime_latency_ms": Decimal("99"),
+        }
     )
-    assert ledger.append(prediction)
-    assert "naive" not in _pending_baselines(ledger, symbol="BTCUSDT", cutoff=cutoff)
+    assert attempted_duplicate.prediction_id == original.prediction_id
+    assert len(ledger.records) == 1
+
+
+def test_resume_fails_closed_on_changed_scientific_input(tmp_path: Path) -> None:
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    corrupted = _baseline_prediction(model="naive", input_snapshot_hash="c" * 64)
+    assert ledger.append(corrupted)
+
+    with pytest.raises(RuntimeError, match="conflicting scientific identity"):
+        _validate_existing_baseline_prediction(
+            ledger,
+            symbol="BTCUSDT",
+            cutoff=CUTOFF,
+            model="naive",
+            context=_context_bars(),
+            expected_model_identity_hash=HASH,
+            expected_source_snapshot_hash=HASH,
+        )
+
+
+def test_missed_cutoff_remains_missed_and_new_cutoff_is_pending(tmp_path: Path) -> None:
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    missed = {("BTCUSDT", CUTOFF.isoformat())}
+    assert ("BTCUSDT", CUTOFF.isoformat()) in missed
+    assert _pending_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF) == tuple(V3_CORE_BASELINES)
+    future_cutoff = CUTOFF + timedelta(hours=1)
+    assert _pending_baselines(ledger, symbol="BTCUSDT", cutoff=future_cutoff) == tuple(
+        V3_CORE_BASELINES
+    )
+
+
+def test_future_cutoff_appends_all_new_baseline_identities(tmp_path: Path) -> None:
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    for model in _pending_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF):
+        assert ledger.append(_baseline_prediction(model))
+    assert len(ledger.records) == len(V3_CORE_BASELINES)
+    assert _pending_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF) == ()
 
 
 def _resume_fixture(tmp_path: Path) -> dict[str, object]:
