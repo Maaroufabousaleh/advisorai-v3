@@ -18,6 +18,7 @@ import os
 import signal
 import subprocess
 import time
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -35,14 +36,24 @@ from advisorai.phase4 import (
     ForwardNormalizedBarSpool,
     ForwardPredictionLedger,
     ForwardPredictionRecord,
+    ForwardRejectionSpool,
     V3CoreBar,
 )
 
 RUN_SCHEMA = "advisorai.phase4.v3-core-forward.baseline-predictions.v1"
+MISSED_CUTOFF_SCHEMA = "advisorai.phase4.v3-core-forward.rejection.v1"
 POLL_SECONDS = 5.0
 INTERVAL = timedelta(minutes=5)
 HORIZON_BARS = 12
 CONTEXT_BARS = 48
+MISSED_CUTOFF_REASONS = (
+    "INSUFFICIENT_CONTEXT",
+    "MISSING_BAR",
+    "SOURCE_HEALTH_FAILURE",
+    "WORKER_STARTED_TOO_LATE",
+    "INFERENCE_RUNTIME_FAILURE",
+    "SCHEDULER_DELAY",
+)
 RESUME_IDENTITY_FIELDS = (
     "schema",
     "source_root",
@@ -55,6 +66,7 @@ RESUME_IDENTITY_FIELDS = (
     "lightgbm_code_sha256",
     "models",
     "model_identity_hashes",
+    "missed_cutoff_schema",
     "context_bars",
     "horizon_bars",
 )
@@ -101,15 +113,67 @@ def _context_for_cutoff(
     by_end = {
         bar.interval_end: bar
         for bar in bars
-        if bar.instrument == symbol and bar.collected_at <= cutoff
+        if bar.instrument == symbol
+        and bar.collected_at <= cutoff
+        and bar.provider_available_at <= cutoff
+        and bar.evidence_class == "forward_pit_admission"
+        and bar.provenance.source_health_state == "HEALTHY"
     }
-    context_times = tuple(
-        cutoff - INTERVAL * (CONTEXT_BARS - index) for index in range(CONTEXT_BARS)
-    )
+    context_times = _context_times(cutoff)
     context = tuple(by_end.get(item) for item in context_times)
     if any(item is None for item in context):
         return None
     return tuple(item for item in context if item is not None)
+
+
+def _context_times(cutoff: datetime) -> tuple[datetime, ...]:
+    return tuple(cutoff - INTERVAL * (CONTEXT_BARS - index) for index in range(CONTEXT_BARS))
+
+
+def _missed_cutoff_reason(
+    bars: tuple[V3CoreBar, ...],
+    *,
+    symbol: str,
+    cutoff: datetime,
+    now: datetime,
+    worker_started_at: datetime,
+    inference_failed: bool = False,
+) -> str:
+    """Classify a cutoff once it can no longer receive a prospective record."""
+
+    if inference_failed:
+        return "INFERENCE_RUNTIME_FAILURE"
+    all_by_end = {
+        bar.interval_end: bar
+        for bar in bars
+        if bar.instrument == symbol and bar.collected_at <= cutoff
+    }
+    context_times = _context_times(cutoff)
+    if len(all_by_end) < CONTEXT_BARS:
+        return "INSUFFICIENT_CONTEXT"
+    if any(item not in all_by_end for item in context_times):
+        return "MISSING_BAR"
+    context = tuple(all_by_end[item] for item in context_times)
+    if any(
+        bar.provider_available_at > cutoff
+        or bar.evidence_class != "forward_pit_admission"
+        or bar.provenance.source_health_state != "HEALTHY"
+        for bar in context
+    ):
+        return "SOURCE_HEALTH_FAILURE"
+    if worker_started_at > cutoff:
+        return "WORKER_STARTED_TOO_LATE"
+    if now > cutoff:
+        return "SCHEDULER_DELAY"
+    return "INSUFFICIENT_CONTEXT"
+
+
+def _missed_cutoff_summary(rejections: ForwardRejectionSpool) -> dict[str, int]:
+    counts = Counter(record.reason for record in rejections.records)
+    unexpected = set(counts).difference(MISSED_CUTOFF_REASONS)
+    if unexpected:
+        raise RuntimeError("unknown missed-cutoff reason: " + ", ".join(sorted(unexpected)))
+    return dict(sorted(counts.items()))
 
 
 def _input_snapshot_hash(context: tuple[V3CoreBar, ...], cutoff: datetime) -> str:
@@ -180,6 +244,7 @@ def _expected_manifest(
             )
             for model in V3_CORE_BASELINES
         },
+        "missed_cutoff_schema": MISSED_CUTOFF_SCHEMA,
         "context_bars": CONTEXT_BARS,
         "horizon_bars": HORIZON_BARS,
     }
@@ -314,14 +379,17 @@ def run(
             "order_writes_attempted": False,
         }
         _write_atomic(manifest_path, manifest)
+    try:
+        worker_started_at = datetime.fromisoformat(
+            str(manifest["started_at"]).replace("Z", "+00:00")
+        ).astimezone(UTC)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("baseline prediction manifest has no valid started_at") from exc
     ledger = ForwardPredictionLedger(run_root / "predictions.jsonl")
     missed_path = run_root / "missed-cutoffs.jsonl"
-    missed: set[tuple[str, str]] = set()
-    if missed_path.exists():
-        for line in missed_path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                value = json.loads(line)
-                missed.add((str(value["symbol"]), str(value["cutoff"])))
+    rejections = ForwardRejectionSpool(missed_path)
+    missed = {(record.instrument, record.cutoff.isoformat()) for record in rejections.records}
+    inference_failures: set[tuple[str, str]] = set()
     stop = False
 
     def request_stop(_signum: int, _frame: object) -> None:
@@ -352,18 +420,26 @@ def run(
                 identity = (symbol, cutoff.isoformat())
                 if now > cutoff:
                     if identity not in missed:
-                        with missed_path.open("a", encoding="utf-8") as handle:
-                            handle.write(
-                                json.dumps({"symbol": symbol, "cutoff": cutoff.isoformat()}) + "\n"
-                            )
-                            handle.flush()
-                            os.fsync(handle.fileno())
+                        rejections.append(
+                            instrument=symbol,
+                            cutoff=cutoff,
+                            reason=_missed_cutoff_reason(
+                                bars,
+                                symbol=symbol,
+                                cutoff=cutoff,
+                                now=now,
+                                worker_started_at=worker_started_at,
+                                inference_failed=identity in inference_failures,
+                            ),
+                        )
                         missed.add(identity)
                     continue
                 context = _context_for_cutoff(bars, symbol=symbol, cutoff=cutoff, now=now)
                 if context is None:
                     continue
-                for model in _pending_baselines(ledger, symbol=symbol, cutoff=cutoff):
+                pending_models = _pending_baselines(ledger, symbol=symbol, cutoff=cutoff)
+                failed_models = 0
+                for model in pending_models:
                     try:
                         ledger.append(
                             _prediction(
@@ -381,7 +457,11 @@ def run(
                     except QualificationError:
                         # Preserve the absence as a sanitized class; no model is
                         # replaced by another baseline.
-                        continue
+                        failed_models += 1
+                if pending_models and failed_models == len(pending_models):
+                    inference_failures.add(identity)
+                else:
+                    inference_failures.discard(identity)
             _write_atomic(
                 run_root / "status.json",
                 {
@@ -390,6 +470,7 @@ def run(
                     "updated_at": datetime.now(UTC).isoformat(),
                     "prediction_count": len(ledger.records),
                     "missed_cutoff_count": len(missed),
+                    "missed_cutoff_reasons": _missed_cutoff_summary(rejections),
                     "models": list(V3_CORE_BASELINES),
                     "candidate_models": manifest["candidate_models"],
                     "network_calls": 0,
@@ -407,6 +488,7 @@ def run(
         "updated_at": datetime.now(UTC).isoformat(),
         "prediction_count": len(ledger.records),
         "missed_cutoff_count": len(missed),
+        "missed_cutoff_reasons": _missed_cutoff_summary(rejections),
         "network_calls": 0,
         "credentials_loaded": False,
         "order_writes_attempted": False,
