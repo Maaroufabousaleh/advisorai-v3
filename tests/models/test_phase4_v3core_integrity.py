@@ -24,6 +24,7 @@ from advisorai.phase4 import (
     parse_binance_klines,
 )
 from advisorai.phase4.v3core_integrity import _hash_payload, _normalized_identity_payload
+from scripts.audit_phase4_v3core_integrity import _ensure_output_is_separate
 from scripts.link_phase4_v3core_prediction_outcomes import (
     OutcomeLinkRefused,
     link_predictions_to_cases,
@@ -522,6 +523,18 @@ def test_prediction_source_identity_limitation_is_not_silently_passed(
     )
     assert report.prediction_source_identity_valid is False
     assert report.integrity_ready is False
+
+
+def test_audit_output_cannot_overlap_an_evidence_root(tmp_path: Path) -> None:
+    evidence_root = tmp_path / "sealed-root"
+    evidence_root.mkdir()
+    raw_path = evidence_root / "raw-responses.jsonl"
+
+    with pytest.raises(SystemExit, match="separate"):
+        _ensure_output_is_separate(evidence_root / "audit" / "report.json", [raw_path])
+
+    with pytest.raises(SystemExit, match="separate"):
+        _ensure_output_is_separate(tmp_path, [raw_path])
 
 
 def test_missing_prediction_source_snapshot_is_reported_with_manifest(
