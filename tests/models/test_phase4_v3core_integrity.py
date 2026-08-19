@@ -94,6 +94,7 @@ def _single_bar_audit(
     *,
     canonical_row: list[object],
     symbol: str = "BTCUSDT",
+    request_url: str | None = None,
 ):
     raw_path = tmp_path / "raw-responses.jsonl"
     normalized_path = tmp_path / "normalized-bars.jsonl"
@@ -102,7 +103,7 @@ def _single_bar_audit(
         raw.append(
             _response(row, START + timedelta(minutes=6, seconds=offset)),
             symbol=symbol,
-            request_url=f"{ENDPOINT}?interval=5m&limit=2&symbol={symbol}",
+            request_url=request_url or f"{ENDPOINT}?interval=5m&limit=2&symbol={symbol}",
         )
     normalized = ForwardNormalizedBarSpool(normalized_path)
     canonical = parse_binance_klines(
@@ -710,6 +711,46 @@ def test_terminal_audit_rejects_normalized_source_substitution(tmp_path: Path) -
         encoding="utf-8",
     )
     with pytest.raises(IntegrityAuditError, match="normalized bar source identity"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_manifest_path=manifest_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
+            auditor_repository_commit="a" * 40,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
+
+
+def test_terminal_audit_rejects_raw_request_url_source_substitution(tmp_path: Path) -> None:
+    _report, raw_path, normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+        request_url="https://api.binance.com/api/v3/klines?interval=5m&limit=2&symbol=BTCUSDT",
+    )
+    status_path = tmp_path / "status.json"
+    status_path.write_text(
+        json.dumps({"state": "target_reached", "minimum_reached": True}), encoding="utf-8"
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "provider_identity": "binance_spot_public_market_data",
+                "endpoint": ENDPOINT,
+                "evidence_class": "forward_pit_admission",
+                "interval": "5m",
+                "symbols": ["BTCUSDT", "ETHUSDT"],
+                "market_data_only": True,
+                "credentials_loaded": False,
+                "order_writes_attempted": False,
+                "source_snapshot_hash": HASH,
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(IntegrityAuditError, match="raw request URL"):
         audit_forward_root(
             raw_path,
             normalized_path,
