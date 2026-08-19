@@ -15,6 +15,7 @@ from advisorai.phase4 import (
     build_exclusion_overlay,
     parse_binance_klines,
 )
+from advisorai.phase4.v3core_integrity import IntegrityAuditReport, _hash_payload
 from scripts.materialize_phase4_v3core_forward_input import MaterializationRefused, materialize
 
 HASH = "a" * 64
@@ -220,8 +221,16 @@ def test_materializer_binds_prediction_manifest_hashes(tmp_path: Path) -> None:
             "admission_minimum_met": True,
         }
     )
+    report_payload = report.model_dump(mode="json")
+    fingerprint_payload = {
+        key: value
+        for key, value in report_payload.items()
+        if key not in {"generated_at", "audit_fingerprint"}
+    }
+    report_payload["audit_fingerprint"] = _hash_payload(fingerprint_payload)
+    report = IntegrityAuditReport.model_validate(report_payload)
     report_path = tmp_path / "integrity.json"
-    report_bytes = json.dumps(report.model_dump(mode="json"), sort_keys=True).encode()
+    report_bytes = json.dumps(report_payload, sort_keys=True).encode()
     report_path.write_bytes(report_bytes)
     overlay = build_exclusion_overlay(
         report,
