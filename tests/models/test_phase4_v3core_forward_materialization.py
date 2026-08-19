@@ -203,6 +203,7 @@ def test_materializer_binds_prediction_manifest_hashes(tmp_path: Path) -> None:
         source_manifest_path=run / "manifest.json",
         source_status_path=run / "status.json",
         source_config_path=run / "config.json",
+        terminal_evidence_eligible=True,
     )
     report = report.model_copy(
         update={
