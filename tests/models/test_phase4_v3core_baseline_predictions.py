@@ -17,6 +17,7 @@ from advisorai.phase4 import (
 from scripts.run_phase4_v3core_baseline_predictions import (
     RESUME_IDENTITY_FIELDS,
     _context_for_cutoff,
+    _existing_baselines,
     _expected_manifest,
     _input_snapshot_hash,
     _missed_cutoff_reason,
@@ -117,6 +118,18 @@ def test_resume_skips_fully_persisted_cutoff_without_inference(tmp_path: Path) -
     pending = _pending_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF)
     assert pending == ()
     assert len(ledger.records) == len(V3_CORE_BASELINES)
+
+
+def test_existing_baselines_are_detected_in_roster_order(tmp_path: Path) -> None:
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    for model in ("lightgbm", "naive", "linear"):
+        assert ledger.append(_baseline_prediction(model))
+
+    assert _existing_baselines(ledger, symbol="BTCUSDT", cutoff=CUTOFF) == (
+        "naive",
+        "linear",
+        "lightgbm",
+    )
 
 
 def test_resume_only_infers_missing_models_for_partial_cutoff(tmp_path: Path) -> None:

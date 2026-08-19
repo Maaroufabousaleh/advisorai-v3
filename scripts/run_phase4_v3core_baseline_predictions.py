@@ -53,6 +53,7 @@ MISSED_CUTOFF_REASONS = (
     "WORKER_STARTED_TOO_LATE",
     "INFERENCE_RUNTIME_FAILURE",
     "SCHEDULER_DELAY",
+    "PARTIAL_BASELINE_COVERAGE",
 )
 RESUME_IDENTITY_FIELDS = (
     "schema",
@@ -293,6 +294,17 @@ def _pending_baselines(
     )
 
 
+def _existing_baselines(
+    ledger: ForwardPredictionLedger, *, symbol: str, cutoff: datetime
+) -> tuple[str, ...]:
+    """Return frozen baseline identities for one cutoff in roster order."""
+
+    prefix = f"{symbol}:{cutoff.isoformat()}"
+    return tuple(
+        model for model in V3_CORE_BASELINES if f"{prefix}:{model}" in ledger.prediction_ids
+    )
+
+
 def _validate_existing_baseline_prediction(
     ledger: ForwardPredictionLedger,
     *,
@@ -461,18 +473,59 @@ def run(
                 if cutoff.minute % 60 != 0 or cutoff.second or cutoff.microsecond:
                     continue
                 identity = (symbol, cutoff.isoformat())
+                existing_models = _existing_baselines(ledger, symbol=symbol, cutoff=cutoff)
+
+                # Validate persisted scientific identity before deciding that a
+                # past cutoff was missed.  A complete cutoff must remain
+                # complete after restart; it must never acquire a rejection
+                # merely because the worker resumed after its deadline.
+                if existing_models:
+                    validation_context = _context_for_cutoff(
+                        bars,
+                        symbol=symbol,
+                        cutoff=cutoff,
+                        now=min(now, cutoff),
+                    )
+                    if validation_context is None:
+                        if now <= cutoff:
+                            continue
+                        raise RuntimeError(
+                            "cannot validate existing baseline prediction context after cutoff"
+                        )
+                    for model in existing_models:
+                        _validate_existing_baseline_prediction(
+                            ledger,
+                            symbol=symbol,
+                            cutoff=cutoff,
+                            model=model,
+                            context=validation_context,
+                            expected_model_identity_hash=manifest["model_identity_hashes"][model],
+                            expected_source_snapshot_hash=manifest["source_snapshot_hash"],
+                        )
+
+                # A cutoff recorded as missed is permanently closed.  A wall
+                # clock adjustment or later resume must never reopen it.
+                if identity in missed:
+                    continue
+
                 if now > cutoff:
+                    if len(existing_models) == len(V3_CORE_BASELINES):
+                        continue
                     if identity not in missed:
                         rejections.append(
                             instrument=symbol,
                             cutoff=cutoff,
-                            reason=_missed_cutoff_reason(
-                                bars,
-                                symbol=symbol,
-                                cutoff=cutoff,
-                                now=now,
-                                worker_started_at=worker_started_at,
-                                inference_failed=identity in inference_failures,
+                            reason=(
+                                "PARTIAL_BASELINE_COVERAGE"
+                                if existing_models
+                                else _missed_cutoff_reason(
+                                    bars,
+                                    symbol=symbol,
+                                    cutoff=cutoff,
+                                    now=now,
+                                    worker_started_at=worker_started_at,
+                                    inference_failed=identity in inference_failures,
+                                )
                             ),
                         )
                         missed.add(identity)
@@ -481,17 +534,6 @@ def run(
                 if context is None:
                     continue
                 pending_models = _pending_baselines(ledger, symbol=symbol, cutoff=cutoff)
-                for model in V3_CORE_BASELINES:
-                    if model not in pending_models:
-                        _validate_existing_baseline_prediction(
-                            ledger,
-                            symbol=symbol,
-                            cutoff=cutoff,
-                            model=model,
-                            context=context,
-                            expected_model_identity_hash=manifest["model_identity_hashes"][model],
-                            expected_source_snapshot_hash=manifest["source_snapshot_hash"],
-                        )
                 failed_models = 0
                 for model in pending_models:
                     try:
