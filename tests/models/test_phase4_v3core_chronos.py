@@ -18,10 +18,12 @@ from advisorai.phase4.v3core_chronos import (
     ChronosInferenceResult,
     ChronosRuntimeIdentity,
     _request_for_inference,
+    _validate_existing_chronos_prediction,
     build_chronos_prediction,
     context_for_cutoff,
     validate_resume_manifest,
 )
+from advisorai.phase4.v3core_prediction_ledger import ForwardPredictionLedger
 
 HASH = "a" * 64
 CUTOFF = datetime(2026, 8, 17, 21, 0, tzinfo=UTC)
@@ -214,6 +216,125 @@ def test_prediction_rejects_generation_after_cutoff() -> None:
             generated_at=CUTOFF + timedelta(seconds=1),
             context=_context(),
             result=result,
+        )
+
+
+def test_prediction_at_cutoff_is_admissible_as_the_availability_boundary() -> None:
+    result = ChronosInferenceResult(
+        forecast=(Decimal("100"),) * CHRONOS_OUTPUT_BARS,
+        latency_ms=Decimal("1"),
+        device="cuda",
+        resource_peak_rss_mib=Decimal("1"),
+        resource_peak_cpu_percent=Decimal("1"),
+        resource_sample_count=1,
+    )
+    prediction = build_chronos_prediction(
+        identity=_identity(),
+        instrument="BTCUSDT",
+        cutoff=CUTOFF,
+        generated_at=CUTOFF,
+        context=_context(),
+        result=result,
+    )
+    assert prediction.generated_at == CUTOFF
+
+
+def test_resume_skips_existing_prediction_without_runtime_metadata_recreation(
+    tmp_path,
+) -> None:
+    result = ChronosInferenceResult(
+        forecast=(Decimal("100"),) * CHRONOS_OUTPUT_BARS,
+        latency_ms=Decimal("12.5"),
+        device="cuda",
+        resource_peak_rss_mib=Decimal("100"),
+        resource_peak_cpu_percent=Decimal("20"),
+        resource_sample_count=3,
+    )
+    prediction = build_chronos_prediction(
+        identity=_identity(),
+        instrument="BTCUSDT",
+        cutoff=CUTOFF,
+        generated_at=CUTOFF - timedelta(seconds=1),
+        context=_context(),
+        result=result,
+    )
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    assert ledger.append(prediction)
+
+    _validate_existing_chronos_prediction(
+        ledger,
+        identity=_identity(),
+        instrument="BTCUSDT",
+        cutoff=CUTOFF,
+        context=_context(),
+    )
+    assert len(ledger.records) == 1
+
+
+def test_resume_fails_closed_on_changed_chronos_input_snapshot(tmp_path) -> None:
+    result = ChronosInferenceResult(
+        forecast=(Decimal("100"),) * CHRONOS_OUTPUT_BARS,
+        latency_ms=Decimal("1"),
+        device="cuda",
+        resource_peak_rss_mib=Decimal("1"),
+        resource_peak_cpu_percent=Decimal("1"),
+        resource_sample_count=1,
+    )
+    original_context = _context()
+    prediction = build_chronos_prediction(
+        identity=_identity(),
+        instrument="BTCUSDT",
+        cutoff=CUTOFF,
+        generated_at=CUTOFF - timedelta(seconds=1),
+        context=original_context,
+        result=result,
+    )
+    changed_context = list(original_context)
+    changed_context[-1] = _bar(
+        changed_context[-1].interval_end,
+        source_hash=HASH,
+    ).model_copy(update={"close": Decimal("101")})
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    assert ledger.append(prediction)
+
+    with pytest.raises(RuntimeError, match="conflicting scientific identity.*input_snapshot_hash"):
+        _validate_existing_chronos_prediction(
+            ledger,
+            identity=_identity(),
+            instrument="BTCUSDT",
+            cutoff=CUTOFF,
+            context=tuple(changed_context),
+        )
+
+
+def test_resume_fails_closed_on_changed_checkpoint_identity(tmp_path) -> None:
+    result = ChronosInferenceResult(
+        forecast=(Decimal("100"),) * CHRONOS_OUTPUT_BARS,
+        latency_ms=Decimal("1"),
+        device="cuda",
+        resource_peak_rss_mib=Decimal("1"),
+        resource_peak_cpu_percent=Decimal("1"),
+        resource_sample_count=1,
+    )
+    ledger = ForwardPredictionLedger(tmp_path / "predictions.jsonl")
+    assert ledger.append(
+        build_chronos_prediction(
+            identity=_identity(),
+            instrument="BTCUSDT",
+            cutoff=CUTOFF,
+            generated_at=CUTOFF - timedelta(seconds=1),
+            context=_context(),
+            result=result,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="conflicting scientific identity"):
+        _validate_existing_chronos_prediction(
+            ledger,
+            identity=_identity().model_copy(update={"checkpoint_hash": "b" * 64}),
+            instrument="BTCUSDT",
+            cutoff=CUTOFF,
+            context=_context(),
         )
 
 

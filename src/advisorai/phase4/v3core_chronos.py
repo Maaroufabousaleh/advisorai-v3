@@ -91,6 +91,23 @@ CHRONOS_RESUME_IDENTITY_FIELDS = (
     "target_end_at",
 )
 
+CHRONOS_PREDICTION_SCIENTIFIC_IDENTITY_FIELDS = (
+    "prediction_id",
+    "instrument",
+    "model",
+    "model_identity_hash",
+    "cutoff",
+    "input_snapshot_hash",
+    "source_snapshot_hash",
+    "checkpoint_hash",
+    "runner_hash",
+    "preprocessing_identity",
+    "preprocessing_hash",
+    "dependency_lock_hash",
+    "runtime_environment_hash",
+    "device",
+)
+
 
 def _canonical(payload: object) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
@@ -627,6 +644,9 @@ def build_chronos_prediction(
     generated_at: datetime,
     context: Sequence[V3CoreBar],
     result: ChronosInferenceResult,
+    inference_started_at: datetime | None = None,
+    inference_finished_at: datetime | None = None,
+    ledger_persisted_at: datetime | None = None,
 ) -> ForwardPredictionRecord:
     """Convert one native Chronos output into the shared prediction schema."""
 
@@ -669,7 +689,7 @@ def build_chronos_prediction(
         )
     )
     return ForwardPredictionRecord(
-        prediction_id=f"{normalized_instrument}:{cutoff.isoformat()}:{CHRONOS_MODEL}",
+        prediction_id=_prediction_id(normalized_instrument, cutoff),
         instrument=normalized_instrument,
         model=CHRONOS_MODEL,
         model_identity_hash=identity.model_identity_hash,
@@ -678,6 +698,9 @@ def build_chronos_prediction(
         predicted_return_bps=_return_bps(result.forecast[index], last_close),
         generated_at=generated_at,
         runtime_latency_ms=result.latency_ms,
+        inference_started_at=inference_started_at,
+        inference_finished_at=inference_finished_at,
+        ledger_persisted_at=ledger_persisted_at,
         source_snapshot_hash=source_hash,
         checkpoint_hash=identity.checkpoint_hash,
         runner_hash=identity.runner_hash,
@@ -693,6 +716,74 @@ def build_chronos_prediction(
         resource_sample_count=result.resource_sample_count,
         provenance=provenance,
     )
+
+
+def _prediction_id(instrument: str, cutoff: datetime) -> str:
+    """Return the stable identity for one instrument/cutoff candidate."""
+
+    return f"{instrument.strip().upper()}:{_aware(cutoff, 'cutoff').isoformat()}:{CHRONOS_MODEL}"
+
+
+def _validate_existing_chronos_prediction(
+    ledger: ForwardPredictionLedger,
+    *,
+    identity: ChronosRuntimeIdentity,
+    instrument: str,
+    cutoff: datetime,
+    context: Sequence[V3CoreBar],
+) -> None:
+    """Validate a persisted candidate before allowing a resume skip.
+
+    Wall-clock fields and measured resource values are deliberately excluded:
+    recreating them would require a second inference and could turn an
+    idempotent resume into a conflicting append.  The input/model/source
+    identity is not excluded; a mismatch fails closed before inference.
+    """
+
+    normalized_instrument = instrument.strip().upper()
+    cutoff = _aware(cutoff, "cutoff")
+    if len(context) != CHRONOS_CONTEXT_BARS:
+        raise RuntimeError("cannot validate existing Chronos prediction without its 48-bar context")
+    source_hashes = {bar.source_snapshot_hash for bar in context}
+    if len(source_hashes) != 1:
+        raise RuntimeError(
+            "cannot validate existing Chronos prediction with mixed source snapshots"
+        )
+    expected = {
+        "prediction_id": _prediction_id(normalized_instrument, cutoff),
+        "instrument": normalized_instrument,
+        "model": CHRONOS_MODEL,
+        "model_identity_hash": identity.model_identity_hash,
+        "cutoff": cutoff,
+        "input_snapshot_hash": _input_snapshot_hash(context, cutoff),
+        "source_snapshot_hash": next(iter(source_hashes)),
+        "checkpoint_hash": identity.checkpoint_hash,
+        "runner_hash": identity.runner_hash,
+        "preprocessing_identity": CHRONOS_PREPROCESSING_IDENTITY,
+        "preprocessing_hash": identity.preprocessing_hash,
+        "dependency_lock_hash": identity.lock_hash,
+        "runtime_environment_hash": identity.environment_fingerprint,
+        "device": identity.device,
+    }
+    existing = next(
+        (
+            entry.prediction
+            for entry in ledger.records
+            if entry.prediction.prediction_id == expected["prediction_id"]
+        ),
+        None,
+    )
+    if existing is None:
+        raise RuntimeError("Chronos prediction identity disappeared during resume")
+    actual = {
+        field: getattr(existing, field) for field in CHRONOS_PREDICTION_SCIENTIFIC_IDENTITY_FIELDS
+    }
+    if actual != expected:
+        mismatches = [field for field in expected if actual[field] != expected[field]]
+        raise RuntimeError(
+            "existing Chronos prediction has conflicting scientific identity: "
+            + ", ".join(mismatches)
+        )
 
 
 def _git_head(repository_root: Path) -> str:
@@ -918,14 +1009,47 @@ def run(
             bars = ForwardNormalizedBarSpool(source_root / "normalized-bars.jsonl").read()
             for symbol in V3_CORE_SYMBOLS:
                 for cutoff in _candidate_cutoffs(bars, symbol):
-                    if any(
+                    rejected = any(
                         record.instrument == symbol and record.cutoff == cutoff
                         for record in rejections.records
-                    ) or any(
-                        record.prediction.instrument == symbol
-                        and record.prediction.cutoff == cutoff
-                        for record in ledger.records
-                    ):
+                    )
+                    existing = next(
+                        (
+                            record.prediction
+                            for record in ledger.records
+                            if record.prediction.instrument == symbol
+                            and record.prediction.cutoff == cutoff
+                        ),
+                        None,
+                    )
+                    if rejected and existing is not None:
+                        raise RuntimeError(
+                            "Chronos prediction and rejection both exist for the same cutoff"
+                        )
+                    if rejected:
+                        continue
+                    if existing is not None:
+                        validation_context = context_for_cutoff(
+                            bars,
+                            instrument=symbol,
+                            cutoff=cutoff,
+                            # Once a prediction exists, validate against the
+                            # cutoff rather than the current wall clock.  A
+                            # later resume must not turn a valid old record
+                            # into a missed cutoff.
+                            now=min(now, cutoff),
+                        )
+                        if validation_context is None:
+                            raise RuntimeError(
+                                "cannot validate existing Chronos prediction context"
+                            )
+                        _validate_existing_chronos_prediction(
+                            ledger,
+                            identity=identity,
+                            instrument=symbol,
+                            cutoff=cutoff,
+                            context=validation_context,
+                        )
                         continue
                     if now > cutoff:
                         rejections.append(
@@ -938,27 +1062,32 @@ def run(
                     if context is None:
                         continue
                     try:
+                        inference_started_at = datetime.now(UTC)
                         inference = infer_chronos(
                             identity=identity,
                             context=context,
                             timeout_seconds=worker_timeout_seconds,
                         )
-                        generated_at = datetime.now(UTC)
-                        if generated_at > cutoff:
+                        inference_finished_at = datetime.now(UTC)
+                        if inference_finished_at > cutoff:
                             rejections.append(
                                 instrument=symbol,
                                 cutoff=cutoff,
                                 reason="INFERENCE_COMPLETED_AFTER_CUTOFF",
                             )
                             continue
+                        ledger_persisted_at = datetime.now(UTC)
                         ledger.append(
                             build_chronos_prediction(
                                 identity=identity,
                                 instrument=symbol,
                                 cutoff=cutoff,
-                                generated_at=generated_at,
+                                generated_at=inference_finished_at,
                                 context=context,
                                 result=inference,
+                                inference_started_at=inference_started_at,
+                                inference_finished_at=inference_finished_at,
+                                ledger_persisted_at=ledger_persisted_at,
                             )
                         )
                     except ChronosInferenceFailure as exc:

@@ -76,6 +76,9 @@ def test_candidate_runtime_metadata_round_trips_through_ledger(tmp_path: Path) -
             "resource_peak_rss_mib": Decimal("100"),
             "resource_peak_cpu_percent": Decimal("20"),
             "resource_sample_count": 3,
+            "inference_started_at": CUTOFF - timedelta(seconds=3),
+            "inference_finished_at": CUTOFF - timedelta(seconds=1),
+            "ledger_persisted_at": CUTOFF,
             "provenance": (("source", "binance_public"),),
         }
     )
@@ -84,9 +87,13 @@ def test_candidate_runtime_metadata_round_trips_through_ledger(tmp_path: Path) -
     assert ledger.append(prediction)
     reopened = ForwardPredictionLedger(path)
     restored = reopened.records[0].prediction
+    assert restored.model_dump(mode="json") == prediction.model_dump(mode="json")
     assert restored.checkpoint_hash == HASH
     assert restored.native_interval_lower_bps == Decimal("-10")
     assert restored.native_confidence == Decimal("0.8")
+    assert restored.inference_started_at == CUTOFF - timedelta(seconds=3)
+    assert restored.inference_finished_at == CUTOFF - timedelta(seconds=1)
+    assert restored.ledger_persisted_at == CUTOFF
     assert restored.provenance == (("source", "binance_public"),)
 
 
@@ -107,6 +114,28 @@ def test_native_prediction_interval_requires_ordered_pair() -> None:
                 **_prediction("chronos-2-small").model_dump(),
                 "native_interval_lower_bps": Decimal("20"),
                 "native_interval_upper_bps": Decimal("10"),
+            }
+        )
+
+
+def test_candidate_timing_requires_completion_order_and_generated_at_match() -> None:
+    with pytest.raises(ValueError, match="finished before it started"):
+        ForwardPredictionRecord(
+            **{
+                **_prediction("chronos-2-small").model_dump(),
+                "inference_started_at": CUTOFF - timedelta(seconds=1),
+                "inference_finished_at": CUTOFF - timedelta(seconds=2),
+                "ledger_persisted_at": CUTOFF,
+            }
+        )
+
+    with pytest.raises(ValueError, match="generated_at must equal inference completion"):
+        ForwardPredictionRecord(
+            **{
+                **_prediction("chronos-2-small").model_dump(),
+                "inference_started_at": CUTOFF - timedelta(seconds=3),
+                "inference_finished_at": CUTOFF - timedelta(seconds=2),
+                "ledger_persisted_at": CUTOFF,
             }
         )
 

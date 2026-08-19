@@ -683,6 +683,13 @@ class ForwardPredictionRecord(BaseModel):
     runtime_latency_ms: Decimal = Field(ge=0)
     outcome_case_id: str | None = None
 
+    # Candidate inference timing is optional for backward compatibility with
+    # existing baseline records.  When present, these fields distinguish the
+    # time the model became available from the later ledger write boundary.
+    inference_started_at: datetime | None = None
+    inference_finished_at: datetime | None = None
+    ledger_persisted_at: datetime | None = None
+
     # Candidate-specific runtime metadata is optional so the shared ledger
     # remains backward-compatible with deterministic baseline predictions.
     # When present, it binds the candidate output to the exact source,
@@ -728,9 +735,17 @@ class ForwardPredictionRecord(BaseModel):
             return None
         return _digest(value, getattr(info, "field_name", "prediction hash"))
 
-    @field_validator("cutoff", "generated_at")
+    @field_validator(
+        "cutoff",
+        "generated_at",
+        "inference_started_at",
+        "inference_finished_at",
+        "ledger_persisted_at",
+    )
     @classmethod
-    def validate_prediction_time(cls, value: datetime, info: object) -> datetime:
+    def validate_prediction_time(cls, value: datetime | None, info: object) -> datetime | None:
+        if value is None:
+            return None
         return _aware(value, getattr(info, "field_name", "prediction timestamp"))
 
     @field_validator(
@@ -766,6 +781,25 @@ class ForwardPredictionRecord(BaseModel):
             raise ValueError("unsupported forward prediction schema")
         if self.generated_at > self.cutoff:
             raise ValueError("prediction cannot be generated after its cutoff")
+        timing = (
+            self.inference_started_at,
+            self.inference_finished_at,
+            self.ledger_persisted_at,
+        )
+        if any(value is not None for value in timing) and not all(
+            value is not None for value in timing
+        ):
+            raise ValueError("candidate inference timing must be complete when present")
+        if all(value is not None for value in timing):
+            assert self.inference_started_at is not None
+            assert self.inference_finished_at is not None
+            assert self.ledger_persisted_at is not None
+            if self.inference_finished_at < self.inference_started_at:
+                raise ValueError("candidate inference finished before it started")
+            if self.ledger_persisted_at < self.inference_finished_at:
+                raise ValueError("candidate ledger persistence precedes inference completion")
+            if self.generated_at != self.inference_finished_at:
+                raise ValueError("candidate generated_at must equal inference completion")
         if (self.native_interval_lower_bps is None) != (self.native_interval_upper_bps is None):
             raise ValueError("native prediction intervals require both bounds")
         if (
