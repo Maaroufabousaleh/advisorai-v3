@@ -24,6 +24,7 @@ from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -730,6 +731,7 @@ def _validate_source_manifest_contract(
     path: Path | None,
     normalized_bars: Sequence[object],
     *,
+    raw_records: Sequence[ForwardRawResponse],
     terminal_evidence_eligible: bool,
 ) -> None:
     """Bind terminal normalized evidence to the reviewed read-only source contract."""
@@ -768,6 +770,20 @@ def _validate_source_manifest_contract(
         raise IntegrityAuditError("source manifest does not attest credential-free operation")
     if manifest.get("order_writes_attempted") is not False:
         raise IntegrityAuditError("source manifest does not attest zero order writes")
+    for raw_record in raw_records:
+        try:
+            parsed_request_url = urlsplit(raw_record.request_url)
+        except ValueError as exc:
+            raise IntegrityAuditError(
+                "raw request URL is not a valid reviewed market-data URL"
+            ) from exc
+        request_base = (
+            f"{parsed_request_url.scheme}://{parsed_request_url.netloc}{parsed_request_url.path}"
+        )
+        if request_base != V3_CORE_MARKET_DATA_REST_ENDPOINT:
+            raise IntegrityAuditError(
+                "raw request URL is not the reviewed market-data-only endpoint"
+            )
     try:
         source_snapshot_hash = _digest(
             str(manifest["source_snapshot_hash"]), "source_snapshot_hash"
@@ -1463,6 +1479,7 @@ def audit_forward_root(
     _validate_source_manifest_contract(
         source_manifest_path,
         normalized_bars,
+        raw_records=raw_records,
         terminal_evidence_eligible=terminal_evidence_eligible,
     )
     source_health_records = (
