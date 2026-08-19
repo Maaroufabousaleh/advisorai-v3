@@ -714,7 +714,17 @@ def _load_prediction_entries(paths: Sequence[Path]) -> tuple[ForwardPredictionLe
 def _load_prediction_entries_by_path(
     paths: Sequence[Path],
 ) -> tuple[tuple[ForwardPredictionLedgerEntry, ...], ...]:
-    return tuple(_load_prediction_entries((path,)) for path in paths)
+    entries_by_path = tuple(_load_prediction_entries((path,)) for path in paths)
+    seen: set[str] = set()
+    for entries in entries_by_path:
+        for entry in entries:
+            prediction_id = entry.prediction.prediction_id
+            if prediction_id in seen:
+                raise IntegrityAuditError(
+                    "prediction ledgers contain a duplicate prediction identity"
+                )
+            seen.add(prediction_id)
+    return entries_by_path
 
 
 def _validate_prediction_identities(

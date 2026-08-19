@@ -737,6 +737,24 @@ def test_unlinked_prediction_blocks_admission_readiness(tmp_path: Path) -> None:
     assert report.admission_evidence_ready is False
 
 
+def test_duplicate_prediction_id_across_ledgers_fails_closed(tmp_path: Path) -> None:
+    raw_path, normalized_path, cases_path, predictions_path, links_path = (
+        _write_multi_symbol_case_fixture(tmp_path)
+    )
+    duplicate_predictions_path = tmp_path / "duplicate-predictions.jsonl"
+    duplicate_predictions_path.write_bytes(predictions_path.read_bytes())
+
+    with pytest.raises(IntegrityAuditError, match="duplicate prediction identity"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            completed_cases_path=cases_path,
+            prediction_ledger_paths=(predictions_path, duplicate_predictions_path),
+            outcome_link_ledger_paths=(links_path,),
+            terminal_observed_at=START + timedelta(days=2),
+        )
+
+
 def test_input_spools_are_byte_identical_after_audit_and_overlay_is_separate(
     tmp_path: Path,
 ) -> None:
