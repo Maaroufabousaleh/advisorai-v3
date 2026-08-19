@@ -28,6 +28,14 @@ from .signal_policy import (
     evaluate_policy_signals,
     summarize_prediction_distribution,
 )
+from .v3core_baseline_regeneration import (
+    CAUSAL_BASELINE_EVIDENCE_CLASS,
+    CAUSAL_BASELINE_IDENTITY_SCHEMA,
+    CAUSAL_BASELINE_SCHEMA,
+    CausalBaselinePrediction,
+    CausalBaselineRegeneration,
+    regenerate_causal_baselines,
+)
 from .v3core_cadence import (
     CADENCE_CONTRACT_VERSION,
     EVALUATION_INPUT_SCHEMA,
@@ -70,6 +78,8 @@ from .v3core_chronos import (
     ChronosInferenceResult,
     ChronosRuntimeIdentity,
     build_chronos_prediction,
+)
+from .v3core_chronos import (
     context_for_cutoff as chronos_context_for_cutoff,
 )
 from .v3core_forward import (
@@ -96,14 +106,6 @@ from .v3core_forward import (
     parse_binance_klines,
     source_snapshot_hash,
 )
-from .v3core_prediction_ledger import (
-    OUTCOME_LINK_SCHEMA,
-    PREDICTION_LEDGER_SCHEMA,
-    ForwardPredictionLedger,
-    ForwardPredictionLedgerEntry,
-    ForwardPredictionOutcomeLink,
-    ForwardPredictionOutcomeLinkLedger,
-)
 from .v3core_generation_readiness import (
     EXPECTED_CANDIDATE_MODEL,
     EXPECTED_CASES_PER_SYMBOL,
@@ -111,6 +113,8 @@ from .v3core_generation_readiness import (
     EXPECTED_GPU_FAMILY_CAP,
     EXPECTED_HORIZON_BARS,
     EXPECTED_OUTPUT_BARS,
+    PREFLIGHT_SCHEMA,
+    READINESS_SCHEMA,
     GenerationCandidateContract,
     GenerationCoverageInput,
     GenerationPreflightReport,
@@ -119,11 +123,17 @@ from .v3core_generation_readiness import (
     GenerationReadinessReport,
     GenerationResourceContract,
     GenerationSourceContract,
-    PREFLIGHT_SCHEMA,
-    READINESS_SCHEMA,
     PreflightCheck,
     evaluate_generation_readiness,
     evaluate_preflight,
+)
+from .v3core_prediction_ledger import (
+    OUTCOME_LINK_SCHEMA,
+    PREDICTION_LEDGER_SCHEMA,
+    ForwardPredictionLedger,
+    ForwardPredictionLedgerEntry,
+    ForwardPredictionOutcomeLink,
+    ForwardPredictionOutcomeLinkLedger,
 )
 
 __all__ = [
@@ -198,6 +208,12 @@ __all__ = [
     "PreflightCheck",
     "evaluate_generation_readiness",
     "evaluate_preflight",
+    "CAUSAL_BASELINE_EVIDENCE_CLASS",
+    "CAUSAL_BASELINE_IDENTITY_SCHEMA",
+    "CAUSAL_BASELINE_SCHEMA",
+    "CausalBaselinePrediction",
+    "CausalBaselineRegeneration",
+    "regenerate_causal_baselines",
     "CHRONOS_CONTEXT_BARS",
     "CHRONOS_HORIZON_BARS",
     "CHRONOS_MODEL",
