@@ -667,11 +667,7 @@ class ForwardRejectionSpool:
 
 
 class ForwardPredictionRecord(BaseModel):
-    """Immutable prediction-side ledger record, before its outcome exists.
-
-    Baseline records use the original fields. Candidate ledgers may carry
-    richer runtime/provenance identity without creating a second truth format.
-    """
+    """Immutable prediction-side ledger record, before its outcome exists."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -685,22 +681,35 @@ class ForwardPredictionRecord(BaseModel):
     predicted_return_bps: Decimal
     generated_at: datetime
     runtime_latency_ms: Decimal = Field(ge=0)
+    outcome_case_id: str | None = None
+
+    # Candidate inference timing is optional for backward compatibility with
+    # existing baseline records.  When present, these fields distinguish the
+    # time the model became available from the later ledger write boundary.
+    inference_started_at: datetime | None = None
+    inference_finished_at: datetime | None = None
+    ledger_persisted_at: datetime | None = None
+
+    # Candidate-specific runtime metadata is optional so the shared ledger
+    # remains backward-compatible with deterministic baseline predictions.
+    # When present, it binds the candidate output to the exact source,
+    # checkpoint, preprocessing, environment, and resource observation used
+    # to produce it.
     source_snapshot_hash: str | None = None
     checkpoint_hash: str | None = None
     runner_hash: str | None = None
-    preprocessing_identity: str | None = None
+    preprocessing_identity: str | None = Field(default=None, min_length=1)
     preprocessing_hash: str | None = None
     dependency_lock_hash: str | None = None
     runtime_environment_hash: str | None = None
-    device: str | None = None
+    device: str | None = Field(default=None, min_length=1)
     native_interval_lower_bps: Decimal | None = None
     native_interval_upper_bps: Decimal | None = None
     native_confidence: Decimal | None = None
-    resource_peak_rss_mib: Decimal | None = None
-    resource_peak_cpu_percent: Decimal | None = None
-    resource_sample_count: int | None = Field(default=None, ge=0)
+    resource_peak_rss_mib: Decimal | None = Field(default=None, ge=0)
+    resource_peak_cpu_percent: Decimal | None = Field(default=None, ge=0)
+    resource_sample_count: int | None = Field(default=None, ge=1)
     provenance: tuple[tuple[str, str], ...] = ()
-    outcome_case_id: str | None = None
 
     @field_validator("instrument")
     @classmethod
@@ -726,9 +735,17 @@ class ForwardPredictionRecord(BaseModel):
             return None
         return _digest(value, getattr(info, "field_name", "prediction hash"))
 
-    @field_validator("cutoff", "generated_at")
+    @field_validator(
+        "cutoff",
+        "generated_at",
+        "inference_started_at",
+        "inference_finished_at",
+        "ledger_persisted_at",
+    )
     @classmethod
-    def validate_prediction_time(cls, value: datetime, info: object) -> datetime:
+    def validate_prediction_time(cls, value: datetime | None, info: object) -> datetime | None:
+        if value is None:
+            return None
         return _aware(value, getattr(info, "field_name", "prediction timestamp"))
 
     @field_validator(
@@ -742,28 +759,21 @@ class ForwardPredictionRecord(BaseModel):
     )
     @classmethod
     def validate_prediction_decimal(cls, value: Decimal | None, info: object) -> Decimal | None:
-        if value is not None and (
-            not value.is_finite()
-            or (
-                getattr(info, "field_name", "")
-                in {"runtime_latency_ms", "resource_peak_rss_mib", "resource_peak_cpu_percent"}
-                and value < 0
-            )
-        ):
+        if value is None:
+            return None
+        if not value.is_finite():
             raise ValueError("prediction numeric fields must be finite")
+        if (
+            getattr(info, "field_name", "")
+            in {
+                "runtime_latency_ms",
+                "resource_peak_rss_mib",
+                "resource_peak_cpu_percent",
+            }
+            and value < 0
+        ):
+            raise ValueError("prediction resource and latency fields must be non-negative")
         return value
-
-    @field_validator("provenance")
-    @classmethod
-    def validate_provenance(cls, value: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
-        normalized = tuple((str(key).strip(), str(item).strip()) for key, item in value)
-        if any(not key or not item for key, item in normalized):
-            raise ValueError("prediction provenance entries must be non-empty")
-        if len({key for key, _item in normalized}) != len(normalized):
-            raise ValueError("prediction provenance keys must be unique")
-        if normalized != tuple(sorted(normalized)):
-            raise ValueError("prediction provenance must be deterministically sorted")
-        return normalized
 
     @model_validator(mode="after")
     def validate_prediction(self) -> ForwardPredictionRecord:
@@ -771,16 +781,53 @@ class ForwardPredictionRecord(BaseModel):
             raise ValueError("unsupported forward prediction schema")
         if self.generated_at > self.cutoff:
             raise ValueError("prediction cannot be generated after its cutoff")
-        if self.outcome_case_id is not None:
-            raise ValueError("prediction records cannot be mutated with an outcome link")
+        timing = (
+            self.inference_started_at,
+            self.inference_finished_at,
+            self.ledger_persisted_at,
+        )
+        if any(value is not None for value in timing) and not all(
+            value is not None for value in timing
+        ):
+            raise ValueError("candidate inference timing must be complete when present")
+        if all(value is not None for value in timing):
+            assert self.inference_started_at is not None
+            assert self.inference_finished_at is not None
+            assert self.ledger_persisted_at is not None
+            if self.inference_finished_at < self.inference_started_at:
+                raise ValueError("candidate inference finished before it started")
+            if self.ledger_persisted_at < self.inference_finished_at:
+                raise ValueError("candidate ledger persistence precedes inference completion")
+            if self.generated_at != self.inference_finished_at:
+                raise ValueError("candidate generated_at must equal inference completion")
         if (self.native_interval_lower_bps is None) != (self.native_interval_upper_bps is None):
             raise ValueError("native prediction intervals require both bounds")
         if (
             self.native_interval_lower_bps is not None
-            and self.native_interval_upper_bps is not None
             and self.native_interval_lower_bps > self.native_interval_upper_bps
         ):
-            raise ValueError("native prediction interval lower bound exceeds upper bound")
+            raise ValueError("native prediction interval bounds are inconsistent")
+        identity_fields = (
+            self.checkpoint_hash,
+            self.runner_hash,
+            self.preprocessing_identity,
+            self.preprocessing_hash,
+            self.dependency_lock_hash,
+            self.runtime_environment_hash,
+            self.device,
+            self.resource_peak_rss_mib,
+            self.resource_peak_cpu_percent,
+            self.resource_sample_count,
+        )
+        if any(value is not None for value in identity_fields) and not all(
+            value is not None for value in identity_fields
+        ):
+            raise ValueError("candidate runtime metadata must be complete when present")
+        provenance_keys = [key for key, _ in self.provenance]
+        if len(provenance_keys) != len(set(provenance_keys)) or any(
+            not key.strip() or not value.strip() for key, value in self.provenance
+        ):
+            raise ValueError("prediction provenance keys and values must be unique and non-blank")
         return self
 
 
