@@ -46,6 +46,40 @@ baseline regeneration after sealing is permitted. Chronos must have valid
 predictions to be scored, while no separate candidate-per-symbol minimum is
 encoded. Phase 4 is therefore still pending, with no gate weakening.
 
+## Current Phase-4 admission-contract audit — 2026-08-19T00:52:05Z
+
+The latest read-only protected status is 6,674 raw responses, 704 normalized
+bars, and 48 completed cases (24 BTCUSDT / 24 ETHUSDT). Collector PID `59671`,
+resource sidecar PID `61721`, and original Chronos PID `80779` remain alive.
+The source root is still incomplete and running; no terminal integrity or
+utility operation has been performed.
+
+`scripts/review_phase4_utility.py` subtracts `MANDATORY_BASELINES` from the
+measured model set before constructing `model_decisions`, and
+`robust_candidate_admission` is satisfied only by `any_admitted` in that
+non-baseline set. `src/advisorai/phase4/paper_utility.py` separately requires
+all five mandatory baselines, but does not make a baseline itself a candidate.
+Thus a mandatory baseline may remain the strongest measured component, but it
+cannot close the current formal Phase-4 gate without a reviewed contract
+change. No particular neural/foundation model is hidden as mandatory.
+
+`evaluate_paper_utility()` rejects any included model whose prediction IDs do
+not equal the complete observation set. The sealed V3-Core target therefore
+requires 128 Chronos predictions if Chronos is scored (64 per symbol), with
+the formal review's 16-per-symbol holdout and 20-observation calibration
+history requirements. There is no internal partial-coverage intersection:
+omitted Chronos is unavailable for scoring; partial Chronos input is refused;
+and either leaves the non-baseline admission requirement unsatisfied.
+
+Forty cases per symbol remained at the checkpoint, while approximately 90
+complete hourly cutoffs were theoretically available before
+`2026-08-22T19:35:06.869338Z`. A corrected worker could be numerically
+complete only under ideal continuity. It was not launched because the
+protected Chronos process is a CUDA worker and the runtime/resource contract
+allows one GPU family at a time through `GpuModelLease` and the global GPU
+lease cap. The correction at `9c33fc4` remains isolated; PID `80779` and
+its rejection root were not modified.
+
 ## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head

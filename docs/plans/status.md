@@ -50,6 +50,45 @@ sealed root. Chronos predictions are required if Chronos is scored, but no
 separate candidate-per-symbol minimum is encoded. Phase 4 remains pending;
 Phases 5–7 remain closed.
 
+## Current Phase-4 admission-contract decision — 2026-08-19T00:52:05Z
+
+The protected source root remains RUNNING under collector PID `59671`,
+resource sidecar PID `61721`, and original Chronos PID `80779`. Its latest
+read-only status contains 6,674 raw responses, 704 normalized bars, and 48
+completed cases (24 BTCUSDT / 24 ETHUSDT), with target end
+`2026-08-22T19:35:06.869338Z`. The root remains credential-free and
+order-write-free; terminal audit and scoring remain prohibited.
+
+The executable Phase-4 reviewer at
+`scripts/review_phase4_utility.py:852-1027,1174-1230` defines
+`candidate_models` as every measured model outside
+`MANDATORY_BASELINES`, and sets `robust_candidate_admission` from
+`any_admitted` over that non-baseline set. Therefore a baseline-only result
+cannot produce `PASSED` under the current formal contract. The plan's exit
+gate likewise requires a model to add past-only calibrated net utility or
+useful risk information over mandatory baselines. There is no requirement for
+TTM-R2, Chronos, a neural model, or a foundation model specifically; there is,
+however, an explicit non-baseline candidate requirement in the current
+reviewer.
+
+If Chronos is scored, `evaluate_paper_utility()` requires every included model
+to cover the exact complete observation ID set. The current V3-Core target
+therefore implies 128 candidate predictions (64 per symbol), with the Phase-4
+review policy also requiring a 16-per-symbol holdout and 20 prior observations
+for rolling calibration. Partial Chronos coverage is not intersected
+automatically: partial input is rejected, while omitted Chronos is not scored
+and leaves `robust_candidate_admission` unsatisfied.
+
+At the checkpoint, 40 cases per symbol remained. The next eligible cutoff was
+`2026-08-19T01:00:00Z`; at most 90 complete hourly cutoffs could close before
+the immutable deadline under perfect continuity. Numerical candidate coverage
+was therefore still theoretically reachable, but a corrected Chronos worker
+was not launched: PID `80779` remains a protected CUDA worker, and the
+resource contract permits only one GPU family resident at once
+(`GpuModelLease` / global GPU lease cap). The corrected implementation remains
+isolated at `9c33fc4`; no old root was patched or backfilled. This is the
+resource-safety decision, not a claim that Chronos coverage is complete.
+
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.

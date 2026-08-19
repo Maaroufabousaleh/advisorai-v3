@@ -34,6 +34,33 @@
 - Phase 4 remains `PENDING`; Phase 2/3 remain `PASSED`; Phase 5–7 remain
   closed. No credentials, orders, or production calls were used.
 
+## Phase-4 admission-contract decision — 2026-08-19T00:52:05Z
+
+- The protected source root remains `RUNNING`: collector PID `59671`, sidecar
+  PID `61721`, and original Chronos PID `80779` are alive. Latest read-only
+  source status: 6,674 raw responses, 704 normalized bars, and 48 completed
+  cases (24 BTCUSDT / 24 ETHUSDT). Target end is
+  `2026-08-22T19:35:06.869338Z`; 40 further cases per symbol are required.
+- The formal reviewer computes candidates as measured models outside the five
+  mandatory baselines and passes only when one of those non-baseline candidates
+  is admitted. Baseline-only Phase 4 cannot pass under the current executable
+  contract. No specific TTM-R2, Chronos, neural, or foundation model is
+  mandatory.
+- If Chronos is scored, `evaluate_paper_utility()` requires complete identical
+  observation-ID coverage for every included model. With the frozen 64-per-
+  symbol target this means 128 Chronos predictions, including a 16-per-symbol
+  holdout and at least 20 prior observations for rolling calibration. Partial
+  candidate coverage is rejected rather than silently intersected.
+- About 90 complete hourly cutoffs remained ideally available from the next
+  eligible cutoff (`2026-08-19T01:00:00Z`) through the deadline, so coverage
+  was numerically possible. A corrected worker was not launched because the
+  protected PID `80779` is a CUDA worker and the resource contract allows only
+  one GPU family resident. The corrected code remains isolated at `9c33fc4`;
+  the old root remains unchanged and unbackfilled.
+- Decision: continue the protected collector; do not start a second Chronos
+  process in this generation. Phase 4 remains `PENDING`, with no terminal
+  audit or utility scoring.
+
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.
