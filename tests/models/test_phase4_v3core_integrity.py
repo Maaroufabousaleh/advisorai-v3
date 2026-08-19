@@ -580,6 +580,32 @@ def test_terminal_audit_requires_explicit_sealed_status(tmp_path: Path) -> None:
             normalized_path,
             source_status_path=status_path,
             terminal_evidence_eligible=True,
+            auditor_repository_commit="a" * 40,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
+
+    status_path.write_text(
+        json.dumps({"state": "target_reached", "minimum_reached": False}), encoding="utf-8"
+    )
+    with pytest.raises(IntegrityAuditError, match="frozen minimum"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
+            auditor_repository_commit="a" * 40,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
+
+    status_path.write_text(
+        json.dumps({"state": "target_reached", "minimum_reached": True}), encoding="utf-8"
+    )
+    with pytest.raises(IntegrityAuditError, match="repository commit"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
             terminal_observed_at=START + timedelta(minutes=10),
         )
 
@@ -591,6 +617,108 @@ def test_terminal_audit_requires_explicit_sealed_status(tmp_path: Path) -> None:
         terminal_observed_at=START + timedelta(minutes=10),
     )
     assert diagnostic.terminal_evidence_eligible is False
+
+
+def test_terminal_audit_requires_reviewed_source_manifest_contract(tmp_path: Path) -> None:
+    _report, raw_path, normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    status_path = tmp_path / "status.json"
+    status_path.write_text(
+        json.dumps({"state": "target_reached", "minimum_reached": True}), encoding="utf-8"
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "provider_identity": "unreviewed_source",
+                "endpoint": ENDPOINT,
+                "evidence_class": "forward_pit_admission",
+                "interval": "5m",
+                "symbols": ["BTCUSDT", "ETHUSDT"],
+                "market_data_only": True,
+                "credentials_loaded": False,
+                "order_writes_attempted": False,
+                "source_snapshot_hash": HASH,
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(IntegrityAuditError, match="provider identity"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_manifest_path=manifest_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
+            auditor_repository_commit="a" * 40,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
+
+
+def test_terminal_audit_rejects_normalized_source_substitution(tmp_path: Path) -> None:
+    _report, raw_path, normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    bar = parse_binance_klines(
+        json.dumps([_row()]).encode(),
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6),
+        source_snapshot_hash=HASH,
+    )[0]
+    substituted_provenance = bar.provenance.model_copy(update={"normalized_record_hash": "0" * 64})
+    substituted = bar.model_copy(
+        update={
+            "source_id": "alternate_public_source",
+            "provider_identity": "alternate_public_source",
+            "endpoint": "https://alternate.example/klines",
+            "provenance": substituted_provenance,
+        }
+    )
+    normalized_hash = _hash_payload(_normalized_identity_payload(substituted))
+    substituted = substituted.model_copy(
+        update={
+            "provenance": substituted.provenance.model_copy(
+                update={"normalized_record_hash": normalized_hash}
+            )
+        }
+    )
+    normalized_path.write_text(substituted.model_dump_json() + "\n", encoding="utf-8")
+    status_path = tmp_path / "status.json"
+    status_path.write_text(
+        json.dumps({"state": "target_reached", "minimum_reached": True}), encoding="utf-8"
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "provider_identity": "binance_spot_public_market_data",
+                "endpoint": ENDPOINT,
+                "evidence_class": "forward_pit_admission",
+                "interval": "5m",
+                "symbols": ["BTCUSDT", "ETHUSDT"],
+                "market_data_only": True,
+                "credentials_loaded": False,
+                "order_writes_attempted": False,
+                "source_snapshot_hash": HASH,
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(IntegrityAuditError, match="normalized bar source identity"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_manifest_path=manifest_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
+            auditor_repository_commit="a" * 40,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
 
 
 def test_allow_unsealed_cli_marks_report_diagnostic_only(

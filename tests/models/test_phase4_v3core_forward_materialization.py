@@ -185,6 +185,12 @@ def test_materializer_binds_prediction_manifest_hashes(tmp_path: Path) -> None:
         "preregistration_sha256": hashlib.sha256(prereg.read_bytes()).hexdigest(),
         "phase3_gate_record_sha256": "b" * 64,
         "source_snapshot_hash": HASH,
+        "provider_identity": "binance_spot_public_market_data",
+        "endpoint": ENDPOINT,
+        "evidence_class": "forward_pit_admission",
+        "interval": "5m",
+        "symbols": ["BTCUSDT", "ETHUSDT"],
+        "market_data_only": True,
         "credentials_loaded": False,
         "order_writes_attempted": False,
     }
@@ -204,6 +210,7 @@ def test_materializer_binds_prediction_manifest_hashes(tmp_path: Path) -> None:
         source_status_path=run / "status.json",
         source_config_path=run / "config.json",
         terminal_evidence_eligible=True,
+        auditor_repository_commit="a" * 40,
     )
     report = report.model_copy(
         update={

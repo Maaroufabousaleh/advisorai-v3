@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from advisorai.phase4.v3core_integrity import (
+    IntegrityAuditError,
     IntegrityAuditReport,
     audit_forward_root,
     build_exclusion_overlay,
@@ -388,6 +389,7 @@ def run(
         workflow_sha256 = _write_new(workflow_path, workflow)
         return {"workflow": str(workflow_path), "workflow_sha256": workflow_sha256, **workflow}
     except (
+        IntegrityAuditError,
         OSError,
         TypeError,
         ValueError,
@@ -448,6 +450,7 @@ def main() -> int:
             minimum_cases_per_symbol=args.minimum_cases_per_symbol,
         )
     except (
+        IntegrityAuditError,
         OSError,
         TypeError,
         ValueError,
