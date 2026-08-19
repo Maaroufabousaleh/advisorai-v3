@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -20,6 +21,37 @@ from advisorai.phase4 import V3CoreEvaluationInput, regenerate_causal_baselines
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _git_head(repository_root: Path) -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    commit = result.stdout.strip().lower()
+    if len(commit) != 40 or any(character not in "0123456789abcdef" for character in commit):
+        raise ValueError("repository HEAD is not a Git SHA-1")
+    return commit
+
+
+def _parse_materialized_at(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("materialized-at must be ISO-8601") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("materialized-at must include a timezone")
+    return parsed.astimezone(UTC)
+
+
+def _validated_repository_commit(repository_root: Path, claimed: str) -> str:
+    actual = _git_head(repository_root)
+    if claimed.strip().lower() != actual:
+        raise ValueError("repository_commit does not match repository_root HEAD")
+    return actual
 
 
 def _write_new(path: Path, payload: object) -> str:
@@ -41,8 +73,10 @@ def regenerate(
 ) -> dict[str, str | int | bool]:
     input_path = input_path.resolve()
     output_root = output_root.resolve()
+    repository_root = repository_root.resolve()
     if output_root.exists():
         raise FileExistsError("causal baseline output root must be new")
+    actual_commit = _validated_repository_commit(repository_root, repository_commit)
     payload = json.loads(input_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict) or not isinstance(payload.get("input"), dict):
         raise ValueError("sealed V3-Core input has no typed input object")
@@ -52,7 +86,7 @@ def regenerate(
     report = regenerate_causal_baselines(
         typed.build.cases,
         repository_root=repository_root,
-        repository_commit=repository_commit,
+        repository_commit=actual_commit,
         materialized_at=materialized_at,
     )
     output_root.mkdir(parents=True)
@@ -61,6 +95,11 @@ def regenerate(
     manifest = {
         "schema": "advisorai.phase4.v3-core-forward.causal-baseline.manifest.v1",
         "generated_at": materialized_at.isoformat(),
+        "repository_commit": report.repository_commit,
+        "forecasting_code_sha256": report.forecasting_code_sha256,
+        "lightgbm_code_sha256": report.lightgbm_code_sha256,
+        "phase3_gate_record_sha256": typed.phase3_gate_record_sha256,
+        "source_snapshot_hashes": sorted({case.source_snapshot_hash for case in typed.build.cases}),
         "input": {"path": str(input_path), "sha256": _sha256(input_path)},
         "report": {"path": "causal-baseline-regeneration.json", "sha256": report_hash},
         "case_counts": typed.case_counts(),
@@ -98,7 +137,7 @@ def main() -> int:
     parser.add_argument("--materialized-at", required=True)
     arguments = parser.parse_args()
     try:
-        materialized_at = datetime.fromisoformat(arguments.materialized_at).astimezone(UTC)
+        materialized_at = _parse_materialized_at(arguments.materialized_at)
         result = regenerate(
             input_path=arguments.input,
             output_root=arguments.output_root,

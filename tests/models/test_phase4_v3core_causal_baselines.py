@@ -8,6 +8,7 @@ import pytest
 
 from advisorai.phase4 import (
     V3_CORE_BASELINES,
+    CausalBaselineRegeneration,
     V3CoreBar,
     V3CoreBarProvenance,
     build_v3core_cases,
@@ -19,6 +20,7 @@ START = datetime(2026, 8, 5, 1, 0, tzinfo=UTC)
 ENDPOINT = "https://data-api.binance.vision/api/v3/klines"
 SOURCE = "binance_spot_public_market_data"
 MATERIALIZED_AT = datetime(2026, 8, 12, 12, 0, tzinfo=UTC)
+REPOSITORY_COMMIT = "b" * 40
 
 
 def _bars() -> tuple[V3CoreBar, ...]:
@@ -71,7 +73,7 @@ def test_regeneration_covers_every_mandatory_baseline_and_is_explicitly_retrospe
     report = regenerate_causal_baselines(
         (_case(),),
         repository_root=Path.cwd(),
-        repository_commit="development-fixture",
+        repository_commit=REPOSITORY_COMMIT,
         materialized_at=MATERIALIZED_AT,
     )
     assert len(report.predictions) == len(V3_CORE_BASELINES)
@@ -95,13 +97,13 @@ def test_regeneration_ignores_future_outcome_content() -> None:
     first = regenerate_causal_baselines(
         (original,),
         repository_root=Path.cwd(),
-        repository_commit="development-fixture",
+        repository_commit=REPOSITORY_COMMIT,
         materialized_at=MATERIALIZED_AT,
     )
     second = regenerate_causal_baselines(
         (changed,),
         repository_root=Path.cwd(),
-        repository_commit="development-fixture",
+        repository_commit=REPOSITORY_COMMIT,
         materialized_at=MATERIALIZED_AT,
     )
     first_scientific = [
@@ -119,7 +121,7 @@ def test_regeneration_refuses_unadmitted_or_historical_cases() -> None:
         regenerate_causal_baselines(
             (case.model_copy(update={"phase3_admitted": False}),),
             repository_root=Path.cwd(),
-            repository_commit="development-fixture",
+            repository_commit=REPOSITORY_COMMIT,
             materialized_at=MATERIALIZED_AT,
         )
 
@@ -127,9 +129,58 @@ def test_regeneration_refuses_unadmitted_or_historical_cases() -> None:
         regenerate_causal_baselines(
             (case.model_copy(update={"evidence_class": "historical_development"}),),
             repository_root=Path.cwd(),
+            repository_commit=REPOSITORY_COMMIT,
+            materialized_at=MATERIALIZED_AT,
+        )
+
+
+def test_regeneration_requires_a_git_commit_identity() -> None:
+    with pytest.raises(ValueError, match="repository_commit"):
+        regenerate_causal_baselines(
+            (_case(),),
+            repository_root=Path.cwd(),
             repository_commit="development-fixture",
             materialized_at=MATERIALIZED_AT,
         )
+
+
+def test_batch_validation_rejects_duplicate_prediction_records() -> None:
+    report = regenerate_causal_baselines(
+        (_case(),),
+        repository_root=Path.cwd(),
+        repository_commit=REPOSITORY_COMMIT,
+        materialized_at=MATERIALIZED_AT,
+    )
+    payload = report.model_dump(mode="json")
+    payload["predictions"].append(payload["predictions"][0])
+    with pytest.raises(ValueError, match="unique identities"):
+        CausalBaselineRegeneration.model_validate(payload)
+
+
+def test_batch_validation_rejects_unexpected_prediction_identity() -> None:
+    report = regenerate_causal_baselines(
+        (_case(),),
+        repository_root=Path.cwd(),
+        repository_commit=REPOSITORY_COMMIT,
+        materialized_at=MATERIALIZED_AT,
+    )
+    payload = report.model_dump(mode="json")
+    payload["predictions"][0]["prediction_id"] = "wrong-case:naive"
+    with pytest.raises(ValueError, match="cover every case"):
+        CausalBaselineRegeneration.model_validate(payload)
+
+
+def test_batch_validation_binds_prediction_id_to_case_and_model() -> None:
+    report = regenerate_causal_baselines(
+        (_case(),),
+        repository_root=Path.cwd(),
+        repository_commit=REPOSITORY_COMMIT,
+        materialized_at=MATERIALIZED_AT,
+    )
+    payload = report.model_dump(mode="json")
+    payload["predictions"][0]["case_id"] = "wrong-case"
+    with pytest.raises(ValueError, match="bind case and model"):
+        CausalBaselineRegeneration.model_validate(payload)
 
 
 def test_regeneration_requires_post_cutoff_materialization_time() -> None:
@@ -137,6 +188,6 @@ def test_regeneration_requires_post_cutoff_materialization_time() -> None:
         regenerate_causal_baselines(
             (_case(),),
             repository_root=Path.cwd(),
-            repository_commit="development-fixture",
+            repository_commit=REPOSITORY_COMMIT,
             materialized_at=datetime(2026, 8, 5, 4, 0, tzinfo=UTC),
         )
