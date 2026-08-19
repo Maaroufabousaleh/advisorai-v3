@@ -773,6 +773,18 @@ def test_report_rejects_inconsistent_unsealed_admission_flags(tmp_path: Path) ->
         IntegrityAuditReport.model_validate(payload)
 
 
+def test_report_fingerprint_rejects_content_mutation(tmp_path: Path) -> None:
+    report, _raw_path, _normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    payload = report.model_dump(mode="json")
+    payload["normalized_bar_count"] = payload["normalized_bar_count"] + 1
+    with pytest.raises(ValueError, match="audit fingerprint"):
+        IntegrityAuditReport.model_validate(payload)
+
+
 def test_legacy_admission_alias_also_requires_case_content_validation(tmp_path: Path) -> None:
     report, _raw_path, _normalized_path = _single_bar_audit(
         tmp_path,

@@ -428,6 +428,16 @@ class IntegrityAuditReport(BaseModel):
             raise ValueError("admission evidence requires validated case content")
         return self
 
+    @model_validator(mode="after")
+    def validate_audit_fingerprint(self) -> IntegrityAuditReport:
+        payload = self.model_dump(
+            mode="json",
+            exclude={"generated_at", "audit_fingerprint"},
+        )
+        if _hash_payload(payload) != self.audit_fingerprint:
+            raise ValueError("audit fingerprint is inconsistent with the report content")
+        return self
+
     @field_validator(
         "prediction_ledger_sha256s",
         "outcome_link_ledger_sha256s",
@@ -1584,7 +1594,7 @@ def audit_forward_root(
     )
     if observed_times and terminal < max(observed_times):
         raise IntegrityAuditError("terminal boundary precedes a raw observation receipt")
-    report = IntegrityAuditReport(
+    report = IntegrityAuditReport.model_construct(
         generated_at=datetime.now(UTC),
         terminal_observed_at=terminal,
         terminal_evidence_eligible=terminal_evidence_eligible,
@@ -1656,7 +1666,8 @@ def audit_forward_root(
         mode="json",
         exclude={"generated_at", "audit_fingerprint"},
     )
-    return report.model_copy(update={"audit_fingerprint": _hash_payload(fingerprint_payload)})
+    report = report.model_copy(update={"audit_fingerprint": _hash_payload(fingerprint_payload)})
+    return IntegrityAuditReport.model_validate(report.model_dump(mode="json"))
 
 
 def build_exclusion_overlay(
