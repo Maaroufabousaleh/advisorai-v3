@@ -190,12 +190,18 @@ def test_prediction_uses_preregistered_12th_output_and_native_bounds() -> None:
         generated_at=CUTOFF - timedelta(seconds=1),
         context=_context(),
         result=result,
+        inference_started_at=CUTOFF - timedelta(seconds=3),
+        inference_finished_at=CUTOFF - timedelta(seconds=1),
+        ledger_persisted_at=CUTOFF,
     )
     assert prediction.model == CHRONOS_MODEL
     assert prediction.predicted_return_bps == Decimal("1100")
     assert prediction.native_interval_lower_bps == Decimal("100")
     assert prediction.native_interval_upper_bps == Decimal("2100")
     assert prediction.outcome_case_id is None
+    assert prediction.inference_started_at == CUTOFF - timedelta(seconds=3)
+    assert prediction.inference_finished_at == CUTOFF - timedelta(seconds=1)
+    assert prediction.ledger_persisted_at == CUTOFF
     assert prediction.provenance
 
 
