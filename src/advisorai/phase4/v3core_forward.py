@@ -808,7 +808,6 @@ class ForwardPredictionRecord(BaseModel):
         ):
             raise ValueError("native prediction interval bounds are inconsistent")
         identity_fields = (
-            self.source_snapshot_hash,
             self.checkpoint_hash,
             self.runner_hash,
             self.preprocessing_identity,
