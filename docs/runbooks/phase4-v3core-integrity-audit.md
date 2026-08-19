@@ -104,6 +104,13 @@ Reports also expose `terminal_evidence_eligible`. The normal sealed workflow
 sets it true; `--allow-unsealed` diagnostic reads set it false and therefore
 cannot produce `admission_evidence_ready` or `admission_minimum_met`, even if
 the other content checks happen to pass.
+Admission-grade library calls additionally require an explicit sealed source
+status, a `target_reached` status must attest `minimum_reached=true`, and an
+exact auditor repository commit. The source manifest must attest the reviewed
+credential-free Binance market-data-only REST surface, the frozen 5m BTC/ETH
+scope, and zero order writes; normalized bars must match that manifest identity.
+These checks prevent a self-consistent but substituted normalized source from
+being treated as the protected V3-Core data plane.
 
 Each prediction ledger must be paired, in argument order, with its frozen
 prediction-run manifest through `--prediction-manifest`. The auditor verifies

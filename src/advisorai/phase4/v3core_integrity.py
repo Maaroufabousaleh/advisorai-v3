@@ -28,6 +28,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.phase4.v3core_cadence import (
+    V3_CORE_MARKET_DATA_PROVIDER,
+    V3_CORE_MARKET_DATA_REST_ENDPOINT,
     V3_CORE_SYMBOLS,
     V3CoreForecastCase,
     sha256_json,
@@ -684,9 +686,22 @@ def _load_source_snapshot_hash(path: Path | None) -> str | None:
         raise IntegrityAuditError("source manifest snapshot identity is invalid") from exc
 
 
-def _validate_terminal_status(path: Path | None, *, terminal_evidence_eligible: bool) -> None:
+def _validate_terminal_status(
+    path: Path | None,
+    *,
+    terminal_evidence_eligible: bool,
+    auditor_repository_commit: str | None,
+) -> None:
     if not terminal_evidence_eligible:
         return
+    if (
+        auditor_repository_commit is None
+        or len(auditor_repository_commit) != 40
+        or any(character not in "0123456789abcdef" for character in auditor_repository_commit)
+    ):
+        raise IntegrityAuditError(
+            "terminal evidence eligibility requires an exact repository commit"
+        )
     if path is None:
         raise IntegrityAuditError(
             "terminal evidence eligibility requires an explicit source status path"
@@ -697,6 +712,71 @@ def _validate_terminal_status(path: Path | None, *, terminal_evidence_eligible: 
         raise IntegrityAuditError("source status is unreadable") from exc
     if not isinstance(status, dict) or status.get("state") not in TERMINAL_SOURCE_STATES:
         raise IntegrityAuditError("terminal evidence requires a sealed source status")
+    if status.get("state") == "target_reached" and status.get("minimum_reached") is not True:
+        raise IntegrityAuditError("target-reached source status does not attest its frozen minimum")
+
+
+def _validate_source_manifest_contract(
+    path: Path | None,
+    normalized_bars: Sequence[object],
+    *,
+    terminal_evidence_eligible: bool,
+) -> None:
+    """Bind terminal normalized evidence to the reviewed read-only source contract."""
+
+    if not terminal_evidence_eligible:
+        return
+    if path is None:
+        raise IntegrityAuditError(
+            "terminal evidence eligibility requires an explicit source manifest path"
+        )
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, json.JSONDecodeError) as exc:
+        raise IntegrityAuditError("source manifest is unreadable") from exc
+    if not isinstance(manifest, dict):
+        raise IntegrityAuditError("source manifest must be an object")
+    if manifest.get("provider_identity") != V3_CORE_MARKET_DATA_PROVIDER:
+        raise IntegrityAuditError(
+            "source manifest provider identity is not the reviewed V3-Core source"
+        )
+    if manifest.get("endpoint") != V3_CORE_MARKET_DATA_REST_ENDPOINT:
+        raise IntegrityAuditError(
+            "source manifest endpoint is not the reviewed market-data-only REST endpoint"
+        )
+    if manifest.get("evidence_class") != "forward_pit_admission":
+        raise IntegrityAuditError("source manifest evidence class is not forward PIT admission")
+    if manifest.get("interval") != "5m":
+        raise IntegrityAuditError("source manifest interval is not the frozen 5m cadence")
+    if tuple(manifest.get("symbols", ())) != V3_CORE_SYMBOLS:
+        raise IntegrityAuditError(
+            "source manifest symbols do not match the frozen V3-Core universe"
+        )
+    if manifest.get("market_data_only") is not True:
+        raise IntegrityAuditError("source manifest does not attest a market-data-only surface")
+    if manifest.get("credentials_loaded") is not False:
+        raise IntegrityAuditError("source manifest does not attest credential-free operation")
+    if manifest.get("order_writes_attempted") is not False:
+        raise IntegrityAuditError("source manifest does not attest zero order writes")
+    try:
+        source_snapshot_hash = _digest(
+            str(manifest["source_snapshot_hash"]), "source_snapshot_hash"
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise IntegrityAuditError("source manifest snapshot identity is invalid") from exc
+    expected_source_id = manifest.get("source_id", V3_CORE_MARKET_DATA_PROVIDER)
+    for bar in normalized_bars:
+        if (
+            bar.source_id != expected_source_id
+            or bar.provider_identity != V3_CORE_MARKET_DATA_PROVIDER
+            or bar.endpoint != V3_CORE_MARKET_DATA_REST_ENDPOINT
+            or bar.source_snapshot_hash != source_snapshot_hash
+            or bar.provenance.source_snapshot_hash != source_snapshot_hash
+            or bar.evidence_class != "forward_pit_admission"
+        ):
+            raise IntegrityAuditError(
+                "normalized bar source identity does not match the reviewed source manifest"
+            )
 
 
 def _load_prediction_entries(paths: Sequence[Path]) -> tuple[ForwardPredictionLedgerEntry, ...]:
@@ -1363,12 +1443,18 @@ def audit_forward_root(
     _validate_terminal_status(
         source_status_path,
         terminal_evidence_eligible=terminal_evidence_eligible,
+        auditor_repository_commit=auditor_repository_commit,
     )
     raw_records = _load_raw_records(raw_responses_path)
     raw_observations = tuple(
         observation for record in raw_records for observation in _decode_raw_observations(record)
     )
     normalized_bars = _load_normalized_bars(normalized_bars_path)
+    _validate_source_manifest_contract(
+        source_manifest_path,
+        normalized_bars,
+        terminal_evidence_eligible=terminal_evidence_eligible,
+    )
     source_health_records = (
         _load_source_health_records(source_health_path) if source_health_path is not None else ()
     )
