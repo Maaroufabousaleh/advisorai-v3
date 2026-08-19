@@ -785,6 +785,20 @@ def test_report_fingerprint_rejects_content_mutation(tmp_path: Path) -> None:
         IntegrityAuditReport.model_validate(payload)
 
 
+def test_missing_terminal_eligibility_defaults_to_diagnostic(tmp_path: Path) -> None:
+    report, _raw_path, _normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    payload = report.model_dump(mode="json")
+    payload.pop("terminal_evidence_eligible")
+    restored = IntegrityAuditReport.model_validate(payload)
+    assert restored.terminal_evidence_eligible is False
+    assert restored.admission_evidence_ready is False
+    assert restored.admission_minimum_met is False
+
+
 def test_legacy_admission_alias_also_requires_case_content_validation(tmp_path: Path) -> None:
     report, _raw_path, _normalized_path = _single_bar_audit(
         tmp_path,

@@ -334,7 +334,7 @@ class IntegrityAuditReport(BaseModel):
     schema_version: str = INTEGRITY_AUDIT_SCHEMA
     generated_at: datetime
     terminal_observed_at: datetime
-    terminal_evidence_eligible: bool = True
+    terminal_evidence_eligible: bool = False
     stability_rule_version: str = STABILITY_RULE_VERSION
     auditor_module_sha256: str = AUDITOR_MODULE_SHA256
     auditor_cli_sha256: str | None = None
@@ -455,7 +455,7 @@ class IntegrityExclusionOverlay(BaseModel):
 
     schema_version: str = INTEGRITY_OVERLAY_SCHEMA
     generated_at: datetime
-    terminal_evidence_eligible: bool = True
+    terminal_evidence_eligible: bool = False
     audit_report_sha256: str
     audit_fingerprint: str
     contaminated_case_ids: tuple[str, ...]
