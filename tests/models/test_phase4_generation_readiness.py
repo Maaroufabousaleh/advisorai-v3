@@ -142,6 +142,14 @@ def test_readiness_refuses_impossible_candidate_coverage() -> None:
     assert "ETHUSDT_cannot_reach_64_candidate_predictions" in report.reasons
 
 
+def test_readiness_refuses_candidate_count_that_exceeds_source_cases() -> None:
+    report = evaluate_generation_readiness(
+        _coverage(btc_predictions=1, eth_predictions=0, btc_remaining=64, eth_remaining=64)
+    )
+    assert report.status == "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION"
+    assert "BTCUSDT_candidate_count_exceeds_source_count" in report.reasons
+
+
 def test_readiness_requires_healthy_candidate_root_even_with_enough_cutoffs() -> None:
     report = evaluate_generation_readiness(_coverage(healthy=False))
     assert report.status == "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION"
