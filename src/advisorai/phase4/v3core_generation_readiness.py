@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.phase4.v3core_cadence import (
     V3_CORE_BASELINES,
@@ -167,6 +167,21 @@ class GenerationPreflightReport(BaseModel):
     refusal_reasons: tuple[str, ...] = ()
     report_hash: str
 
+    @field_validator("report_hash")
+    @classmethod
+    def valid_report_hash(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not _is_sha256(normalized):
+            raise ValueError("report_hash must be a SHA-256 digest")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_report_fingerprint(self) -> GenerationPreflightReport:
+        payload = self.model_dump(mode="json", by_alias=True, exclude={"report_hash"})
+        if _canonical_hash(payload) != self.report_hash:
+            raise ValueError("preflight report hash is inconsistent with its content")
+        return self
+
 
 class GenerationCoverageInput(BaseModel):
     """Read-only counts used to detect an impossible candidate generation."""
@@ -226,6 +241,21 @@ class GenerationReadinessReport(BaseModel):
     candidate_root_healthy: bool
     reasons: tuple[str, ...]
     report_hash: str
+
+    @field_validator("report_hash")
+    @classmethod
+    def valid_report_hash(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not _is_sha256(normalized):
+            raise ValueError("report_hash must be a SHA-256 digest")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_report_fingerprint(self) -> GenerationReadinessReport:
+        payload = self.model_dump(mode="json", by_alias=True, exclude={"report_hash"})
+        if _canonical_hash(payload) != self.report_hash:
+            raise ValueError("readiness report hash is inconsistent with its content")
+        return self
 
 
 def _checks(spec: GenerationPreflightSpec) -> tuple[PreflightCheck, ...]:
