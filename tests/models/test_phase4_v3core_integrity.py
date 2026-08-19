@@ -565,6 +565,34 @@ def test_unsealed_diagnostic_cannot_be_admission_evidence(tmp_path: Path) -> Non
     assert report.admission_minimum_met is False
 
 
+def test_terminal_audit_requires_explicit_sealed_status(tmp_path: Path) -> None:
+    _report, raw_path, normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    status_path = tmp_path / "status.json"
+    status_path.write_text(json.dumps({"state": "running"}), encoding="utf-8")
+
+    with pytest.raises(IntegrityAuditError, match="sealed source status"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
+
+    diagnostic = audit_forward_root(
+        raw_path,
+        normalized_path,
+        source_status_path=status_path,
+        terminal_evidence_eligible=False,
+        terminal_observed_at=START + timedelta(minutes=10),
+    )
+    assert diagnostic.terminal_evidence_eligible is False
+
+
 def test_allow_unsealed_cli_marks_report_diagnostic_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -624,6 +652,7 @@ def test_legacy_admission_alias_also_requires_case_content_validation(tmp_path: 
         canonical_row=_row(),
     )
     payload = report.model_dump(mode="json")
+    payload["terminal_evidence_eligible"] = True
     payload["completed_case_content_valid"] = False
     payload["admission_evidence_ready"] = False
     payload["admission_minimum_met"] = True

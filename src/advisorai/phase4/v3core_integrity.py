@@ -45,6 +45,7 @@ from advisorai.phase4.v3core_prediction_ledger import (
 INTEGRITY_AUDIT_SCHEMA = "advisorai.phase4.v3-core.integrity-audit.v7"
 INTEGRITY_OVERLAY_SCHEMA = "advisorai.phase4.v3-core.integrity-exclusion-overlay.v7"
 STABILITY_RULE_VERSION = "closed_terminal_repeat_v1"
+TERMINAL_SOURCE_STATES = frozenset({"target_reached", "deadline_reached", "stopped_with_evidence"})
 DEFAULT_MINIMUM_TERMINAL_CLOSED_OBSERVATIONS = 2
 DEFAULT_MINIMUM_CASES_PER_SYMBOL = 64
 AUDITOR_MODULE_SHA256 = sha256(Path(__file__).read_bytes()).hexdigest()
@@ -681,6 +682,21 @@ def _load_source_snapshot_hash(path: Path | None) -> str | None:
         return _digest(value, "source_snapshot_hash")
     except ValueError as exc:
         raise IntegrityAuditError("source manifest snapshot identity is invalid") from exc
+
+
+def _validate_terminal_status(path: Path | None, *, terminal_evidence_eligible: bool) -> None:
+    if not terminal_evidence_eligible:
+        return
+    if path is None:
+        raise IntegrityAuditError(
+            "terminal evidence eligibility requires an explicit source status path"
+        )
+    try:
+        status = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, json.JSONDecodeError) as exc:
+        raise IntegrityAuditError("source status is unreadable") from exc
+    if not isinstance(status, dict) or status.get("state") not in TERMINAL_SOURCE_STATES:
+        raise IntegrityAuditError("terminal evidence requires a sealed source status")
 
 
 def _load_prediction_entries(paths: Sequence[Path]) -> tuple[ForwardPredictionLedgerEntry, ...]:
@@ -1338,12 +1354,16 @@ def audit_forward_root(
     source_status_path: Path | None = None,
     source_health_path: Path | None = None,
     source_config_path: Path | None = None,
-    terminal_evidence_eligible: bool = True,
+    terminal_evidence_eligible: bool = False,
 ) -> IntegrityAuditReport:
     """Audit immutable inputs without writing to any input path."""
 
     if minimum_terminal_closed_observations < 2:
         raise ValueError("terminal stability requires at least two closed observations")
+    _validate_terminal_status(
+        source_status_path,
+        terminal_evidence_eligible=terminal_evidence_eligible,
+    )
     raw_records = _load_raw_records(raw_responses_path)
     raw_observations = tuple(
         observation for record in raw_records for observation in _decode_raw_observations(record)

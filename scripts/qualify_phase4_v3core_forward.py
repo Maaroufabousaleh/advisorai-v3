@@ -257,6 +257,7 @@ def run(
             source_status_path=run / "status.json",
             source_health_path=run / "source-health.jsonl",
             source_config_path=run / "config.json",
+            terminal_evidence_eligible=True,
         )
         integrity_report_path = integrity_dir / "integrity-audit.json"
         integrity_report_sha256 = _write_new(
