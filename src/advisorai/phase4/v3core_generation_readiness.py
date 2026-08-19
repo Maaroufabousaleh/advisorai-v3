@@ -219,6 +219,7 @@ class GenerationReadinessReport(BaseModel):
     candidate_model: str
     expected_predictions_total: int
     candidate_prediction_counts: dict[str, int]
+    source_completed_case_counts: dict[str, int]
     source_target_counts: dict[str, int]
     remaining_future_cutoffs: dict[str, int]
     complete_coverage_possible: bool
@@ -271,8 +272,19 @@ def _checks(spec: GenerationPreflightSpec) -> tuple[PreflightCheck, ...]:
         ),
         PreflightCheck(
             name="source_deadline",
-            passed=source.target_end_at > source.first_eligible_cutoff,
+            passed=(
+                source.cases_per_symbol_target == EXPECTED_CASES_PER_SYMBOL
+                and source.target_end_at > source.first_eligible_cutoff
+            ),
             reason="the immutable target end must be after the first eligible cutoff",
+        ),
+        PreflightCheck(
+            name="prospective_cutoff_binding",
+            passed=(
+                source.first_eligible_cutoff == prospective.first_eligible_cutoff
+                and source.target_end_at > prospective.candidate_started_at
+            ),
+            reason="source and candidate must bind the same first cutoff and target interval",
         ),
         PreflightCheck(
             name="candidate_non_baseline",
@@ -383,17 +395,35 @@ def evaluate_generation_readiness(
 
     counts = coverage.candidate_predictions
     target = coverage.cases_per_symbol_target
-    possible_by_symbol = {
+    candidate_possible_by_symbol = {
         symbol: counts[symbol] + coverage.remaining_future_cutoffs[symbol] >= target
         for symbol in V3_CORE_SYMBOLS
     }
-    complete = all(possible_by_symbol.values()) and coverage.candidate_root_healthy
+    source_possible_by_symbol = {
+        symbol: coverage.source_completed_cases[symbol] + coverage.remaining_future_cutoffs[symbol]
+        >= target
+        for symbol in V3_CORE_SYMBOLS
+    }
+    candidate_within_source = {
+        symbol: counts[symbol] <= coverage.source_completed_cases[symbol]
+        for symbol in V3_CORE_SYMBOLS
+    }
+    complete = (
+        all(candidate_possible_by_symbol.values())
+        and all(source_possible_by_symbol.values())
+        and all(candidate_within_source.values())
+        and coverage.candidate_root_healthy
+    )
     reasons: list[str] = []
     if not coverage.candidate_root_healthy:
         reasons.append("candidate_root_unhealthy")
     for symbol in V3_CORE_SYMBOLS:
-        if not possible_by_symbol[symbol]:
+        if not source_possible_by_symbol[symbol]:
+            reasons.append(f"{symbol}_source_cannot_reach_{target}_cases")
+        if not candidate_possible_by_symbol[symbol]:
             reasons.append(f"{symbol}_cannot_reach_{target}_candidate_predictions")
+        if not candidate_within_source[symbol]:
+            reasons.append(f"{symbol}_candidate_count_exceeds_source_count")
     status: Literal[
         "CANDIDATE_COVERAGE_POSSIBLE",
         "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION",
@@ -405,6 +435,7 @@ def evaluate_generation_readiness(
         "candidate_model": coverage.candidate_model,
         "expected_predictions_total": target * len(V3_CORE_SYMBOLS),
         "candidate_prediction_counts": counts,
+        "source_completed_case_counts": coverage.source_completed_cases,
         "source_target_counts": {
             symbol: coverage.cases_per_symbol_target for symbol in V3_CORE_SYMBOLS
         },
