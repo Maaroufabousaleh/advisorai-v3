@@ -23,6 +23,7 @@ from advisorai.phase4.v3core_integrity import (
 )
 
 SCHEMA = "advisorai.phase4.v3-core.revision-timing-analysis.v1"
+TERMINAL_RUN_STATES = frozenset({"target_reached", "deadline_reached", "stopped_with_evidence"})
 
 
 def _timestamp(value: str) -> datetime:
@@ -73,6 +74,7 @@ def analyze(
     raw_responses_path: Path,
     terminal_observed_at: datetime,
     source_manifest_path: Path | None = None,
+    terminal_evidence_eligible: bool = True,
 ) -> dict[str, object]:
     records = _load_raw_records(raw_responses_path)
     observations = tuple(
@@ -189,6 +191,7 @@ def analyze(
         "summary_by_symbol": summary,
         "intervals": intervals,
         "selection_status": "STATISTICS_ONLY_NO_GRACE_SELECTED",
+        "terminal_evidence_eligible": terminal_evidence_eligible,
         "network_calls": 0,
         "credentials_loaded": False,
         "order_writes_attempted": False,
@@ -197,6 +200,21 @@ def analyze(
         _canonical({key: value for key, value in payload.items() if key != "analysis_fingerprint"})
     ).hexdigest()
     return payload
+
+
+def _validate_run_status(status: object, *, allow_unsealed: bool) -> bool:
+    if not isinstance(status, dict):
+        raise ValueError("forward status must be an object")
+    state = status.get("state")
+    if state == "running":
+        if allow_unsealed:
+            return False
+        raise ValueError("refusing analysis of a running root; seal it first")
+    if state not in TERMINAL_RUN_STATES:
+        raise ValueError(f"forward root has no supported terminal state: {state!r}")
+    if state == "target_reached" and status.get("minimum_reached") is not True:
+        raise ValueError("target-reached root does not attest its frozen minimum")
+    return True
 
 
 def main() -> int:
@@ -213,21 +231,29 @@ def main() -> int:
     if args.run_directory is not None:
         run = args.run_directory.resolve()
         status_path = run / "status.json"
+        terminal_evidence_eligible = True
         if status_path.is_file():
             status = json.loads(status_path.read_text(encoding="utf-8"))
-            if status.get("state") == "running" and not args.allow_unsealed:
-                raise SystemExit("refusing analysis of a running root; seal it first")
+            try:
+                terminal_evidence_eligible = _validate_run_status(
+                    status,
+                    allow_unsealed=args.allow_unsealed,
+                )
+            except ValueError as exc:
+                raise SystemExit(str(exc)) from exc
         raw_path = run / "raw-responses.jsonl"
         manifest_path = args.source_manifest or run / "manifest.json"
     else:
         raw_path = args.raw_responses.resolve()
         manifest_path = args.source_manifest.resolve() if args.source_manifest else None
+        terminal_evidence_eligible = True
 
     try:
         payload = analyze(
             raw_responses_path=raw_path,
             terminal_observed_at=args.terminal_observed_at,
             source_manifest_path=manifest_path if manifest_path.is_file() else None,
+            terminal_evidence_eligible=terminal_evidence_eligible,
         )
         artifact_sha256 = _write_new(args.output.resolve(), payload)
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
