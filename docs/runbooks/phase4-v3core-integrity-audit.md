@@ -254,7 +254,11 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
 The artifact reports first post-close, first/last revision, first repeated
 version, and second terminal-confirmation lags by symbol and interval. It is
 marked `STATISTICS_ONLY_NO_GRACE_SELECTED`; it cannot alter the current
-collector contract or make a finality/admission decision.
+collector contract or make a finality/admission decision. The CLI requires a
+supported sealed collector state and, for `target_reached`, an explicit frozen
+minimum attestation. `--allow-unsealed` is diagnostic-only and records
+`terminal_evidence_eligible=false`; unsupported or incomplete statuses are
+refused.
 
 Every report binds the auditor module hash, optional CLI hash and repository
 commit, input hashes, terminal boundary, frozen rule, and a deterministic
