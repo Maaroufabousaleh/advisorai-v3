@@ -134,6 +134,21 @@ def test_regeneration_refuses_unadmitted_or_historical_cases() -> None:
         )
 
 
+def test_regeneration_refuses_mixed_source_identity() -> None:
+    with pytest.raises(ValueError, match="source identity substitution"):
+        regenerate_causal_baselines(
+            (
+                _case(),
+                _case().model_copy(
+                    update={"case_id": "different-case", "source_snapshot_hash": "b" * 64}
+                ),
+            ),
+            repository_root=Path.cwd(),
+            repository_commit=REPOSITORY_COMMIT,
+            materialized_at=MATERIALIZED_AT,
+        )
+
+
 def test_regeneration_requires_a_git_commit_identity() -> None:
     with pytest.raises(ValueError, match="repository_commit"):
         regenerate_causal_baselines(

@@ -264,6 +264,24 @@ def regenerate_causal_baselines(
             raise ValueError("causal regeneration requires admitted forward PIT cases")
         if timestamp < case.cutoff:
             raise ValueError("materialization timestamp must be after every case cutoff")
+    first = ordered_cases[0]
+    source_identity = (
+        first.source_id,
+        first.provider_identity,
+        first.endpoint,
+        first.source_snapshot_hash,
+    )
+    if any(
+        (
+            case.source_id,
+            case.provider_identity,
+            case.endpoint,
+            case.source_snapshot_hash,
+        )
+        != source_identity
+        for case in ordered_cases
+    ):
+        raise ValueError("causal baseline cases contain source identity substitution")
 
     predictions: list[CausalBaselinePrediction] = []
     for case in ordered_cases:
