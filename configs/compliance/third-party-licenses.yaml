@@ -1,0 +1,1281 @@
+schema_version: 1
+inventory_kind: advisorai_v3_third_party_license_inventory
+
+audit:
+  repository: Maaroufabousaleh/advisorai-v3
+  repository_commit: 8f8b7cb89c98191b0d0a06498aea5d2438018ccc
+  audited_at: '2026-08-21'
+  method: authoritative-source-first; pinned package/model metadata; repository and history scan
+  source_lock_files:
+    - uv.lock (211 locked Python package records; sha256: 2baec5b4342fa9cef1c199ceb958621b320e8107a70abae26237d173b83ce0ac)
+    - dashboard/package-lock.json (122 locked npm package records; sha256: e4e03baed9034f13aa26c1ca3c2e2f9a39c7e1bf845d2aecfcdd3fc936c3e93c)
+  important_limitations:
+    - Package-lock and uv.lock do not provide a complete authoritative license field for every locked record.
+    - Source-only publication does not bundle package-managed dependencies, model weights, or provider data.
+    - Model-card license statements do not resolve base-model, tokenizer, training-data, or gated-term restrictions.
+    - This inventory is engineering evidence, not a legal opinion.
+
+components:
+  # Direct core runtime dependencies from pyproject.toml and uv.lock.
+  - name: pydantic
+    version: 2.13.4
+    category: DEPENDENCY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/pydantic/pydantic
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: false
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: source-only dependency; upstream notices retained by package distribution
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [source_archive, wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: pyarrow
+    version: 25.0.0
+    category: DEPENDENCY
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0, with upstream third-party notices
+    source_url: https://github.com/apache/arrow
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: false
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: Apache Arrow repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: source-only dependency; package-level notices are not vendored here
+    action_required: ship Apache and bundled third-party notices if included
+    distribution_profiles: [source_archive, wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: duckdb
+    version: 1.5.5
+    category: DEPENDENCY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/duckdb/duckdb
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: false
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: DuckDB repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: source-only dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [source_archive, wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: polars
+    version: 1.43.2
+    category: DEPENDENCY
+    license_spdx: MIT
+    license_name: MIT License, with upstream notices for included portions
+    source_url: https://github.com/pola-rs/polars
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: false
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license (including its included-portion notice) and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: source-only dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [source_archive, wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: pyyaml
+    version: 6.0.3
+    category: DEPENDENCY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/yaml/pyyaml
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: false
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: PyYAML repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: source-only dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [source_archive, wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: psutil
+    version: 7.2.2
+    category: DEPENDENCY
+    license_spdx: BSD-3-Clause
+    license_name: BSD 3-Clause License
+    source_url: https://github.com/giampaolo/psutil
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: false
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: psutil repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: source-only dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [source_archive, wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  # Optional Python runtime groups.
+  - name: pydantic-ai
+    version: 2.24.0
+    category: OPTIONAL_PLUGIN
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/pydantic/pydantic-ai
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional dependency; not installed by core package
+    action_required: preserve upstream license/notice if selected
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: pydantic-graph
+    version: 2.24.0
+    category: OPTIONAL_PLUGIN
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/pydantic/pydantic-ai
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: pydantic-ai repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional dependency; same upstream project as pydantic-ai
+    action_required: preserve upstream license/notice if selected
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: prefect
+    version: 3.8.1
+    category: OPTIONAL_PLUGIN
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0
+    source_url: https://github.com/PrefectHQ/prefect
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: Prefect repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional dependency
+    action_required: preserve upstream license/notice if selected
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: sf-hamilton
+    version: 1.90.0
+    category: OPTIONAL_PLUGIN
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0
+    source_url: https://github.com/DAGWorks-Inc/hamilton
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: Hamilton repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional dependency
+    action_required: preserve upstream license/notice if selected
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: litellm
+    version: 1.95.0
+    category: OPTIONAL_PLUGIN
+    license_spdx: MIT
+    license_name: MIT License for the audited open-source package scope
+    source_url: https://github.com/BerriAI/litellm
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: YELLOW
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: LiteLLM repository LICENSE and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional open-source package scope; enterprise directory has separate terms
+    action_required: verify selected package contents and exclude enterprise material unless separately licensed
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: nautilus-trader
+    version: 1.231.0
+    category: OPTIONAL_PLUGIN
+    license_spdx: LGPL-3.0-or-later
+    license_name: GNU Lesser General Public License v3.0 or later
+    source_url: https://github.com/nautechsystems/nautilus_trader
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: YELLOW
+    notice_required: true
+    source_obligation: conditional
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: NautilusTrader repository LICENSE and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional ordinary dependency; no Nautilus source vendored or modified
+    action_required: if bundled, provide LGPL notices and satisfy replacement/relinking and modified-source obligations
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: argon2-cffi
+    version: 25.1.0
+    category: OPTIONAL_PLUGIN
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/hynek/argon2_cffi
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional dashboard dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: fastapi
+    version: 0.141.1
+    category: OPTIONAL_PLUGIN
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/fastapi/fastapi
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: FastAPI repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional dashboard dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: uvicorn
+    version: 0.52.1
+    category: OPTIONAL_PLUGIN
+    license_spdx: BSD-3-Clause
+    license_name: BSD 3-Clause License
+    source_url: https://github.com/encode/uvicorn
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository/package metadata and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional dashboard dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: websockets
+    version: 16.1.1
+    category: OPTIONAL_PLUGIN
+    license_spdx: BSD-3-Clause
+    license_name: BSD 3-Clause License
+    source_url: https://github.com/python-websockets/websockets
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional transition dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: lightgbm
+    version: 4.7.0
+    category: OPTIONAL_PLUGIN
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/microsoft/LightGBM
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: LightGBM repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional model/baseline dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: transformers
+    version: 5.5.4
+    category: OPTIONAL_PLUGIN
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0
+    source_url: https://github.com/huggingface/transformers
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: Transformers repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional model runtime dependency
+    action_required: preserve upstream license/notice if bundled
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  # Development and build dependencies are not part of the core runtime
+  # distribution, but are recorded so a release pipeline does not silently
+  # bundle them.
+  - name: pytest
+    version: 9.1.1
+    category: DEVELOPMENT_ONLY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/pytest-dev/pytest
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: development-only dependency
+    action_required: exclude from production bundle or preserve notice if intentionally bundled
+    distribution_profiles: [source_archive]
+    notes: see current_compliance_state and action_required
+
+  - name: pytest-cov
+    version: 7.1.0
+    category: DEVELOPMENT_ONLY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/pytest-dev/pytest-cov
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: development-only dependency
+    action_required: exclude from production bundle or preserve notice if intentionally bundled
+    distribution_profiles: [source_archive]
+    notes: see current_compliance_state and action_required
+
+  - name: ruff
+    version: 0.16.1
+    category: DEVELOPMENT_ONLY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/astral-sh/ruff
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: upstream repository license and pinned uv.lock record
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: development-only dependency
+    action_required: exclude from production bundle or preserve notice if intentionally bundled
+    distribution_profiles: [source_archive]
+    notes: see current_compliance_state and action_required
+
+  - name: hatchling
+    version: '>=1.27,<2 (build requirement)'
+    category: DEVELOPMENT_ONLY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/pypa/hatch
+    incorporation_mode: BUILD_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: false
+    optional: false
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: Hatch project license and pyproject build-system declaration
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: build-only dependency; not intended for runtime bundle
+    action_required: exclude from runtime bundle or preserve notice if included in a build image
+    distribution_profiles: [source_archive, container]
+    notes: see current_compliance_state and action_required
+
+  # Dashboard package-managed dependencies from package-lock.json.
+  - name: dashboard-direct-dependencies
+    version: package-lock pinned versions
+    category: DEPENDENCY
+    license_spdx: mixed
+    license_name: MIT, ISC, and Apache-2.0 by package
+    source_url: https://github.com/Maaroufabousaleh/advisorai-v3/tree/main/dashboard
+    incorporation_mode: PACKAGE_MANAGER_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: dashboard/package.json, dashboard/package-lock.json, and package-level lock metadata
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: dashboard source is tracked; npm dependencies are not vendored
+    action_required: generate package-level notices/SBOM if dashboard dependencies are bundled
+    distribution_profiles: [source_archive, container, executable]
+    notes: see current_compliance_state and action_required
+
+  # Model runtime support code. These are referenced by isolated runtime
+  # manifests and are not part of the core install or tracked as source.
+  - name: pytorch-model-runtime
+    version: pinned per model_runtimes requirements and wheel hash
+    category: MODEL_LIBRARY
+    license_spdx: BSD-3-Clause
+    license_name: BSD 3-Clause License
+    source_url: https://github.com/pytorch/pytorch
+    incorporation_mode: MODEL_RUNTIME_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: pinned model_runtimes requirement files and PyTorch upstream license
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: isolated runtime dependency; no wheel/weights tracked
+    action_required: preserve wheel license and notices if a runtime image is distributed
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: granite-tsfm
+    version: d473fc3d800c400230a3d8f5192fbdc6255a02f5
+    category: MODEL_LIBRARY
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0
+    source_url: https://github.com/ibm-granite/granite-tsfm
+    incorporation_mode: MODEL_RUNTIME_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: pinned model runtime requirements and upstream repository license
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: isolated model runtime source reference; not vendored in AdvisorAI
+    action_required: preserve upstream notices if bundled
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: chronos-runtime-source
+    version: 7dc4435706a4454feb79df44ca9f33631f3027bf
+    category: MODEL_LIBRARY
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0
+    source_url: https://github.com/amazon-science/chronos-forecasting
+    incorporation_mode: MODEL_RUNTIME_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: pinned Chronos runtime source revision and upstream repository license
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: isolated runtime reference; no source vendored
+    action_required: preserve upstream notices if bundled
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: kronos-runtime-source
+    version: 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+    category: MODEL_LIBRARY
+    license_spdx: MIT
+    license_name: MIT License
+    source_url: https://github.com/shiyu-coder/Kronos
+    incorporation_mode: MODEL_RUNTIME_DEPENDENCY
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: pinned Kronos runtime source revision and upstream repository license
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: isolated research runtime reference; no source vendored
+    action_required: preserve upstream notices if bundled
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  # Exact model/checkpoint identities referenced by executable qualification
+  # code and manifests. The checkpoint files are not tracked or bundled.
+  - name: ibm-granite-ttm-r2
+    version: d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f
+    category: MODEL_CHECKPOINT
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0 (model card)
+    source_url: https://huggingface.co/ibm-granite/granite-timeseries-ttm-r2/tree/d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: exact Hugging Face model-card/revision metadata and repository registry
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: qualification evidence references checkpoint; weight files absent from git
+    action_required: separately audit IBM and base-component terms before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: ibm-granite-ttm-r3
+    version: ea17cfd2e3edcaea21eb8dcecd18bf88971482fa
+    category: MODEL_CHECKPOINT
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0 (model card)
+    source_url: https://huggingface.co/ibm-granite/granite-timeseries-ttm-r3/tree/ea17cfd2e3edcaea21eb8dcecd18bf88971482fa
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: exact Hugging Face model-card/revision metadata and repository registry
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: research-only reference; weight files absent from git
+    action_required: separately audit IBM and base-component terms before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: ibm-granite-tspulse-r1
+    version: 2e64fcdc2a06d3565dfadaf0065c0ab5055f80f2
+    category: MODEL_CHECKPOINT
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0 (model card)
+    source_url: https://huggingface.co/ibm-granite/granite-timeseries-tspulse-r1/tree/2e64fcdc2a06d3565dfadaf0065c0ab5055f80f2
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: exact Hugging Face model-card/revision metadata and repository registry
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: role-restricted reference; weight files absent from git
+    action_required: separately audit model card and base components before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: autogluon-chronos-2-small
+    version: ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a
+    category: MODEL_CHECKPOINT
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0 (model card)
+    source_url: https://huggingface.co/autogluon/chronos-2-small/tree/ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: GREEN
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: exact Hugging Face model-card/revision metadata and Chronos source license
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: runtime reference; weight files absent from git
+    action_required: separately audit AutoGluon/model terms before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: neoquasar-kronos-mini
+    version: f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+    category: MODEL_CHECKPOINT
+    license_spdx: MIT
+    license_name: MIT License (model/source card)
+    source_url: https://huggingface.co/NeoQuasar/Kronos-mini/tree/f4e68697d9d5aed55cef5c96aabc3376bcad9f81
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: YELLOW
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: unknown
+    evidence_source: exact model-card/revision metadata and Kronos source repository
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: research reference; tokenizer and weights absent from git
+    action_required: audit tokenizer/checkpoint terms and commercial permission before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: neoquasar-kronos-small
+    version: 901c26c1332695a2a8f243eb2f37243a37bea320
+    category: MODEL_CHECKPOINT
+    license_spdx: MIT
+    license_name: MIT License (model/source card)
+    source_url: https://huggingface.co/NeoQuasar/Kronos-small/tree/901c26c1332695a2a8f243eb2f37243a37bea320
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: YELLOW
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: unknown
+    evidence_source: exact model-card/revision metadata and Kronos source repository
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: research reference; tokenizer and weights absent from git
+    action_required: audit tokenizer/checkpoint terms and commercial permission before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: tabpfn-ts
+    version: a756ae3fb3af82c903c39e1cd71864ff5252bc4d
+    category: MODEL_CHECKPOINT
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0 declaration with gated access
+    source_url: https://huggingface.co/Prior-Labs/tabpfn-time-series/tree/a756ae3fb3af82c903c39e1cd71864ff5252bc4d
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: repository model registry and gated model-card metadata
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: not acquired; quarantined pending acceptance and terms review
+    action_required: do not download, use, or bundle until gated terms are accepted and reviewed
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: modernfinbert
+    version: 6c6de8332ea7f6824c0f8917358dce1e669c1710
+    category: MODEL_CHECKPOINT
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0 (model card)
+    source_url: https://huggingface.co/tabularisai/ModernFinBERT/tree/6c6de8332ea7f6824c0f8917358dce1e669c1710
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: exact model-card/revision metadata
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: qualified reference; weights absent; complete training-data rights not established
+    action_required: resolve training-data provenance and commercial weight terms before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: finbert-minilm
+    version: fdbfec0cd09610bd5af26da8998507fe7838e838
+    category: MODEL_CHECKPOINT
+    license_spdx: MIT
+    license_name: MIT (model card)
+    source_url: https://huggingface.co/9mark9/finbert-minilm-sentiment/tree/fdbfec0cd09610bd5af26da8998507fe7838e838
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: unknown
+    commercial_restricted: true
+    evidence_source: exact model-card/revision metadata; base MiniLM card; referenced Financial PhraseBank terms
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: qualified reference; weights absent; underlying training-data terms require review
+    action_required: resolve Financial PhraseBank/commercial model-use rights before bundling or commercial use
+    distribution_profiles: [container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: finance-deberta-v3
+    version: f2312de96d6cfe6251da37afb0e99b8e29885bdd
+    category: MODEL_CHECKPOINT
+    license_spdx: Apache-2.0
+    license_name: Apache License 2.0 (model card)
+    source_url: https://huggingface.co/anabdd/finsentiment-deberta-v3-base/tree/f2312de96d6cfe6251da37afb0e99b8e29885bdd
+    incorporation_mode: REMOTE_CHECKPOINT_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: unknown
+    commercial_restricted: true
+    evidence_source: exact model-card/revision metadata; referenced dataset cards
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: qualified reference; weights absent; model-card training-data rights unresolved
+    action_required: resolve Financial PhraseBank and nickmuchi dataset provenance before bundling or commercial use
+    distribution_profiles: [container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  # Data and service terms are deliberately not collapsed into software
+  # licenses.
+  - name: financial-phrasebank
+    version: model-card referenced dataset
+    category: DATA_SOURCE
+    license_spdx: CC-BY-NC-SA-3.0
+    license_name: Creative Commons Attribution-NonCommercial-ShareAlike 3.0
+    source_url: https://huggingface.co/datasets/takala/financial_phrasebank
+    incorporation_mode: MODEL_TRAINING_DATA_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: false
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: share-alike for covered adaptations
+    redistribution_restricted: true
+    commercial_restricted: true
+    evidence_source: official dataset card and model-card training references
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: no rows tracked; terms are non-commercial/share-alike and require separate review
+    action_required: do not redistribute rows or bundle derived weights for commercial use without rights analysis
+    distribution_profiles: [container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: twitter-financial-news-sentiment
+    version: model-card referenced dataset
+    category: DATA_SOURCE
+    license_spdx: MIT
+    license_name: MIT (dataset card)
+    source_url: https://huggingface.co/datasets/zeroshot/twitter-financial-news-sentiment
+    incorporation_mode: MODEL_TRAINING_DATA_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: false
+    optional: true
+    risk_class: YELLOW
+    notice_required: true
+    source_obligation: false
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: official dataset card
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: no rows tracked; social-content/data terms remain separate from dataset-card license
+    action_required: review source-content and service terms before redistributing data or derived artifacts
+    distribution_profiles: [container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: nickmuchi-financial-classification
+    version: model-card referenced dataset
+    category: DATA_SOURCE
+    license_spdx: null
+    license_name: UNKNOWN / not established from authoritative card in this audit
+    source_url: https://huggingface.co/datasets/nickmuchi/financial-classification
+    incorporation_mode: MODEL_TRAINING_DATA_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: false
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: unknown
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: Finance DeBERTa model-card reference; dataset license not established
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: unresolved provenance; no rows tracked
+    action_required: resolve license and permission before commercial model-weight distribution
+    distribution_profiles: [container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: provider-market-news-and-filings
+    version: provider terms vary by source and retrieval date
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / service and data terms
+    source_url: https://data-api.binance.vision/api/v3/klines
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: AdvisorAI provider configurations and official provider endpoints/terms
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: no raw provider data tracked in source repository
+    action_required: review each provider's current terms before publishing cached/raw/derived data
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: binance-public-market-data
+    version: reviewed endpoint contract in V3-Core configuration
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / provider data terms
+    source_url: https://data-api.binance.vision/api/v3/klines
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: false
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: Phase-4 source configuration and official public market-data endpoint
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: credential-free source acquisition; no raw responses tracked
+    action_required: review Binance data/API terms before redistributing market data or caches
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: binance-spot-testnet
+    version: selected paper venue contract
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / provider testnet terms
+    source_url: https://testnet.binance.vision
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: Phase-2 venue runbook and selected venue configuration
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: paper/testnet service reference; no credentials or testnet responses tracked here
+    action_required: review current venue terms before redistributing responses or building a service bundle
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: coinbase-exchange-sandbox
+    version: provider-specific sandbox contract
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / provider sandbox terms
+    source_url: https://api-public.sandbox.exchange.coinbase.com
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: Coinbase sandbox runbook and provider documentation link
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: preserved optional provider path; no provider responses tracked
+    action_required: review Coinbase data/API terms before redistributing responses or caches
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: deribit-public-context
+    version: configured public context adapter
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / provider data terms
+    source_url: https://www.deribit.com/api/v2/public/get_index_price
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: V3-Core source configuration and public-context adapter
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: context-only source; no raw provider data tracked
+    action_required: review Deribit current data/API terms before redistribution
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: gdelt
+    version: configured public news/context source
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / provider data terms
+    source_url: https://www.gdeltproject.org/
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: V3-Core source configuration and official GDELT site
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: optional context source; availability/rate limits are separate from licensing
+    action_required: review GDELT source/data terms before publishing cached news or derived data
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: sec-official-rss
+    version: configured official filings/news feed
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / government feed and data terms
+    source_url: https://www.sec.gov/edgar/sec-api-documentation
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: configured SEC/RSS source and SEC official API documentation
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: no SEC response rows tracked; feed-specific terms not collapsed into software license
+    action_required: review source, rate, attribution, and redistribution terms before publishing cached filings
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: fred-alfred-macro-data
+    version: configured macro source family
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / provider data terms
+    source_url: https://fred.stlouisfed.org/
+    incorporation_mode: REMOTE_API
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: provider-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: configured FRED/ALFRED source family and official site
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: equity/macro scope is not current V3-Core admission evidence; no rows tracked
+    action_required: review series-specific source and redistribution terms before publishing macro data
+    distribution_profiles: [source_archive, wheel, container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  - name: huggingface-hub-model-hosting
+    version: pinned model revisions vary by checkpoint
+    category: API_SERVICE
+    license_spdx: null
+    license_name: NOT A SOFTWARE LICENSE / hosting, model-card, and gated terms
+    source_url: https://huggingface.co/docs/hub/repositories-licenses
+    incorporation_mode: REMOTE_MODEL_HOST
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: true
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: model-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: exact model repository cards/revisions and Hugging Face license guidance
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: weights are external/cache-only; no model files tracked
+    action_required: audit each checkpoint, tokenizer, gated term, and base model before bundling
+    distribution_profiles: [container, executable, commercial_service]
+    notes: see current_compliance_state and action_required
+
+  # Documentation-only references are not incorporated components.
+  - name: architecture-only-external-tools
+    version: repository references vary
+    category: DOCUMENTATION_REFERENCE
+    license_spdx: mixed_or_not_applicable
+    license_name: not incorporated
+    source_url: https://github.com/mirror29/inalpha
+    incorporation_mode: DOCUMENTATION_REFERENCE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: false
+    optional: true
+    risk_class: GREEN
+    notice_required: false
+    source_obligation: false
+    redistribution_restricted: false
+    commercial_restricted: false
+    evidence_source: repository search; no import, vendored source, or bundled artifact found
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: planned/reference only; includes projects with licenses that would require review if integrated
+    action_required: perform a new audit before incorporation or distribution
+    distribution_profiles: [source-visible]
+    notes: see current_compliance_state and action_required
+
+  # Lockfile closures are represented as auditable aggregates rather than a
+  # false claim that every transitive package has already been individually
+  # verified. This intentionally keeps future bundles fail-closed.
+  - name: python-lock-runtime-closure
+    version: 211 locked package records
+    category: TRANSITIVE_DEPENDENCY
+    license_spdx: null
+    license_name: MIXED / package-level audit required
+    source_url: https://github.com/Maaroufabousaleh/advisorai-v3/blob/main/uv.lock
+    incorporation_mode: PACKAGE_MANAGER_TRANSITIVE_CLOSURE
+    redistributed: false
+    modified: false
+    dynamically_imported: true
+    separate_process: false
+    optional: false
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: package-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: uv.lock sha256 and pinned direct dependency closure
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: not bundled by this repository; individual package licenses required for a binary/container profile
+    action_required: generate a package-level SBOM and notices before bundling
+    distribution_profiles: [wheel, container, executable]
+    notes: see current_compliance_state and action_required
+
+  - name: dashboard-lock-transitive-closure
+    version: 122 locked package records
+    category: TRANSITIVE_DEPENDENCY
+    license_spdx: mixed
+    license_name: MIT, ISC, Apache-2.0, CC-BY-4.0, BSD-3-Clause observed in lock metadata
+    source_url: https://github.com/Maaroufabousaleh/advisorai-v3/blob/main/dashboard/package-lock.json
+    incorporation_mode: PACKAGE_MANAGER_TRANSITIVE_CLOSURE
+    redistributed: false
+    modified: false
+    dynamically_imported: false
+    separate_process: false
+    optional: true
+    risk_class: REVIEW_REQUIRED
+    notice_required: true
+    source_obligation: package-specific
+    redistribution_restricted: unknown
+    commercial_restricted: unknown
+    evidence_source: package-lock sha256 and package-level license metadata
+    evidence_checked_at: '2026-08-21'
+    current_compliance_state: dashboard dependencies not vendored; bundle audit required
+    action_required: generate package-level SBOM and notices before bundling
+    distribution_profiles: [container, executable]
+    notes: see current_compliance_state and action_required

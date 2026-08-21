@@ -1,0 +1,32 @@
+AdvisorAI Proprietary License
+Copyright (c) 2026 Maarouf Abou-Saleh
+All Rights Reserved.
+
+This license applies only to the original AdvisorAI software and source
+material identified as such by the copyright holder (the "AdvisorAI Work").
+
+No permission is granted to copy, modify, distribute, sublicense, publish,
+sell, commercially exploit, or create derivative works of the AdvisorAI Work,
+in whole or in part, without prior written permission from the copyright
+holder. Viewing the repository for evaluation is not a license to exercise any
+of those rights.
+
+This notice does not purport to restrict rights that are necessarily granted by
+the terms of the platform hosting a public repository. In particular, public
+repository visibility and platform functionality may create separate rights
+under the applicable hosting-platform terms. A private repository is the
+appropriate operational control when source access must be restricted.
+
+Third-party software, source code, model checkpoints, datasets, data, and
+other externally licensed material are excluded from the AdvisorAI Work and
+remain governed by their respective licenses, terms, and notices. Nothing in
+this license relicenses, removes, or restricts rights granted by those
+third-party terms. See THIRD_PARTY_NOTICES.md and the compliance inventory for
+the components identified during the repository audit.
+
+THE ADVISORAI WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN
+NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE ADVISORAI WORK OR
+THE USE OR OTHER DEALINGS IN THE ADVISORAI WORK.

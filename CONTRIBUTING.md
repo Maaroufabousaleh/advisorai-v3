@@ -73,4 +73,12 @@ Keep unrelated refactors out of focused changes. Do not represent a passing loca
 
 ## License and governance
 
-This checkout does not currently contain a tracked `LICENSE` file or a published contribution/license policy. Confirm redistribution and contribution terms with the repository maintainer before publishing a derived distribution. Do not invent a license notice in a contribution.
+AdvisorAI's original source is proprietary and All Rights Reserved under [`LICENSE`](LICENSE). Third-party software, models, datasets, and provider data retain their own licenses and terms; do not add a copied or vendored component without recording its provenance in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and the [compliance inventory](configs/compliance/third-party-licenses.yaml).
+
+Before submitting a contribution, contributors must have the right to submit the work and must identify copied, adapted, generated, or externally licensed material. This repository does not currently make a blanket inbound contribution or CLA promise; the maintainer must approve contribution terms before accepting material intended for redistribution. Do not add a license notice that purports to relicense third-party code.
+
+Run the offline compliance check when changing licensing, dependencies, models, data, or distribution metadata:
+
+```bash
+uv run python scripts/check_license_policy.py
+```

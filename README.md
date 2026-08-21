@@ -207,4 +207,6 @@ Before changing a boundary, read [CONTRIBUTING.md](CONTRIBUTING.md), the relevan
 
 ## License
 
-No `LICENSE` file is present in this repository, so this checkout does not document a license or redistribution terms. Add an explicit license before publishing or redistributing the project.
+AdvisorAI's original source code is proprietary and All Rights Reserved. Third-party software, model checkpoints, datasets, and provider data retain their respective licenses and terms. See [`LICENSE`](LICENSE), [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), and the [licensing audit](docs/compliance/license-audit.md).
+
+This is a source-visible proprietary repository, not an open-source license. Public GitHub hosting remains subject to GitHub's platform terms; use a private repository when strict source access is required. A proprietary source license does not by itself clear a future wheel, container, model bundle, cached-data release, or commercial distribution.
