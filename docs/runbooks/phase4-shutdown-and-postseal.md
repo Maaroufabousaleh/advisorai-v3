@@ -40,6 +40,15 @@ The current source root's immutable identities are:
 - Phase-3 gate SHA-256: `4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232`;
 - source snapshot SHA-256: `f41af27a93dfbee5b4c67cff2570cb80de09004133b84e2eb0f0ffd2546b0b9a`.
 
+`target_reached` is a legitimate terminal state for the collector: once both
+64-case minima are reached, it releases its lock and exits before the deadline.
+The source root is therefore collector-immutable now, but the generation is not
+shutdown-safe yet. The protected Chronos worker's loop is bound to its explicit
+`--until` deadline rather than the source case count, and its normal natural
+exit writes `deadline_reached`. Shutdown readiness consequently waits for the
+deadline, terminal sidecar/candidate state, flushed files, and absent or
+non-reused processes.
+
 ## Post-seal processing after the laptop is available again
 
 Do not run these commands while the source status is `running`. Use the
