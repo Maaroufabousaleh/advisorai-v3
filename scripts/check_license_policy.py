@@ -87,6 +87,8 @@ def _validate_component(component: Any, index: int) -> list[str]:
             errors.append(f"{prefix} ({name}): {field} must be boolean")
     if not isinstance(component["redistribution_restricted"], (bool, str)):
         errors.append(f"{prefix} ({name}): redistribution_restricted must be boolean or unknown")
+    if not isinstance(component["commercial_restricted"], (bool, str)):
+        errors.append(f"{prefix} ({name}): commercial_restricted must be boolean or unknown")
     if not isinstance(component["source_url"], str) or not component["source_url"].strip():
         errors.append(f"{prefix} ({name}): source_url is required")
     if (
@@ -103,8 +105,14 @@ def _validate_component(component: Any, index: int) -> list[str]:
             errors.append(
                 f"{prefix} ({name}): redistributed component is {component['risk_class']}"
             )
-        if component["redistribution_restricted"] is True:
-            errors.append(f"{prefix} ({name}): redistribution is explicitly restricted")
+        if component["redistribution_restricted"] is not False:
+            errors.append(
+                f"{prefix} ({name}): redistribution permission is restricted or unresolved"
+            )
+        if component["commercial_restricted"] is not False:
+            errors.append(
+                f"{prefix} ({name}): commercial redistribution permission is restricted or unresolved"
+            )
         if component["notice_required"] and _is_unknown(component.get("action_required")):
             errors.append(f"{prefix} ({name}): required notice has no action_required")
         source_obligation = component["source_obligation"]
