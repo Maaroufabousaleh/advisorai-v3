@@ -13,6 +13,15 @@ from .paper_utility import (
     build_preparation_manifest,
     evaluate_paper_utility,
 )
+from .shutdown_readiness import (
+    CANDIDATE_REQUIRED_FILES,
+    RESOURCE_REQUIRED_FILES,
+    SOURCE_REQUIRED_FILES,
+    TERMINAL_STATES,
+    ProcessInspection,
+    ShutdownReadiness,
+    evaluate_shutdown_readiness,
+)
 from .signal_policy import (
     PolicyPathComparison,
     PolicySignal,
@@ -189,6 +198,13 @@ __all__ = [
     "ForwardPredictionLedgerEntry",
     "ForwardPredictionOutcomeLink",
     "ForwardPredictionOutcomeLinkLedger",
+    "CANDIDATE_REQUIRED_FILES",
+    "RESOURCE_REQUIRED_FILES",
+    "SOURCE_REQUIRED_FILES",
+    "ProcessInspection",
+    "ShutdownReadiness",
+    "TERMINAL_STATES",
+    "evaluate_shutdown_readiness",
     "EXPECTED_CANDIDATE_MODEL",
     "EXPECTED_CASES_PER_SYMBOL",
     "EXPECTED_CONTEXT_BARS",
