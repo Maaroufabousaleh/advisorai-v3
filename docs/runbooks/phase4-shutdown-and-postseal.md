@@ -88,17 +88,18 @@ remain a refusal, not a reason to synthesize evidence inside the old root.
 
 If and only if the workflow produces a materialized evaluation input, run the
 strictly post-seal causal baseline pass into a new root using the frozen
-repository commit:
+PR #192 hardening checkout and its exact reviewed head:
 
 ```bash
 BASELINE_OUTPUT=/mnt/c/projects/advisorai-v3/artifacts/phase4/causal-baselines/20260822T193400Z-current-r1
-PYTHONPATH=/mnt/c/projects/advisorai-v3/src \
+BASELINE_REPO=/mnt/c/projects/advisorai-v3-phase4-causal-hardening
+PYTHONPATH="$BASELINE_REPO/src" \
 /mnt/c/projects/advisorai-v3/.venv/bin/python \
-/mnt/c/projects/advisorai-v3/scripts/regenerate_phase4_v3core_baselines.py \
+"$BASELINE_REPO/scripts/regenerate_phase4_v3core_baselines.py" \
   --input "$OUTPUT/materialized/phase4-v3core-evaluation-input.json" \
   --output-root "$BASELINE_OUTPUT" \
-  --repository-root /mnt/c/projects/advisorai-v3 \
-  --repository-commit eb795be5fe4145f51cfefc50a314fe99a3b059b1 \
+  --repository-root "$BASELINE_REPO" \
+  --repository-commit 24e82dc7615c6653225abf91585fc0ee0c493bd6 \
   --materialized-at "$TERMINAL_AT"
 ```
 
