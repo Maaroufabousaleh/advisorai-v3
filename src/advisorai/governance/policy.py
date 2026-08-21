@@ -48,6 +48,14 @@ class CorrelatedExposureGroup(BaseModel):
     group_id: str = Field(min_length=1)
     instruments: tuple[str, ...] = Field(min_length=2)
 
+    @field_validator("group_id")
+    @classmethod
+    def normalize_group_id(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ValueError("correlated exposure group_id cannot be blank")
+        return normalized
+
     @field_validator("instruments")
     @classmethod
     def normalize_instruments(cls, value: tuple[str, ...]) -> tuple[str, ...]:
@@ -70,6 +78,14 @@ class AggregateGroupExposureLimit(BaseModel):
 
     group_id: str = Field(min_length=1)
     max_fraction: Decimal | None = None
+
+    @field_validator("group_id")
+    @classmethod
+    def normalize_group_id(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not normalized:
+            raise ValueError("aggregate exposure group_id cannot be blank")
+        return normalized
 
     @field_validator("max_fraction")
     @classmethod

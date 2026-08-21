@@ -218,15 +218,26 @@ class GovernanceRiskSnapshot(_StrictModel):
             raise ValueError("proposed gross leverage must be finite and non-negative")
         return value
 
-    @field_validator("proposed_asset_exposures", "proposed_group_exposures")
+    @field_validator("proposed_asset_exposures")
     @classmethod
-    def validate_exposures(cls, value: dict[str, Decimal]) -> dict[str, Decimal]:
+    def validate_asset_exposures(cls, value: dict[str, Decimal]) -> dict[str, Decimal]:
         normalized: dict[str, Decimal] = {}
         for key, exposure in value.items():
             instrument = key.strip().upper()
             if not instrument or not exposure.is_finite() or exposure < 0:
                 raise ValueError("proposed exposures must use finite non-negative values")
             normalized[instrument] = exposure
+        return normalized
+
+    @field_validator("proposed_group_exposures")
+    @classmethod
+    def validate_group_exposures(cls, value: dict[str, Decimal]) -> dict[str, Decimal]:
+        normalized: dict[str, Decimal] = {}
+        for key, exposure in value.items():
+            group_id = key.strip().lower()
+            if not group_id or not exposure.is_finite() or exposure < 0:
+                raise ValueError("proposed group exposures must use finite non-negative values")
+            normalized[group_id] = exposure
         return normalized
 
 
@@ -391,6 +402,9 @@ def _architecture_reasons(evidence: GovernanceEvidence) -> list[ReasonCode]:
 
 def _exposure_reasons(policy: GovernancePolicy, request: GovernanceRequest) -> list[ReasonCode]:
     reasons: list[ReasonCode] = []
+    target = request.target.strip().upper()
+    if target not in request.risk.proposed_asset_exposures:
+        reasons.append(ReasonCode.UNKNOWN_REQUIRED_INPUT)
     for exposure in request.risk.proposed_asset_exposures.values():
         if exposure > policy.max_single_asset_fraction:
             reasons.append(ReasonCode.POSITION_LIMIT)
@@ -398,6 +412,12 @@ def _exposure_reasons(policy: GovernancePolicy, request: GovernanceRequest) -> l
         limit.group_id: limit.max_fraction for limit in policy.aggregate_group_exposure_limits
     }
     for group in policy.correlated_exposure_groups:
+        if (
+            target in group.instruments
+            and group.group_id not in request.risk.proposed_group_exposures
+        ):
+            reasons.append(ReasonCode.UNKNOWN_REQUIRED_INPUT)
+            continue
         if group.group_id not in request.risk.proposed_group_exposures:
             continue
         proposed = request.risk.proposed_group_exposures[group.group_id]
