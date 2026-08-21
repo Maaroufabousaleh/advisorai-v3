@@ -20,6 +20,7 @@ from scripts.materialize_phase4_v3core_forward_input import MaterializationRefus
 
 HASH = "a" * 64
 START = datetime(2026, 8, 18, 0, tzinfo=UTC)
+TARGET_END = START + timedelta(hours=24)
 ENDPOINT = "https://data-api.binance.vision/api/v3/klines"
 
 
@@ -183,20 +184,37 @@ def test_materializer_binds_prediction_manifest_hashes(tmp_path: Path) -> None:
         },
     )
     manifest = {
+        "schema": "advisorai.phase4.v3-core-forward.run.v1",
+        "run_id": "synthetic-forward-root",
+        "started_at": START.isoformat(),
+        "target_end_at": TARGET_END.isoformat(),
+        "target_cases_per_symbol": 1,
+        "poll_seconds": 30,
         "preregistration_sha256": hashlib.sha256(prereg.read_bytes()).hexdigest(),
         "phase3_gate_record_sha256": "b" * 64,
         "source_snapshot_hash": HASH,
         "provider_identity": "binance_spot_public_market_data",
         "endpoint": ENDPOINT,
+        "websocket_reviewed_endpoint": "wss://data-stream.binance.vision/ws",
         "evidence_class": "forward_pit_admission",
         "interval": "5m",
         "symbols": ["BTCUSDT", "ETHUSDT"],
         "market_data_only": True,
+        "code_commit": "c" * 40,
+        "collector_script_sha256": "d" * 64,
+        "forward_module_sha256": "e" * 64,
         "credentials_loaded": False,
         "order_writes_attempted": False,
     }
     _write(run / "manifest.json", manifest)
-    _write(run / "status.json", {"state": "target_reached", "minimum_reached": True})
+    _write(
+        run / "status.json",
+        {
+            "state": "target_reached",
+            "minimum_reached": True,
+            "target_end_at": TARGET_END.isoformat(),
+        },
+    )
     _write(run / "config.json", {"schema": "test"})
     prediction_manifest = tmp_path / "prediction-manifest.json"
     _write(prediction_manifest, {"models": []})

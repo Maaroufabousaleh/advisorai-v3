@@ -44,6 +44,63 @@ HASH = "a" * 64
 PHASE3_HASH = "b" * 64
 START = datetime(2026, 8, 17, 22, 0, tzinfo=UTC)
 ENDPOINT = "https://data-api.binance.vision/api/v3/klines"
+TARGET_END = START + timedelta(hours=24)
+
+
+def _reviewed_source_manifest(**overrides: object) -> dict[str, object]:
+    manifest: dict[str, object] = {
+        "schema": "advisorai.phase4.v3-core-forward.run.v1",
+        "run_id": "synthetic-forward-root",
+        "started_at": START.isoformat(),
+        "target_end_at": TARGET_END.isoformat(),
+        "target_cases_per_symbol": 64,
+        "poll_seconds": 30,
+        "provider_identity": "binance_spot_public_market_data",
+        "endpoint": ENDPOINT,
+        "websocket_reviewed_endpoint": "wss://data-stream.binance.vision/ws",
+        "symbols": ["BTCUSDT", "ETHUSDT"],
+        "interval": "5m",
+        "evidence_class": "forward_pit_admission",
+        "preregistration_sha256": PHASE3_HASH,
+        "phase3_gate_record_sha256": PHASE3_HASH,
+        "source_snapshot_hash": HASH,
+        "code_commit": "c" * 40,
+        "collector_script_sha256": "d" * 64,
+        "forward_module_sha256": "e" * 64,
+        "credentials_loaded": False,
+        "order_writes_attempted": False,
+        "market_data_only": True,
+        "execution_venue": "binance_spot_testnet",
+    }
+    manifest.update(overrides)
+    return manifest
+
+
+def _write_reviewed_terminal_inputs(
+    tmp_path: Path, *, manifest_updates: dict[str, object] | None = None
+) -> tuple[Path, Path, Path, Path]:
+    _report, raw_path, normalized_path = _single_bar_audit(
+        tmp_path,
+        [_row(), _row()],
+        canonical_row=_row(),
+    )
+    status_path = tmp_path / "status.json"
+    status_path.write_text(
+        json.dumps(
+            {
+                "state": "target_reached",
+                "minimum_reached": True,
+                "target_end_at": TARGET_END.isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(_reviewed_source_manifest(**(manifest_updates or {}))),
+        encoding="utf-8",
+    )
+    return raw_path, normalized_path, status_path, manifest_path
 
 
 def _row(index: int = 0, *, close: str | None = None) -> list[object]:
@@ -628,26 +685,95 @@ def test_terminal_audit_requires_reviewed_source_manifest_contract(tmp_path: Pat
     )
     status_path = tmp_path / "status.json"
     status_path.write_text(
-        json.dumps({"state": "target_reached", "minimum_reached": True}), encoding="utf-8"
-    )
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(
         json.dumps(
             {
-                "provider_identity": "unreviewed_source",
-                "endpoint": ENDPOINT,
-                "evidence_class": "forward_pit_admission",
-                "interval": "5m",
-                "symbols": ["BTCUSDT", "ETHUSDT"],
-                "market_data_only": True,
-                "credentials_loaded": False,
-                "order_writes_attempted": False,
-                "source_snapshot_hash": HASH,
+                "state": "target_reached",
+                "minimum_reached": True,
+                "target_end_at": TARGET_END.isoformat(),
             }
         ),
         encoding="utf-8",
     )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(_reviewed_source_manifest(provider_identity="unreviewed_source")),
+        encoding="utf-8",
+    )
     with pytest.raises(IntegrityAuditError, match="provider identity"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_manifest_path=manifest_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
+            auditor_repository_commit="a" * 40,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
+
+
+def test_missing_source_config_uses_the_collector_manifest_contract(tmp_path: Path) -> None:
+    raw_path, normalized_path, status_path, manifest_path = _write_reviewed_terminal_inputs(
+        tmp_path
+    )
+
+    report = audit_forward_root(
+        raw_path,
+        normalized_path,
+        source_manifest_path=manifest_path,
+        source_status_path=status_path,
+        terminal_evidence_eligible=True,
+        auditor_repository_commit="a" * 40,
+        terminal_observed_at=START + timedelta(minutes=10),
+    )
+
+    assert report.source_provenance_surface == "manifest.json"
+    assert report.source_config_sha256 is None
+
+
+def test_incomplete_source_manifest_is_refused_without_config_fallback(tmp_path: Path) -> None:
+    raw_path, normalized_path, status_path, manifest_path = _write_reviewed_terminal_inputs(
+        tmp_path,
+        manifest_updates={"forward_module_sha256": None},
+    )
+
+    with pytest.raises(IntegrityAuditError, match="forward_module_sha256 is missing"):
+        audit_forward_root(
+            raw_path,
+            normalized_path,
+            source_manifest_path=manifest_path,
+            source_status_path=status_path,
+            terminal_evidence_eligible=True,
+            auditor_repository_commit="a" * 40,
+            terminal_observed_at=START + timedelta(minutes=10),
+        )
+
+
+@pytest.mark.parametrize(
+    ("manifest_updates", "message"),
+    (
+        ({"provider_identity": "other"}, "provider identity"),
+        ({"endpoint": "https://other.example/klines"}, "endpoint"),
+        ({"symbols": ["BTCUSDT"]}, "symbols"),
+        ({"interval": "1d"}, "interval"),
+        ({"target_cases_per_symbol": 63}, "target case count"),
+        ({"target_end_at": (TARGET_END + timedelta(hours=1)).isoformat()}, "target_end_at"),
+        ({"credentials_loaded": True}, "credential-free"),
+        ({"order_writes_attempted": True}, "zero order writes"),
+        ({"code_commit": "not-a-repository-identity"}, "repository code identity"),
+        ({"collector_script_sha256": "not-a-digest"}, "collector_script_sha256"),
+    ),
+)
+def test_source_manifest_contract_rejects_identity_drift(
+    tmp_path: Path,
+    manifest_updates: dict[str, object],
+    message: str,
+) -> None:
+    raw_path, normalized_path, status_path, manifest_path = _write_reviewed_terminal_inputs(
+        tmp_path,
+        manifest_updates=manifest_updates,
+    )
+
+    with pytest.raises(IntegrityAuditError, match=message):
         audit_forward_root(
             raw_path,
             normalized_path,
@@ -691,23 +817,18 @@ def test_terminal_audit_rejects_normalized_source_substitution(tmp_path: Path) -
     normalized_path.write_text(substituted.model_dump_json() + "\n", encoding="utf-8")
     status_path = tmp_path / "status.json"
     status_path.write_text(
-        json.dumps({"state": "target_reached", "minimum_reached": True}), encoding="utf-8"
+        json.dumps(
+            {
+                "state": "target_reached",
+                "minimum_reached": True,
+                "target_end_at": TARGET_END.isoformat(),
+            }
+        ),
+        encoding="utf-8",
     )
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
-        json.dumps(
-            {
-                "provider_identity": "binance_spot_public_market_data",
-                "endpoint": ENDPOINT,
-                "evidence_class": "forward_pit_admission",
-                "interval": "5m",
-                "symbols": ["BTCUSDT", "ETHUSDT"],
-                "market_data_only": True,
-                "credentials_loaded": False,
-                "order_writes_attempted": False,
-                "source_snapshot_hash": HASH,
-            }
-        ),
+        json.dumps(_reviewed_source_manifest()),
         encoding="utf-8",
     )
     with pytest.raises(IntegrityAuditError, match="normalized bar source identity"):
@@ -731,23 +852,18 @@ def test_terminal_audit_rejects_raw_request_url_source_substitution(tmp_path: Pa
     )
     status_path = tmp_path / "status.json"
     status_path.write_text(
-        json.dumps({"state": "target_reached", "minimum_reached": True}), encoding="utf-8"
+        json.dumps(
+            {
+                "state": "target_reached",
+                "minimum_reached": True,
+                "target_end_at": TARGET_END.isoformat(),
+            }
+        ),
+        encoding="utf-8",
     )
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(
-        json.dumps(
-            {
-                "provider_identity": "binance_spot_public_market_data",
-                "endpoint": ENDPOINT,
-                "evidence_class": "forward_pit_admission",
-                "interval": "5m",
-                "symbols": ["BTCUSDT", "ETHUSDT"],
-                "market_data_only": True,
-                "credentials_loaded": False,
-                "order_writes_attempted": False,
-                "source_snapshot_hash": HASH,
-            }
-        ),
+        json.dumps(_reviewed_source_manifest()),
         encoding="utf-8",
     )
     with pytest.raises(IntegrityAuditError, match="raw request URL"):
