@@ -61,9 +61,23 @@ predictions remain in their original append-only ledger and are represented in
 the overlay as `EXCLUDED_DATA_INTEGRITY`; no prediction or completed case is
 deleted or rewritten.
 
-The repository commit argument is required. It must be the exact code commit
-used for the sealed generation and auditor review; omission or a non-SHA-1
-value is refused.
+The `--repository-commit` argument is required and binds the exact auditor
+checkout used to create the report; omission or a non-SHA-1 value is refused.
+The sealed collector's own repository/code identity remains separately
+required in the source `manifest.json` and is validated there.
+
+The source collector contract is identified by
+`advisorai.phase4.v3-core-forward.run.v1`. That contract writes the complete
+source provenance to `manifest.json`; it does not promise a source-root
+`config.json`. The terminal workflow therefore treats `manifest.json` as the
+authoritative source contract and records `source_provenance_surface` as
+`manifest.json` when no source config exists. If a source `config.json` is
+present, it is hashed as a supplementary surface and the report records
+`manifest.json+config.json`; it is never used to silently fill missing manifest
+identity. A missing config is accepted only for this explicitly reviewed run
+schema. An incomplete manifest, deadline mismatch, provider/endpoint/universe
+drift, credential or order capability, or malformed repository/code identity is
+refused.
 
 The report also validates raw, source-health, and prediction hash chains,
 per-symbol source-health state continuity, prediction timing and context

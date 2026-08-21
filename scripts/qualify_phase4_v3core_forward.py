@@ -198,6 +198,7 @@ def run(
     prereg = preregistration.resolve()
     output = output_root.resolve()
     repo = (repository_root or Path(__file__).resolve().parents[1]).resolve()
+    config_path = run / "config.json" if (run / "config.json").is_file() else None
     _paired_paths(prediction_ledger_paths, prediction_manifest_paths)
     _validate_sha256(phase3_gate_sha256, field="phase3_gate_sha256")
     status = _load_sealed_root(run)
@@ -208,7 +209,7 @@ def run(
         run / "completed-cases.jsonl",
         run / "manifest.json",
         run / "status.json",
-        run / "config.json",
+        config_path,
         run / "source-health.jsonl",
         resource,
         prereg,
@@ -216,7 +217,9 @@ def run(
         *prediction_manifest_paths,
         *outcome_link_ledger_paths,
     )
-    _assert_output_is_separate(output, tuple(path.resolve() for path in input_paths))
+    _assert_output_is_separate(
+        output, tuple(path.resolve() for path in input_paths if path is not None)
+    )
     if not run.is_dir() or not resource.is_dir():
         raise TerminalWorkflowRefused("sealed forward and resource roots must be directories")
     output.mkdir(parents=True, exist_ok=False)
@@ -257,7 +260,7 @@ def run(
             source_manifest_path=run / "manifest.json",
             source_status_path=run / "status.json",
             source_health_path=run / "source-health.jsonl",
-            source_config_path=run / "config.json",
+            source_config_path=config_path,
             terminal_evidence_eligible=True,
         )
         integrity_report_path = integrity_dir / "integrity-audit.json"
@@ -321,8 +324,8 @@ def run(
             },
             "source_inputs": {
                 name: {
-                    "path": _relative(path, repo),
-                    "sha256": _sha256_file(path) if path.is_file() else None,
+                    "path": _relative(path, repo) if path is not None else None,
+                    "sha256": _sha256_file(path) if path is not None and path.is_file() else None,
                 }
                 for name, path in {
                     "raw_responses": run / "raw-responses.jsonl",
@@ -330,7 +333,7 @@ def run(
                     "completed_cases": cases_path,
                     "manifest": run / "manifest.json",
                     "status": run / "status.json",
-                    "config": run / "config.json",
+                    "config": config_path,
                     "source_health": run / "source-health.jsonl",
                 }.items()
             },

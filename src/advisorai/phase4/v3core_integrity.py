@@ -31,12 +31,15 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from advisorai.phase4.v3core_cadence import (
     V3_CORE_MARKET_DATA_PROVIDER,
     V3_CORE_MARKET_DATA_REST_ENDPOINT,
+    V3_CORE_MARKET_DATA_WS_ENDPOINT,
     V3_CORE_SYMBOLS,
     V3CoreForecastCase,
     sha256_json,
 )
 from advisorai.phase4.v3core_forward import (
     FORWARD_CASE_SCHEMA,
+    FORWARD_INTERVAL,
+    FORWARD_RUN_SCHEMA,
     ForwardHealthTransition,
     ForwardRawResponse,
 )
@@ -61,6 +64,7 @@ BarStabilityClassification = Literal[
 ]
 InvalidBarClassification = Literal["REVISED_CANONICAL_DISAGREES", "UNRESOLVED"]
 CaseSegment = Literal["context", "outcome"]
+SourceProvenanceSurface = Literal["manifest.json", "manifest.json+config.json"]
 
 
 def _canonical_bytes(payload: object) -> bytes:
@@ -352,6 +356,7 @@ class IntegrityAuditReport(BaseModel):
     source_status_sha256: str | None = None
     source_health_ledger_sha256: str | None = None
     source_config_sha256: str | None = None
+    source_provenance_surface: SourceProvenanceSurface = "manifest.json"
     prediction_ledger_sha256s: tuple[str, ...] = ()
     outcome_link_ledger_sha256s: tuple[str, ...] = ()
     prediction_manifest_sha256s: tuple[str, ...] = ()
@@ -733,6 +738,8 @@ def _validate_source_manifest_contract(
     *,
     raw_records: Sequence[ForwardRawResponse],
     terminal_evidence_eligible: bool,
+    source_status_path: Path | None,
+    minimum_cases_per_symbol: int,
 ) -> None:
     """Bind terminal normalized evidence to the reviewed read-only source contract."""
 
@@ -748,6 +755,10 @@ def _validate_source_manifest_contract(
         raise IntegrityAuditError("source manifest is unreadable") from exc
     if not isinstance(manifest, dict):
         raise IntegrityAuditError("source manifest must be an object")
+    if manifest.get("schema") != FORWARD_RUN_SCHEMA:
+        raise IntegrityAuditError(
+            "source manifest schema is not the reviewed V3-Core forward collector contract"
+        )
     if manifest.get("provider_identity") != V3_CORE_MARKET_DATA_PROVIDER:
         raise IntegrityAuditError(
             "source manifest provider identity is not the reviewed V3-Core source"
@@ -758,7 +769,7 @@ def _validate_source_manifest_contract(
         )
     if manifest.get("evidence_class") != "forward_pit_admission":
         raise IntegrityAuditError("source manifest evidence class is not forward PIT admission")
-    if manifest.get("interval") != "5m":
+    if manifest.get("interval") != FORWARD_INTERVAL:
         raise IntegrityAuditError("source manifest interval is not the frozen 5m cadence")
     if tuple(manifest.get("symbols", ())) != V3_CORE_SYMBOLS:
         raise IntegrityAuditError(
@@ -770,6 +781,65 @@ def _validate_source_manifest_contract(
         raise IntegrityAuditError("source manifest does not attest credential-free operation")
     if manifest.get("order_writes_attempted") is not False:
         raise IntegrityAuditError("source manifest does not attest zero order writes")
+    if manifest.get("websocket_reviewed_endpoint") != V3_CORE_MARKET_DATA_WS_ENDPOINT:
+        raise IntegrityAuditError(
+            "source manifest websocket endpoint is not the reviewed market-data surface"
+        )
+    if manifest.get("source_id", V3_CORE_MARKET_DATA_PROVIDER) != V3_CORE_MARKET_DATA_PROVIDER:
+        raise IntegrityAuditError("source manifest source identity is not the reviewed provider")
+    target_cases = manifest.get("target_cases_per_symbol")
+    if isinstance(target_cases, bool) or not isinstance(target_cases, int):
+        raise IntegrityAuditError("source manifest target case count is invalid")
+    if target_cases < minimum_cases_per_symbol:
+        raise IntegrityAuditError(
+            "source manifest target case count is below the required frozen minimum"
+        )
+    for field_name in (
+        "preregistration_sha256",
+        "phase3_gate_record_sha256",
+        "source_snapshot_hash",
+        "collector_script_sha256",
+        "forward_module_sha256",
+    ):
+        value = manifest.get(field_name)
+        if not isinstance(value, str):
+            raise IntegrityAuditError(f"source manifest {field_name} is missing")
+        try:
+            _digest(value, field_name)
+        except ValueError as exc:
+            raise IntegrityAuditError(f"source manifest {field_name} is invalid") from exc
+    code_commit = manifest.get("code_commit")
+    if (
+        not isinstance(code_commit, str)
+        or len(code_commit) != 40
+        or any(character not in "0123456789abcdef" for character in code_commit.lower())
+    ):
+        raise IntegrityAuditError("source manifest repository code identity is invalid")
+    try:
+        started_at = datetime.fromisoformat(str(manifest["started_at"]).replace("Z", "+00:00"))
+        target_end_at = datetime.fromisoformat(
+            str(manifest["target_end_at"]).replace("Z", "+00:00")
+        )
+        started_at = _aware(started_at, "source manifest started_at")
+        target_end_at = _aware(target_end_at, "source manifest target_end_at")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise IntegrityAuditError("source manifest start/deadline identity is invalid") from exc
+    if target_end_at <= started_at:
+        raise IntegrityAuditError("source manifest target_end_at is not after started_at")
+    if source_status_path is None:
+        raise IntegrityAuditError("source status is required to bind the frozen target deadline")
+    try:
+        status = json.loads(source_status_path.read_text(encoding="utf-8"))
+        status_target_end_at = datetime.fromisoformat(
+            str(status["target_end_at"]).replace("Z", "+00:00")
+        )
+        status_target_end_at = _aware(status_target_end_at, "source status target_end_at")
+    except (KeyError, TypeError, OSError, ValueError, json.JSONDecodeError) as exc:
+        raise IntegrityAuditError("source status target deadline is unreadable") from exc
+    if target_end_at != status_target_end_at:
+        raise IntegrityAuditError(
+            "source manifest target_end_at differs from the immutable source status"
+        )
     for raw_record in raw_records:
         try:
             parsed_request_url = urlsplit(raw_record.request_url)
@@ -1481,6 +1551,8 @@ def audit_forward_root(
         normalized_bars,
         raw_records=raw_records,
         terminal_evidence_eligible=terminal_evidence_eligible,
+        source_status_path=source_status_path,
+        minimum_cases_per_symbol=minimum_cases_per_symbol,
     )
     source_health_records = (
         _load_source_health_records(source_health_path) if source_health_path is not None else ()
@@ -1635,6 +1707,9 @@ def audit_forward_root(
         ),
         source_config_sha256=(
             _sha256_file(source_config_path) if source_config_path is not None else None
+        ),
+        source_provenance_surface=(
+            "manifest.json+config.json" if source_config_path is not None else "manifest.json"
         ),
         prediction_ledger_sha256s=tuple(_sha256_file(path) for path in prediction_ledger_paths),
         outcome_link_ledger_sha256s=tuple(_sha256_file(path) for path in outcome_link_ledger_paths),
