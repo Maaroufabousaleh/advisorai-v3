@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -150,6 +151,26 @@ def test_live_exact_process_fails_closed(tmp_path: Path) -> None:
     assert "candidate_process_active:303" in result.reasons
 
 
+def test_candidate_status_running_is_unsafe_even_when_pid_is_absent(
+    tmp_path: Path,
+) -> None:
+    source, resource, candidate = _build_roots(tmp_path)
+    status = json.loads((candidate / "status.json").read_text(encoding="utf-8"))
+    status["state"] = "running"
+    _write_json(candidate / "status.json", status)
+
+    result = evaluate_shutdown_readiness(
+        source_root=source,
+        resource_root=resource,
+        candidate_root=candidate,
+        now=AFTER_TARGET,
+        process_probe=_dead_process,
+    )
+
+    assert result.decision == "NOT_SAFE_TO_SHUT_DOWN"
+    assert "candidate_state_not_terminal:'running'" in result.reasons
+
+
 def test_pid_reuse_or_command_mismatch_fails_closed(tmp_path: Path) -> None:
     source, resource, candidate = _build_roots(tmp_path)
 
@@ -203,3 +224,40 @@ def test_missing_lock_or_temporary_file_fails_closed(tmp_path: Path) -> None:
     assert "source_missing_file:collector.lock" in result.reasons
     assert "source_lock_missing" in result.reasons
     assert "source_temporary_file:.status.json.tmp" in result.reasons
+
+
+def test_nonterminal_resource_sidecar_fails_closed(tmp_path: Path) -> None:
+    source, resource, candidate = _build_roots(tmp_path)
+    status = json.loads((resource / "status.json").read_text(encoding="utf-8"))
+    status["state"] = "running"
+    _write_json(resource / "status.json", status)
+
+    result = evaluate_shutdown_readiness(
+        source_root=source,
+        resource_root=resource,
+        candidate_root=candidate,
+        now=AFTER_TARGET,
+        process_probe=_dead_process,
+    )
+
+    assert result.decision == "NOT_SAFE_TO_SHUT_DOWN"
+    assert "resource_state_not_terminal:'running'" in result.reasons
+
+
+def test_active_collector_lock_fails_closed(tmp_path: Path) -> None:
+    source, resource, candidate = _build_roots(tmp_path)
+    with (source / "collector.lock").open("rb") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            result = evaluate_shutdown_readiness(
+                source_root=source,
+                resource_root=resource,
+                candidate_root=candidate,
+                now=AFTER_TARGET,
+                process_probe=_dead_process,
+            )
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    assert result.decision == "NOT_SAFE_TO_SHUT_DOWN"
+    assert "source_lock_owned" in result.reasons

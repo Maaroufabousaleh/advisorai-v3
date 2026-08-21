@@ -12,14 +12,18 @@ Run this after the frozen deadline, not merely after the source reaches its
 it does not select a latest artifact.
 
 ```bash
-PYTHONPATH=/mnt/c/projects/advisorai-v3-postseal-readiness/src \
-/mnt/c/projects/advisorai-v3/.venv/bin/python \
-/mnt/c/projects/advisorai-v3-postseal-readiness/scripts/check_phase4_shutdown_readiness.py \
-  --source-root /mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1 \
-  --resource-root /mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1 \
-  --resource-pid-file /mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1.pid \
-  --resource-process-token /mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1 \
-  --candidate-root /mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+PYTHON="${ADVISORAI_PYTHON:-python}"
+SOURCE="$REPO_ROOT/artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1"
+RESOURCE="$REPO_ROOT/artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1"
+CANDIDATE="$REPO_ROOT/artifacts/phase4/v3core-forward-predictions/20260817T193400Z-operator-interrupted-replacement-r1-chronos-2-small-r1"
+PYTHONPATH="$REPO_ROOT/src" "$PYTHON" \
+  "$REPO_ROOT/scripts/check_phase4_shutdown_readiness.py" \
+  --source-root "$SOURCE" \
+  --resource-root "$RESOURCE" \
+  --resource-pid-file "$REPO_ROOT/artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1.pid" \
+  --resource-process-token "$SOURCE" \
+  --candidate-root "$CANDIDATE"
 ```
 
 Only `SAFE_TO_SHUT_DOWN` permits the operator to power off the laptop. Any
@@ -43,16 +47,17 @@ isolated integrity-auditor checkout at the exact current draft head until that
 PR is reviewed or merged:
 
 ```bash
-AUDITOR=/mnt/c/projects/advisorai-v3-integrity-auditor
-PYTHON=/mnt/c/projects/advisorai-v3/.venv/bin/python
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+AUDITOR="${ADVISORAI_PHASE4_AUDITOR_ROOT:?set this to the reviewed PR #190 checkout}"
+PYTHON="${ADVISORAI_PYTHON:-python}"
 PYTHONPATH="$AUDITOR:$AUDITOR/src"
-SOURCE=/mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1
-RESOURCE=/mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1
-PREREG=/mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/phase4-v3core-cadence-preregistration.json
+SOURCE="$REPO_ROOT/artifacts/phase4/v3core-forward/20260817T193400Z-operator-interrupted-replacement-r1"
+RESOURCE="$REPO_ROOT/artifacts/phase4/v3core-forward-resource/20260817T193400Z-operator-interrupted-replacement-r1-sidecar-r1"
+PREREG="$REPO_ROOT/artifacts/phase4/v3core-cadence-preregistration/20260812T204444Z-v3core-1h-5m-reobserve-fix-v5/phase4-v3core-cadence-preregistration.json"
 PHASE3_GATE_SHA=4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232
-AUDIT_COMMIT=4932b2cae992d2230538dbc2a8b1c4d49da98737
+AUDIT_COMMIT=ca0497cf268eed855ad1295053e34cf079b6c1b5
 TERMINAL_AT=2026-08-22T20:00:00Z
-OUTPUT=/mnt/c/projects/advisorai-v3/artifacts/phase4/v3core-terminal-review/20260822T193400Z-current-r1
+OUTPUT="$REPO_ROOT/artifacts/phase4/v3core-terminal-review/20260822T193400Z-current-r1"
 ```
 
 First verify the exact auditor checkout and source identity:
@@ -62,8 +67,10 @@ test "$(git -C "$AUDITOR" rev-parse HEAD)" = "$AUDIT_COMMIT"
 test "$(sha256sum "$SOURCE/manifest.json" | cut -d' ' -f1)" != ""
 jq -e --arg commit 0e23c0b6a94ac87df7e5cc9fa0e552cb9adb50c5 \
   --arg prereg 5a867b9c68f9a90593990a820f612bf3fd66670933d680a75ddd521762da1ffd \
+  --arg collector 9713692cd64d2aa987ff3cdffd18c48e2cb62f531f79015f3ba4e1aa03b7bd0b \
+  --arg forward 2080857b56b1e641cb648cfd97bec7bd7590584606014afe27dc8227b80c98f5 \
   --arg gate "$PHASE3_GATE_SHA" \
-  '.code_commit == $commit and .preregistration_sha256 == $prereg and .phase3_gate_record_sha256 == $gate' \
+  '.code_commit == $commit and .collector_script_sha256 == $collector and .forward_module_sha256 == $forward and .preregistration_sha256 == $prereg and .phase3_gate_record_sha256 == $gate' \
   "$SOURCE/manifest.json"
 ```
 
@@ -83,18 +90,24 @@ PYTHONPATH="$PYTHONPATH" "$PYTHON" "$AUDITOR/scripts/qualify_phase4_v3core_forwa
 The current generation has zero scorable Chronos predictions. Do not pass a
 retrospective or substitute ledger to change that fact. The workflow may
 produce integrity/resource evidence while leaving admission and materialization
-closed. A missing `config.json` or any other unverifiable source identity must
-remain a refusal, not a reason to synthesize evidence inside the old root.
+closed. For this collector generation, a missing source-root `config.json` is
+expected: the reviewed run contract binds provenance in `manifest.json`. An
+incomplete manifest or any other unverifiable source identity must remain a
+refusal, not a reason to synthesize evidence inside the old root.
 
 If and only if the workflow produces a materialized evaluation input, run the
 strictly post-seal causal baseline pass into a new root using the frozen
 PR #192 hardening checkout and its exact reviewed head:
 
 ```bash
-BASELINE_OUTPUT=/mnt/c/projects/advisorai-v3/artifacts/phase4/causal-baselines/20260822T193400Z-current-r1
-BASELINE_REPO=/mnt/c/projects/advisorai-v3-phase4-causal-hardening
+BASELINE_OUTPUT="$REPO_ROOT/artifacts/phase4/causal-baselines/20260822T193400Z-current-r1"
+BASELINE_REPO="${ADVISORAI_PHASE4_BASELINE_ROOT:?set this to the reviewed PR #192 checkout}"
+BASELINE_PYTHON="${ADVISORAI_PYTHON:-python}"
+test "$(git -C "$BASELINE_REPO" rev-parse HEAD)" = "24e82dc7615c6653225abf91585fc0ee0c493bd6"
+test "$(sha256sum "$BASELINE_REPO/scripts/regenerate_phase4_v3core_baselines.py" | cut -d' ' -f1)" = "bcdf13316210d93b4ba9bcd7138bc5bd0c5c75db93223bbe631d3d4537eb3dff"
+test "$(sha256sum "$BASELINE_REPO/src/advisorai/phase4/v3core_baseline_regeneration.py" | cut -d' ' -f1)" = "396c85e76da6246b1ed5f3229ffe635a08b97c98df2c63757393170f4bcb84c6"
 PYTHONPATH="$BASELINE_REPO/src" \
-/mnt/c/projects/advisorai-v3/.venv/bin/python \
+"$BASELINE_PYTHON" \
 "$BASELINE_REPO/scripts/regenerate_phase4_v3core_baselines.py" \
   --input "$OUTPUT/materialized/phase4-v3core-evaluation-input.json" \
   --output-root "$BASELINE_OUTPUT" \
