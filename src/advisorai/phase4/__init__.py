@@ -28,6 +28,12 @@ from .signal_policy import (
     evaluate_policy_signals,
     summarize_prediction_distribution,
 )
+from .v3core_admission_watchdog import (
+    WATCHDOG_SCHEMA,
+    GenerationWatchdogReport,
+    GenerationWatchdogSnapshot,
+    evaluate_watchdog,
+)
 from .v3core_baseline_regeneration import (
     CAUSAL_BASELINE_EVIDENCE_CLASS,
     CAUSAL_BASELINE_IDENTITY_SCHEMA,
@@ -81,6 +87,15 @@ from .v3core_chronos import (
 )
 from .v3core_chronos import (
     context_for_cutoff as chronos_context_for_cutoff,
+)
+from .v3core_diagnostics import (
+    DIAGNOSTIC_LEDGER_SCHEMA,
+    RETROSPECTIVE_DIAGNOSTIC,
+    RetrospectiveDiagnosticLedger,
+    RetrospectiveDiagnosticLedgerEntry,
+    RetrospectiveDiagnosticRecord,
+    RetrospectiveEvidenceRefused,
+    reject_retrospective_for_admission,
 )
 from .v3core_forward import (
     FORWARD_CASE_SCHEMA,
@@ -208,6 +223,17 @@ __all__ = [
     "PreflightCheck",
     "evaluate_generation_readiness",
     "evaluate_preflight",
+    "WATCHDOG_SCHEMA",
+    "GenerationWatchdogReport",
+    "GenerationWatchdogSnapshot",
+    "evaluate_watchdog",
+    "DIAGNOSTIC_LEDGER_SCHEMA",
+    "RETROSPECTIVE_DIAGNOSTIC",
+    "RetrospectiveDiagnosticLedger",
+    "RetrospectiveDiagnosticLedgerEntry",
+    "RetrospectiveDiagnosticRecord",
+    "RetrospectiveEvidenceRefused",
+    "reject_retrospective_for_admission",
     "CAUSAL_BASELINE_EVIDENCE_CLASS",
     "CAUSAL_BASELINE_IDENTITY_SCHEMA",
     "CAUSAL_BASELINE_SCHEMA",

@@ -127,6 +127,7 @@ class GenerationProspectiveContract(BaseModel):
     existing_completed_cases: int = Field(default=0, ge=0)
     historical_backfill_enabled: bool = False
     candidate_starts_before_first_cutoff: bool = False
+    canary_qualification_present: bool = False
 
     @field_validator("candidate_started_at", "first_eligible_cutoff")
     @classmethod
@@ -359,6 +360,11 @@ def _checks(spec: GenerationPreflightSpec) -> tuple[PreflightCheck, ...]:
                 and prospective.candidate_started_at <= prospective.first_eligible_cutoff
             ),
             reason="prospective candidate coverage must begin before the first eligible cutoff",
+        ),
+        PreflightCheck(
+            name="canary_qualification",
+            passed=prospective.canary_qualification_present,
+            reason="a bounded prospective canary must qualify the exact launch path before a long run",
         ),
     )
 
