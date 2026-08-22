@@ -37,6 +37,7 @@ FORWARD_RAW_SCHEMA = "advisorai.phase4.v3-core-forward.raw-response.v1"
 FORWARD_FAILURE_SCHEMA = "advisorai.phase4.v3-core-forward.failure.v1"
 FORWARD_HEALTH_SCHEMA = "advisorai.phase4.v3-core-forward.health.v1"
 FORWARD_CASE_SCHEMA = "advisorai.phase4.v3-core-forward.case.v1"
+FORWARD_RUN_SCHEMA = "advisorai.phase4.v3-core-forward.run.v1"
 FORWARD_REJECTION_SCHEMA = "advisorai.phase4.v3-core-forward.rejection.v1"
 FORWARD_PREDICTION_SCHEMA = "advisorai.phase4.v3-core-forward.prediction.v1"
 FORWARD_INTERVAL = "5m"
@@ -975,6 +976,7 @@ __all__ = [
     "FORWARD_INTERVAL_SECONDS",
     "FORWARD_PREDICTION_SCHEMA",
     "FORWARD_RAW_SCHEMA",
+    "FORWARD_RUN_SCHEMA",
     "ForwardCaseSpool",
     "ForwardFailureRecord",
     "ForwardFailureSpool",

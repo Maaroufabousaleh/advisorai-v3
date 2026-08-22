@@ -23,6 +23,8 @@ from advisorai.phase4 import (
     EVALUATION_INPUT_SCHEMA,
     FORWARD_CASE_SCHEMA,
     V3_CORE_SYMBOLS,
+    IntegrityAuditReport,
+    IntegrityExclusionOverlay,
     V3CoreCaseBuild,
     V3CoreEvaluationInput,
     V3CoreForecastCase,
@@ -118,15 +120,96 @@ def _load_cases(path: Path) -> tuple[V3CoreForecastCase, ...]:
     return tuple(cases)
 
 
+def _load_integrity_boundary(
+    *,
+    report_path: Path,
+    overlay_path: Path,
+    run_directory: Path,
+    cases_path: Path,
+    raw_responses_path: Path,
+    normalized_bars_path: Path,
+    prediction_ledger_paths: tuple[Path, ...],
+    prediction_manifest_paths: tuple[Path, ...],
+    outcome_link_ledger_paths: tuple[Path, ...],
+) -> tuple[IntegrityAuditReport, IntegrityExclusionOverlay, str, str]:
+    try:
+        report = IntegrityAuditReport.model_validate_json(report_path.read_text(encoding="utf-8"))
+        overlay = IntegrityExclusionOverlay.model_validate_json(
+            overlay_path.read_text(encoding="utf-8")
+        )
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise MaterializationRefused("integrity report or exclusion overlay is invalid") from exc
+    report_sha256 = _sha256(report_path)
+    overlay_sha256 = _sha256(overlay_path)
+    if overlay.audit_report_sha256 != report_sha256:
+        raise MaterializationRefused("exclusion overlay does not bind the integrity report")
+    if overlay.audit_fingerprint != report.audit_fingerprint:
+        raise MaterializationRefused("exclusion overlay fingerprint does not match the report")
+    if overlay.terminal_evidence_eligible != report.terminal_evidence_eligible:
+        raise MaterializationRefused("exclusion overlay terminal eligibility does not match report")
+    if overlay.completed_case_content_valid != report.completed_case_content_valid:
+        raise MaterializationRefused("exclusion overlay case-content flag does not match report")
+    if overlay.admission_evidence_ready != report.admission_evidence_ready:
+        raise MaterializationRefused("exclusion overlay admission flag does not match report")
+    if not report.admission_evidence_ready:
+        raise MaterializationRefused("integrity audit is not ready for materialization")
+    if report.raw_responses_sha256 != _sha256(raw_responses_path):
+        raise MaterializationRefused("integrity report/raw response hash mismatch")
+    if report.normalized_bars_sha256 != _sha256(normalized_bars_path):
+        raise MaterializationRefused("integrity report/normalized bar hash mismatch")
+    if report.completed_cases_sha256 != _sha256(cases_path):
+        raise MaterializationRefused("integrity report/completed case hash mismatch")
+    if tuple(_sha256(path) for path in prediction_ledger_paths) != report.prediction_ledger_sha256s:
+        raise MaterializationRefused("integrity report/prediction ledger hash mismatch")
+    if (
+        tuple(_sha256(path) for path in prediction_manifest_paths)
+        != report.prediction_manifest_sha256s
+    ):
+        raise MaterializationRefused("integrity report/prediction manifest hash mismatch")
+    if (
+        tuple(_sha256(path) for path in outcome_link_ledger_paths)
+        != report.outcome_link_ledger_sha256s
+    ):
+        raise MaterializationRefused("integrity report/outcome-link ledger hash mismatch")
+    if report.source_manifest_sha256 is not None and report.source_manifest_sha256 != _sha256(
+        run_directory / "manifest.json"
+    ):
+        raise MaterializationRefused("integrity report/source manifest hash mismatch")
+    if report.source_status_sha256 is not None and report.source_status_sha256 != _sha256(
+        run_directory / "status.json"
+    ):
+        raise MaterializationRefused("integrity report/source status hash mismatch")
+    if report.source_config_sha256 is not None and report.source_config_sha256 != _sha256(
+        run_directory / "config.json"
+    ):
+        raise MaterializationRefused("integrity report/source config hash mismatch")
+    expected_ids = tuple(case.case_id for case in report.contaminated_cases)
+    if overlay.contaminated_case_ids != expected_ids:
+        raise MaterializationRefused("exclusion overlay case identities do not match the report")
+    if overlay.raw_completed_case_counts != report.raw_completed_case_counts:
+        raise MaterializationRefused("exclusion overlay raw counts do not match the report")
+    if overlay.integrity_eligible_case_counts != report.integrity_eligible_case_counts:
+        raise MaterializationRefused("exclusion overlay eligible counts do not match the report")
+    return report, overlay, report_sha256, overlay_sha256
+
+
 def materialize(
     *,
     run_directory: Path,
     preregistration: Path,
     output_root: Path,
     phase3_gate_sha256: str,
+    integrity_report_path: Path | None = None,
+    exclusion_overlay_path: Path | None = None,
+    prediction_ledger_paths: tuple[Path, ...] = (),
+    prediction_manifest_paths: tuple[Path, ...] = (),
+    outcome_link_ledger_paths: tuple[Path, ...] = (),
 ) -> dict[str, str | int | bool]:
     run_directory = run_directory.resolve()
     preregistration = preregistration.resolve()
+    output_root = output_root.resolve()
+    if output_root.exists():
+        raise MaterializationRefused("materialization output root must be new")
     manifest_path = run_directory / "manifest.json"
     status_path = run_directory / "status.json"
     manifest = _load_json(manifest_path, "forward manifest")
@@ -146,10 +229,47 @@ def materialize(
     if preregistration_payload.get("network_calls") != 0:
         raise MaterializationRefused("preregistration must remain offline")
 
-    cases = _load_cases(run_directory / "completed-cases.jsonl")
+    cases_path = run_directory / "completed-cases.jsonl"
+    raw_responses_path = run_directory / "raw-responses.jsonl"
+    normalized_bars = run_directory / "normalized-bars.jsonl"
+    if (integrity_report_path is None) != (exclusion_overlay_path is None):
+        raise MaterializationRefused(
+            "integrity report and exclusion overlay must be supplied together"
+        )
+    cases = _load_cases(cases_path)
+    integrity_report = None
+    integrity_overlay = None
+    integrity_report_sha256 = None
+    integrity_overlay_sha256 = None
+    raw_case_counts = {
+        symbol: sum(case.instrument == symbol for case in cases) for symbol in V3_CORE_SYMBOLS
+    }
+    if integrity_report_path is not None and exclusion_overlay_path is not None:
+        (
+            integrity_report,
+            integrity_overlay,
+            integrity_report_sha256,
+            integrity_overlay_sha256,
+        ) = _load_integrity_boundary(
+            report_path=integrity_report_path.resolve(),
+            overlay_path=exclusion_overlay_path.resolve(),
+            run_directory=run_directory,
+            cases_path=cases_path,
+            raw_responses_path=raw_responses_path,
+            normalized_bars_path=normalized_bars,
+            prediction_ledger_paths=tuple(path.resolve() for path in prediction_ledger_paths),
+            prediction_manifest_paths=tuple(path.resolve() for path in prediction_manifest_paths),
+            outcome_link_ledger_paths=tuple(path.resolve() for path in outcome_link_ledger_paths),
+        )
+        if raw_case_counts != integrity_report.raw_completed_case_counts:
+            raise MaterializationRefused("integrity report raw counts do not match case ledger")
+        contaminated_ids = set(integrity_overlay.contaminated_case_ids)
+        cases = tuple(case for case in cases if case.case_id not in contaminated_ids)
     counts = {
         symbol: sum(case.instrument == symbol for case in cases) for symbol in V3_CORE_SYMBOLS
     }
+    if integrity_overlay is not None and counts != integrity_overlay.integrity_eligible_case_counts:
+        raise MaterializationRefused("integrity exclusion overlay does not match filtered cases")
     target = int(preregistration_payload["plan"]["minimum_cases_per_symbol"])
     if any(counts[symbol] < target for symbol in V3_CORE_SYMBOLS):
         raise MaterializationRefused("completed case ledger is below the frozen per-symbol minimum")
@@ -165,7 +285,6 @@ def materialize(
         for case in cases
     ):
         raise MaterializationRefused("completed cases contain source or snapshot substitution")
-    normalized_bars = run_directory / "normalized-bars.jsonl"
     build = V3CoreCaseBuild(
         schema_version=EVALUATION_INPUT_SCHEMA,
         evidence_class="forward_pit_admission",
@@ -208,6 +327,40 @@ def materialize(
         "endpoint": first.endpoint,
         "symbols": list(V3_CORE_SYMBOLS),
         "case_counts": counts,
+        "raw_case_counts": raw_case_counts,
+        "integrity": (
+            {
+                "report_path": str(integrity_report_path.resolve()),
+                "report_sha256": integrity_report_sha256,
+                "overlay_path": str(exclusion_overlay_path.resolve()),
+                "overlay_sha256": integrity_overlay_sha256,
+                "audit_fingerprint": integrity_report.audit_fingerprint,
+                "terminal_evidence_eligible": integrity_report.terminal_evidence_eligible,
+                "completed_case_content_valid": integrity_report.completed_case_content_valid,
+                "completed_case_content_limitations": integrity_report.completed_case_content_limitations,
+                "sample_minimum_met": integrity_report.sample_minimum_met,
+                "integrity_ready": integrity_report.integrity_ready,
+                "admission_evidence_ready": integrity_report.admission_evidence_ready,
+                "contaminated_case_count": len(integrity_overlay.contaminated_case_ids),
+            }
+            if integrity_report is not None and integrity_overlay is not None
+            else None
+        ),
+        "prediction_ledgers": [
+            {"path": str(path.resolve()), "sha256": _sha256(path)}
+            for path in prediction_ledger_paths
+        ],
+        "prediction_manifests": [
+            {"path": str(path.resolve()), "sha256": _sha256(path)}
+            for path in prediction_manifest_paths
+        ],
+        "prediction_model_identity_valid": (
+            integrity_report.prediction_model_identity_valid if integrity_report else None
+        ),
+        "outcome_link_ledgers": [
+            {"path": str(path.resolve()), "sha256": _sha256(path)}
+            for path in outcome_link_ledger_paths
+        ],
         "evidence_class": "forward_pit_admission",
         "network_calls": 0,
         "credentials_loaded": False,
@@ -249,6 +402,11 @@ def main() -> int:
     parser.add_argument("--preregistration", type=Path, required=True)
     parser.add_argument("--phase3-gate-sha256", required=True)
     parser.add_argument("--output-root", type=Path, required=True)
+    parser.add_argument("--integrity-report", type=Path)
+    parser.add_argument("--exclusion-overlay", type=Path)
+    parser.add_argument("--prediction-ledger", type=Path, action="append", default=[])
+    parser.add_argument("--prediction-manifest", type=Path, action="append", default=[])
+    parser.add_argument("--outcome-link-ledger", type=Path, action="append", default=[])
     args = parser.parse_args()
     try:
         print(
@@ -258,6 +416,11 @@ def main() -> int:
                     preregistration=args.preregistration,
                     output_root=args.output_root,
                     phase3_gate_sha256=args.phase3_gate_sha256,
+                    integrity_report_path=args.integrity_report,
+                    exclusion_overlay_path=args.exclusion_overlay,
+                    prediction_ledger_paths=tuple(args.prediction_ledger),
+                    prediction_manifest_paths=tuple(args.prediction_manifest),
+                    outcome_link_ledger_paths=tuple(args.outcome_link_ledger),
                 ),
                 sort_keys=True,
             )
