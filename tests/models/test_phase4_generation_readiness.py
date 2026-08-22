@@ -60,6 +60,7 @@ def _spec() -> GenerationPreflightSpec:
             first_eligible_cutoff=FIRST_CUTOFF,
             fresh_run_root=True,
             candidate_starts_before_first_cutoff=True,
+            canary_qualification_present=True,
         ),
     )
 
@@ -95,6 +96,7 @@ def test_preflight_accepts_complete_frozen_candidate_path() -> None:
             False,
             "candidate_starts_before_first_cutoff",
         ),
+        ("prospective.canary_qualification_present", False, "canary_qualification"),
     ],
 )
 def test_preflight_refuses_each_unsafe_launch_condition(
