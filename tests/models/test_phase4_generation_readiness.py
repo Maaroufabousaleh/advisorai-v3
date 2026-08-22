@@ -9,8 +9,10 @@ from advisorai.phase4.v3core_generation_readiness import (
     EXPECTED_CASES_PER_SYMBOL,
     GenerationCandidateContract,
     GenerationCoverageInput,
+    GenerationPreflightReport,
     GenerationPreflightSpec,
     GenerationProspectiveContract,
+    GenerationReadinessReport,
     GenerationResourceContract,
     GenerationSourceContract,
     evaluate_generation_readiness,
@@ -69,6 +71,14 @@ def test_preflight_accepts_complete_frozen_candidate_path() -> None:
     assert report.decision == "READY_TO_LAUNCH"
     assert report.refusal_reasons == ()
     assert report.report_hash
+
+
+def test_preflight_report_rejects_mutated_content_after_serialization() -> None:
+    report = evaluate_preflight(_spec())
+    payload = report.model_dump(mode="json", by_alias=True)
+    payload["decision"] = "REFUSE_LAUNCH"
+    with pytest.raises(ValueError, match="preflight report hash"):
+        GenerationPreflightReport.model_validate(payload)
 
 
 @pytest.mark.parametrize(
@@ -130,6 +140,14 @@ def test_readiness_reports_complete_candidate_coverage_possible() -> None:
     assert report.status == "CANDIDATE_COVERAGE_POSSIBLE"
     assert report.complete_coverage_possible is True
     assert report.expected_predictions_total == 128
+
+
+def test_readiness_report_rejects_mutated_content_after_serialization() -> None:
+    report = evaluate_generation_readiness(_coverage())
+    payload = report.model_dump(mode="json", by_alias=True)
+    payload["complete_coverage_possible"] = False
+    with pytest.raises(ValueError, match="readiness report hash"):
+        GenerationReadinessReport.model_validate(payload)
 
 
 def test_readiness_refuses_impossible_candidate_coverage() -> None:
