@@ -4,6 +4,7 @@ policy_id: advisorai-trading-scope
 policy_version: trading-scope-v1
 human_governance_policy_version: human-governance-v1
 live_activation_permitted: false
+live_asset_class: CRYPTO_SPOT
 live_symbols:
   - BTCUSDT
   - ETHUSDT
@@ -11,6 +12,8 @@ live_market_type: SPOT
 live_directions:
   - LONG
   - FLAT
+paper_enabled: true
+paper_symbols: []
 # An empty list deliberately avoids silently approving a venue.  A reviewed
 # technical venue gate must still set venue_approved=true for each request.
 approved_spot_venues: []
@@ -19,18 +22,75 @@ disabled_market_types:
   - FUTURES
   - PERPETUAL
   - OPTIONS
+  - CFDS
   - LEVERAGED_TOKENS
+  - SYNTHETIC_LEVERAGED_EXPOSURE
+disabled_capabilities:
+  - SHORT_SELLING
+  - MARGIN_BORROWING
+  - FUTURES
+  - PERPETUAL_FUTURES
+  - OPTIONS
+  - CFDS
+  - LEVERAGED_TOKENS
+  - SYNTHETIC_LEVERAGED_EXPOSURE
 system_forbidden_actions:
   - WITHDRAW
+  - WITHDRAW_FUNDS
+  - WITHDRAW_CRYPTO
+  - WITHDRAW_FIAT
   - EXTERNAL_TRANSFER
+  - TRANSFER_FUNDS
+  - INTERNAL_ACCOUNT_TRANSFER
+  - INITIATE_DEPOSIT
+  - CREATE_PAYMENT_INSTRUCTION
+  - CHANGE_WITHDRAWAL_ADDRESS
+  - WHITELIST_WITHDRAWAL_ADDRESS
+  - MODIFY_WITHDRAWAL_PERMISSIONS
   - API_KEY_ADMINISTRATION
+  - ACCOUNT_SECURITY_ADMINISTRATION
+  - ROTATE_EXECUTION_CREDENTIALS
 human_gate_actions:
   - ADD_ASSET
+  - ACTIVATE_NEW_LIVE_INSTRUMENT
   - ADD_BROKER_OR_VENUE
+  - ADD_BROKER
+  - CHANGE_BROKER
+  - CHANGE_VENUE
+  - SWITCH_VENUE
+  - SWITCH_EXECUTION_VENUE
+  - CHANGE_PRODUCTION_ENDPOINT
+  - ENABLE_PRODUCTION_FROM_TESTNET
+  - ENABLE_SHORTING
+  - ENABLE_DERIVATIVES
+  - ENABLE_DERIVATIVE_CLASS
   - ENABLE_LEVERAGE
+  - INCREASE_LEVERAGE
+  - CHANGE_MODEL
   - PROMOTE_MODEL
+  - CHANGE_STRATEGY
   - PROMOTE_STRATEGY
   - RELAX_RISK_LIMITS
+  - CHANGE_DAILY_LOSS_THRESHOLD
+  - CHANGE_DRAWDOWN_THRESHOLD
+  - CHANGE_CAPITAL_ALLOCATION
+  - INCREASE_CAPITAL_STAGE
   - RESUME_AFTER_HARD_KILL
+required_live_credential_capabilities:
+  - MARKET_DATA_READ
+  - ACCOUNT_READ
+  - ORDER_READ
+  - ORDER_CREATE
+  - ORDER_CANCEL
+forbidden_live_credential_capabilities:
+  - WITHDRAW_CRYPTO
+  - WITHDRAW_FIAT
+  - EXTERNAL_TRANSFER
+  - INTERNAL_ACCOUNT_TRANSFER
+  - CHANGE_WITHDRAWAL_ADDRESS
+  - WHITELIST_WITHDRAWAL_ADDRESS
+  - API_KEY_ADMINISTRATION
+  - ACCOUNT_SECURITY_ADMINISTRATION
+max_single_asset_fraction: 0.15
 research_enabled: true
 execution_authority: false
