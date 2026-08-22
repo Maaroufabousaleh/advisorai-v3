@@ -58,3 +58,26 @@ def test_materializer_rejects_network_or_write_flags(tmp_path: Path) -> None:
             output_root=tmp_path / "out",
             phase3_gate_sha256="a" * 64,
         )
+
+
+def test_materializer_rejects_prospective_canary_evidence(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    run.mkdir()
+    _write(
+        run / "manifest.json",
+        {
+            "evidence_class": "PROSPECTIVE_CANARY_ONLY",
+            "admission_eligible": False,
+        },
+    )
+    _write(run / "status.json", {"state": "target_reached", "minimum_reached": True})
+    prereg = tmp_path / "prereg.json"
+    _write(prereg, {})
+
+    with pytest.raises(MaterializationRefused, match="prospective canary"):
+        materialize(
+            run_directory=run,
+            preregistration=prereg,
+            output_root=tmp_path / "out",
+            phase3_gate_sha256="a" * 64,
+        )
