@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/branding/advisorai-v3-architecture.png" alt="AdvisorAI V3 architecture: federated intelligence connected to a deterministic paper-trading authority and audit trail" width="1200">
+  <img src="docs/assets/branding/advisorai-v3-header.png" alt="AdvisorAI V3 banner with federated intelligence, deterministic safety, auditable execution, and a paper/testnet-first flow" width="1200">
 </p>
 
 <h1 align="center">AdvisorAI V3</h1>
