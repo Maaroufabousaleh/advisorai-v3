@@ -1,11 +1,18 @@
 <p align="center">
-  <img src="docs/assets/branding/advisorai-logo.png" alt="AdvisorAI logo" width="220">
+  <img src="docs/assets/branding/advisorai-v3-architecture.png" alt="AdvisorAI V3 architecture: federated intelligence connected to a deterministic paper-trading authority and audit trail" width="1200">
 </p>
 
 <h1 align="center">AdvisorAI V3</h1>
 
 <p align="center">
   A federated research and paper-trading system with one deterministic safety and execution spine.
+</p>
+
+<p align="center">
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12%2B-0e1218?style=flat-square&logo=python&logoColor=0e1218&labelColor=6ed9e8" alt="Python 3.12 or newer"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-18.3-0e1218?style=flat-square&logo=react&logoColor=0e1218&labelColor=6ed9e8" alt="React 18.3"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-0e1218?style=flat-square&logo=typescript&logoColor=edf2f4&labelColor=3178c6" alt="TypeScript 5.7"></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Safety-paper%20%2F%20testnet%20only-0e1218?style=flat-square&logo=shield&logoColor=0e1218&labelColor=f2bd67" alt="Paper and testnet only"></a>
 </p>
 
 > [!IMPORTANT]
