@@ -1,0 +1,36 @@
+# Scope only.  This file does not enable live capital or grant execution
+# authority.  Live activation remains separately human- and phase-gated.
+policy_id: advisorai-trading-scope
+policy_version: trading-scope-v1
+human_governance_policy_version: human-governance-v1
+live_activation_permitted: false
+live_symbols:
+  - BTCUSDT
+  - ETHUSDT
+live_market_type: SPOT
+live_directions:
+  - LONG
+  - FLAT
+# An empty list deliberately avoids silently approving a venue.  A reviewed
+# technical venue gate must still set venue_approved=true for each request.
+approved_spot_venues: []
+disabled_market_types:
+  - MARGIN
+  - FUTURES
+  - PERPETUAL
+  - OPTIONS
+  - LEVERAGED_TOKENS
+system_forbidden_actions:
+  - WITHDRAW
+  - EXTERNAL_TRANSFER
+  - API_KEY_ADMINISTRATION
+human_gate_actions:
+  - ADD_ASSET
+  - ADD_BROKER_OR_VENUE
+  - ENABLE_LEVERAGE
+  - PROMOTE_MODEL
+  - PROMOTE_STRATEGY
+  - RELAX_RISK_LIMITS
+  - RESUME_AFTER_HARD_KILL
+research_enabled: true
+execution_authority: false
