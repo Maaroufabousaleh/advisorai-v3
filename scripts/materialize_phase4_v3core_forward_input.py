@@ -134,7 +134,9 @@ def materialize(
     preregistration_payload = _load_json(preregistration, "preregistration")
 
     if manifest.get("evidence_class") == "PROSPECTIVE_CANARY_ONLY":
-        raise MaterializationRefused("prospective canary evidence cannot enter the Phase-4 materializer")
+        raise MaterializationRefused(
+            "prospective canary evidence cannot enter the Phase-4 materializer"
+        )
     if status.get("state") != "target_reached" or not status.get("minimum_reached"):
         raise MaterializationRefused("forward root has not reached its frozen sample minimum")
     if manifest.get("preregistration_sha256") != _sha256(preregistration):
