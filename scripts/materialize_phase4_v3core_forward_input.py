@@ -133,6 +133,8 @@ def materialize(
     status = _load_json(status_path, "forward status")
     preregistration_payload = _load_json(preregistration, "preregistration")
 
+    if manifest.get("evidence_class") == "PROSPECTIVE_CANARY_ONLY":
+        raise MaterializationRefused("prospective canary evidence cannot enter the Phase-4 materializer")
     if status.get("state") != "target_reached" or not status.get("minimum_reached"):
         raise MaterializationRefused("forward root has not reached its frozen sample minimum")
     if manifest.get("preregistration_sha256") != _sha256(preregistration):
@@ -141,6 +143,12 @@ def materialize(
         raise MaterializationRefused("forward manifest/Phase-3 gate hash mismatch")
     if manifest.get("credentials_loaded") or manifest.get("order_writes_attempted"):
         raise MaterializationRefused("forward root is not credential-free and write-free")
+    if manifest.get("evidence_class") != "forward_pit_admission":
+        raise MaterializationRefused(
+            "only forward_pit_admission roots may enter the Phase-4 materializer"
+        )
+    if manifest.get("admission_eligible") is False:
+        raise MaterializationRefused("non-admission evidence cannot enter the Phase-4 materializer")
     if preregistration_payload.get("measurement_status") != "PENDING_FRESH_PIT_DATA":
         raise MaterializationRefused("input must bind the frozen pre-outcome preregistration")
     if preregistration_payload.get("network_calls") != 0:
