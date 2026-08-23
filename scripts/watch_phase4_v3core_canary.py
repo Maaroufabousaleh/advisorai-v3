@@ -124,6 +124,8 @@ def evaluate_once(
         "source_admitted_final_bars": source_status.get("admitted_final_bar_count"),
         "candidate_prediction_counts": candidate_status.get("prediction_counts"),
         "candidate_rejection_count": candidate_status.get("rejection_count"),
+        "candidate_warmup_state": candidate_status.get("warmup_state"),
+        "candidate_last_eligibility_status": candidate_status.get("last_eligibility_status"),
         "evidence_class": CANARY_EVIDENCE_CLASS,
         "admission_eligible": False,
         "preregistration_sha256": preregistration_sha256,
