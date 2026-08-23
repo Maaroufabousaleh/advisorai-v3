@@ -9,6 +9,9 @@ import pytest
 from advisorai.collectors.sources import HttpResponse
 from advisorai.phase4 import (
     CANARY_EVIDENCE_CLASS,
+    CANARY_SOURCE_CONTEXT_UNAVAILABLE,
+    CANARY_WAITING_FOR_CONTEXT,
+    CANARY_WARMUP_NOT_ELIGIBLE,
     CanaryFinalityTracker,
     CanaryFinalityViolation,
     CanaryPredictionLedger,
@@ -18,10 +21,13 @@ from advisorai.phase4 import (
     ForwardPredictionRecord,
     ForwardRawSpool,
     bar_content_hash,
+    derive_first_mandatory_cutoff,
+    derive_mandatory_cutoffs,
     require_canary_artifact,
 )
 from advisorai.phase4.v3core_cadence import sha256_json
 from advisorai.phase4.v3core_forward import parse_binance_klines
+from scripts.run_phase4_v3core_canary_chronos import cutoff_eligibility_status
 
 HASH = "a" * 64
 START = datetime(2026, 8, 22, 0, 0, tzinfo=UTC)
@@ -222,3 +228,60 @@ def test_bar_content_hash_excludes_receipt_timestamps() -> None:
         }
     )
     assert bar_content_hash(first) == bar_content_hash(second)
+
+
+def test_warmup_schedule_derives_first_legal_hourly_cutoff() -> None:
+    start = datetime(2026, 8, 22, 23, 0, tzinfo=UTC)
+    first = derive_first_mandatory_cutoff(start)
+    assert first == datetime(2026, 8, 23, 4, 0, tzinfo=UTC)
+    assert derive_mandatory_cutoffs(start) == tuple(
+        datetime(2026, 8, 23, hour, 0, tzinfo=UTC) for hour in range(4, 8)
+    )
+
+
+@pytest.mark.parametrize("hour", (0, 1, 2, 3))
+def test_old_canary_early_cutoffs_are_warmup_not_failures(hour: int) -> None:
+    start = datetime(2026, 8, 22, 23, 0, tzinfo=UTC)
+    first = derive_first_mandatory_cutoff(start)
+    cutoff = datetime(2026, 8, 23, hour, 0, tzinfo=UTC)
+    assert (
+        cutoff_eligibility_status(
+            cutoff=cutoff,
+            now=cutoff + timedelta(seconds=1),
+            first_mandatory_cutoff=first,
+            context_available=False,
+        )
+        == CANARY_WARMUP_NOT_ELIGIBLE
+    )
+
+
+def test_first_mandatory_cutoff_distinguishes_eligibility_from_source_gap() -> None:
+    start = datetime(2026, 8, 22, 23, 0, tzinfo=UTC)
+    first = derive_first_mandatory_cutoff(start)
+    assert (
+        cutoff_eligibility_status(
+            cutoff=first,
+            now=first,
+            first_mandatory_cutoff=first,
+            context_available=True,
+        )
+        == "ELIGIBLE"
+    )
+    assert (
+        cutoff_eligibility_status(
+            cutoff=first,
+            now=first,
+            first_mandatory_cutoff=first,
+            context_available=False,
+        )
+        == CANARY_SOURCE_CONTEXT_UNAVAILABLE
+    )
+    assert (
+        cutoff_eligibility_status(
+            cutoff=first,
+            now=first - timedelta(seconds=1),
+            first_mandatory_cutoff=first,
+            context_available=False,
+        )
+        == CANARY_WAITING_FOR_CONTEXT
+    )
