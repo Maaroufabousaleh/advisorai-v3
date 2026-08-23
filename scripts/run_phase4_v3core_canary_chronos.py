@@ -17,6 +17,10 @@ from pathlib import Path
 from advisorai.phase4 import (
     CANARY_CONTEXT_LAG_SECONDS,
     CANARY_EVIDENCE_CLASS,
+    CANARY_MISSED_MANDATORY_CUTOFF,
+    CANARY_SOURCE_CONTEXT_UNAVAILABLE,
+    CANARY_WAITING_FOR_CONTEXT,
+    CANARY_WARMUP_NOT_ELIGIBLE,
     V3_CORE_SYMBOLS,
     CanaryPredictionLedger,
     CanaryRejectionLedger,
@@ -146,6 +150,9 @@ def _status(
     identity: ChronosRuntimeIdentity,
     target_end_at: datetime,
     failure_reason: str | None = None,
+    failure_detail: str | None = None,
+    warmup_state: str = "ACTIVE",
+    last_eligibility_status: str | None = None,
 ) -> dict[str, object]:
     result: dict[str, object] = {
         "schema": RUN_SCHEMA,
@@ -169,10 +176,35 @@ def _status(
         "admission_eligible": False,
         "phase4_materialization_eligible": False,
         "target_end_at": target_end_at.isoformat(),
+        "warmup_state": warmup_state,
+        "last_eligibility_status": last_eligibility_status,
     }
     if failure_reason is not None:
         result["failure_reason"] = failure_reason
+    if failure_detail is not None:
+        result["failure_detail"] = failure_detail
     return result
+
+
+def cutoff_eligibility_status(
+    *,
+    cutoff: datetime,
+    now: datetime,
+    first_mandatory_cutoff: datetime,
+    context_available: bool,
+) -> str:
+    """Classify a cutoff without turning warm-up into a candidate failure."""
+
+    cutoff = cutoff.astimezone(UTC)
+    now = now.astimezone(UTC)
+    first_mandatory_cutoff = first_mandatory_cutoff.astimezone(UTC)
+    if cutoff < first_mandatory_cutoff:
+        return CANARY_WARMUP_NOT_ELIGIBLE
+    if not context_available:
+        if now < cutoff:
+            return CANARY_WAITING_FOR_CONTEXT
+        return CANARY_SOURCE_CONTEXT_UNAVAILABLE
+    return "ELIGIBLE"
 
 
 def run(
@@ -248,6 +280,19 @@ def run(
         "runtime_environment_hash": identity.environment_fingerprint,
         "context_bars": 48,
         "context_newest_lag_seconds": CANARY_CONTEXT_LAG_SECONDS,
+        "warmup_policy_id": prereg.warmup_policy_id,
+        "warmup_until_at": (
+            prereg.warmup_until_at.isoformat() if prereg.warmup_until_at is not None else None
+        ),
+        "first_mandatory_cutoff_at": (
+            prereg.first_mandatory_cutoff_at.isoformat()
+            if prereg.first_mandatory_cutoff_at is not None
+            else None
+        ),
+        "mandatory_cutoffs": [cutoff.isoformat() for cutoff in prereg.mandatory_cutoffs],
+        "scheduler_identity": prereg.scheduler_identity,
+        "scheduler_sha256": prereg.scheduler_sha256,
+        "status_output_contract": prereg.status_output_contract,
         "horizon_bars": CHRONOS_HORIZON_BARS,
         "target_end_at": prereg.target_end_at.isoformat(),
         "evidence_class": CANARY_EVIDENCE_CLASS,
@@ -274,6 +319,11 @@ def run(
     stop = False
     state = "running"
     failure_reason: str | None = None
+    failure_detail: str | None = None
+    mandatory_cutoffs = prereg.mandatory_cutoffs
+    first_mandatory_cutoff = prereg.first_mandatory_cutoff_at
+    if not mandatory_cutoffs or first_mandatory_cutoff is None:
+        raise ValueError("replacement canary requires a preregistered warm-up schedule")
 
     def request_stop(_signum: int, _frame: object) -> None:
         nonlocal stop
@@ -286,6 +336,10 @@ def run(
     try:
         while not stop and datetime.now(UTC) < prereg.target_end_at:
             now = datetime.now(UTC)
+            warmup_state = CANARY_WARMUP_NOT_ELIGIBLE if now < first_mandatory_cutoff else "ACTIVE"
+            last_eligibility_status: str | None = (
+                CANARY_WARMUP_NOT_ELIGIBLE if warmup_state == CANARY_WARMUP_NOT_ELIGIBLE else None
+            )
             bars = ForwardNormalizedBarSpool(source_root / "normalized-bars.jsonl").read()
             source_status_path = source_root / "status.json"
             if source_status_path.is_file():
@@ -300,14 +354,15 @@ def run(
                 completed_for_symbol = sum(
                     record.prediction.instrument == symbol for record in ledger.records
                 )
-                for cutoff in _candidate_cutoffs(
-                    bars, symbol=symbol, context_lag_seconds=CANARY_CONTEXT_LAG_SECONDS
-                ):
+                for cutoff in mandatory_cutoffs:
                     existing = ledger.for_cutoff(symbol, cutoff)
                     if (
                         existing is None
                         and completed_for_symbol >= prereg.maximum_cutoffs_per_symbol
                     ):
+                        continue
+                    if cutoff < first_mandatory_cutoff:
+                        last_eligibility_status = CANARY_WARMUP_NOT_ELIGIBLE
                         continue
                     context = context_for_cutoff(
                         bars,
@@ -315,6 +370,14 @@ def run(
                         cutoff=cutoff,
                         now=min(now, cutoff),
                         newest_context_lag_seconds=CANARY_CONTEXT_LAG_SECONDS,
+                    )
+                    if context is not None and any(bar.collected_at > now for bar in context):
+                        context = None
+                    last_eligibility_status = cutoff_eligibility_status(
+                        cutoff=cutoff,
+                        now=now,
+                        first_mandatory_cutoff=first_mandatory_cutoff,
+                        context_available=context is not None,
                     )
                     if existing is not None:
                         if context is None:
@@ -330,24 +393,24 @@ def run(
                         )
                         continue
                     if context is None:
-                        if now >= cutoff:
-                            rejections.append(
-                                instrument=symbol,
-                                cutoff=cutoff,
-                                reason="MISSING_MANDATORY_48_BAR_CONTEXT",
-                            )
-                            state = "CANARY_FAILED"
-                            failure_reason = "MISSING_MANDATORY_48_BAR_CONTEXT"
-                            break
-                        continue
+                        if now < cutoff:
+                            continue
+                        rejections.append(
+                            instrument=symbol,
+                            cutoff=cutoff,
+                            reason=CANARY_SOURCE_CONTEXT_UNAVAILABLE,
+                        )
+                        state = "CANARY_FAILED"
+                        failure_reason = CANARY_SOURCE_CONTEXT_UNAVAILABLE
+                        break
                     if now > cutoff:
                         rejections.append(
                             instrument=symbol,
                             cutoff=cutoff,
-                            reason="MISSED_MANDATORY_CUTOFF",
+                            reason=CANARY_MISSED_MANDATORY_CUTOFF,
                         )
                         state = "CANARY_FAILED"
-                        failure_reason = "MISSED_MANDATORY_CUTOFF"
+                        failure_reason = CANARY_MISSED_MANDATORY_CUTOFF
                         break
                     try:
                         inference_started_at = datetime.now(UTC)
@@ -361,10 +424,11 @@ def run(
                             rejections.append(
                                 instrument=symbol,
                                 cutoff=cutoff,
-                                reason="INFERENCE_COMPLETED_AFTER_CUTOFF",
+                                reason=CANARY_MISSED_MANDATORY_CUTOFF,
                             )
                             state = "CANARY_FAILED"
-                            failure_reason = "INFERENCE_COMPLETED_AFTER_CUTOFF"
+                            failure_reason = CANARY_MISSED_MANDATORY_CUTOFF
+                            failure_detail = "INFERENCE_COMPLETED_AFTER_CUTOFF"
                             break
                         prediction = build_chronos_prediction(
                             identity=identity,
@@ -383,19 +447,21 @@ def run(
                         rejections.append(
                             instrument=symbol,
                             cutoff=cutoff,
-                            reason=f"INFERENCE_{exc.error_class.upper()}",
+                            reason=CANARY_MISSED_MANDATORY_CUTOFF,
                         )
                         state = "CANARY_FAILED"
-                        failure_reason = f"INFERENCE_{exc.error_class.upper()}"
+                        failure_reason = CANARY_MISSED_MANDATORY_CUTOFF
+                        failure_detail = f"INFERENCE_{exc.error_class.upper()}"
                         break
                     except (RuntimeError, ValueError) as exc:
                         rejections.append(
                             instrument=symbol,
                             cutoff=cutoff,
-                            reason="OUTPUT_OR_LEDGER_CONTRACT_FAILURE",
+                            reason=CANARY_MISSED_MANDATORY_CUTOFF,
                         )
                         state = "CANARY_FAILED"
-                        failure_reason = f"OUTPUT_OR_LEDGER_CONTRACT_FAILURE:{type(exc).__name__}"
+                        failure_reason = CANARY_MISSED_MANDATORY_CUTOFF
+                        failure_detail = f"OUTPUT_OR_LEDGER_CONTRACT_FAILURE:{type(exc).__name__}"
                         break
             _write_atomic(
                 run_root / "status.json",
@@ -406,6 +472,9 @@ def run(
                     identity=identity,
                     target_end_at=prereg.target_end_at,
                     failure_reason=failure_reason,
+                    failure_detail=failure_detail,
+                    warmup_state=warmup_state,
+                    last_eligibility_status=last_eligibility_status,
                 ),
             )
             if state == "CANARY_FAILED":
@@ -438,6 +507,10 @@ def run(
         identity=identity,
         target_end_at=prereg.target_end_at,
         failure_reason=failure_reason,
+        failure_detail=failure_detail,
+        warmup_state=(
+            CANARY_WARMUP_NOT_ELIGIBLE if datetime.now(UTC) < first_mandatory_cutoff else "ACTIVE"
+        ),
     )
     _write_atomic(run_root / "status.json", result)
     return result
