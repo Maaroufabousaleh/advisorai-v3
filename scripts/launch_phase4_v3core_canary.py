@@ -149,6 +149,8 @@ def launch(
             str(source_root),
             "--candidate-root",
             str(candidate_root),
+            "--history-root",
+            str(watchdog_root),
             "--output-root",
             str(watchdog_root),
         ]
