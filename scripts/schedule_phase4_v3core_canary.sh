@@ -104,6 +104,7 @@ run_health_once() {
         --preregistration-sha256 "$PREREGISTRATION_SHA256" \
         --source-root "$SOURCE_ROOT" \
         --candidate-root "$CANDIDATE_ROOT" \
+        --history-root "$WATCHDOG_ROOT" \
         --output-root "$output_root" \
         --once > "$output_root/stdout.log" 2> "$output_root/stderr.log"
     command_status=$?

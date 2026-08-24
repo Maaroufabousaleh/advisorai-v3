@@ -143,6 +143,152 @@ def test_canary_finality_detects_post_admission_revision_without_rewrite(tmp_pat
     assert set(tracker.revisions[0].changed_fields) == {"high", "close"}
 
 
+def test_pre_admission_variation_is_not_post_admission_revision(tmp_path: Path) -> None:
+    """A changed receipt before admission is allowed and recorded separately."""
+
+    normalized = ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl")
+    tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
+    raw = ForwardRawSpool(tmp_path / "raw.jsonl")
+    original = json.dumps([_row(0)]).encode()
+    changed_row = _row(0)
+    changed_row[5] = "3"
+    changed = json.dumps([changed_row]).encode()
+    records = (
+        raw.append(
+            _response(original, START + timedelta(minutes=5, seconds=1)),
+            symbol="ETHUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT",
+        ),
+        raw.append(
+            _response(changed, START + timedelta(minutes=5, seconds=32)),
+            symbol="ETHUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT",
+        ),
+        raw.append(
+            _response(changed, START + timedelta(minutes=6, seconds=4)),
+            symbol="ETHUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT",
+        ),
+    )
+    for record, body in zip(records, (original, changed, changed), strict=True):
+        tracker.observe(
+            record,
+            parse_binance_klines(
+                body,
+                symbol="ETHUSDT",
+                collected_at=record.collected_at,
+                source_snapshot_hash=HASH,
+            ),
+        )
+
+    assert not tracker.revisions
+    metrics = tracker.metrics()
+    assert metrics["post_admission_revision_count"] == 0
+    assert metrics["pre_admission_variation_intervals"] == 1
+    admission = metrics["admissions"][0]
+    assert admission["instrument"] == "ETHUSDT"
+    assert admission["admission_raw_sequence"] == 3
+    assert admission["supporting_receipt_sequences"] == [2, 3]
+    assert admission["pre_admission_variation_count"] == 1
+
+
+def test_receipt_after_admission_at_equal_timestamp_is_a_revision(tmp_path: Path) -> None:
+    normalized = ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl")
+    tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
+    raw = ForwardRawSpool(tmp_path / "raw.jsonl")
+    original = json.dumps([_row(0)]).encode()
+    changed_row = _row(0)
+    changed_row[4] = "102"
+    changed_row[2] = "103"
+    changed = json.dumps([changed_row]).encode()
+    admission_time = START + timedelta(minutes=6)
+    for body in (original, original):
+        record = raw.append(
+            _response(body, admission_time),
+            symbol="ETHUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT",
+        )
+        tracker.observe(
+            record,
+            parse_binance_klines(
+                body,
+                symbol="ETHUSDT",
+                collected_at=record.collected_at,
+                source_snapshot_hash=HASH,
+            ),
+        )
+    revised = raw.append(
+        _response(changed, admission_time),
+        symbol="ETHUSDT",
+        request_url="https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT",
+    )
+    with pytest.raises(CanaryFinalityViolation, match="POST_ADMISSION_REVISION"):
+        tracker.observe(
+            revised,
+            parse_binance_klines(
+                changed,
+                symbol="ETHUSDT",
+                collected_at=revised.collected_at,
+                source_snapshot_hash=HASH,
+            ),
+        )
+
+
+def test_v2_eth_receipt_chronology_is_pre_admission_variation(tmp_path: Path) -> None:
+    """Regression fixture for ETH 2026-08-23 15:45Z from the immutable canary."""
+
+    interval_start = datetime(2026, 8, 23, 15, 40, tzinfo=UTC)
+
+    def row(volume: str) -> list[object]:
+        interval_end = interval_start + timedelta(minutes=5)
+        return [
+            int(interval_start.timestamp() * 1000),
+            "2444.28000000",
+            "2452.86000000",
+            "2443.37000000",
+            "2446.68000000",
+            volume,
+            int(interval_end.timestamp() * 1000) - 1,
+            "200",
+            4,
+            "1",
+            "100",
+        ]
+
+    normalized = ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl")
+    tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
+    raw = ForwardRawSpool(tmp_path / "raw.jsonl")
+    original = json.dumps([row("1891.64530000")]).encode()
+    final = json.dumps([row("1892.05400000")]).encode()
+    chronology = (
+        (original, datetime(2026, 8, 23, 15, 45, 0, 970963, tzinfo=UTC)),
+        (final, datetime(2026, 8, 23, 15, 45, 32, 668159, tzinfo=UTC)),
+        (final, datetime(2026, 8, 23, 15, 46, 4, 696743, tzinfo=UTC)),
+    )
+    for body, collected_at in chronology:
+        record = raw.append(
+            _response(body, collected_at),
+            symbol="ETHUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT",
+        )
+        tracker.observe(
+            record,
+            parse_binance_klines(
+                body,
+                symbol="ETHUSDT",
+                collected_at=collected_at,
+                source_snapshot_hash=HASH,
+            ),
+        )
+
+    assert not tracker.revisions
+    admission = tracker.metrics()["admissions"][0]
+    assert admission["interval_end"] == "2026-08-23T15:45:00+00:00"
+    assert admission["admission_observed_at"] == "2026-08-23T15:46:04.696743+00:00"
+    assert admission["supporting_receipt_sequences"] == [2, 3]
+    assert admission["pre_admission_variation_count"] == 1
+
+
 def test_canary_prediction_envelope_and_resume_round_trip(tmp_path: Path) -> None:
     cutoff = START + timedelta(hours=1)
     prediction = ForwardPredictionRecord(
