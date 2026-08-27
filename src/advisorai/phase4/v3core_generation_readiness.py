@@ -28,7 +28,12 @@ EXPECTED_CANDIDATE_MODEL = "chronos-2-small"
 EXPECTED_CONTEXT_BARS = 48
 EXPECTED_OUTPUT_BARS = 30
 EXPECTED_HORIZON_BARS = 12
-EXPECTED_CASES_PER_SYMBOL = 64
+EXPECTED_MINIMUM_CASES_PER_SYMBOL = 64
+# Retain the historical name for callers that implement the original
+# 64-case readiness contract.  Long-run release candidates pass an explicit
+# larger scheduled target while keeping this clean minimum unchanged.
+EXPECTED_CASES_PER_SYMBOL = EXPECTED_MINIMUM_CASES_PER_SYMBOL
+EXPECTED_LONG_RUN_CASES_PER_SYMBOL = 80
 EXPECTED_GPU_FAMILY_CAP = 1
 
 
@@ -68,6 +73,7 @@ class GenerationSourceContract(BaseModel):
     target_end_at: datetime
     first_eligible_cutoff: datetime
     cases_per_symbol_target: int = EXPECTED_CASES_PER_SYMBOL
+    minimum_clean_cases_per_symbol: int = EXPECTED_MINIMUM_CASES_PER_SYMBOL
     credentials_loaded: bool = False
     order_writes_attempted: bool = False
     credential_loader_configured: bool = False
@@ -77,6 +83,14 @@ class GenerationSourceContract(BaseModel):
     @classmethod
     def aware_timestamp(cls, value: datetime, info: object) -> datetime:
         return _aware(value, getattr(info, "field_name", "timestamp"))
+
+    @model_validator(mode="after")
+    def validate_case_contract(self) -> GenerationSourceContract:
+        if self.minimum_clean_cases_per_symbol != EXPECTED_MINIMUM_CASES_PER_SYMBOL:
+            raise ValueError("V3-Core requires a 64-case clean minimum per symbol")
+        if self.cases_per_symbol_target < self.minimum_clean_cases_per_symbol:
+            raise ValueError("scheduled target cannot be below the clean minimum")
+        return self
 
 
 class GenerationCandidateContract(BaseModel):
@@ -194,6 +208,7 @@ class GenerationCoverageInput(BaseModel):
     remaining_future_cutoffs: dict[str, int]
     candidate_root_healthy: bool = False
     cases_per_symbol_target: int = EXPECTED_CASES_PER_SYMBOL
+    minimum_clean_cases_per_symbol: int = EXPECTED_MINIMUM_CASES_PER_SYMBOL
     candidate_model: str = EXPECTED_CANDIDATE_MODEL
 
     @field_validator("source_completed_cases", "candidate_predictions", "remaining_future_cutoffs")
@@ -206,12 +221,23 @@ class GenerationCoverageInput(BaseModel):
             raise ValueError("coverage counts cannot be negative")
         return normalized
 
-    @field_validator("cases_per_symbol_target")
+    @field_validator("cases_per_symbol_target", "minimum_clean_cases_per_symbol")
     @classmethod
     def positive_target(cls, value: int) -> int:
-        if value != EXPECTED_CASES_PER_SYMBOL:
-            raise ValueError("V3-Core readiness requires 64 cases per symbol")
+        if value < 1:
+            raise ValueError("coverage targets must be positive")
         return value
+
+    @model_validator(mode="after")
+    def validate_case_contract(self) -> GenerationCoverageInput:
+        if self.minimum_clean_cases_per_symbol != EXPECTED_MINIMUM_CASES_PER_SYMBOL:
+            raise ValueError("V3-Core readiness requires a 64-case clean minimum")
+        if self.cases_per_symbol_target < self.minimum_clean_cases_per_symbol:
+            raise ValueError(
+                "V3-Core readiness requires 64 cases as the clean minimum; "
+                "scheduled target cannot be below it"
+            )
+        return self
 
     @field_validator("candidate_model")
     @classmethod
@@ -238,6 +264,7 @@ class GenerationReadinessReport(BaseModel):
     source_completed_case_counts: dict[str, int]
     source_target_counts: dict[str, int]
     remaining_future_cutoffs: dict[str, int]
+    minimum_clean_cases_per_symbol: int
     complete_coverage_possible: bool
     candidate_root_healthy: bool
     reasons: tuple[str, ...]
@@ -304,10 +331,11 @@ def _checks(spec: GenerationPreflightSpec) -> tuple[PreflightCheck, ...]:
         PreflightCheck(
             name="source_deadline",
             passed=(
-                source.cases_per_symbol_target == EXPECTED_CASES_PER_SYMBOL
+                source.minimum_clean_cases_per_symbol == EXPECTED_MINIMUM_CASES_PER_SYMBOL
+                and source.cases_per_symbol_target >= source.minimum_clean_cases_per_symbol
                 and source.target_end_at > source.first_eligible_cutoff
             ),
-            reason="the immutable target end must be after the first eligible cutoff",
+            reason="the immutable target must exceed the 64-case clean minimum and end after the first cutoff",
         ),
         PreflightCheck(
             name="prospective_cutoff_binding",
@@ -431,8 +459,9 @@ def evaluate_generation_readiness(
 
     counts = coverage.candidate_predictions
     target = coverage.cases_per_symbol_target
+    minimum = coverage.minimum_clean_cases_per_symbol
     candidate_possible_by_symbol = {
-        symbol: counts[symbol] + coverage.remaining_future_cutoffs[symbol] >= target
+        symbol: counts[symbol] + coverage.remaining_future_cutoffs[symbol] >= minimum
         for symbol in V3_CORE_SYMBOLS
     }
     source_possible_by_symbol = {
@@ -457,7 +486,7 @@ def evaluate_generation_readiness(
         if not source_possible_by_symbol[symbol]:
             reasons.append(f"{symbol}_source_cannot_reach_{target}_cases")
         if not candidate_possible_by_symbol[symbol]:
-            reasons.append(f"{symbol}_cannot_reach_{target}_candidate_predictions")
+            reasons.append(f"{symbol}_cannot_reach_{minimum}_candidate_predictions")
         if not candidate_within_source[symbol]:
             reasons.append(f"{symbol}_candidate_count_exceeds_source_count")
     status: Literal[
@@ -476,6 +505,7 @@ def evaluate_generation_readiness(
             symbol: coverage.cases_per_symbol_target for symbol in V3_CORE_SYMBOLS
         },
         "remaining_future_cutoffs": coverage.remaining_future_cutoffs,
+        "minimum_clean_cases_per_symbol": minimum,
         "complete_coverage_possible": complete,
         "candidate_root_healthy": coverage.candidate_root_healthy,
         "reasons": reasons,
@@ -490,6 +520,8 @@ def evaluate_generation_readiness(
 __all__ = [
     "EXPECTED_CANDIDATE_MODEL",
     "EXPECTED_CASES_PER_SYMBOL",
+    "EXPECTED_LONG_RUN_CASES_PER_SYMBOL",
+    "EXPECTED_MINIMUM_CASES_PER_SYMBOL",
     "EXPECTED_CONTEXT_BARS",
     "EXPECTED_GPU_FAMILY_CAP",
     "EXPECTED_HORIZON_BARS",

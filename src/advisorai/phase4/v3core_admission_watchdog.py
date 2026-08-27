@@ -13,11 +13,12 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from advisorai.phase4.v3core_cadence import V3_CORE_SYMBOLS
 from advisorai.phase4.v3core_generation_readiness import (
     EXPECTED_CASES_PER_SYMBOL,
+    EXPECTED_MINIMUM_CASES_PER_SYMBOL,
     GenerationCoverageInput,
     GenerationReadinessReport,
     evaluate_generation_readiness,
@@ -71,6 +72,7 @@ class GenerationWatchdogSnapshot(BaseModel):
     candidate_ledger_healthy: bool
     candidate_root_healthy: bool
     cases_per_symbol_target: int = EXPECTED_CASES_PER_SYMBOL
+    minimum_clean_cases_per_symbol: int = EXPECTED_MINIMUM_CASES_PER_SYMBOL
 
     @field_validator(
         "observed_at",
@@ -99,12 +101,18 @@ class GenerationWatchdogSnapshot(BaseModel):
     def validate_counts(cls, value: dict[str, int]) -> dict[str, int]:
         return _symbols(value)
 
-    @field_validator("cases_per_symbol_target")
+    @field_validator("cases_per_symbol_target", "minimum_clean_cases_per_symbol")
     @classmethod
     def validate_target(cls, value: int) -> int:
-        if value != EXPECTED_CASES_PER_SYMBOL:
-            raise ValueError("V3-Core watchdog requires a 64-case target per symbol")
+        if value < EXPECTED_MINIMUM_CASES_PER_SYMBOL:
+            raise ValueError("V3-Core watchdog requires a 64-case clean minimum per symbol")
         return value
+
+    @model_validator(mode="after")
+    def validate_case_contract(self) -> GenerationWatchdogSnapshot:
+        if self.cases_per_symbol_target < self.minimum_clean_cases_per_symbol:
+            raise ValueError("watchdog target cannot be below the clean minimum")
+        return self
 
 
 class GenerationWatchdogReport(BaseModel):
@@ -140,6 +148,7 @@ def evaluate_watchdog(snapshot: GenerationWatchdogSnapshot) -> GenerationWatchdo
         candidate_root_healthy=snapshot.candidate_root_healthy
         and snapshot.candidate_ledger_healthy,
         cases_per_symbol_target=snapshot.cases_per_symbol_target,
+        minimum_clean_cases_per_symbol=snapshot.minimum_clean_cases_per_symbol,
     )
     readiness = evaluate_generation_readiness(coverage)
     reasons = list(readiness.reasons)

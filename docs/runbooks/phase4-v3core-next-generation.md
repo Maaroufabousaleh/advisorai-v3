@@ -1,5 +1,11 @@
 # Phase-4 V3-Core next-generation launch contract
 
+> This earlier 64-case runbook is retained for review history. The current
+> release-candidate contract is documented in
+> `phase4-v3core-longrun-release-candidate.md` and must be used for any future
+> long-run planning. V3B is qualified canary evidence only; no long run has
+> been launched and live capital remains unauthorized.
+
 This runbook is for a future fresh Phase-4 generation. It does not authorize a
 launch while a protected source or CUDA worker is active, and it does not
 modify an existing evidence root.

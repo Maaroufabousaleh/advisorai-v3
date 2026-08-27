@@ -210,6 +210,10 @@ def materialize(
     output_root = output_root.resolve()
     if output_root.exists():
         raise MaterializationRefused("materialization output root must be new")
+    if (integrity_report_path is None) != (exclusion_overlay_path is None):
+        raise MaterializationRefused(
+            "integrity report and exclusion overlay must be supplied together"
+        )
     manifest_path = run_directory / "manifest.json"
     status_path = run_directory / "status.json"
     manifest = _load_json(manifest_path, "forward manifest")
@@ -242,10 +246,6 @@ def materialize(
     cases_path = run_directory / "completed-cases.jsonl"
     raw_responses_path = run_directory / "raw-responses.jsonl"
     normalized_bars = run_directory / "normalized-bars.jsonl"
-    if (integrity_report_path is None) != (exclusion_overlay_path is None):
-        raise MaterializationRefused(
-            "integrity report and exclusion overlay must be supplied together"
-        )
     cases = _load_cases(cases_path)
     integrity_report = None
     integrity_overlay = None
