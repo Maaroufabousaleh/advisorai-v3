@@ -170,6 +170,20 @@ def test_readiness_refuses_candidate_count_that_exceeds_source_cases() -> None:
     assert "BTCUSDT_candidate_count_exceeds_source_count" in report.reasons
 
 
+def test_readiness_refuses_candidate_count_that_exceeds_opportunity_target() -> None:
+    report = evaluate_generation_readiness(
+        GenerationCoverageInput(
+            source_completed_cases={"BTCUSDT": 81, "ETHUSDT": 64},
+            candidate_predictions={"BTCUSDT": 81, "ETHUSDT": 64},
+            remaining_future_cutoffs={"BTCUSDT": 0, "ETHUSDT": 0},
+            candidate_root_healthy=True,
+            cases_per_symbol_target=80,
+        )
+    )
+    assert report.status == "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION"
+    assert "BTCUSDT_candidate_count_exceeds_80_opportunity_target" in report.reasons
+
+
 def test_readiness_requires_healthy_candidate_root_even_with_enough_cutoffs() -> None:
     report = evaluate_generation_readiness(_coverage(healthy=False))
     assert report.status == "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION"

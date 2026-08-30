@@ -122,6 +122,19 @@ def test_first_cutoff_uses_fresh_run_context_geometry() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "start_at",
+    (
+        datetime(2026, 8, 24, 16, 0, 1, tzinfo=UTC),
+        datetime(2026, 8, 24, 16, 4, 59, tzinfo=UTC),
+        datetime(2026, 8, 24, 16, 5, tzinfo=UTC),
+    ),
+)
+def test_first_cutoff_rejects_non_aligned_fresh_run_start(start_at: datetime) -> None:
+    with pytest.raises(ValueError, match="aligned to a UTC hour"):
+        derive_first_long_run_cutoff(start_at)
+
+
 def test_terminal_deadline_includes_80_opportunities_outcome_and_margin() -> None:
     deadline = estimate_long_run_terminal_deadline(START)
     assert deadline - START == timedelta(hours=86)
@@ -307,6 +320,17 @@ def test_incident_dispositions_separate_case_exclusion_recovery_and_fatal() -> N
             clean_minimum_still_attainable=True,
         )
         == LongRunIncidentDisposition.GENERATION_FATAL
+    )
+
+
+def test_infeasible_coverage_overrides_nominal_component_recovery() -> None:
+    assert (
+        classify_long_run_incident(
+            LongRunIncidentType.CANDIDATE_PROCESS_DEATH,
+            clean_minimum_still_attainable=False,
+            recovery_verified=True,
+        )
+        == LongRunIncidentDisposition.GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION
     )
 
 

@@ -90,6 +90,8 @@ def test_materializer_rejects_network_or_write_flags(tmp_path: Path) -> None:
             output_root=tmp_path / "out",
             phase3_gate_sha256="a" * 64,
         )
+
+
 def test_materializer_rejects_prospective_canary_evidence(tmp_path: Path) -> None:
     run = tmp_path / "run"
     run.mkdir()

@@ -619,14 +619,14 @@ def classify_long_run_incident(
     incident = LongRunIncidentType(incident)
     if incident in _GENERATION_FATAL_INCIDENTS:
         return LongRunIncidentDisposition.GENERATION_FATAL
+    if not clean_minimum_still_attainable:
+        return LongRunIncidentDisposition.GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION
     if incident in _RECOVERABLE_COMPONENT_INCIDENTS:
         return (
             LongRunIncidentDisposition.COMPONENT_RECOVERY_ALLOWED
             if recovery_verified
             else LongRunIncidentDisposition.GENERATION_FATAL
         )
-    if not clean_minimum_still_attainable:
-        return LongRunIncidentDisposition.GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION
     return LongRunIncidentDisposition.CASE_EXCLUDED
 
 

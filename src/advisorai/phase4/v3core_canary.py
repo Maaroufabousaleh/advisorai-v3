@@ -566,6 +566,17 @@ class CanaryRejectionLedger:
 
 
 def _bar_content_payload(bar: V3CoreBar) -> dict[str, str]:
+    """Return the stable identity used by the finality rule.
+
+    Receipt-local timestamps and the derived normalized hash are deliberately
+    excluded.  The source identity, raw kline identity, provider event time,
+    and source-health classification are part of the scientific content and
+    must therefore participate in equality checks as well as OHLCV values.
+    """
+
+    provenance = bar.provenance.model_dump(mode="json")
+    for field in ("provider_available_at", "collected_at", "normalized_record_hash"):
+        provenance.pop(field, None)
     return {
         "instrument": bar.instrument,
         "interval_end": bar.interval_end.isoformat(),
@@ -574,11 +585,17 @@ def _bar_content_payload(bar: V3CoreBar) -> dict[str, str]:
         "low": str(bar.low),
         "close": str(bar.close),
         "volume": str(bar.volume),
+        "source_id": bar.source_id,
+        "provider_identity": bar.provider_identity,
+        "endpoint": bar.endpoint,
+        "source_snapshot_hash": bar.source_snapshot_hash,
+        "quality": bar.quality,
+        "provenance": provenance,
     }
 
 
 def bar_content_hash(bar: V3CoreBar) -> str:
-    """Hash only the final OHLCV content used by the canary finality rule."""
+    """Hash stable OHLCV and source identity used by the finality rule."""
 
     return sha256_json(_bar_content_payload(bar))
 
@@ -715,38 +732,80 @@ class CanaryFinalityTracker:
         self.revisions.append(revision)
         return revision
 
-    def observe(self, raw: ForwardRawResponse, bars: Iterable[V3CoreBar]) -> tuple[V3CoreBar, ...]:
+    def _observe_state(
+        self,
+        raw: ForwardRawResponse,
+        bars: Iterable[V3CoreBar],
+        *,
+        versions: dict[tuple[str, datetime], dict[str, list[tuple[int, datetime]]]],
+        admitted_bars: dict[tuple[str, datetime], V3CoreBar],
+        admissions: dict[tuple[str, datetime], dict[str, object]],
+        persist_normalized: bool,
+        record_revisions: bool,
+    ) -> tuple[V3CoreBar, ...]:
+        """Apply one receipt to an explicit state projection.
+
+        Replay uses a shadow projection so a persisted canonical bar cannot
+        cause an earlier raw variation to be mistaken for a later revision.
+        The live path uses the tracker's mutable projection and persists only
+        after the same deterministic checks pass.
+        """
+
         admitted_now: list[V3CoreBar] = []
         for bar in bars:
             key = (bar.instrument, bar.interval_end)
             content_hash = bar_content_hash(bar)
-            versions = self._versions[key]
-            if raw.sequence not in {sequence for sequence, _ in versions[content_hash]}:
-                versions[content_hash].append((raw.sequence, raw.collected_at))
-            prior = self.normalized.bars.get(key)
+            interval_versions = versions[key]
+            sequence_hashes = {
+                version_hash
+                for version_hash, receipts in interval_versions.items()
+                if any(sequence == raw.sequence for sequence, _timestamp in receipts)
+            }
+            if sequence_hashes and content_hash not in sequence_hashes:
+                raise RuntimeError(
+                    f"raw receipt sequence {raw.sequence} contains conflicting content for "
+                    f"{bar.instrument}:{bar.interval_end.isoformat()}"
+                )
+            if raw.sequence not in {
+                sequence for sequence, _timestamp in interval_versions[content_hash]
+            }:
+                interval_versions[content_hash].append((raw.sequence, raw.collected_at))
+            prior = admitted_bars.get(key)
             if prior is not None:
                 if bar_content_hash(prior) != content_hash:
-                    revision = self._append_revision(
-                        bar=bar,
-                        admitted=prior,
-                        raw=raw,
-                        observed_hash=content_hash,
-                    )
-                    raise CanaryFinalityViolation(
-                        f"POST_ADMISSION_REVISION {revision.instrument}:{revision.interval_end.isoformat()}"
-                    )
+                    if record_revisions:
+                        revision = self._append_revision(
+                            bar=bar,
+                            admitted=prior,
+                            raw=raw,
+                            observed_hash=content_hash,
+                        )
+                        message = (
+                            f"POST_ADMISSION_REVISION {revision.instrument}:"
+                            f"{revision.interval_end.isoformat()}"
+                        )
+                    else:
+                        message = (
+                            "POST_ADMISSION_REVISION "
+                            f"{bar.instrument}:{bar.interval_end.isoformat()}"
+                        )
+                    raise CanaryFinalityViolation(message)
                 continue
             if raw.collected_at < bar.interval_end + timedelta(seconds=self.guard_seconds):
                 continue
-            if len(versions[content_hash]) < self.repeat_receipts:
+            if len(interval_versions[content_hash]) < self.repeat_receipts:
                 continue
             final_bar = self._admitted_bar(bar, raw.collected_at)
-            self.normalized.append(final_bar)
-            supporting = sorted(versions[content_hash], key=lambda item: (item[1], item[0]))
-            pre_admission_hashes = sorted(
-                version_hash for version_hash in versions if version_hash != content_hash
+            if persist_normalized:
+                self.normalized.append(final_bar)
+            admitted_bars[key] = final_bar
+            supporting = sorted(
+                interval_versions[content_hash], key=lambda item: (item[1], item[0])
             )
-            self._admissions[key] = {
+            pre_admission_hashes = sorted(
+                version_hash for version_hash in interval_versions if version_hash != content_hash
+            )
+            admissions[key] = {
                 "instrument": bar.instrument,
                 "interval_end": bar.interval_end,
                 "admission_observed_at": raw.collected_at,
@@ -764,17 +823,72 @@ class CanaryFinalityTracker:
             admitted_now.append(final_bar)
         return tuple(admitted_now)
 
+    def observe(self, raw: ForwardRawResponse, bars: Iterable[V3CoreBar]) -> tuple[V3CoreBar, ...]:
+        return self._observe_state(
+            raw,
+            bars,
+            versions=self._versions,
+            admitted_bars=self.normalized.bars,
+            admissions=self._admissions,
+            persist_normalized=True,
+            record_revisions=True,
+        )
+
     def replay(self, raw_records: Sequence[ForwardRawResponse], source_snapshot_hash: str) -> None:
         """Rebuild finality state from persisted raw receipts without changing them."""
 
+        if self.revisions:
+            raise CanaryFinalityViolation(
+                "cannot replay a canary with an existing post-admission revision history"
+            )
+
+        shadow_versions: dict[tuple[str, datetime], dict[str, list[tuple[int, datetime]]]] = (
+            defaultdict(lambda: defaultdict(list))
+        )
+        shadow_bars: dict[tuple[str, datetime], V3CoreBar] = {}
+        shadow_admissions: dict[tuple[str, datetime], dict[str, object]] = {}
+        previous_sequence = 0
+        previous_record_hash: str | None = None
         for raw in raw_records:
+            if raw.sequence != previous_sequence + 1:
+                raise RuntimeError("raw replay sequence is not continuous")
+            if raw.previous_record_hash != previous_record_hash:
+                raise RuntimeError("raw replay hash chain is not continuous")
+            previous_sequence = raw.sequence
+            previous_record_hash = raw.record_hash
             bars = parse_binance_klines(
                 raw.payload,
                 symbol=raw.symbol,
                 collected_at=raw.collected_at,
                 source_snapshot_hash=source_snapshot_hash,
             )
-            self.observe(raw, bars)
+            self._observe_state(
+                raw,
+                bars,
+                versions=shadow_versions,
+                admitted_bars=shadow_bars,
+                admissions=shadow_admissions,
+                persist_normalized=False,
+                record_revisions=False,
+            )
+
+        persisted_bars = dict(self.normalized.bars)
+        if not set(persisted_bars).issubset(shadow_bars):
+            raise RuntimeError("persisted canonical bars do not match chronological replay")
+        for key, persisted in persisted_bars.items():
+            if bar_content_hash(persisted) != bar_content_hash(shadow_bars[key]):
+                raise RuntimeError("persisted canonical bar identity differs from replay")
+
+        # A crash after a raw receipt was durably appended but before the
+        # derived canonical append is recoverable: reconstruct the missing
+        # derived records only after the complete raw replay validates.  Raw
+        # evidence is never rewritten and existing canonical records are never
+        # replaced.
+        for key in sorted(set(shadow_bars) - set(persisted_bars)):
+            self.normalized.append(shadow_bars[key])
+
+        self._versions = shadow_versions
+        self._admissions = shadow_admissions
 
     def metrics(self) -> dict[str, object]:
         observed = set(self._versions)

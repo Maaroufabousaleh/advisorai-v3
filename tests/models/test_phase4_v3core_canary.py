@@ -289,6 +289,160 @@ def test_v2_eth_receipt_chronology_is_pre_admission_variation(tmp_path: Path) ->
     assert admission["pre_admission_variation_count"] == 1
 
 
+def test_finality_replay_rebuilds_state_without_false_post_admission_revision(
+    tmp_path: Path,
+) -> None:
+    """Restart replay must evaluate receipts before the persisted admission."""
+
+    interval_start = datetime(2026, 8, 23, 15, 40, tzinfo=UTC)
+
+    def row(volume: str) -> list[object]:
+        interval_end = interval_start + timedelta(minutes=5)
+        return [
+            int(interval_start.timestamp() * 1000),
+            "2444.28000000",
+            "2452.86000000",
+            "2443.37000000",
+            "2446.68000000",
+            volume,
+            int(interval_end.timestamp() * 1000) - 1,
+            "200",
+            4,
+            "1",
+            "100",
+        ]
+
+    normalized_path = tmp_path / "normalized.jsonl"
+    raw_path = tmp_path / "raw.jsonl"
+    normalized = ForwardNormalizedBarSpool(normalized_path)
+    tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
+    raw = ForwardRawSpool(raw_path)
+    original = json.dumps([row("1891.64530000")]).encode()
+    final = json.dumps([row("1892.05400000")]).encode()
+    chronology = (
+        (original, datetime(2026, 8, 23, 15, 45, 0, 970963, tzinfo=UTC)),
+        (final, datetime(2026, 8, 23, 15, 45, 32, 668159, tzinfo=UTC)),
+        (final, datetime(2026, 8, 23, 15, 46, 4, 696743, tzinfo=UTC)),
+    )
+    for body, collected_at in chronology:
+        record = raw.append(
+            _response(body, collected_at),
+            symbol="ETHUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT",
+        )
+        tracker.observe(
+            record,
+            parse_binance_klines(
+                body,
+                symbol="ETHUSDT",
+                collected_at=collected_at,
+                source_snapshot_hash=HASH,
+            ),
+        )
+    persisted = normalized.read()
+
+    reopened_normalized = ForwardNormalizedBarSpool(normalized_path)
+    reopened = CanaryFinalityTracker(reopened_normalized, tmp_path / "reopened-revisions.jsonl")
+    reopened.replay(raw.read(), HASH)
+
+    assert reopened_normalized.read() == persisted
+    assert not reopened.revisions
+    metrics = reopened.metrics()
+    assert metrics["post_admission_revision_count"] == 0
+    assert metrics["pre_admission_variation_intervals"] == 1
+    assert metrics["admissions"][0]["admission_raw_sequence"] == 3
+    assert metrics["admissions"][0]["supporting_receipt_sequences"] == [2, 3]
+
+
+def test_finality_replay_reconstructs_missing_derived_bar_after_raw_commit(tmp_path: Path) -> None:
+    normalized = ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl")
+    tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
+    raw = ForwardRawSpool(tmp_path / "raw.jsonl")
+    body = json.dumps([_row(0)]).encode()
+    records = tuple(
+        raw.append(
+            _response(body, START + timedelta(minutes=6, seconds=offset)),
+            symbol="BTCUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT",
+        )
+        for offset in (1, 2)
+    )
+    # The temporary tracker represents a process that crashed before its
+    # derived canonical append; replay must rebuild it only after raw replay
+    # validates.
+    del tracker
+    reopened = CanaryFinalityTracker(normalized, tmp_path / "reopened-revisions.jsonl")
+    reopened.replay(raw.read(), HASH)
+    assert len(normalized.read()) == 1
+    assert reopened.metrics()["admissions"][0]["supporting_receipt_sequences"] == [1, 2]
+    assert records[0].previous_record_hash is None
+
+
+def test_finality_replay_rejects_change_after_reconstructed_admission(tmp_path: Path) -> None:
+    normalized = ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl")
+    tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
+    raw = ForwardRawSpool(tmp_path / "raw.jsonl")
+    original = json.dumps([_row(0)]).encode()
+    changed_row = _row(0, close="102")
+    changed_row[2] = "103"
+    changed = json.dumps([changed_row]).encode()
+    chronology = (
+        (original, START + timedelta(minutes=6, seconds=1)),
+        (original, START + timedelta(minutes=6, seconds=2)),
+        (changed, START + timedelta(minutes=7)),
+    )
+    for body, collected_at in chronology:
+        record = raw.append(
+            _response(body, collected_at),
+            symbol="BTCUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT",
+        )
+        if body == changed:
+            continue
+        tracker.observe(
+            record,
+            parse_binance_klines(
+                body,
+                symbol="BTCUSDT",
+                collected_at=collected_at,
+                source_snapshot_hash=HASH,
+            ),
+        )
+
+    reopened = CanaryFinalityTracker(
+        ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl"),
+        tmp_path / "reopened-revisions.jsonl",
+    )
+    with pytest.raises(CanaryFinalityViolation, match="POST_ADMISSION_REVISION"):
+        reopened.replay(raw.read(), HASH)
+    assert not reopened.revisions
+
+
+def test_finality_replay_rejects_a_broken_raw_hash_chain(tmp_path: Path) -> None:
+    body = json.dumps([_row(0)]).encode()
+    raw = ForwardRawSpool(tmp_path / "raw.jsonl")
+    first = raw.append(
+        _response(body, START + timedelta(minutes=6, seconds=1)),
+        symbol="BTCUSDT",
+        request_url="https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT",
+    )
+    second = raw.append(
+        _response(body, START + timedelta(minutes=6, seconds=2)),
+        symbol="BTCUSDT",
+        request_url="https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT",
+    )
+    broken = second.model_copy(update={"previous_record_hash": "b" * 64})
+    broken = broken.model_copy(
+        update={"record_hash": sha256_json(broken.model_dump(mode="json", exclude={"record_hash"}))}
+    )
+    tracker = CanaryFinalityTracker(
+        ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl"),
+        tmp_path / "revisions.jsonl",
+    )
+    with pytest.raises(RuntimeError, match="raw replay hash chain"):
+        tracker.replay((first, broken), HASH)
+
+
 def test_canary_prediction_envelope_and_resume_round_trip(tmp_path: Path) -> None:
     cutoff = START + timedelta(hours=1)
     prediction = ForwardPredictionRecord(
@@ -374,6 +528,26 @@ def test_bar_content_hash_excludes_receipt_timestamps() -> None:
         }
     )
     assert bar_content_hash(first) == bar_content_hash(second)
+
+
+def test_bar_content_hash_binds_source_identity() -> None:
+    body = json.dumps([_row(0)]).encode()
+    first = parse_binance_klines(
+        body,
+        symbol="BTCUSDT",
+        collected_at=START + timedelta(minutes=6),
+        source_snapshot_hash=HASH,
+    )[0]
+    other_snapshot = "b" * 64
+    second = first.model_copy(
+        update={
+            "source_snapshot_hash": other_snapshot,
+            "provenance": first.provenance.model_copy(
+                update={"source_snapshot_hash": other_snapshot}
+            ),
+        }
+    )
+    assert bar_content_hash(first) != bar_content_hash(second)
 
 
 def test_warmup_schedule_derives_first_legal_hourly_cutoff() -> None:

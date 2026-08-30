@@ -323,7 +323,11 @@ def run_collection(
                     state = "CANARY_FAILED"
                     failure_reason = str(exc)
                     break
-                except Exception as exc:  # record class/status only; never provider bodies
+                except (HttpTransportError, TimeoutError, ValueError) as exc:
+                    # Transport and malformed-provider responses are isolated
+                    # source failures.  The raw receipt, when available, is
+                    # retained and the run remains eligible to classify the
+                    # affected cutoff explicitly at terminal audit.
                     failure_class, status_code, retriable = _failure_class(exc)
                     observed_at = datetime.now(UTC)
                     failures.append(
@@ -340,6 +344,14 @@ def run_collection(
                         reason=failure_class,
                         last_valid_interval_end=_latest_admitted(normalized, symbol),
                     )
+                except Exception as exc:
+                    # Evidence, ledger, and state-machine errors are not
+                    # provider noise.  Never downgrade an unknown scientific
+                    # or persistence error into CASE_EXCLUDED-style failure
+                    # telemetry; fail closed for this canary.
+                    state = "CANARY_FAILED"
+                    failure_reason = f"UNCLASSIFIED_SOURCE_ERROR:{type(exc).__name__}"
+                    break
             if state == "CANARY_FAILED":
                 break
             summary = _summary(

@@ -460,6 +460,7 @@ def evaluate_generation_readiness(
     counts = coverage.candidate_predictions
     target = coverage.cases_per_symbol_target
     minimum = coverage.minimum_clean_cases_per_symbol
+    candidate_within_target = {symbol: counts[symbol] <= target for symbol in V3_CORE_SYMBOLS}
     candidate_possible_by_symbol = {
         symbol: counts[symbol] + coverage.remaining_future_cutoffs[symbol] >= minimum
         for symbol in V3_CORE_SYMBOLS
@@ -477,6 +478,7 @@ def evaluate_generation_readiness(
         all(candidate_possible_by_symbol.values())
         and all(source_possible_by_symbol.values())
         and all(candidate_within_source.values())
+        and all(candidate_within_target.values())
         and coverage.candidate_root_healthy
     )
     reasons: list[str] = []
@@ -489,6 +491,8 @@ def evaluate_generation_readiness(
             reasons.append(f"{symbol}_cannot_reach_{minimum}_candidate_predictions")
         if not candidate_within_source[symbol]:
             reasons.append(f"{symbol}_candidate_count_exceeds_source_count")
+        if not candidate_within_target[symbol]:
+            reasons.append(f"{symbol}_candidate_count_exceeds_{target}_opportunity_target")
     status: Literal[
         "CANDIDATE_COVERAGE_POSSIBLE",
         "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION",
