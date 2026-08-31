@@ -37,6 +37,7 @@ FORWARD_RAW_SCHEMA = "advisorai.phase4.v3-core-forward.raw-response.v1"
 FORWARD_FAILURE_SCHEMA = "advisorai.phase4.v3-core-forward.failure.v1"
 FORWARD_HEALTH_SCHEMA = "advisorai.phase4.v3-core-forward.health.v1"
 FORWARD_CASE_SCHEMA = "advisorai.phase4.v3-core-forward.case.v1"
+FORWARD_RUN_SCHEMA = "advisorai.phase4.v3-core-forward.run.v1"
 FORWARD_REJECTION_SCHEMA = "advisorai.phase4.v3-core-forward.rejection.v1"
 FORWARD_PREDICTION_SCHEMA = "advisorai.phase4.v3-core-forward.prediction.v1"
 FORWARD_INTERVAL = "5m"
@@ -667,7 +668,11 @@ class ForwardRejectionSpool:
 
 
 class ForwardPredictionRecord(BaseModel):
-    """Immutable prediction-side ledger record, before its outcome exists."""
+    """Immutable prediction-side ledger record, before its outcome exists.
+
+    Baseline records use the original fields. Candidate ledgers may carry
+    richer runtime/provenance identity without creating a second truth format.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -689,6 +694,10 @@ class ForwardPredictionRecord(BaseModel):
     inference_started_at: datetime | None = None
     inference_finished_at: datetime | None = None
     ledger_persisted_at: datetime | None = None
+    # Long-run candidate records may use a separately preregistered durable
+    # deadline after the scheduled cutoff.  With this unset, the historical
+    # forward/baseline contract remains cutoff-bound.
+    generation_deadline_at: datetime | None = None
 
     # Candidate-specific runtime metadata is optional so the shared ledger
     # remains backward-compatible with deterministic baseline predictions.
@@ -741,6 +750,7 @@ class ForwardPredictionRecord(BaseModel):
         "inference_started_at",
         "inference_finished_at",
         "ledger_persisted_at",
+        "generation_deadline_at",
     )
     @classmethod
     def validate_prediction_time(cls, value: datetime | None, info: object) -> datetime | None:
@@ -761,7 +771,11 @@ class ForwardPredictionRecord(BaseModel):
     def validate_prediction_decimal(cls, value: Decimal | None, info: object) -> Decimal | None:
         if value is None:
             return None
-        if not value.is_finite():
+        if not value.is_finite() or (
+            getattr(info, "field_name", "")
+            in {"runtime_latency_ms", "resource_peak_rss_mib", "resource_peak_cpu_percent"}
+            and value < 0
+        ):
             raise ValueError("prediction numeric fields must be finite")
         if (
             getattr(info, "field_name", "")
@@ -775,35 +789,58 @@ class ForwardPredictionRecord(BaseModel):
             raise ValueError("prediction resource and latency fields must be non-negative")
         return value
 
+    @field_validator("provenance")
+    @classmethod
+    def validate_provenance(cls, value: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
+        normalized = tuple((str(key).strip(), str(item).strip()) for key, item in value)
+        if any(not key or not item for key, item in normalized):
+            raise ValueError("prediction provenance entries must be non-empty")
+        if len({key for key, _item in normalized}) != len(normalized):
+            raise ValueError("prediction provenance keys must be unique")
+        if normalized != tuple(sorted(normalized)):
+            raise ValueError("prediction provenance must be deterministically sorted")
+        return normalized
+
     @model_validator(mode="after")
     def validate_prediction(self) -> ForwardPredictionRecord:
         if self.schema_version != FORWARD_PREDICTION_SCHEMA:
             raise ValueError("unsupported forward prediction schema")
-        if self.generated_at > self.cutoff:
-            raise ValueError("prediction cannot be generated after its cutoff")
-        timing = (
-            self.inference_started_at,
-            self.inference_finished_at,
-            self.ledger_persisted_at,
-        )
-        if any(value is not None for value in timing) and not all(
-            value is not None for value in timing
+        if self.generation_deadline_at is None:
+            if self.generated_at > self.cutoff:
+                raise ValueError("prediction cannot be generated after its cutoff")
+        else:
+            if self.generation_deadline_at <= self.cutoff:
+                raise ValueError("prediction generation deadline must be after its cutoff")
+            if self.generated_at > self.generation_deadline_at:
+                raise ValueError("prediction cannot be generated after its frozen deadline")
+        inference_timing = (self.inference_started_at, self.inference_finished_at)
+        if any(value is not None for value in inference_timing) and not all(
+            value is not None for value in inference_timing
         ):
-            raise ValueError("candidate inference timing must be complete when present")
-        if all(value is not None for value in timing):
+            raise ValueError("candidate inference timing must include start and finish")
+        if self.ledger_persisted_at is not None and any(
+            value is None for value in inference_timing
+        ):
+            raise ValueError("ledger persistence timing requires inference timing")
+        if all(value is not None for value in inference_timing):
             assert self.inference_started_at is not None
             assert self.inference_finished_at is not None
-            assert self.ledger_persisted_at is not None
             if self.inference_finished_at < self.inference_started_at:
                 raise ValueError("candidate inference finished before it started")
-            if self.ledger_persisted_at < self.inference_finished_at:
-                raise ValueError("candidate ledger persistence precedes inference completion")
             if self.generated_at != self.inference_finished_at:
                 raise ValueError("candidate generated_at must equal inference completion")
+            if (
+                self.ledger_persisted_at is not None
+                and self.ledger_persisted_at < self.inference_finished_at
+            ):
+                raise ValueError("candidate ledger persistence precedes inference completion")
+        if self.outcome_case_id is not None:
+            raise ValueError("prediction records cannot be mutated with an outcome link")
         if (self.native_interval_lower_bps is None) != (self.native_interval_upper_bps is None):
             raise ValueError("native prediction intervals require both bounds")
         if (
             self.native_interval_lower_bps is not None
+            and self.native_interval_upper_bps is not None
             and self.native_interval_lower_bps > self.native_interval_upper_bps
         ):
             raise ValueError("native prediction interval bounds are inconsistent")
@@ -975,6 +1012,7 @@ __all__ = [
     "FORWARD_INTERVAL_SECONDS",
     "FORWARD_PREDICTION_SCHEMA",
     "FORWARD_RAW_SCHEMA",
+    "FORWARD_RUN_SCHEMA",
     "ForwardCaseSpool",
     "ForwardFailureRecord",
     "ForwardFailureSpool",

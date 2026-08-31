@@ -417,14 +417,29 @@ def _return_bps(price: Decimal, last_close: Decimal) -> Decimal:
 
 
 def context_for_cutoff(
-    bars: Sequence[V3CoreBar], *, instrument: str, cutoff: datetime, now: datetime
+    bars: Sequence[V3CoreBar],
+    *,
+    instrument: str,
+    cutoff: datetime,
+    now: datetime,
+    newest_context_lag_seconds: int = FORWARD_INTERVAL_SECONDS,
 ) -> tuple[V3CoreBar, ...] | None:
-    """Return exactly 48 healthy forward bars available by the cutoff."""
+    """Return exactly 48 healthy forward bars available by the cutoff.
+
+    The default preserves the original V3-Core candidate contract.  The
+    bounded canary passes an explicit ten-minute lag so the newest context bar
+    is not the bar that closes only five minutes before the hourly cutoff.
+    """
 
     cutoff = _aware(cutoff, "cutoff")
     now = _aware(now, "now")
     if now > cutoff:
         return None
+    if (
+        newest_context_lag_seconds < FORWARD_INTERVAL_SECONDS
+        or newest_context_lag_seconds % FORWARD_INTERVAL_SECONDS
+    ):
+        raise ValueError("newest context lag must be a positive whole V3-Core interval")
     normalized_instrument = instrument.strip().upper()
     if normalized_instrument not in V3_CORE_SYMBOLS:
         raise ValueError("Chronos predictions are restricted to BTCUSDT and ETHUSDT")
@@ -438,7 +453,9 @@ def context_for_cutoff(
         and bar.provenance.source_health_state == "HEALTHY"
     }
     context_times = tuple(
-        cutoff - timedelta(seconds=FORWARD_INTERVAL_SECONDS * (CHRONOS_CONTEXT_BARS - index))
+        cutoff
+        - timedelta(seconds=newest_context_lag_seconds)
+        - timedelta(seconds=FORWARD_INTERVAL_SECONDS * (CHRONOS_CONTEXT_BARS - 1 - index))
         for index in range(CHRONOS_CONTEXT_BARS)
     )
     context = tuple(by_end.get(item) for item in context_times)
@@ -647,13 +664,20 @@ def build_chronos_prediction(
     inference_started_at: datetime | None = None,
     inference_finished_at: datetime | None = None,
     ledger_persisted_at: datetime | None = None,
+    generation_deadline_at: datetime | None = None,
 ) -> ForwardPredictionRecord:
     """Convert one native Chronos output into the shared prediction schema."""
 
     cutoff = _aware(cutoff, "cutoff")
     generated_at = _aware(generated_at, "generated_at")
-    if generated_at > cutoff:
+    if generation_deadline_at is None and generated_at > cutoff:
         raise ValueError("Chronos prediction completed after its cutoff")
+    if generation_deadline_at is not None:
+        generation_deadline_at = _aware(generation_deadline_at, "generation_deadline_at")
+        if generation_deadline_at <= cutoff:
+            raise ValueError("Chronos generation deadline must be after its cutoff")
+        if generated_at > generation_deadline_at:
+            raise ValueError("Chronos prediction completed after its frozen deadline")
     if len(context) != CHRONOS_CONTEXT_BARS:
         raise ValueError("Chronos prediction requires exactly 48 context bars")
     if len(result.forecast) < CHRONOS_HORIZON_BARS:
@@ -701,6 +725,7 @@ def build_chronos_prediction(
         inference_started_at=inference_started_at,
         inference_finished_at=inference_finished_at,
         ledger_persisted_at=ledger_persisted_at,
+        generation_deadline_at=generation_deadline_at,
         source_snapshot_hash=source_hash,
         checkpoint_hash=identity.checkpoint_hash,
         runner_hash=identity.runner_hash,

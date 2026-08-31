@@ -9,8 +9,10 @@ from advisorai.phase4.v3core_generation_readiness import (
     EXPECTED_CASES_PER_SYMBOL,
     GenerationCandidateContract,
     GenerationCoverageInput,
+    GenerationPreflightReport,
     GenerationPreflightSpec,
     GenerationProspectiveContract,
+    GenerationReadinessReport,
     GenerationResourceContract,
     GenerationSourceContract,
     evaluate_generation_readiness,
@@ -60,6 +62,7 @@ def _spec() -> GenerationPreflightSpec:
             first_eligible_cutoff=FIRST_CUTOFF,
             fresh_run_root=True,
             candidate_starts_before_first_cutoff=True,
+            canary_qualification_present=True,
         ),
     )
 
@@ -69,6 +72,14 @@ def test_preflight_accepts_complete_frozen_candidate_path() -> None:
     assert report.decision == "READY_TO_LAUNCH"
     assert report.refusal_reasons == ()
     assert report.report_hash
+
+
+def test_preflight_report_rejects_mutated_content_after_serialization() -> None:
+    report = evaluate_preflight(_spec())
+    payload = report.model_dump(mode="json", by_alias=True)
+    payload["decision"] = "REFUSE_LAUNCH"
+    with pytest.raises(ValueError, match="preflight report hash"):
+        GenerationPreflightReport.model_validate(payload)
 
 
 @pytest.mark.parametrize(
@@ -95,6 +106,7 @@ def test_preflight_accepts_complete_frozen_candidate_path() -> None:
             False,
             "candidate_starts_before_first_cutoff",
         ),
+        ("prospective.canary_qualification_present", False, "canary_qualification"),
     ],
 )
 def test_preflight_refuses_each_unsafe_launch_condition(
@@ -132,6 +144,14 @@ def test_readiness_reports_complete_candidate_coverage_possible() -> None:
     assert report.expected_predictions_total == 128
 
 
+def test_readiness_report_rejects_mutated_content_after_serialization() -> None:
+    report = evaluate_generation_readiness(_coverage())
+    payload = report.model_dump(mode="json", by_alias=True)
+    payload["complete_coverage_possible"] = False
+    with pytest.raises(ValueError, match="readiness report hash"):
+        GenerationReadinessReport.model_validate(payload)
+
+
 def test_readiness_refuses_impossible_candidate_coverage() -> None:
     report = evaluate_generation_readiness(
         _coverage(btc_predictions=20, eth_predictions=20, btc_remaining=10, eth_remaining=10)
@@ -148,6 +168,20 @@ def test_readiness_refuses_candidate_count_that_exceeds_source_cases() -> None:
     )
     assert report.status == "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION"
     assert "BTCUSDT_candidate_count_exceeds_source_count" in report.reasons
+
+
+def test_readiness_refuses_candidate_count_that_exceeds_opportunity_target() -> None:
+    report = evaluate_generation_readiness(
+        GenerationCoverageInput(
+            source_completed_cases={"BTCUSDT": 81, "ETHUSDT": 64},
+            candidate_predictions={"BTCUSDT": 81, "ETHUSDT": 64},
+            remaining_future_cutoffs={"BTCUSDT": 0, "ETHUSDT": 0},
+            candidate_root_healthy=True,
+            cases_per_symbol_target=80,
+        )
+    )
+    assert report.status == "GENERATION_CANNOT_SATISFY_PHASE4_ADMISSION"
+    assert "BTCUSDT_candidate_count_exceeds_80_opportunity_target" in report.reasons
 
 
 def test_readiness_requires_healthy_candidate_root_even_with_enough_cutoffs() -> None:
