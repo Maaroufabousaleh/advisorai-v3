@@ -3423,9 +3423,9 @@ def _required_preflight_checks(
 
     checks = [
         LongRunReadinessCheck(
-            name,
-            supplied.get(name) is True,
-            reason if name in supplied else "required preflight result was not supplied",
+            name=name,
+            passed=supplied.get(name) is True,
+            reason=reason if name in supplied else "required preflight result was not supplied",
         )
         for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS
     ]
@@ -3450,33 +3450,35 @@ def evaluate_release_candidate_preflight(
 
     checks = [
         LongRunReadinessCheck(
-            "actual_repository_and_components",
-            identity_matches_preregistration(preregistration, attestation),
-            "actual checkout and component files equal the draft contract",
+            name="actual_repository_and_components",
+            passed=identity_matches_preregistration(preregistration, attestation),
+            reason="actual checkout and component files equal the draft contract",
         ),
         LongRunReadinessCheck(
-            "phase3_gate",
-            phase3_gate_passed
+            name="phase3_gate",
+            passed=phase3_gate_passed
             and attestation.phase3_gate_sha256 == preregistration.phase3_gate_sha256,
-            "the immutable Phase-3 predecessor is present and passed",
+            reason="the immutable Phase-3 predecessor is present and passed",
         ),
         LongRunReadinessCheck(
-            "model_runtime",
-            model_runtime_passed,
-            "the qualified Chronos runtime artifact is present and passing",
+            name="model_runtime",
+            passed=model_runtime_passed,
+            reason="the qualified Chronos runtime artifact is present and passing",
         ),
         LongRunReadinessCheck(
-            "dual_lock",
-            attestation.uv_lock_sha256 == preregistration.uv_lock_sha256
+            name="dual_lock",
+            passed=attestation.uv_lock_sha256 == preregistration.uv_lock_sha256
             and attestation.requirements_lock_sha256 == preregistration.requirements_lock_sha256,
-            "both runtime lock identities equal the draft contract",
+            reason="both runtime lock identities equal the draft contract",
         ),
         LongRunReadinessCheck(
-            "security",
-            preregistration.credentials_prohibited and preregistration.orders_prohibited,
-            "credentials and order capabilities are prohibited",
+            name="security",
+            passed=preregistration.credentials_prohibited and preregistration.orders_prohibited,
+            reason="credentials and order capabilities are prohibited",
         ),
-        LongRunReadinessCheck("gpu_lease", gpu_lease_free, "no AdvisorAI GPU lease is held"),
+        LongRunReadinessCheck(
+            name="gpu_lease", passed=gpu_lease_free, reason="no AdvisorAI GPU lease is held"
+        ),
     ]
     checks.extend(
         _required_preflight_checks(
@@ -3517,37 +3519,41 @@ def evaluate_long_run_readiness(
 ) -> LongRunLaunchReadinessReport:
     checks = [
         LongRunReadinessCheck(
-            "actual_repository_and_components",
-            identity_matches_preregistration(preregistration, attestation),
-            "actual checkout/file hashes must equal the preregistration",
+            name="actual_repository_and_components",
+            passed=identity_matches_preregistration(preregistration, attestation),
+            reason="actual checkout/file hashes must equal the preregistration",
         ),
         LongRunReadinessCheck(
-            "phase3_gate",
-            phase3_gate_passed
+            name="phase3_gate",
+            passed=phase3_gate_passed
             and attestation.phase3_gate_sha256 == preregistration.phase3_gate_sha256,
-            "Phase-3 predecessor identity must be attested",
+            reason="Phase-3 predecessor identity must be attested",
         ),
         LongRunReadinessCheck(
-            "model_runtime", model_runtime_passed, "qualified model-runtime evidence must pass"
+            name="model_runtime",
+            passed=model_runtime_passed,
+            reason="qualified model-runtime evidence must pass",
         ),
         LongRunReadinessCheck(
-            "dual_lock",
-            attestation.uv_lock_sha256 == preregistration.uv_lock_sha256
+            name="dual_lock",
+            passed=attestation.uv_lock_sha256 == preregistration.uv_lock_sha256
             and attestation.requirements_lock_sha256 == preregistration.requirements_lock_sha256,
-            "both lock identities must match actual files",
+            reason="both lock identities must match actual files",
         ),
         LongRunReadinessCheck(
-            "security",
-            not credentials_loaded and not order_writes_attempted,
-            "credentials and order writes are forbidden",
+            name="security",
+            passed=not credentials_loaded and not order_writes_attempted,
+            reason="credentials and order writes are forbidden",
         ),
         LongRunReadinessCheck(
-            "gpu_lease", gpu_lease_free, "no competing AdvisorAI GPU lease may exist"
+            name="gpu_lease",
+            passed=gpu_lease_free,
+            reason="no competing AdvisorAI GPU lease may exist",
         ),
         LongRunReadinessCheck(
-            "immutable_preregistration",
-            immutable_preregistration_created,
-            "the real launch requires a human-approved immutable preregistration",
+            name="immutable_preregistration",
+            passed=immutable_preregistration_created,
+            reason="the real launch requires a human-approved immutable preregistration",
         ),
     ]
     checks.extend(
