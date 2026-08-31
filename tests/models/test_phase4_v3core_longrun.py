@@ -321,6 +321,14 @@ def test_incident_dispositions_separate_case_exclusion_recovery_and_fatal() -> N
         )
         == LongRunIncidentDisposition.GENERATION_FATAL
     )
+    assert (
+        classify_long_run_incident(
+            LongRunIncidentType.WATCHDOG_FAILURE,
+            clean_minimum_still_attainable=True,
+            recovery_verified=True,
+        )
+        == LongRunIncidentDisposition.GENERATION_FATAL
+    )
 
 
 def test_infeasible_coverage_overrides_nominal_component_recovery() -> None:

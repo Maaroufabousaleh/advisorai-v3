@@ -664,13 +664,20 @@ def build_chronos_prediction(
     inference_started_at: datetime | None = None,
     inference_finished_at: datetime | None = None,
     ledger_persisted_at: datetime | None = None,
+    generation_deadline_at: datetime | None = None,
 ) -> ForwardPredictionRecord:
     """Convert one native Chronos output into the shared prediction schema."""
 
     cutoff = _aware(cutoff, "cutoff")
     generated_at = _aware(generated_at, "generated_at")
-    if generated_at > cutoff:
+    if generation_deadline_at is None and generated_at > cutoff:
         raise ValueError("Chronos prediction completed after its cutoff")
+    if generation_deadline_at is not None:
+        generation_deadline_at = _aware(generation_deadline_at, "generation_deadline_at")
+        if generation_deadline_at <= cutoff:
+            raise ValueError("Chronos generation deadline must be after its cutoff")
+        if generated_at > generation_deadline_at:
+            raise ValueError("Chronos prediction completed after its frozen deadline")
     if len(context) != CHRONOS_CONTEXT_BARS:
         raise ValueError("Chronos prediction requires exactly 48 context bars")
     if len(result.forecast) < CHRONOS_HORIZON_BARS:
@@ -718,6 +725,7 @@ def build_chronos_prediction(
         inference_started_at=inference_started_at,
         inference_finished_at=inference_finished_at,
         ledger_persisted_at=ledger_persisted_at,
+        generation_deadline_at=generation_deadline_at,
         source_snapshot_hash=source_hash,
         checkpoint_hash=identity.checkpoint_hash,
         runner_hash=identity.runner_hash,

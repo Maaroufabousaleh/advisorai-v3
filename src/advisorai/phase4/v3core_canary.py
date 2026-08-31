@@ -834,8 +834,24 @@ class CanaryFinalityTracker:
             record_revisions=True,
         )
 
-    def replay(self, raw_records: Sequence[ForwardRawResponse], source_snapshot_hash: str) -> None:
-        """Rebuild finality state from persisted raw receipts without changing them."""
+    def replay(
+        self,
+        raw_records: Sequence[ForwardRawResponse],
+        source_snapshot_hash: str,
+        *,
+        minimum_interval_end: datetime | None = None,
+        persist_missing: bool = True,
+    ) -> None:
+        """Rebuild finality state from persisted raw receipts without changing them.
+
+        ``minimum_interval_end`` is used by fresh-run contracts to prevent a
+        response acquired after launch from smuggling a pre-launch interval
+        into the admitted context. The raw receipt itself remains preserved;
+        only the derived admission projection is scoped.
+        """
+
+        if minimum_interval_end is not None:
+            minimum_interval_end = _aware(minimum_interval_end, "minimum_interval_end")
 
         if self.revisions:
             raise CanaryFinalityViolation(
@@ -862,6 +878,8 @@ class CanaryFinalityTracker:
                 collected_at=raw.collected_at,
                 source_snapshot_hash=source_snapshot_hash,
             )
+            if minimum_interval_end is not None:
+                bars = tuple(bar for bar in bars if bar.interval_end >= minimum_interval_end)
             self._observe_state(
                 raw,
                 bars,
@@ -876,16 +894,28 @@ class CanaryFinalityTracker:
         if not set(persisted_bars).issubset(shadow_bars):
             raise RuntimeError("persisted canonical bars do not match chronological replay")
         for key, persisted in persisted_bars.items():
-            if bar_content_hash(persisted) != bar_content_hash(shadow_bars[key]):
+            # ``bar_content_hash`` intentionally excludes receipt-local
+            # timestamps and the derived normalized hash for finality
+            # equality.  That is correct for deciding whether raw
+            # observations agree, but insufficient for attesting the
+            # persisted canonical projection.  Replay must compare the whole
+            # admitted record, including admission timestamps and derived
+            # normalized identity.
+            if persisted.model_dump(mode="json") != shadow_bars[key].model_dump(mode="json"):
                 raise RuntimeError("persisted canonical bar identity differs from replay")
 
+        missing = set(shadow_bars) - set(persisted_bars)
+        if missing and not persist_missing:
+            raise RuntimeError("persisted canonical bars are incomplete for read-only replay")
         # A crash after a raw receipt was durably appended but before the
         # derived canonical append is recoverable: reconstruct the missing
         # derived records only after the complete raw replay validates.  Raw
         # evidence is never rewritten and existing canonical records are never
-        # replaced.
-        for key in sorted(set(shadow_bars) - set(persisted_bars)):
-            self.normalized.append(shadow_bars[key])
+        # replaced.  Terminal auditing and monitoring pass ``persist_missing``
+        # false so an audit cannot repair or mutate scientific evidence.
+        if persist_missing:
+            for key in sorted(missing):
+                self.normalized.append(shadow_bars[key])
 
         self._versions = shadow_versions
         self._admissions = shadow_admissions

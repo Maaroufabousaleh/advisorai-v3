@@ -50,6 +50,12 @@ LONG_RUN_OBSERVATION_INTERVAL_SECONDS = 300
 LONG_RUN_PREDICTION_CADENCE_SECONDS = 3600
 LONG_RUN_OUTCOME_HORIZON_SECONDS = 3600
 LONG_RUN_TERMINAL_MARGIN_SECONDS = 3600
+# This is an operational bookkeeping grace only.  It gives the candidate a
+# bounded opportunity to append the immutable CASE_EXCLUDED event at the
+# prediction deadline before the watchdog treats an unaccounted cutoff as a
+# generation-level monitoring failure.  It never permits a late prediction,
+# shifts a cutoff, extends the terminal deadline, or changes feasibility.
+LONG_RUN_CASE_ACCOUNTING_GRACE_SECONDS = 10
 
 QUALIFIED_V3B_CANARY_ID = "20260824T160000Z-chronos-monitor-audit-v3b"
 QUALIFIED_V3B_PREREGISTRATION_SHA256 = (
@@ -146,6 +152,8 @@ def _commit(value: str, field_name: str) -> str:
 def _aware(value: datetime, field_name: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must include a timezone")
+    if value.utcoffset() != timedelta(0):
+        raise ValueError(f"{field_name} must use UTC")
     return value.astimezone(UTC)
 
 
@@ -600,7 +608,6 @@ _RECOVERABLE_COMPONENT_INCIDENTS = frozenset(
     {
         LongRunIncidentType.SOURCE_PROCESS_DEATH,
         LongRunIncidentType.CANDIDATE_PROCESS_DEATH,
-        LongRunIncidentType.WATCHDOG_FAILURE,
     }
 )
 _GENERATION_FATAL_INCIDENTS = frozenset(LongRunIncidentType) - (
@@ -655,10 +662,12 @@ def derive_first_long_run_cutoff(
     """Derive the first top-of-hour cutoff from fresh-run source geometry.
 
     With no qualified warm-start snapshot, the first required closed interval
-    is the first interval ending at or after ``start_at``.  The first cutoff
-    is the earliest UTC hour strictly after the last required context close plus
-    the fixed context lag.  This is the same causal arithmetic as the reviewed
-    canary contract, expressed for the 80-case long-run planner.
+    is the first interval ending strictly after ``start_at``.  A bar ending
+    exactly at launch contains data from before the fresh-run boundary and is
+    excluded by :func:`fresh_long_run_minimum_interval_end`.  The first cutoff
+    is the earliest UTC hour at or after the last required context close plus
+    the fixed context lag.  This arithmetic is planning geometry only; actual
+    admitted-final availability remains authoritative at runtime.
     """
 
     normalized_start = _aware(start_at, "start_at")
@@ -666,7 +675,8 @@ def derive_first_long_run_cutoff(
         raise ValueError("fresh-run start must be aligned to a UTC hour")
     if context_bars < 1 or interval_seconds <= 0 or context_lag_seconds < interval_seconds:
         raise ValueError("long-run timing parameters are invalid")
-    latest_required_bar = normalized_start + timedelta(
+    first_fresh_interval_end = normalized_start + timedelta(seconds=interval_seconds)
+    latest_required_bar = first_fresh_interval_end + timedelta(
         seconds=(context_bars - 1) * interval_seconds
     )
     earliest_cutoff = latest_required_bar + timedelta(seconds=context_lag_seconds)

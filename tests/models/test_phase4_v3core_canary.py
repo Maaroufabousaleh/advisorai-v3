@@ -354,6 +354,44 @@ def test_finality_replay_rebuilds_state_without_false_post_admission_revision(
     assert metrics["admissions"][0]["supporting_receipt_sequences"] == [2, 3]
 
 
+def test_finality_replay_rejects_tampered_admission_metadata(tmp_path: Path) -> None:
+    normalized_path = tmp_path / "normalized.jsonl"
+    raw_path = tmp_path / "raw.jsonl"
+    normalized = ForwardNormalizedBarSpool(normalized_path)
+    tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
+    raw = ForwardRawSpool(raw_path)
+    body = json.dumps([_row(0)]).encode()
+    for offset in (61, 62):
+        record = raw.append(
+            _response(body, START + timedelta(minutes=5, seconds=offset)),
+            symbol="BTCUSDT",
+            request_url="https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT",
+        )
+        tracker.observe(
+            record,
+            parse_binance_klines(
+                body,
+                symbol="BTCUSDT",
+                collected_at=record.collected_at,
+                source_snapshot_hash=HASH,
+            ),
+        )
+    admitted = normalized.read()[0]
+    tampered = admitted.model_copy(
+        update={
+            "provenance": admitted.provenance.model_copy(
+                update={"collected_at": admitted.collected_at + timedelta(seconds=1)}
+            )
+        }
+    )
+    normalized_path.write_text(tampered.model_dump_json() + "\n", encoding="utf-8")
+    reopened = CanaryFinalityTracker(
+        ForwardNormalizedBarSpool(normalized_path), tmp_path / "reopened-revisions.jsonl"
+    )
+    with pytest.raises(RuntimeError, match="canonical bar identity"):
+        reopened.replay(raw.read(), HASH)
+
+
 def test_finality_replay_reconstructs_missing_derived_bar_after_raw_commit(tmp_path: Path) -> None:
     normalized = ForwardNormalizedBarSpool(tmp_path / "normalized.jsonl")
     tracker = CanaryFinalityTracker(normalized, tmp_path / "revisions.jsonl")
