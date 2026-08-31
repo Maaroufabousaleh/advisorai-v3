@@ -61,7 +61,11 @@ def build_preregistration(
     finality_path = files["finality_rule_sha256"]
     context_path = files["context_rule_sha256"]
     preprocessing_path = files["preprocessing_sha256"]
-    code_hashes = {name: sha256_file(path) for name, path in files.items()}
+    code_hashes = {
+        name: sha256_file(path)
+        for name, path in files.items()
+        if name not in {"finality_rule_sha256", "context_rule_sha256", "preprocessing_sha256"}
+    }
     first_cutoff = derive_first_long_run_cutoff(start_at)
     mandatory_cutoffs = derive_long_run_cutoffs(start_at)
     repository_commit = subprocess.run(

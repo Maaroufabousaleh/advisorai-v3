@@ -4,6 +4,7 @@ import fcntl
 import importlib.util
 import sys
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -114,6 +115,65 @@ def test_long_run_launch_wires_the_scheduler_to_the_outcome_root(tmp_path) -> No
     scheduler = commands["scheduler"]
     assert scheduler[scheduler.index("--outcome-root") + 1] == str(outcome_root)
     assert "--outcome-root" not in commands["collector"]
+
+
+def test_long_run_preregistration_builder_does_not_duplicate_rule_hash_arguments(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script(
+        "phase4_longrun_preregistration_builder_test",
+        "preregister_phase4_v3core_longrun.py",
+    )
+    component_names = (
+        "finality_rule_sha256",
+        "context_rule_sha256",
+        "preprocessing_sha256",
+        "long_run_contract_code_sha256",
+        "forward_contract_code_sha256",
+        "cadence_contract_code_sha256",
+        "collector_code_sha256",
+        "candidate_worker_code_sha256",
+        "outcome_linker_code_sha256",
+        "watchdog_code_sha256",
+        "auditor_code_sha256",
+        "scheduler_code_sha256",
+        "coordinator_code_sha256",
+        "launcher_code_sha256",
+    )
+    component_files = {}
+    for name in component_names:
+        path = tmp_path / name
+        path.write_bytes(name.encode())
+        component_files[name] = path
+    monkeypatch.setattr(module, "long_run_component_files", lambda _root: component_files)
+    phase3 = tmp_path / "phase3.json"
+    runtime = tmp_path / "runtime.json"
+    phase3.write_text("{}", encoding="utf-8")
+    runtime.write_text("{}", encoding="utf-8")
+    real_sha256_file = module.sha256_file
+
+    def qualified_sha256_file(path: Path) -> str:
+        if path == phase3:
+            return "4e00850787cc6dcd95cadcd6152f74d4875bf480d219d07736706dd47a11d232"
+        if path == runtime:
+            return "e04dc75df9bebd79f623ea32a8e815f7f15ad92cb0e343edf098ad577c896289"
+        return real_sha256_file(path)
+
+    monkeypatch.setattr(module, "sha256_file", qualified_sha256_file)
+    start = datetime(2030, 1, 1, tzinfo=UTC)
+    contract = module.build_preregistration(
+        repository_root=ROOT,
+        generation_id="builder-regression",
+        branch_or_tag="test",
+        start_at=start,
+        created_at=start - timedelta(hours=1),
+        terminal_deadline=datetime(2030, 1, 4, 14, tzinfo=UTC),
+        terminal_check_at=datetime(2030, 1, 4, 14, 5, tzinfo=UTC),
+        model_runtime_qualification_path=runtime,
+        phase3_gate_path=phase3,
+    )
+    assert contract.finality_rule_sha256 == sha256(b"finality_rule_sha256").hexdigest()
+    assert contract.context_rule_sha256 == sha256(b"context_rule_sha256").hexdigest()
 
 
 def test_watchdog_rejects_an_ordinary_terminal_status_before_the_deadline() -> None:
