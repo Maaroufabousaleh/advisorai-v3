@@ -34,8 +34,11 @@ from advisorai.phase4.v3core_longrun_runtime import (
     LongRunRawSpool,
     LongRunState,
     LongRunTransportFailureSpool,
+    attest_long_run_identity,
+    collect_runtime_attestation,
     derive_long_run_source_snapshot_sha256,
     fresh_long_run_minimum_interval_end,
+    long_run_component_files,
     long_run_context_for_cutoff,
     prediction_deadline,
     read_append_only_lines,
@@ -164,6 +167,48 @@ def test_long_run_schedule_has_exactly_eighty_ordered_cutoffs() -> None:
         right - left == timedelta(hours=1)
         for left, right in zip(prereg.mandatory_cutoffs, prereg.mandatory_cutoffs[1:], strict=False)
     )
+
+
+def test_actual_identity_attestation_hash_round_trips_with_identity_schema(monkeypatch) -> None:
+    import advisorai.phase4.v3core_longrun_runtime as runtime_module
+
+    root = Path(__file__).parents[2]
+    requirements_lock = Path(
+        "/home/maaro/.local/share/advisorai-v3/runtime-admissions/chronos-2-small/requirements.lock"
+    )
+    checkpoint = Path(
+        "/home/maaro/.cache/advisorai-v3/models/chronos-2-small/"
+        "ddec01313e50b6bc58ebaa92ede81bc24a3d9f9a/model/model.safetensors"
+    )
+    phase3_gate = Path(
+        "/mnt/c/projects/advisorai-v3/artifacts/phase3/formal-admission/"
+        "20260812T013505Z-with-passed-phase2-post-phase2-commit/phase3-gate-record.json"
+    )
+    runtime_qualification = Path(
+        "/mnt/c/projects/advisorai-v3/artifacts/phase0/model-runtime-qualification/"
+        "chronos-v3core-r1/20260817T194802.642906Z/chronos-2-small.json"
+    )
+    expected_head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    monkeypatch.setattr(runtime_module, "_worktree_clean", lambda _root: True)
+
+    attestation = attest_long_run_identity(
+        repository_root=root,
+        expected_repository_commit=expected_head,
+        component_files=long_run_component_files(root),
+        requirements_lock_path=requirements_lock,
+        checkpoint_path=checkpoint,
+        phase3_gate_path=phase3_gate,
+        model_runtime_qualification_path=runtime_qualification,
+        runtime=collect_runtime_attestation(),
+    )
+
+    assert attestation.repository_head == expected_head
+    assert attestation.attestation_hash
 
 
 @pytest.mark.parametrize(

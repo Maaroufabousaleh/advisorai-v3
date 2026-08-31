@@ -3259,6 +3259,7 @@ def attest_long_run_identity(
     if loaded_package is not None and loaded_locations != {package_root}:
         raise ValueError("already-loaded advisorai package is shadowed outside the frozen checkout")
     payload = {
+        "schema": f"{LONG_RUN_READINESS_SCHEMA}.identity",
         "repository_head": actual_head,
         "worktree_clean": _worktree_clean(repository_root),
         "import_root": str(expected_import_root),
