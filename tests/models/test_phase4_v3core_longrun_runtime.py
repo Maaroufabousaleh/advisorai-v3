@@ -22,6 +22,9 @@ from advisorai.phase4.v3core_longrun import (
     QUALIFIED_REQUIREMENTS_LOCK_SHA256,
     QUALIFIED_UV_LOCK_SHA256,
     LongRunCoverageSnapshot,
+    LongRunIncidentDisposition,
+    LongRunIncidentType,
+    classify_long_run_incident,
     estimate_long_run_terminal_deadline,
     evaluate_long_run_coverage,
 )
@@ -1098,3 +1101,192 @@ def test_prediction_ledger_conflicting_duplicate_envelope_fails_closed(tmp_path)
             append_started_at=append_started_at + timedelta(milliseconds=1),
             clock=lambda: cutoff + timedelta(seconds=4),
         )
+
+
+def test_synthetic_collector_crash_resume_preserves_raw_receipt_chain(tmp_path) -> None:
+    """A collector restart resumes append-only raw truth without duplication."""
+
+    first_fetched = START + timedelta(minutes=1)
+    raw_path = tmp_path / "raw-receipts.jsonl"
+    first_response = HttpResponse(
+        status_code=200,
+        body=b"[]",
+        fetched_at=first_fetched,
+        url=V3_CORE_MARKET_DATA_REST_ENDPOINT,
+    )
+    spool = LongRunRawSpool(raw_path, source_snapshot_hash=HASH)
+    first = spool.append(
+        first_response,
+        symbol="BTCUSDT",
+        request_url=V3_CORE_MARKET_DATA_REST_ENDPOINT,
+        request_attempt_id="collector-attempt-1",
+        source_snapshot_hash=HASH,
+    )
+
+    # Simulate a process crash and reconstruct the collector projection.
+    resumed = LongRunRawSpool(raw_path, source_snapshot_hash=HASH)
+    second = resumed.append(
+        first_response.model_copy(update={"fetched_at": first_fetched + timedelta(seconds=1)}),
+        symbol="BTCUSDT",
+        request_url=V3_CORE_MARKET_DATA_REST_ENDPOINT,
+        request_attempt_id="collector-attempt-2",
+        source_snapshot_hash=HASH,
+    )
+
+    assert [record.request_attempt_id for record in resumed.records] == [
+        "collector-attempt-1",
+        "collector-attempt-2",
+    ]
+    assert resumed.records[0].record_hash == first.record_hash
+    assert resumed.records[1].record_hash == second.record_hash
+
+
+def test_synthetic_candidate_crash_before_and_after_durable_append_is_idempotent(tmp_path) -> None:
+    """A candidate restart neither loses nor duplicates an already durable cutoff."""
+
+    prereg = _preregistration()
+    cutoff = prereg.mandatory_cutoffs[0]
+    prediction = _prediction("BTCUSDT", cutoff)
+    predictions_path = tmp_path / "predictions.jsonl"
+    durability_path = tmp_path / "durability.jsonl"
+
+    # Crash before append: a fresh worker can append the one intended record.
+    before_append = LongRunPredictionLedger(
+        predictions_path,
+        durability_path,
+        cutoff_schedule=prereg.mandatory_cutoffs,
+    )
+    assert before_append.entries == []
+    entry = before_append.append(
+        generation_id=prereg.generation_id,
+        symbol="BTCUSDT",
+        cutoff=cutoff,
+        cutoff_ordinal=1,
+        prediction=prediction,
+        inference_started_at=prediction.inference_started_at,
+        inference_finished_at=prediction.inference_finished_at,
+        append_started_at=cutoff + timedelta(seconds=3),
+        clock=lambda: cutoff + timedelta(seconds=4),
+    )
+
+    # Crash after the prediction and its post-fsync attestation: exact replay
+    # returns the existing entry instead of writing a second prediction.
+    resumed = LongRunPredictionLedger(
+        predictions_path,
+        durability_path,
+        cutoff_schedule=prereg.mandatory_cutoffs,
+    )
+    replayed = resumed.append(
+        generation_id=prereg.generation_id,
+        symbol="BTCUSDT",
+        cutoff=cutoff,
+        cutoff_ordinal=1,
+        prediction=prediction,
+        inference_started_at=prediction.inference_started_at,
+        inference_finished_at=prediction.inference_finished_at,
+        append_started_at=cutoff + timedelta(seconds=3),
+        clock=lambda: cutoff + timedelta(seconds=4),
+    )
+    assert replayed.record_hash == entry.record_hash
+    assert len(resumed.entries) == 1
+    assert len(resumed.attestations) == 1
+
+
+def test_synthetic_watchdog_death_is_fatal_and_cannot_become_healthy(tmp_path) -> None:
+    coordinator = _running_coordinator(tmp_path)
+    coordinator.fail(LongRunIncident.WATCHDOG_PROCESS_DEATH, at=START, detail="synthetic death")
+    resumed = LongRunCoordinator(coordinator.preregistration, tmp_path / "events.jsonl")
+
+    assert resumed.scientific_state == LongRunState.GENERATION_FATAL
+    assert resumed.fatal_latched is True
+    with pytest.raises(RuntimeError, match="healthy"):
+        resumed.record_watchdog_check(
+            decision="LONG_RUN_HEALTHY",
+            reasons=(),
+            at=START + timedelta(seconds=1),
+        )
+
+
+@pytest.mark.parametrize(
+    "incident",
+    (
+        LongRunIncidentType.POST_ADMISSION_REVISION,
+        LongRunIncidentType.IDENTITY_MISMATCH,
+        LongRunIncidentType.RUNTIME_LOCK_DRIFT,
+        LongRunIncidentType.FUTURE_LEAKAGE,
+    ),
+)
+def test_synthetic_integrity_failure_matrix_is_generation_fatal(
+    incident: LongRunIncidentType,
+) -> None:
+    assert (
+        classify_long_run_incident(incident, clean_minimum_still_attainable=True)
+        == LongRunIncidentDisposition.GENERATION_FATAL
+    )
+
+
+def test_synthetic_late_prediction_is_observed_after_frozen_deadline(tmp_path) -> None:
+    prereg = _preregistration()
+    cutoff = prereg.mandatory_cutoffs[0]
+    prediction = _prediction("ETHUSDT", cutoff)
+    ledger = LongRunPredictionLedger(
+        tmp_path / "predictions.jsonl",
+        tmp_path / "durability.jsonl",
+        cutoff_schedule=prereg.mandatory_cutoffs,
+    )
+    entry = ledger.append(
+        generation_id=prereg.generation_id,
+        symbol="ETHUSDT",
+        cutoff=cutoff,
+        cutoff_ordinal=1,
+        prediction=prediction,
+        inference_started_at=prediction.inference_started_at,
+        inference_finished_at=prediction.inference_finished_at,
+        append_started_at=cutoff + timedelta(seconds=300),
+        clock=lambda: cutoff + timedelta(seconds=301),
+    )
+    assert ledger.durability_for(entry).durable_appended_at > prediction_deadline(cutoff)
+
+
+def test_synthetic_missing_outcome_remains_pending_and_not_clean(tmp_path) -> None:
+    coordinator = _running_coordinator(tmp_path)
+    cutoff = coordinator.preregistration.mandatory_cutoffs[0]
+    coordinator.record_case_pending(
+        symbol="BTCUSDT",
+        ordinal=1,
+        cutoff=cutoff,
+        prediction_id="missing-outcome-prediction",
+        at=cutoff,
+    )
+    accounting = coordinator.accounting()
+    assert accounting.cases_pending_outcome["BTCUSDT"] == 1
+    assert accounting.clean_cases_provisional["BTCUSDT"] == 1
+    assert accounting.cases_terminally_certified["BTCUSDT"] == 0
+    assert coordinator.case_states()[("BTCUSDT", 1)][0].value == "PENDING_OUTCOME"
+
+
+def test_synthetic_host_suspension_excludes_cutoffs_without_extending_schedule(tmp_path) -> None:
+    prereg = _preregistration()
+    coordinator = _running_coordinator(tmp_path)
+    original_cutoffs = prereg.mandatory_cutoffs
+    original_deadline = prereg.terminal_deadline
+
+    assert (
+        classify_long_run_incident(
+            LongRunIncidentType.MISSED_MANDATORY_CUTOFF,
+            clean_minimum_still_attainable=True,
+        )
+        == LongRunIncidentDisposition.CASE_EXCLUDED
+    )
+    for ordinal in range(1, 4):
+        coordinator.record_case_excluded(
+            symbol="BTCUSDT",
+            ordinal=ordinal,
+            cutoff=original_cutoffs[ordinal - 1],
+            reason="synthetic host suspension missed cutoff",
+            at=original_cutoffs[ordinal - 1] + timedelta(hours=3),
+        )
+
+    assert coordinator.preregistration.mandatory_cutoffs == original_cutoffs
+    assert coordinator.preregistration.terminal_deadline == original_deadline
+    assert coordinator.accounting().opportunities_remaining["BTCUSDT"] == 77
