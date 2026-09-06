@@ -91,6 +91,7 @@ LONG_RUN_AUDIT_SCHEMA = "advisorai.phase4.v3-core.long-run.terminal-audit.v1"
 LONG_RUN_READINESS_SCHEMA = "advisorai.phase4.v3-core.long-run.launch-readiness.v1"
 LONG_RUN_RC_PREFLIGHT_SCHEMA = "advisorai.phase4.v3-core.long-run.release-candidate-preflight.v1"
 LONG_RUN_TRANSPORT_FAILURE_SCHEMA = "advisorai.phase4.v3-core.long-run.transport-failure.v1"
+LONG_RUN_VERIFICATION_SCHEMA = "advisorai.phase4.v3-core.long-run.verification-results.v1"
 
 LONG_RUN_FINALITY_RULE_ID = "v3core-admitted-final-60s-two-distinct-receipts-v1"
 LONG_RUN_CONTEXT_RULE_ID = "v3core-48-admitted-final-newest-minus-10m-v1"
@@ -151,6 +152,7 @@ _LONG_RUN_COMPONENT_RELATIVE_PATHS = {
     "coordinator_code_sha256": "src/advisorai/phase4/v3core_longrun_runtime.py",
     "launcher_code_sha256": "scripts/launch_phase4_v3core_longrun.py",
     "launch_gate_code_sha256": "scripts/arm_phase4_v3core_longrun.py",
+    "launch_preflight_code_sha256": "scripts/preflight_phase4_v3core_longrun_launch.py",
 }
 
 
@@ -662,6 +664,8 @@ class LongRunPreregistration(BaseModel):
     coordinator_code_sha256: str
     launcher_code_sha256: str
     launch_gate_code_sha256: str | None = None
+    launch_preflight_code_sha256: str | None = None
+    verification_results_sha256: str | None = None
     long_run_contract_code_sha256: str
     forward_contract_code_sha256: str
     cadence_contract_code_sha256: str
@@ -737,10 +741,14 @@ class LongRunPreregistration(BaseModel):
     def valid_hash(cls, value: str, info: object) -> str:
         return _digest(value, getattr(info, "field_name", "hash"))
 
-    @field_validator("launch_gate_code_sha256")
+    @field_validator(
+        "launch_gate_code_sha256",
+        "launch_preflight_code_sha256",
+        "verification_results_sha256",
+    )
     @classmethod
-    def valid_optional_hash(cls, value: str | None) -> str | None:
-        return None if value is None else _digest(value, "launch_gate_code_sha256")
+    def valid_optional_hash(cls, value: str | None, info: object) -> str | None:
+        return None if value is None else _digest(value, getattr(info, "field_name", "hash"))
 
     @field_validator("symbols")
     @classmethod
@@ -757,12 +765,20 @@ class LongRunPreregistration(BaseModel):
         if self.created_at > self.start_at:
             raise ValueError("long-run preregistration must be created before its frozen start")
         launch_window = (self.launch_not_before_at, self.launch_not_after_at)
+        gated_identities = (
+            *launch_window,
+            self.launch_gate_code_sha256,
+            self.launch_preflight_code_sha256,
+            self.verification_results_sha256,
+        )
         if self.schema == LONG_RUN_PREREGISTRATION_SCHEMA_V1:
-            if any(value is not None for value in (*launch_window, self.launch_gate_code_sha256)):
+            if any(value is not None for value in gated_identities):
                 raise ValueError("legacy V1 preregistration cannot acquire launch-gate authority")
         else:
-            if any(value is None for value in (*launch_window, self.launch_gate_code_sha256)):
-                raise ValueError("V2 preregistration must bind its launch gate and window")
+            if any(value is None for value in gated_identities):
+                raise ValueError(
+                    "V2 preregistration must bind its launch gate, preflight, verification, and window"
+                )
             if launch_window[0] != self.start_at:
                 raise ValueError("long-run launch cannot begin before the frozen start")
             if launch_window[1] != self.start_at + timedelta(
@@ -856,6 +872,41 @@ def long_run_preregistration_sha256(preregistration: LongRunPreregistration) -> 
     # artifact's canonical identity while binding the fields for every new
     # post-start-gated preregistration.
     return _hash_payload(preregistration.model_dump(mode="json", exclude_none=True))
+
+
+def load_long_run_verification_results(
+    path: Path, *, expected_sha256: str | None = None
+) -> dict[str, bool]:
+    """Load the immutable, hash-bound launch-critical verification result set."""
+
+    path = path.resolve()
+    if expected_sha256 is not None and sha256_file(path) != _digest(
+        expected_sha256, "verification results hash"
+    ):
+        raise ValueError("launch verification results hash mismatch")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("launch verification results are unreadable") from exc
+    if not isinstance(payload, dict) or set(payload) != {"schema", "checks"}:
+        raise ValueError("launch verification results must contain only schema and checks")
+    if payload.get("schema") != LONG_RUN_VERIFICATION_SCHEMA:
+        raise ValueError("launch verification results schema mismatch")
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        raise ValueError("launch verification checks must be an object")
+    names = set(checks)
+    expected_names = set(LONG_RUN_REQUIRED_PREFLIGHT_CHECKS)
+    if names != expected_names:
+        missing = sorted(expected_names - names)
+        extra = sorted(names - expected_names)
+        raise ValueError(
+            f"launch verification check set mismatch: missing={missing}, extra={extra}"
+        )
+    if any(value is not True for value in checks.values()):
+        failed = sorted(name for name, value in checks.items() if value is not True)
+        raise ValueError("launch verification contains failed checks: " + ", ".join(failed))
+    return {str(name): True for name in checks}
 
 
 def write_immutable_long_run_preregistration(
@@ -3336,6 +3387,8 @@ def identity_matches_preregistration(
     }
     if preregistration.launch_gate_code_sha256 is not None:
         required["launch_gate_code_sha256"] = preregistration.launch_gate_code_sha256
+    if preregistration.launch_preflight_code_sha256 is not None:
+        required["launch_preflight_code_sha256"] = preregistration.launch_preflight_code_sha256
     return (
         attestation.repository_head == preregistration.repository_commit
         and attestation.worktree_clean
@@ -4504,6 +4557,7 @@ __all__ = [
     "LONG_RUN_REQUIRED_PREFLIGHT_CHECKS",
     "LONG_RUN_RC_PREFLIGHT_SCHEMA",
     "LONG_RUN_TRANSPORT_FAILURE_SCHEMA",
+    "LONG_RUN_VERIFICATION_SCHEMA",
     "LongRunAccountingSnapshot",
     "LongRunCaseState",
     "LongRunCoordinator",
@@ -4536,6 +4590,7 @@ __all__ = [
     "fresh_long_run_minimum_interval_end",
     "identity_matches_preregistration",
     "load_long_run_preregistration",
+    "load_long_run_verification_results",
     "long_run_context_for_cutoff",
     "long_run_preregistration_sha256",
     "prediction_deadline",

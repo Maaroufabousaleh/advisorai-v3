@@ -93,8 +93,10 @@ prospective evidence.
 ## Detached launch gate
 
 A newly reviewed V2 preregistration binds the detached gate's code hash and an
-exact 60-second launch window beginning at the frozen start. The gate may be
-armed before that time, but its only prestart scientific state is
+exact 60-second launch window beginning at the frozen start. It also binds the
+canonical launch-preflight code and a complete immutable verification-results
+artifact; missing, failed, extra, or caller-invented checks are rejected. The
+gate may be armed before that time, but its only prestart scientific state is
 `PRESTART_WAITING_VALID_GATE`. It waits in a local OS process; it does not
 start the coordinator, collector, candidate, watchdog, outcome linker, or
 scheduler early.

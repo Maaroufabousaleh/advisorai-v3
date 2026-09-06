@@ -24,6 +24,7 @@ from advisorai.phase4.v3core_longrun_runtime import (
     attest_long_run_identity,
     identity_matches_preregistration,
     load_long_run_preregistration,
+    load_long_run_verification_results,
     long_run_component_files,
     process_command_identity,
     process_create_time,
@@ -286,6 +287,7 @@ def launch(
     checkpoint_path: Path,
     phase3_gate_path: Path,
     model_runtime_qualification_path: Path,
+    verification_results_path: Path,
     launch: bool,
 ) -> dict[str, object]:
     if not launch:
@@ -303,6 +305,12 @@ def launch(
         raise ValueError("readiness report is bound to a different preregistration")
     if not all(check.passed for check in readiness.checks):
         raise ValueError("readiness report contains a failed launch check")
+    if preregistration.verification_results_sha256 is None:
+        raise ValueError("preregistration has no launch verification identity")
+    load_long_run_verification_results(
+        verification_results_path.resolve(),
+        expected_sha256=preregistration.verification_results_sha256,
+    )
     if _git_head(repository_root) != preregistration.repository_commit:
         raise ValueError("launch checkout differs from preregistration")
     if _git_tag_target(repository_root, preregistration.branch_or_tag) != (
@@ -582,6 +590,7 @@ def main() -> int:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--phase3-gate", type=Path, required=True)
     parser.add_argument("--model-runtime-qualification", type=Path, required=True)
+    parser.add_argument("--verification-results", type=Path, required=True)
     args = parser.parse_args()
     try:
         result = launch(
@@ -597,6 +606,7 @@ def main() -> int:
             checkpoint_path=args.checkpoint,
             phase3_gate_path=args.phase3_gate,
             model_runtime_qualification_path=args.model_runtime_qualification,
+            verification_results_path=args.verification_results,
         )
     except (OSError, KeyError, TypeError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
         refusal = {

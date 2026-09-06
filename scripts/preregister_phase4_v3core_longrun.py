@@ -24,6 +24,7 @@ from advisorai.phase4.v3core_longrun_runtime import (
     derive_first_long_run_cutoff,
     derive_long_run_cutoffs,
     derive_long_run_source_snapshot_sha256,
+    load_long_run_verification_results,
     long_run_component_files,
     long_run_preregistration_sha256,
     write_immutable_long_run_preregistration,
@@ -51,11 +52,18 @@ def build_preregistration(
     terminal_check_at: datetime,
     model_runtime_qualification_path: Path,
     phase3_gate_path: Path,
+    verification_results_path: Path,
 ) -> LongRunPreregistration:
+    load_long_run_verification_results(verification_results_path)
     files = long_run_component_files(repository_root)
     missing = [
         str(path)
-        for path in (*files.values(), model_runtime_qualification_path, phase3_gate_path)
+        for path in (
+            *files.values(),
+            model_runtime_qualification_path,
+            phase3_gate_path,
+            verification_results_path,
+        )
         if not path.is_file()
     ]
     if missing:
@@ -107,6 +115,7 @@ def build_preregistration(
         context_rule_sha256=context_hash,
         preprocessing_sha256=sha256_file(preprocessing_path),
         **code_hashes,
+        verification_results_sha256=sha256_file(verification_results_path),
         model_runtime_qualification_sha256=sha256_file(model_runtime_qualification_path),
         source_snapshot_sha256=source_snapshot_hash,
         runtime_attestation_sha256=collect_runtime_attestation().attestation_hash,
@@ -127,6 +136,7 @@ def main() -> int:
     parser.add_argument("--terminal-check-at", required=True)
     parser.add_argument("--model-runtime-qualification", type=Path, required=True)
     parser.add_argument("--phase3-gate", type=Path, required=True)
+    parser.add_argument("--verification-results", type=Path, required=True)
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     parser.add_argument("--branch-or-tag", required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -145,6 +155,7 @@ def main() -> int:
         terminal_check_at=_parse_utc(args.terminal_check_at),
         model_runtime_qualification_path=args.model_runtime_qualification.resolve(),
         phase3_gate_path=args.phase3_gate.resolve(),
+        verification_results_path=args.verification_results.resolve(),
     )
     digest = long_run_preregistration_sha256(preregistration)
     result = {

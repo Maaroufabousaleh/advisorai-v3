@@ -100,6 +100,7 @@ def _build_launch_command(
     checkpoint_path: Path,
     phase3_gate_path: Path,
     model_runtime_qualification_path: Path,
+    verification_results_path: Path,
 ) -> list[str]:
     return [
         sys.executable,
@@ -127,6 +128,8 @@ def _build_launch_command(
         str(phase3_gate_path),
         "--model-runtime-qualification",
         str(model_runtime_qualification_path),
+        "--verification-results",
+        str(verification_results_path),
     ]
 
 
@@ -214,6 +217,7 @@ def arm(
     checkpoint_path: Path,
     phase3_gate_path: Path,
     model_runtime_qualification_path: Path,
+    verification_results_path: Path,
     arm_requested: bool,
     now: Callable[[], datetime] = _utcnow,
     sleep: Callable[[float], None] = time.sleep,
@@ -229,6 +233,12 @@ def arm(
     expected_gate_hash = preregistration.launch_gate_code_sha256
     if expected_gate_hash is None or sha256_file(Path(__file__).resolve()) != expected_gate_hash:
         raise ValueError("launch-gate code identity differs from preregistration")
+    if (
+        preregistration.verification_results_sha256 is None
+        or sha256_file(verification_results_path.resolve())
+        != preregistration.verification_results_sha256
+    ):
+        raise ValueError("launch verification results differ from preregistration")
     readiness = LongRunLaunchReadinessReport.model_validate(
         read_json_stable(readiness_report_path.resolve())
     )
@@ -299,6 +309,7 @@ def arm(
             checkpoint_path=checkpoint_path.resolve(),
             phase3_gate_path=phase3_gate_path.resolve(),
             model_runtime_qualification_path=model_runtime_qualification_path.resolve(),
+            verification_results_path=verification_results_path.resolve(),
         )
         terminal_at = launch_observed
         try:
@@ -356,6 +367,7 @@ def main() -> int:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--phase3-gate", type=Path, required=True)
     parser.add_argument("--model-runtime-qualification", type=Path, required=True)
+    parser.add_argument("--verification-results", type=Path, required=True)
     args = parser.parse_args()
     try:
         result = arm(
@@ -371,6 +383,7 @@ def main() -> int:
             checkpoint_path=args.checkpoint,
             phase3_gate_path=args.phase3_gate,
             model_runtime_qualification_path=args.model_runtime_qualification,
+            verification_results_path=args.verification_results,
             arm_requested=args.arm,
         )
     except (OSError, TypeError, ValueError, RuntimeError, json.JSONDecodeError) as exc:

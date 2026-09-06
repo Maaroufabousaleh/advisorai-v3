@@ -12,6 +12,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from advisorai.phase4.v3core_longrun_runtime import (
+    LONG_RUN_REQUIRED_PREFLIGHT_CHECKS,
+    LONG_RUN_VERIFICATION_SCHEMA,
+)
+
 ROOT = Path(__file__).parents[2]
 
 
@@ -162,6 +167,8 @@ def test_launch_entrypoint_emits_structured_exact_refusal(monkeypatch, capsys) -
             "phase3.json",
             "--model-runtime-qualification",
             "runtime.json",
+            "--verification-results",
+            "verification.json",
         ],
     )
     assert module.main() == 2
@@ -220,6 +227,71 @@ def test_launch_entrypoint_requires_queryable_idle_gpu(monkeypatch) -> None:
         module._require_gpu_lease_free()
 
 
+def test_canonical_launch_preflight_writes_one_hash_bound_report(monkeypatch, tmp_path) -> None:
+    module = _load_script(
+        "phase4_longrun_canonical_launch_preflight_test",
+        "preflight_phase4_v3core_longrun_launch.py",
+    )
+    preregistration = SimpleNamespace(
+        repository_commit="a" * 40,
+        verification_results_sha256="b" * 64,
+    )
+    attestation = SimpleNamespace(attestation_hash="c" * 64)
+    recorded: dict[str, object] = {}
+
+    class Report:
+        def model_dump(self, *, mode: str):
+            assert mode == "json"
+            return {"decision": "LONG_RUN_READY", "report_hash": "d" * 64}
+
+    def evaluate(contract, **kwargs):
+        recorded["contract"] = contract
+        recorded.update(kwargs)
+        return Report()
+
+    monkeypatch.setattr(module, "load_long_run_preregistration", lambda *_a, **_k: preregistration)
+    monkeypatch.setattr(
+        module,
+        "load_long_run_verification_results",
+        lambda *_a, **_k: {name: True for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS},
+    )
+    monkeypatch.setattr(module, "_competing_component_exists", lambda: False)
+    monkeypatch.setattr(module, "long_run_component_files", lambda _root: {})
+    monkeypatch.setattr(module, "attest_long_run_identity", lambda **_kwargs: attestation)
+    monkeypatch.setattr(module, "_phase3_passed", lambda _path: True)
+    monkeypatch.setattr(module, "_runtime_passed", lambda _path: True)
+    monkeypatch.setattr(module, "_gpu_lease_free", lambda: True)
+    monkeypatch.setattr(module, "evaluate_long_run_readiness", evaluate)
+    output = tmp_path / "readiness.json"
+    result = module.run(
+        repository_root=tmp_path / "repo",
+        preregistration_path=tmp_path / "prereg.json",
+        preregistration_sha256="e" * 64,
+        verification_results_path=tmp_path / "verification.json",
+        requirements_lock_path=tmp_path / "requirements.lock",
+        checkpoint_path=tmp_path / "checkpoint",
+        phase3_gate_path=tmp_path / "phase3.json",
+        model_runtime_qualification_path=tmp_path / "runtime.json",
+        output_path=output,
+    )
+    assert result["decision"] == "LONG_RUN_READY"
+    assert recorded["gpu_lease_free"] is True
+    assert recorded["immutable_preregistration_created"] is True
+    assert json.loads(output.read_text())["report_hash"] == "d" * 64
+    with pytest.raises(FileExistsError):
+        module.run(
+            repository_root=tmp_path / "repo",
+            preregistration_path=tmp_path / "prereg.json",
+            preregistration_sha256="e" * 64,
+            verification_results_path=tmp_path / "verification.json",
+            requirements_lock_path=tmp_path / "requirements.lock",
+            checkpoint_path=tmp_path / "checkpoint",
+            phase3_gate_path=tmp_path / "phase3.json",
+            model_runtime_qualification_path=tmp_path / "runtime.json",
+            output_path=output,
+        )
+
+
 def test_long_run_launch_wires_the_scheduler_to_the_outcome_root(tmp_path) -> None:
     module = _load_script(
         "phase4_longrun_launch_command_construction_test",
@@ -268,6 +340,7 @@ def test_long_run_preregistration_builder_does_not_duplicate_rule_hash_arguments
         "coordinator_code_sha256",
         "launcher_code_sha256",
         "launch_gate_code_sha256",
+        "launch_preflight_code_sha256",
     )
     component_files = {}
     for name in component_names:
@@ -279,6 +352,14 @@ def test_long_run_preregistration_builder_does_not_duplicate_rule_hash_arguments
     runtime = tmp_path / "runtime.json"
     phase3.write_text("{}", encoding="utf-8")
     runtime.write_text("{}", encoding="utf-8")
+    verification = tmp_path / "verification.json"
+    verification_text = json.dumps(
+        {
+            "schema": LONG_RUN_VERIFICATION_SCHEMA,
+            "checks": {name: True for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS},
+        }
+    )
+    verification.write_text(verification_text, encoding="utf-8")
     real_sha256_file = module.sha256_file
 
     def qualified_sha256_file(path: Path) -> str:
@@ -300,12 +381,42 @@ def test_long_run_preregistration_builder_does_not_duplicate_rule_hash_arguments
         terminal_check_at=datetime(2030, 1, 4, 14, 5, tzinfo=UTC),
         model_runtime_qualification_path=runtime,
         phase3_gate_path=phase3,
+        verification_results_path=verification,
     )
     assert contract.finality_rule_sha256 == sha256(b"finality_rule_sha256").hexdigest()
     assert contract.context_rule_sha256 == sha256(b"context_rule_sha256").hexdigest()
     assert contract.launch_not_before_at == start
     assert contract.launch_not_after_at == start + timedelta(seconds=60)
     assert contract.launch_gate_code_sha256 == sha256(b"launch_gate_code_sha256").hexdigest()
+    assert (
+        contract.launch_preflight_code_sha256 == sha256(b"launch_preflight_code_sha256").hexdigest()
+    )
+    assert contract.verification_results_sha256 == sha256(verification_text.encode()).hexdigest()
+
+
+def test_long_run_preregistration_builder_rejects_incomplete_verification(tmp_path) -> None:
+    module = _load_script(
+        "phase4_longrun_preregistration_invalid_verification_test",
+        "preregister_phase4_v3core_longrun.py",
+    )
+    verification = tmp_path / "verification.json"
+    verification.write_text(
+        json.dumps({"schema": LONG_RUN_VERIFICATION_SCHEMA, "checks": {}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="check set mismatch"):
+        module.build_preregistration(
+            repository_root=tmp_path,
+            generation_id="20300101T000000Z-test",
+            branch_or_tag="test-tag",
+            created_at=datetime(2029, 12, 31, tzinfo=UTC),
+            start_at=datetime(2030, 1, 1, tzinfo=UTC),
+            terminal_deadline=datetime(2030, 1, 4, 14, tzinfo=UTC),
+            terminal_check_at=datetime(2030, 1, 4, 14, 5, tzinfo=UTC),
+            model_runtime_qualification_path=tmp_path / "runtime.json",
+            phase3_gate_path=tmp_path / "phase3.json",
+            verification_results_path=verification,
+        )
 
 
 def _gate_preregistration(start: datetime):
@@ -316,6 +427,7 @@ def _gate_preregistration(start: datetime):
         launch_not_before_at=start,
         launch_not_after_at=start + timedelta(seconds=60),
         launch_gate_code_sha256="b" * 64,
+        verification_results_sha256="b" * 64,
     )
 
 
@@ -377,6 +489,7 @@ def _arm_gate(
         checkpoint_path=tmp_path / "checkpoint",
         phase3_gate_path=tmp_path / "phase3.json",
         model_runtime_qualification_path=tmp_path / "runtime.json",
+        verification_results_path=tmp_path / "verification.json",
         arm_requested=True,
         now=now,
         sleep=sleep,
