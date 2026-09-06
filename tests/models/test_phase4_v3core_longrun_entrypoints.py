@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import fcntl
 import importlib.util
+import json
 import sys
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -79,17 +81,93 @@ def test_watchdog_public_runner_rejects_a_competing_instance(monkeypatch, tmp_pa
     assert module.run(watchdog_root=watchdog_root) == sentinel
 
 
-def test_launch_entrypoint_rejects_only_at_or_after_the_frozen_start() -> None:
+def test_launch_entrypoint_accepts_only_the_frozen_post_start_window() -> None:
     module = _load_script(
         "phase4_longrun_launch_entrypoint_test",
         "launch_phase4_v3core_longrun.py",
     )
     start = datetime(2026, 9, 1, 12, tzinfo=UTC)
-    module._require_future_launch_window(start - timedelta(microseconds=1), start)
+    end = start + timedelta(seconds=60)
+    with pytest.raises(ValueError, match="has not opened"):
+        module._require_launch_window(
+            start - timedelta(microseconds=1),
+            launch_not_before_at=start,
+            launch_not_after_at=end,
+        )
+    module._require_launch_window(
+        start,
+        launch_not_before_at=start,
+        launch_not_after_at=end,
+    )
+    module._require_launch_window(
+        end,
+        launch_not_before_at=start,
+        launch_not_after_at=end,
+    )
     with pytest.raises(ValueError, match="start window was missed"):
-        module._require_future_launch_window(start, start)
-    with pytest.raises(ValueError, match="start window was missed"):
-        module._require_future_launch_window(start + timedelta(seconds=1), start)
+        module._require_launch_window(
+            end + timedelta(microseconds=1),
+            launch_not_before_at=start,
+            launch_not_after_at=end,
+        )
+
+
+def test_launch_entrypoint_refuses_legacy_preregistration_without_window() -> None:
+    module = _load_script(
+        "phase4_longrun_legacy_launch_entrypoint_test",
+        "launch_phase4_v3core_longrun.py",
+    )
+    with pytest.raises(ValueError, match="no post-start launch window"):
+        module._require_launch_window(
+            datetime(2026, 9, 1, 12, tzinfo=UTC),
+            launch_not_before_at=None,
+            launch_not_after_at=None,
+        )
+
+
+def test_launch_entrypoint_emits_structured_exact_refusal(monkeypatch, capsys) -> None:
+    module = _load_script(
+        "phase4_longrun_structured_refusal_test",
+        "launch_phase4_v3core_longrun.py",
+    )
+    monkeypatch.setattr(
+        module,
+        "launch",
+        lambda **_kwargs: (_ for _ in ()).throw(ValueError("checkpoint identity mismatch")),
+    )
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            "launch_phase4_v3core_longrun.py",
+            "--launch",
+            "--preregistration",
+            "prereg.json",
+            "--preregistration-sha256",
+            "a" * 64,
+            "--readiness-report",
+            "readiness.json",
+            "--evidence-root",
+            "evidence",
+            "--admission",
+            "admission.json",
+            "--qualification-evidence",
+            "qualification.json",
+            "--requirements-lock",
+            "requirements.lock",
+            "--checkpoint",
+            "checkpoint",
+            "--phase3-gate",
+            "phase3.json",
+            "--model-runtime-qualification",
+            "runtime.json",
+        ],
+    )
+    assert module.main() == 2
+    refusal = json.loads(capsys.readouterr().out)
+    assert refusal["state"] == "LONGRUN_NOT_LAUNCHED_PREFLIGHT_FAILED"
+    assert refusal["error_type"] == "ValueError"
+    assert refusal["reason"] == "checkpoint identity mismatch"
 
 
 def test_long_run_launch_wires_the_scheduler_to_the_outcome_root(tmp_path) -> None:
@@ -139,6 +217,7 @@ def test_long_run_preregistration_builder_does_not_duplicate_rule_hash_arguments
         "scheduler_code_sha256",
         "coordinator_code_sha256",
         "launcher_code_sha256",
+        "launch_gate_code_sha256",
     )
     component_files = {}
     for name in component_names:
@@ -174,6 +253,160 @@ def test_long_run_preregistration_builder_does_not_duplicate_rule_hash_arguments
     )
     assert contract.finality_rule_sha256 == sha256(b"finality_rule_sha256").hexdigest()
     assert contract.context_rule_sha256 == sha256(b"context_rule_sha256").hexdigest()
+    assert contract.launch_not_before_at == start
+    assert contract.launch_not_after_at == start + timedelta(seconds=60)
+    assert contract.launch_gate_code_sha256 == sha256(b"launch_gate_code_sha256").hexdigest()
+
+
+def _gate_preregistration(start: datetime):
+    return SimpleNamespace(
+        generation_id="synthetic-gate",
+        repository_commit="a" * 40,
+        start_at=start,
+        launch_not_before_at=start,
+        launch_not_after_at=start + timedelta(seconds=60),
+        launch_gate_code_sha256="b" * 64,
+    )
+
+
+def _arm_gate(
+    module,
+    monkeypatch,
+    tmp_path,
+    *,
+    now_values: list[datetime],
+    launch_stdout: str = '{"state":"RUNNING"}',
+    launch_returncode: int = 0,
+):
+    start = datetime(2030, 1, 1, tzinfo=UTC)
+    preregistration = _gate_preregistration(start)
+    readiness = SimpleNamespace(
+        decision="LONG_RUN_READY",
+        long_run_ready=True,
+        preregistration_sha256="c" * 64,
+        checks=(SimpleNamespace(passed=True),),
+    )
+    monkeypatch.setattr(
+        module, "load_long_run_preregistration", lambda *_args, **_kwargs: preregistration
+    )
+    monkeypatch.setattr(module, "sha256_file", lambda _path: "b" * 64)
+    monkeypatch.setattr(module, "read_json_stable", lambda _path: {})
+    monkeypatch.setattr(
+        module,
+        "LongRunLaunchReadinessReport",
+        SimpleNamespace(model_validate=lambda _value: readiness),
+    )
+    monkeypatch.setattr(module, "_current_command", lambda: ["python", "gate.py", "--arm"])
+    monkeypatch.setattr(module, "process_create_time", lambda _pid: 17.0)
+    actions: list[object] = []
+    observed = iter(now_values)
+
+    def now() -> datetime:
+        value = next(observed)
+        actions.append(("now", value))
+        return value
+
+    def sleep(seconds: float) -> None:
+        actions.append(("sleep", seconds))
+
+    def run(command, **_kwargs):
+        actions.append(("run", tuple(command)))
+        return SimpleNamespace(returncode=launch_returncode, stdout=launch_stdout, stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", run)
+    result = module.arm(
+        repository_root=tmp_path / "repo",
+        preregistration_path=tmp_path / "prereg.json",
+        preregistration_sha256="c" * 64,
+        readiness_report_path=tmp_path / "readiness.json",
+        evidence_root=tmp_path / "evidence",
+        gate_root=tmp_path / "gate",
+        admission_path=tmp_path / "admission.json",
+        qualification_evidence_path=tmp_path / "qualification.json",
+        requirements_lock_path=tmp_path / "requirements.lock",
+        checkpoint_path=tmp_path / "checkpoint",
+        phase3_gate_path=tmp_path / "phase3.json",
+        model_runtime_qualification_path=tmp_path / "runtime.json",
+        arm_requested=True,
+        now=now,
+        sleep=sleep,
+    )
+    return result, actions, tmp_path / "gate"
+
+
+def test_detached_gate_never_invokes_launcher_before_frozen_start(monkeypatch, tmp_path) -> None:
+    module = _load_script("phase4_longrun_gate_wait_test", "arm_phase4_v3core_longrun.py")
+    start = datetime(2030, 1, 1, tzinfo=UTC)
+    result, actions, gate_root = _arm_gate(
+        module,
+        monkeypatch,
+        tmp_path,
+        now_values=[start - timedelta(seconds=10), start - timedelta(seconds=10), start, start],
+    )
+    assert result["state"] == module.LAUNCHED_STATE
+    assert [action[0] for action in actions].index("sleep") < [
+        action[0] for action in actions
+    ].index("run")
+    events = [json.loads(line) for line in (gate_root / "events.jsonl").read_text().splitlines()]
+    assert [event["state"] for event in events] == [
+        module.PRESTART_STATE,
+        "FINAL_LAUNCH_ATTESTATION",
+        module.LAUNCHED_STATE,
+    ]
+    assert events[0]["observed_at"] < events[1]["observed_at"]
+
+
+def test_detached_gate_records_missed_window_without_invoking_launcher(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script("phase4_longrun_gate_missed_test", "arm_phase4_v3core_longrun.py")
+    start = datetime(2030, 1, 1, tzinfo=UTC)
+    result, actions, _gate_root = _arm_gate(
+        module,
+        monkeypatch,
+        tmp_path,
+        now_values=[
+            start - timedelta(seconds=10),
+            start - timedelta(seconds=10),
+            start + timedelta(seconds=61),
+        ],
+    )
+    assert result["state"] == module.MISSED_WINDOW_STATE
+    assert not any(action[0] == "run" for action in actions)
+
+
+def test_detached_gate_malformed_launcher_output_fails_closed(monkeypatch, tmp_path) -> None:
+    module = _load_script("phase4_longrun_gate_output_test", "arm_phase4_v3core_longrun.py")
+    start = datetime(2030, 1, 1, tzinfo=UTC)
+    result, _actions, gate_root = _arm_gate(
+        module,
+        monkeypatch,
+        tmp_path,
+        now_values=[start, start, start],
+        launch_stdout="not-json",
+    )
+    assert result["state"] == module.PREFLIGHT_FAILED_STATE
+    assert "JSONDecodeError" in result["detail"]
+    assert (gate_root / "launch.stdout.log").read_text() == "not-json"
+
+
+def test_detached_gate_preserves_exact_structured_launcher_refusal(monkeypatch, tmp_path) -> None:
+    module = _load_script("phase4_longrun_gate_refusal_test", "arm_phase4_v3core_longrun.py")
+    start = datetime(2030, 1, 1, tzinfo=UTC)
+    refusal = {
+        "state": module.PREFLIGHT_FAILED_STATE,
+        "reason": "actual checkpoint identity differs from preregistration",
+    }
+    result, _actions, _gate_root = _arm_gate(
+        module,
+        monkeypatch,
+        tmp_path,
+        now_values=[start, start, start],
+        launch_stdout=json.dumps(refusal),
+        launch_returncode=2,
+    )
+    assert result["state"] == module.PREFLIGHT_FAILED_STATE
+    assert refusal["reason"] in result["detail"]
 
 
 def test_watchdog_rejects_an_ordinary_terminal_status_before_the_deadline() -> None:

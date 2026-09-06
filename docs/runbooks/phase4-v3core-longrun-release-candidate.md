@@ -59,7 +59,7 @@ The first legal cutoff for a fresh UTC-hour start `S` is the first top-of-hour
 `T` satisfying:
 
 ```text
-T >= S + (48 - 1) * 5 minutes + 10 minutes
+T >= S + 48 * 5 minutes + 10 minutes
 ```
 
 All 48 bars must originate after `S`. For example, a 16:00 UTC start derives a
@@ -84,6 +84,29 @@ qualification references. A future immutable preregistration must add its own
 hash and the resulting run-specific source snapshot hash; the dry-run keeps
 that future source snapshot explicitly pending. This branch does not create a
 long-run preregistration.
+
+The original `20260901T120000Z-v3core-phase4-chronos-long-r1`
+preregistration is immutable historical control evidence. Its start window
+passed without a launch and it must never be edited, reused, or treated as
+prospective evidence.
+
+## Detached launch gate
+
+A newly reviewed V2 preregistration binds the detached gate's code hash and an
+exact 60-second launch window beginning at the frozen start. The gate may be
+armed before that time, but its only prestart scientific state is
+`PRESTART_WAITING_VALID_GATE`. It waits in a local OS process; it does not
+start the coordinator, collector, candidate, watchdog, outcome linker, or
+scheduler early.
+
+At the window boundary, the gate delegates exactly once to the reviewed
+launcher. The launcher recomputes checkout, component, dual-lock, model,
+checkpoint, predecessor, runtime, import-path, and worktree identities before
+creating any evidence root or child process. A refusal is recorded as
+`LONGRUN_NOT_LAUNCHED_PREFLIGHT_FAILED`; expiry is recorded as
+`LONGRUN_NOT_LAUNCHED_MISSED_START_WINDOW`. Neither state permits a late
+launch or a shifted schedule. Legacy V1 preregistrations have no launch-gate
+authority and always fail closed.
 
 The source and candidate path has no credentials, withdrawal/transfer
 capability, broker/order capability, or execution authority. The readiness
@@ -120,6 +143,7 @@ relaxation, or performance-dependent stop is allowed.
 | Warm-up/scheduler contract | #201 | Reused first-cutoff geometry and prospective timing boundary | Warm-up and scheduler tests |
 | Watchdog/auditor repair | #202 | Reused absorbing failure and chronological replay behavior | Watchdog, replay, and terminal workflow tests |
 | 80/64 long-run accounting and recovery boundary | This release-candidate branch | `v3core_longrun.py` and long-run preflight script | Long-run accounting/recovery tests |
+| Detached post-start launch gate | Follow-up launch-gate review | V2 preregistration schema, hash-bound gate, post-start launcher window | Early/missed-window, legacy refusal, and structured-failure tests |
 
 PR #192 remains separate post-seal causal baseline tooling. PR #195 remains
 separate shutdown/readiness operational tooling. Neither is required to acquire

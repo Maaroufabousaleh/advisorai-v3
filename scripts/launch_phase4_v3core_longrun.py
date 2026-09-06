@@ -67,10 +67,19 @@ def _safe_environment(repository_root: Path) -> dict[str, str]:
     return result
 
 
-def _require_future_launch_window(now: datetime, start_at: datetime) -> None:
-    """Refuse a launch at or after the frozen start; never slide a run."""
+def _require_launch_window(
+    now: datetime,
+    *,
+    launch_not_before_at: datetime | None,
+    launch_not_after_at: datetime | None,
+) -> None:
+    """Require the explicit post-start window frozen in the preregistration."""
 
-    if now >= start_at:
+    if launch_not_before_at is None or launch_not_after_at is None:
+        raise ValueError("preregistration has no post-start launch window")
+    if now < launch_not_before_at:
+        raise ValueError("launch window has not opened; early component start is forbidden")
+    if now > launch_not_after_at:
         raise ValueError("launch start window was missed; do not slide a long-run start")
 
 
@@ -237,7 +246,11 @@ def launch(
     if actual_identity.attestation_hash != readiness.actual_identity_hash:
         raise ValueError("launch readiness attestation is stale for the current checkout")
     now = datetime.now(UTC)
-    _require_future_launch_window(now, preregistration.start_at)
+    _require_launch_window(
+        now,
+        launch_not_before_at=preregistration.launch_not_before_at,
+        launch_not_after_at=preregistration.launch_not_after_at,
+    )
     evidence_root = evidence_root.resolve()
     if evidence_root.exists() and any(evidence_root.iterdir()):
         raise ValueError("long-run evidence root must be empty before launch")
@@ -290,11 +303,18 @@ def launch(
             "scheduler": preregistration.scheduler_code_sha256,
             "coordinator": preregistration.coordinator_code_sha256,
             "launcher": preregistration.launcher_code_sha256,
+            "launch_gate": preregistration.launch_gate_code_sha256,
             "long_run_contract": preregistration.long_run_contract_code_sha256,
             "forward_contract": preregistration.forward_contract_code_sha256,
             "cadence_contract": preregistration.cadence_contract_code_sha256,
         },
         "started_at": now.isoformat().replace("+00:00", "Z"),
+        "launch_not_before_at": preregistration.launch_not_before_at.isoformat().replace(
+            "+00:00", "Z"
+        ),
+        "launch_not_after_at": preregistration.launch_not_after_at.isoformat().replace(
+            "+00:00", "Z"
+        ),
         "commands": commands,
         "processes": processes,
         "credentials_loaded": False,
@@ -491,7 +511,17 @@ def main() -> int:
             model_runtime_qualification_path=args.model_runtime_qualification,
         )
     except (OSError, KeyError, TypeError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"long-run launch refused ({type(exc).__name__})") from exc
+        refusal = {
+            "schema": "advisorai.phase4.v3-core.long-run.launch-refusal.v1",
+            "state": "LONGRUN_NOT_LAUNCHED_PREFLIGHT_FAILED",
+            "error_type": type(exc).__name__,
+            "reason": str(exc),
+            "credentials_loaded": False,
+            "order_writes_attempted": False,
+            "execution_authority_present": False,
+        }
+        print(json.dumps(refusal, sort_keys=True, separators=(",", ":")))
+        return 2
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0
 

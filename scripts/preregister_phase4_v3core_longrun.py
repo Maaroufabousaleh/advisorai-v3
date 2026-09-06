@@ -11,12 +11,14 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from advisorai.phase4.v3core_canary import sha256_file
 from advisorai.phase4.v3core_chronos import CHRONOS_PREPROCESSING_IDENTITY
 from advisorai.phase4.v3core_longrun_runtime import (
+    LONG_RUN_LAUNCH_WINDOW_SECONDS,
+    LONG_RUN_PREREGISTRATION_SCHEMA,
     LongRunPreregistration,
     collect_runtime_attestation,
     derive_first_long_run_cutoff,
@@ -91,11 +93,14 @@ def build_preregistration(
         context_rule_sha256=context_hash,
     )
     preregistration = LongRunPreregistration(
+        schema=LONG_RUN_PREREGISTRATION_SCHEMA,
         generation_id=generation_id,
         branch_or_tag=branch_or_tag,
         repository_commit=repository_commit,
         created_at=created_at,
         start_at=start_at,
+        launch_not_before_at=start_at,
+        launch_not_after_at=start_at + timedelta(seconds=LONG_RUN_LAUNCH_WINDOW_SECONDS),
         first_mandatory_cutoff_at=first_cutoff,
         mandatory_cutoffs=mandatory_cutoffs,
         finality_rule_sha256=finality_hash,

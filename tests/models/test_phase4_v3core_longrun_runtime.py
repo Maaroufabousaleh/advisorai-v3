@@ -30,6 +30,8 @@ from advisorai.phase4.v3core_longrun import (
 )
 from advisorai.phase4.v3core_longrun_runtime import (
     LONG_RUN_CONTEXT_BARS,
+    LONG_RUN_PREREGISTRATION_SCHEMA,
+    LONG_RUN_PREREGISTRATION_SCHEMA_V1,
     LONG_RUN_REQUIRED_PREFLIGHT_CHECKS,
     LongRunCoordinator,
     LongRunIncident,
@@ -45,6 +47,7 @@ from advisorai.phase4.v3core_longrun_runtime import (
     fresh_long_run_minimum_interval_end,
     long_run_component_files,
     long_run_context_for_cutoff,
+    long_run_preregistration_sha256,
     prediction_deadline,
     read_append_only_lines,
     read_long_run_normalized_bars_for_start,
@@ -172,6 +175,49 @@ def test_long_run_schedule_has_exactly_eighty_ordered_cutoffs() -> None:
         right - left == timedelta(hours=1)
         for left, right in zip(prereg.mandatory_cutoffs, prereg.mandatory_cutoffs[1:], strict=False)
     )
+
+
+def test_legacy_preregistration_hash_is_stable_and_cannot_gain_gate_authority() -> None:
+    legacy = _preregistration()
+    assert legacy.schema == LONG_RUN_PREREGISTRATION_SCHEMA_V1
+    digest = long_run_preregistration_sha256(legacy)
+    reloaded = LongRunPreregistration.model_validate(
+        legacy.model_dump(mode="json", exclude_none=True)
+    )
+    assert long_run_preregistration_sha256(reloaded) == digest
+    payload = legacy.model_dump(mode="json", exclude_none=True)
+    payload.update(
+        launch_not_before_at=START,
+        launch_not_after_at=START + timedelta(seconds=60),
+        launch_gate_code_sha256=HASH,
+    )
+    with pytest.raises(ValueError, match="legacy V1"):
+        LongRunPreregistration.model_validate(payload)
+
+
+def test_v2_preregistration_requires_exact_gate_hash_and_launch_window() -> None:
+    payload = _preregistration().model_dump(mode="json", exclude_none=True)
+    payload.update(
+        schema=LONG_RUN_PREREGISTRATION_SCHEMA,
+        launch_not_before_at=START,
+        launch_not_after_at=START + timedelta(seconds=60),
+        launch_gate_code_sha256=HASH,
+    )
+    preregistration = LongRunPreregistration.model_validate(payload)
+    assert preregistration.launch_not_before_at == START
+    assert preregistration.launch_not_after_at == START + timedelta(seconds=60)
+    assert long_run_preregistration_sha256(preregistration) != long_run_preregistration_sha256(
+        _preregistration()
+    )
+    for missing in ("launch_not_before_at", "launch_not_after_at", "launch_gate_code_sha256"):
+        invalid = dict(payload)
+        invalid.pop(missing)
+        with pytest.raises(ValueError, match="must bind"):
+            LongRunPreregistration.model_validate(invalid)
+    invalid = dict(payload)
+    invalid["launch_not_after_at"] = START + timedelta(seconds=61)
+    with pytest.raises(ValueError, match="60-second"):
+        LongRunPreregistration.model_validate(invalid)
 
 
 def test_actual_identity_attestation_hash_round_trips_with_identity_schema(monkeypatch) -> None:
