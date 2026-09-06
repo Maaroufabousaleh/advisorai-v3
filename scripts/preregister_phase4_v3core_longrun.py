@@ -128,7 +128,7 @@ def main() -> int:
     parser.add_argument("--model-runtime-qualification", type=Path, required=True)
     parser.add_argument("--phase3-gate", type=Path, required=True)
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
-    parser.add_argument("--branch-or-tag", default="release-candidate")
+    parser.add_argument("--branch-or-tag", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--create", action="store_true", help="perform the one-time immutable write"

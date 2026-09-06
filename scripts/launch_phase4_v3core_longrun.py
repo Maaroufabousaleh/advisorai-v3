@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -40,6 +41,78 @@ def _git_head(root: Path) -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+def _git_tag_target(root: Path, tag: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root.resolve()), "rev-parse", f"refs/tags/{tag}^{{commit}}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _require_no_long_run_component_processes() -> None:
+    """Refuse stale/competing scientific components using full command identity."""
+
+    try:
+        import psutil
+    except ImportError as exc:
+        raise RuntimeError("launch process inspection requires psutil") from exc
+    component_names = {
+        "collect_phase4_v3core_longrun.py",
+        "run_phase4_v3core_longrun_chronos.py",
+        "link_phase4_v3core_longrun_prediction_outcomes.py",
+        "watch_phase4_v3core_longrun.py",
+        "schedule_phase4_v3core_longrun.sh",
+    }
+    conflicts: list[str] = []
+    for process in psutil.process_iter(("pid", "cmdline")):
+        if process.pid == os.getpid():
+            continue
+        try:
+            command = [str(item) for item in (process.info.get("cmdline") or ())]
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+        if any(Path(token).name in component_names for token in command):
+            conflicts.append(f"pid={process.pid} command={command!r}")
+    if conflicts:
+        raise RuntimeError("competing long-run component exists: " + "; ".join(conflicts))
+
+
+def _require_gpu_lease_free() -> None:
+    """Require a queryable CUDA device with no resident compute application."""
+
+    executable = shutil.which("nvidia-smi")
+    if executable is None:
+        raise RuntimeError("nvidia-smi is unavailable at launch time")
+    try:
+        gpu = subprocess.run(
+            [executable, "--query-gpu=name,driver_version", "--format=csv,noheader"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        applications = subprocess.run(
+            [
+                executable,
+                "--query-compute-apps=pid,process_name,used_memory",
+                "--format=csv,noheader",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError("launch-time CUDA/GPU attestation failed") from exc
+    if not gpu.stdout.strip():
+        raise RuntimeError("launch-time CUDA/GPU attestation returned no device")
+    resident = [line.strip() for line in applications.stdout.splitlines() if line.strip()]
+    if resident:
+        raise RuntimeError("GPU lease is not free: " + "; ".join(resident))
 
 
 def _safe_environment(repository_root: Path) -> dict[str, str]:
@@ -232,6 +305,10 @@ def launch(
         raise ValueError("readiness report contains a failed launch check")
     if _git_head(repository_root) != preregistration.repository_commit:
         raise ValueError("launch checkout differs from preregistration")
+    if _git_tag_target(repository_root, preregistration.branch_or_tag) != (
+        preregistration.repository_commit
+    ):
+        raise ValueError("frozen release tag differs from preregistration")
     actual_identity = attest_long_run_identity(
         repository_root=repository_root,
         expected_repository_commit=preregistration.repository_commit,
@@ -245,6 +322,17 @@ def launch(
         raise ValueError("actual launch checkout identity does not match the preregistration")
     if actual_identity.attestation_hash != readiness.actual_identity_hash:
         raise ValueError("launch readiness attestation is stale for the current checkout")
+    now = datetime.now(UTC)
+    _require_launch_window(
+        now,
+        launch_not_before_at=preregistration.launch_not_before_at,
+        launch_not_after_at=preregistration.launch_not_after_at,
+    )
+    _require_no_long_run_component_processes()
+    _require_gpu_lease_free()
+    # Host checks consume part of the frozen launch window. Recheck immediately
+    # before creating evidence or starting a child so a slow check cannot turn
+    # into an unreviewed late launch.
     now = datetime.now(UTC)
     _require_launch_window(
         now,

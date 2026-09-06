@@ -102,7 +102,11 @@ scheduler early.
 At the window boundary, the gate delegates exactly once to the reviewed
 launcher. The launcher recomputes checkout, component, dual-lock, model,
 checkpoint, predecessor, runtime, import-path, and worktree identities before
-creating any evidence root or child process. A refusal is recorded as
+creating any evidence root or child process. It also resolves the annotated
+release tag to the preregistered commit, refuses any existing long-run
+component, and requires a queryable GPU with no resident compute application.
+The launch window is checked again after these dynamic checks so a slow
+attestation cannot become a late launch. A refusal is recorded as
 `LONGRUN_NOT_LAUNCHED_PREFLIGHT_FAILED`; expiry is recorded as
 `LONGRUN_NOT_LAUNCHED_MISSED_START_WINDOW`. Neither state permits a late
 launch or a shifted schedule. Legacy V1 preregistrations have no launch-gate

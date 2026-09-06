@@ -3,6 +3,7 @@ from __future__ import annotations
 import fcntl
 import importlib.util
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -168,6 +169,55 @@ def test_launch_entrypoint_emits_structured_exact_refusal(monkeypatch, capsys) -
     assert refusal["state"] == "LONGRUN_NOT_LAUNCHED_PREFLIGHT_FAILED"
     assert refusal["error_type"] == "ValueError"
     assert refusal["reason"] == "checkpoint identity mismatch"
+
+
+def test_launch_entrypoint_resolves_annotated_release_tag_to_commit() -> None:
+    module = _load_script(
+        "phase4_longrun_release_tag_test",
+        "launch_phase4_v3core_longrun.py",
+    )
+    expected = subprocess.run(
+        ["git", "-C", str(ROOT), "rev-parse", "phase4-v3core-longrun-r1^{}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert module._git_tag_target(ROOT, "phase4-v3core-longrun-r1") == expected
+
+
+def test_launch_entrypoint_refuses_competing_long_run_component(monkeypatch) -> None:
+    module = _load_script(
+        "phase4_longrun_process_quiescence_test",
+        "launch_phase4_v3core_longrun.py",
+    )
+    import psutil
+
+    current = SimpleNamespace(pid=111, info={"cmdline": ["python", "launcher.py"]})
+    conflict = SimpleNamespace(
+        pid=222,
+        info={"cmdline": ["python", "/repo/scripts/watch_phase4_v3core_longrun.py"]},
+    )
+    monkeypatch.setattr(module.os, "getpid", lambda: 111)
+    monkeypatch.setattr(psutil, "process_iter", lambda _attrs: (current, conflict))
+    with pytest.raises(RuntimeError, match="pid=222"):
+        module._require_no_long_run_component_processes()
+
+
+def test_launch_entrypoint_requires_queryable_idle_gpu(monkeypatch) -> None:
+    module = _load_script(
+        "phase4_longrun_gpu_quiescence_test",
+        "launch_phase4_v3core_longrun.py",
+    )
+    monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/bin/nvidia-smi")
+    responses = iter(
+        (
+            SimpleNamespace(stdout="NVIDIA GPU, 999.0\n"),
+            SimpleNamespace(stdout="4321, python, 1024 MiB\n"),
+        )
+    )
+    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs: next(responses))
+    with pytest.raises(RuntimeError, match="GPU lease is not free"):
+        module._require_gpu_lease_free()
 
 
 def test_long_run_launch_wires_the_scheduler_to_the_outcome_root(tmp_path) -> None:
