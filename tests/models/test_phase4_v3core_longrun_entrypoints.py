@@ -375,6 +375,23 @@ def test_detached_gate_records_missed_window_without_invoking_launcher(
     assert not any(action[0] == "run" for action in actions)
 
 
+def test_detached_gate_invoked_late_records_missed_window_without_prestart_state(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script("phase4_longrun_gate_late_test", "arm_phase4_v3core_longrun.py")
+    start = datetime(2030, 1, 1, tzinfo=UTC)
+    result, actions, gate_root = _arm_gate(
+        module,
+        monkeypatch,
+        tmp_path,
+        now_values=[start + timedelta(seconds=61)],
+    )
+    assert result["state"] == module.MISSED_WINDOW_STATE
+    assert not any(action[0] in {"sleep", "run"} for action in actions)
+    events = [json.loads(line) for line in (gate_root / "events.jsonl").read_text().splitlines()]
+    assert [event["state"] for event in events] == [module.MISSED_WINDOW_STATE]
+
+
 def test_detached_gate_malformed_launcher_output_fails_closed(monkeypatch, tmp_path) -> None:
     module = _load_script("phase4_longrun_gate_output_test", "arm_phase4_v3core_longrun.py")
     start = datetime(2030, 1, 1, tzinfo=UTC)

@@ -240,8 +240,6 @@ def arm(
     ):
         raise ValueError("readiness report does not authorize this preregistration")
     observed = now().astimezone(UTC)
-    if observed > launch_not_after:
-        raise ValueError("launch start window was already missed")
     if evidence_root.resolve().exists() and any(evidence_root.resolve().iterdir()):
         raise ValueError("long-run evidence root is not empty")
     gate_root = gate_root.resolve()
@@ -273,7 +271,14 @@ def arm(
             write_json_atomic(status_path, payload)
             return payload
 
-        publish(PRESTART_STATE, "waiting for the immutable UTC launch window", observed)
+        if observed > launch_not_after:
+            return publish(
+                MISSED_WINDOW_STATE,
+                "the immutable launch window expired before this gate could act",
+                observed,
+            )
+        if observed < launch_not_before:
+            publish(PRESTART_STATE, "waiting for the immutable UTC launch window", observed)
         launch_observed = _wait_until(launch_not_before, now=now, sleep=sleep)
         if launch_observed > launch_not_after:
             return publish(
