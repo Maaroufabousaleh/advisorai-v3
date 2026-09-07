@@ -79,6 +79,22 @@ def _runtime_passed(path: Path) -> bool:
     )
 
 
+def _git_tag_target(repository_root: Path, tag: str) -> str:
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(repository_root.resolve()),
+            "rev-parse",
+            f"refs/tags/{tag}^{{commit}}",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
 def _gpu_lease_free() -> bool:
     executable = shutil.which("nvidia-smi")
     if executable is None:
@@ -124,8 +140,12 @@ def _competing_component_exists() -> bool:
             continue
         try:
             command = [str(item) for item in (process.info.get("cmdline") or ())]
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
             continue
+        except psutil.AccessDenied as exc:
+            raise RuntimeError(
+                "cannot inspect a process command line while proving run quiescence"
+            ) from exc
         if any(Path(token).name in names for token in command):
             return True
     return False
@@ -149,6 +169,10 @@ def run(
     )
     if preregistration.verification_results_sha256 is None:
         raise ValueError("preregistration has no launch verification identity")
+    if _git_tag_target(repository_root, preregistration.branch_or_tag) != (
+        preregistration.repository_commit
+    ):
+        raise ValueError("frozen release tag differs from preregistration")
     checks = load_long_run_verification_results(
         verification_results_path.resolve(),
         expected_sha256=preregistration.verification_results_sha256,

@@ -234,6 +234,7 @@ def test_canonical_launch_preflight_writes_one_hash_bound_report(monkeypatch, tm
     )
     preregistration = SimpleNamespace(
         repository_commit="a" * 40,
+        branch_or_tag="phase4-v3core-longrun-r2",
         verification_results_sha256="b" * 64,
     )
     attestation = SimpleNamespace(attestation_hash="c" * 64)
@@ -255,6 +256,7 @@ def test_canonical_launch_preflight_writes_one_hash_bound_report(monkeypatch, tm
         "load_long_run_verification_results",
         lambda *_a, **_k: {name: True for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS},
     )
+    monkeypatch.setattr(module, "_git_tag_target", lambda *_a, **_k: "a" * 40)
     monkeypatch.setattr(module, "_competing_component_exists", lambda: False)
     monkeypatch.setattr(module, "long_run_component_files", lambda _root: {})
     monkeypatch.setattr(module, "attest_long_run_identity", lambda **_kwargs: attestation)

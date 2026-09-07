@@ -39,6 +39,7 @@ from advisorai.phase4.v3core_longrun_runtime import (
     LongRunPredictionLedger,
     LongRunPreregistration,
     LongRunRawSpool,
+    LongRunReadinessCheck,
     LongRunState,
     LongRunTransportFailureSpool,
     attest_long_run_identity,
@@ -269,6 +270,13 @@ def test_launch_verification_results_fail_closed(mutation: str, tmp_path) -> Non
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError):
         load_long_run_verification_results(path)
+
+
+def test_readiness_check_passed_is_strictly_boolean() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        LongRunReadinessCheck(name="security", passed=1, reason="forged")
 
 
 def test_actual_identity_attestation_hash_round_trips_with_identity_schema(monkeypatch) -> None:

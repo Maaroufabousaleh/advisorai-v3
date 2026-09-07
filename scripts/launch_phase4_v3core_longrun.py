@@ -74,8 +74,12 @@ def _require_no_long_run_component_processes() -> None:
             continue
         try:
             command = [str(item) for item in (process.info.get("cmdline") or ())]
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
             continue
+        except psutil.AccessDenied as exc:
+            raise RuntimeError(
+                "cannot inspect a process command line while proving run quiescence"
+            ) from exc
         if any(Path(token).name in component_names for token in command):
             conflicts.append(f"pid={process.pid} command={command!r}")
     if conflicts:

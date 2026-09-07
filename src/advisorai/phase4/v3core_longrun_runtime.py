@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qsl, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from advisorai.collectors.sources import HttpResponse
 from advisorai.phase4.v3core_cadence import (
@@ -3410,7 +3410,7 @@ class LongRunReadinessCheck(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str
-    passed: bool
+    passed: StrictBool
     reason: str
 
 
@@ -3424,7 +3424,7 @@ class LongRunLaunchReadinessReport(BaseModel):
     actual_identity: LongRunIdentityAttestation
     actual_identity_hash: str
     report_hash: str
-    long_run_ready: bool = False
+    long_run_ready: StrictBool = False
 
     @field_validator("preregistration_sha256", "actual_identity_hash", "report_hash")
     @classmethod
