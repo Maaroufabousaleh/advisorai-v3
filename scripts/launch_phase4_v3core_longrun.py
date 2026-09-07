@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -23,6 +24,7 @@ from advisorai.phase4.v3core_longrun_runtime import (
     attest_long_run_identity,
     identity_matches_preregistration,
     load_long_run_preregistration,
+    load_long_run_verification_results,
     long_run_component_files,
     process_command_identity,
     process_create_time,
@@ -40,6 +42,82 @@ def _git_head(root: Path) -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+def _git_tag_target(root: Path, tag: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(root.resolve()), "rev-parse", f"refs/tags/{tag}^{{commit}}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _require_no_long_run_component_processes() -> None:
+    """Refuse stale/competing scientific components using full command identity."""
+
+    try:
+        import psutil
+    except ImportError as exc:
+        raise RuntimeError("launch process inspection requires psutil") from exc
+    component_names = {
+        "collect_phase4_v3core_longrun.py",
+        "run_phase4_v3core_longrun_chronos.py",
+        "link_phase4_v3core_longrun_prediction_outcomes.py",
+        "watch_phase4_v3core_longrun.py",
+        "schedule_phase4_v3core_longrun.sh",
+    }
+    conflicts: list[str] = []
+    for process in psutil.process_iter(("pid", "cmdline")):
+        if process.pid == os.getpid():
+            continue
+        try:
+            command = [str(item) for item in (process.info.get("cmdline") or ())]
+        except (psutil.NoSuchProcess, psutil.ZombieProcess):
+            continue
+        except psutil.AccessDenied as exc:
+            raise RuntimeError(
+                "cannot inspect a process command line while proving run quiescence"
+            ) from exc
+        if any(Path(token).name in component_names for token in command):
+            conflicts.append(f"pid={process.pid} command={command!r}")
+    if conflicts:
+        raise RuntimeError("competing long-run component exists: " + "; ".join(conflicts))
+
+
+def _require_gpu_lease_free() -> None:
+    """Require a queryable CUDA device with no resident compute application."""
+
+    executable = shutil.which("nvidia-smi")
+    if executable is None:
+        raise RuntimeError("nvidia-smi is unavailable at launch time")
+    try:
+        gpu = subprocess.run(
+            [executable, "--query-gpu=name,driver_version", "--format=csv,noheader"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        applications = subprocess.run(
+            [
+                executable,
+                "--query-compute-apps=pid,process_name,used_memory",
+                "--format=csv,noheader",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError("launch-time CUDA/GPU attestation failed") from exc
+    if not gpu.stdout.strip():
+        raise RuntimeError("launch-time CUDA/GPU attestation returned no device")
+    resident = [line.strip() for line in applications.stdout.splitlines() if line.strip()]
+    if resident:
+        raise RuntimeError("GPU lease is not free: " + "; ".join(resident))
 
 
 def _safe_environment(repository_root: Path) -> dict[str, str]:
@@ -67,10 +145,19 @@ def _safe_environment(repository_root: Path) -> dict[str, str]:
     return result
 
 
-def _require_future_launch_window(now: datetime, start_at: datetime) -> None:
-    """Refuse a launch at or after the frozen start; never slide a run."""
+def _require_launch_window(
+    now: datetime,
+    *,
+    launch_not_before_at: datetime | None,
+    launch_not_after_at: datetime | None,
+) -> None:
+    """Require the explicit post-start window frozen in the preregistration."""
 
-    if now >= start_at:
+    if launch_not_before_at is None or launch_not_after_at is None:
+        raise ValueError("preregistration has no post-start launch window")
+    if now < launch_not_before_at:
+        raise ValueError("launch window has not opened; early component start is forbidden")
+    if now > launch_not_after_at:
         raise ValueError("launch start window was missed; do not slide a long-run start")
 
 
@@ -204,6 +291,7 @@ def launch(
     checkpoint_path: Path,
     phase3_gate_path: Path,
     model_runtime_qualification_path: Path,
+    verification_results_path: Path,
     launch: bool,
 ) -> dict[str, object]:
     if not launch:
@@ -221,8 +309,18 @@ def launch(
         raise ValueError("readiness report is bound to a different preregistration")
     if not all(check.passed for check in readiness.checks):
         raise ValueError("readiness report contains a failed launch check")
+    if preregistration.verification_results_sha256 is None:
+        raise ValueError("preregistration has no launch verification identity")
+    load_long_run_verification_results(
+        verification_results_path.resolve(),
+        expected_sha256=preregistration.verification_results_sha256,
+    )
     if _git_head(repository_root) != preregistration.repository_commit:
         raise ValueError("launch checkout differs from preregistration")
+    if _git_tag_target(repository_root, preregistration.branch_or_tag) != (
+        preregistration.repository_commit
+    ):
+        raise ValueError("frozen release tag differs from preregistration")
     actual_identity = attest_long_run_identity(
         repository_root=repository_root,
         expected_repository_commit=preregistration.repository_commit,
@@ -237,7 +335,22 @@ def launch(
     if actual_identity.attestation_hash != readiness.actual_identity_hash:
         raise ValueError("launch readiness attestation is stale for the current checkout")
     now = datetime.now(UTC)
-    _require_future_launch_window(now, preregistration.start_at)
+    _require_launch_window(
+        now,
+        launch_not_before_at=preregistration.launch_not_before_at,
+        launch_not_after_at=preregistration.launch_not_after_at,
+    )
+    _require_no_long_run_component_processes()
+    _require_gpu_lease_free()
+    # Host checks consume part of the frozen launch window. Recheck immediately
+    # before creating evidence or starting a child so a slow check cannot turn
+    # into an unreviewed late launch.
+    now = datetime.now(UTC)
+    _require_launch_window(
+        now,
+        launch_not_before_at=preregistration.launch_not_before_at,
+        launch_not_after_at=preregistration.launch_not_after_at,
+    )
     evidence_root = evidence_root.resolve()
     if evidence_root.exists() and any(evidence_root.iterdir()):
         raise ValueError("long-run evidence root must be empty before launch")
@@ -290,11 +403,18 @@ def launch(
             "scheduler": preregistration.scheduler_code_sha256,
             "coordinator": preregistration.coordinator_code_sha256,
             "launcher": preregistration.launcher_code_sha256,
+            "launch_gate": preregistration.launch_gate_code_sha256,
             "long_run_contract": preregistration.long_run_contract_code_sha256,
             "forward_contract": preregistration.forward_contract_code_sha256,
             "cadence_contract": preregistration.cadence_contract_code_sha256,
         },
         "started_at": now.isoformat().replace("+00:00", "Z"),
+        "launch_not_before_at": preregistration.launch_not_before_at.isoformat().replace(
+            "+00:00", "Z"
+        ),
+        "launch_not_after_at": preregistration.launch_not_after_at.isoformat().replace(
+            "+00:00", "Z"
+        ),
         "commands": commands,
         "processes": processes,
         "credentials_loaded": False,
@@ -474,6 +594,7 @@ def main() -> int:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--phase3-gate", type=Path, required=True)
     parser.add_argument("--model-runtime-qualification", type=Path, required=True)
+    parser.add_argument("--verification-results", type=Path, required=True)
     args = parser.parse_args()
     try:
         result = launch(
@@ -489,9 +610,20 @@ def main() -> int:
             checkpoint_path=args.checkpoint,
             phase3_gate_path=args.phase3_gate,
             model_runtime_qualification_path=args.model_runtime_qualification,
+            verification_results_path=args.verification_results,
         )
     except (OSError, KeyError, TypeError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"long-run launch refused ({type(exc).__name__})") from exc
+        refusal = {
+            "schema": "advisorai.phase4.v3-core.long-run.launch-refusal.v1",
+            "state": "LONGRUN_NOT_LAUNCHED_PREFLIGHT_FAILED",
+            "error_type": type(exc).__name__,
+            "reason": str(exc),
+            "credentials_loaded": False,
+            "order_writes_attempted": False,
+            "execution_authority_present": False,
+        }
+        print(json.dumps(refusal, sort_keys=True, separators=(",", ":")))
+        return 2
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0
 

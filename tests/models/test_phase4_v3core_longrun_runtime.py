@@ -30,12 +30,16 @@ from advisorai.phase4.v3core_longrun import (
 )
 from advisorai.phase4.v3core_longrun_runtime import (
     LONG_RUN_CONTEXT_BARS,
+    LONG_RUN_PREREGISTRATION_SCHEMA,
+    LONG_RUN_PREREGISTRATION_SCHEMA_V1,
     LONG_RUN_REQUIRED_PREFLIGHT_CHECKS,
+    LONG_RUN_VERIFICATION_SCHEMA,
     LongRunCoordinator,
     LongRunIncident,
     LongRunPredictionLedger,
     LongRunPreregistration,
     LongRunRawSpool,
+    LongRunReadinessCheck,
     LongRunState,
     LongRunTransportFailureSpool,
     attest_long_run_identity,
@@ -43,8 +47,10 @@ from advisorai.phase4.v3core_longrun_runtime import (
     derive_long_run_source_snapshot_sha256,
     evaluate_release_candidate_preflight,
     fresh_long_run_minimum_interval_end,
+    load_long_run_verification_results,
     long_run_component_files,
     long_run_context_for_cutoff,
+    long_run_preregistration_sha256,
     prediction_deadline,
     read_append_only_lines,
     read_long_run_normalized_bars_for_start,
@@ -172,6 +178,105 @@ def test_long_run_schedule_has_exactly_eighty_ordered_cutoffs() -> None:
         right - left == timedelta(hours=1)
         for left, right in zip(prereg.mandatory_cutoffs, prereg.mandatory_cutoffs[1:], strict=False)
     )
+
+
+def test_legacy_preregistration_hash_is_stable_and_cannot_gain_gate_authority() -> None:
+    legacy = _preregistration()
+    assert legacy.schema == LONG_RUN_PREREGISTRATION_SCHEMA_V1
+    digest = long_run_preregistration_sha256(legacy)
+    reloaded = LongRunPreregistration.model_validate(
+        legacy.model_dump(mode="json", exclude_none=True)
+    )
+    assert long_run_preregistration_sha256(reloaded) == digest
+    payload = legacy.model_dump(mode="json", exclude_none=True)
+    payload.update(
+        launch_not_before_at=START,
+        launch_not_after_at=START + timedelta(seconds=60),
+        launch_gate_code_sha256=HASH,
+        launch_preflight_code_sha256=HASH,
+        verification_results_sha256=HASH,
+    )
+    with pytest.raises(ValueError, match="legacy V1"):
+        LongRunPreregistration.model_validate(payload)
+
+
+def test_v2_preregistration_requires_exact_gate_hash_and_launch_window() -> None:
+    payload = _preregistration().model_dump(mode="json", exclude_none=True)
+    payload.update(
+        schema=LONG_RUN_PREREGISTRATION_SCHEMA,
+        launch_not_before_at=START,
+        launch_not_after_at=START + timedelta(seconds=60),
+        launch_gate_code_sha256=HASH,
+        launch_preflight_code_sha256=HASH,
+        verification_results_sha256=HASH,
+    )
+    preregistration = LongRunPreregistration.model_validate(payload)
+    assert preregistration.launch_not_before_at == START
+    assert preregistration.launch_not_after_at == START + timedelta(seconds=60)
+    assert long_run_preregistration_sha256(preregistration) != long_run_preregistration_sha256(
+        _preregistration()
+    )
+    for missing in (
+        "launch_not_before_at",
+        "launch_not_after_at",
+        "launch_gate_code_sha256",
+        "launch_preflight_code_sha256",
+        "verification_results_sha256",
+    ):
+        invalid = dict(payload)
+        invalid.pop(missing)
+        with pytest.raises(ValueError, match="must bind"):
+            LongRunPreregistration.model_validate(invalid)
+    invalid = dict(payload)
+    invalid["launch_not_after_at"] = START + timedelta(seconds=61)
+    with pytest.raises(ValueError, match="60-second"):
+        LongRunPreregistration.model_validate(invalid)
+
+
+def test_launch_verification_results_are_complete_true_and_hash_bound(tmp_path) -> None:
+    path = tmp_path / "verification.json"
+    payload = {
+        "schema": LONG_RUN_VERIFICATION_SCHEMA,
+        "checks": {name: True for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS},
+    }
+    encoded = json.dumps(payload, sort_keys=True).encode()
+    path.write_bytes(encoded)
+    digest = __import__("hashlib").sha256(encoded).hexdigest()
+    assert load_long_run_verification_results(path, expected_sha256=digest) == payload["checks"]
+    with pytest.raises(ValueError, match="hash mismatch"):
+        load_long_run_verification_results(path, expected_sha256="b" * 64)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing", "extra", "failed", "non_boolean", "schema", "top_level_extra"],
+)
+def test_launch_verification_results_fail_closed(mutation: str, tmp_path) -> None:
+    path = tmp_path / f"{mutation}.json"
+    checks = {name: True for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS}
+    payload: dict[str, object] = {"schema": LONG_RUN_VERIFICATION_SCHEMA, "checks": checks}
+    if mutation == "missing":
+        checks.pop(next(iter(checks)))
+    elif mutation == "extra":
+        checks["caller_invented_check"] = True
+    elif mutation == "failed":
+        checks[next(iter(checks))] = False
+    elif mutation == "non_boolean":
+        checks[next(iter(checks))] = 1
+    elif mutation == "top_level_extra":
+        payload["unreviewed"] = True
+    else:
+        payload["schema"] = "unreviewed"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_long_run_verification_results(path)
+
+
+def test_readiness_check_passed_is_strictly_boolean() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        LongRunReadinessCheck(name="security", passed=1, reason="forged")
 
 
 def test_actual_identity_attestation_hash_round_trips_with_identity_schema(monkeypatch) -> None:

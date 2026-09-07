@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qsl, urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 from advisorai.collectors.sources import HttpResponse
 from advisorai.phase4.v3core_cadence import (
@@ -80,7 +80,8 @@ from advisorai.phase4.v3core_longrun import (
 )
 
 LONG_RUN_EVIDENCE_CLASS = "PROSPECTIVE_PHASE4_LONGRUN"
-LONG_RUN_PREREGISTRATION_SCHEMA = "advisorai.phase4.v3-core.long-run.preregistration.v1"
+LONG_RUN_PREREGISTRATION_SCHEMA_V1 = "advisorai.phase4.v3-core.long-run.preregistration.v1"
+LONG_RUN_PREREGISTRATION_SCHEMA = "advisorai.phase4.v3-core.long-run.preregistration.v2"
 LONG_RUN_EVENT_SCHEMA = "advisorai.phase4.v3-core.long-run.event.v1"
 LONG_RUN_RAW_SCHEMA = "advisorai.phase4.v3-core.long-run.raw-receipt.v1"
 LONG_RUN_PREDICTION_SCHEMA = "advisorai.phase4.v3-core.long-run.prediction.v1"
@@ -90,12 +91,14 @@ LONG_RUN_AUDIT_SCHEMA = "advisorai.phase4.v3-core.long-run.terminal-audit.v1"
 LONG_RUN_READINESS_SCHEMA = "advisorai.phase4.v3-core.long-run.launch-readiness.v1"
 LONG_RUN_RC_PREFLIGHT_SCHEMA = "advisorai.phase4.v3-core.long-run.release-candidate-preflight.v1"
 LONG_RUN_TRANSPORT_FAILURE_SCHEMA = "advisorai.phase4.v3-core.long-run.transport-failure.v1"
+LONG_RUN_VERIFICATION_SCHEMA = "advisorai.phase4.v3-core.long-run.verification-results.v1"
 
 LONG_RUN_FINALITY_RULE_ID = "v3core-admitted-final-60s-two-distinct-receipts-v1"
 LONG_RUN_CONTEXT_RULE_ID = "v3core-48-admitted-final-newest-minus-10m-v1"
 LONG_RUN_OUTCOME_RULE_ID = "v3core-one-hour-12-subsequent-5m-bars-v1"
 LONG_RUN_RECOVERY_POLICY_ID = "v3core-longrun-recovery-one-attempt-component-v1"
 LONG_RUN_PREDICTION_LATENESS_SECONDS = 300
+LONG_RUN_LAUNCH_WINDOW_SECONDS = 60
 
 # These names are the contract between the executable release preflight and
 # the separately run focused/artifact-backed checks.  A caller may not omit a
@@ -148,6 +151,8 @@ _LONG_RUN_COMPONENT_RELATIVE_PATHS = {
     "scheduler_code_sha256": "scripts/schedule_phase4_v3core_longrun.sh",
     "coordinator_code_sha256": "src/advisorai/phase4/v3core_longrun_runtime.py",
     "launcher_code_sha256": "scripts/launch_phase4_v3core_longrun.py",
+    "launch_gate_code_sha256": "scripts/arm_phase4_v3core_longrun.py",
+    "launch_preflight_code_sha256": "scripts/preflight_phase4_v3core_longrun_launch.py",
 }
 
 
@@ -608,7 +613,13 @@ class LongRunPreregistration(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema: Literal[LONG_RUN_PREREGISTRATION_SCHEMA] = LONG_RUN_PREREGISTRATION_SCHEMA
+    # V1 is retained only so immutable preregistrations created before the
+    # detached launch gate can still be read and audited. New launchable
+    # contracts are V2 and must bind the gate plus its post-start window.
+    schema: Literal[
+        LONG_RUN_PREREGISTRATION_SCHEMA_V1,
+        LONG_RUN_PREREGISTRATION_SCHEMA,
+    ] = LONG_RUN_PREREGISTRATION_SCHEMA_V1
     generation_id: str = Field(min_length=1)
     evidence_class: Literal[LONG_RUN_EVIDENCE_CLASS] = LONG_RUN_EVIDENCE_CLASS
     admission_eligible: Literal[False] = False
@@ -616,6 +627,8 @@ class LongRunPreregistration(BaseModel):
     branch_or_tag: str = Field(min_length=1)
     created_at: datetime
     start_at: datetime
+    launch_not_before_at: datetime | None = None
+    launch_not_after_at: datetime | None = None
     first_mandatory_cutoff_at: datetime
     mandatory_cutoffs: tuple[datetime, ...]
     target_opportunities_per_symbol: int = LONG_RUN_TARGET_CASES_PER_SYMBOL
@@ -650,6 +663,9 @@ class LongRunPreregistration(BaseModel):
     scheduler_code_sha256: str
     coordinator_code_sha256: str
     launcher_code_sha256: str
+    launch_gate_code_sha256: str | None = None
+    launch_preflight_code_sha256: str | None = None
+    verification_results_sha256: str | None = None
     long_run_contract_code_sha256: str
     forward_contract_code_sha256: str
     cadence_contract_code_sha256: str
@@ -675,12 +691,16 @@ class LongRunPreregistration(BaseModel):
     @field_validator(
         "created_at",
         "start_at",
+        "launch_not_before_at",
+        "launch_not_after_at",
         "first_mandatory_cutoff_at",
         "terminal_deadline",
         "terminal_check_at",
     )
     @classmethod
-    def aware_timestamps(cls, value: datetime, info: object) -> datetime:
+    def aware_timestamps(cls, value: datetime | None, info: object) -> datetime | None:
+        if value is None:
+            return None
         return _aware(value, getattr(info, "field_name", "timestamp"))
 
     @field_validator("mandatory_cutoffs")
@@ -721,6 +741,15 @@ class LongRunPreregistration(BaseModel):
     def valid_hash(cls, value: str, info: object) -> str:
         return _digest(value, getattr(info, "field_name", "hash"))
 
+    @field_validator(
+        "launch_gate_code_sha256",
+        "launch_preflight_code_sha256",
+        "verification_results_sha256",
+    )
+    @classmethod
+    def valid_optional_hash(cls, value: str | None, info: object) -> str | None:
+        return None if value is None else _digest(value, getattr(info, "field_name", "hash"))
+
     @field_validator("symbols")
     @classmethod
     def fixed_symbols(cls, value: tuple[str, ...]) -> tuple[str, ...]:
@@ -735,6 +764,27 @@ class LongRunPreregistration(BaseModel):
             raise ValueError("long-run start must be aligned to a UTC hour")
         if self.created_at > self.start_at:
             raise ValueError("long-run preregistration must be created before its frozen start")
+        launch_window = (self.launch_not_before_at, self.launch_not_after_at)
+        gated_identities = (
+            *launch_window,
+            self.launch_gate_code_sha256,
+            self.launch_preflight_code_sha256,
+            self.verification_results_sha256,
+        )
+        if self.schema == LONG_RUN_PREREGISTRATION_SCHEMA_V1:
+            if any(value is not None for value in gated_identities):
+                raise ValueError("legacy V1 preregistration cannot acquire launch-gate authority")
+        else:
+            if any(value is None for value in gated_identities):
+                raise ValueError(
+                    "V2 preregistration must bind its launch gate, preflight, verification, and window"
+                )
+            if launch_window[0] != self.start_at:
+                raise ValueError("long-run launch cannot begin before the frozen start")
+            if launch_window[1] != self.start_at + timedelta(
+                seconds=LONG_RUN_LAUNCH_WINDOW_SECONDS
+            ):
+                raise ValueError("long-run launch window must remain the frozen 60-second window")
         if self.target_opportunities_per_symbol != LONG_RUN_TARGET_CASES_PER_SYMBOL:
             raise ValueError("long-run target must remain 80 opportunities per symbol")
         if self.minimum_clean_cases_per_symbol != LONG_RUN_MINIMUM_CLEAN_CASES_PER_SYMBOL:
@@ -817,7 +867,46 @@ class LongRunPreregistration(BaseModel):
 def long_run_preregistration_sha256(preregistration: LongRunPreregistration) -> str:
     """Hash the canonical JSON contract, independent of a trailing newline."""
 
-    return _hash_payload(preregistration.model_dump(mode="json"))
+    # Optional launch-window fields were added after the first immutable
+    # preregistration. Omitting unset fields preserves that historical
+    # artifact's canonical identity while binding the fields for every new
+    # post-start-gated preregistration.
+    return _hash_payload(preregistration.model_dump(mode="json", exclude_none=True))
+
+
+def load_long_run_verification_results(
+    path: Path, *, expected_sha256: str | None = None
+) -> dict[str, bool]:
+    """Load the immutable, hash-bound launch-critical verification result set."""
+
+    path = path.resolve()
+    if expected_sha256 is not None and sha256_file(path) != _digest(
+        expected_sha256, "verification results hash"
+    ):
+        raise ValueError("launch verification results hash mismatch")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("launch verification results are unreadable") from exc
+    if not isinstance(payload, dict) or set(payload) != {"schema", "checks"}:
+        raise ValueError("launch verification results must contain only schema and checks")
+    if payload.get("schema") != LONG_RUN_VERIFICATION_SCHEMA:
+        raise ValueError("launch verification results schema mismatch")
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        raise ValueError("launch verification checks must be an object")
+    names = set(checks)
+    expected_names = set(LONG_RUN_REQUIRED_PREFLIGHT_CHECKS)
+    if names != expected_names:
+        missing = sorted(expected_names - names)
+        extra = sorted(names - expected_names)
+        raise ValueError(
+            f"launch verification check set mismatch: missing={missing}, extra={extra}"
+        )
+    if any(value is not True for value in checks.values()):
+        failed = sorted(name for name, value in checks.items() if value is not True)
+        raise ValueError("launch verification contains failed checks: " + ", ".join(failed))
+    return {str(name): True for name in checks}
 
 
 def write_immutable_long_run_preregistration(
@@ -826,7 +915,7 @@ def write_immutable_long_run_preregistration(
     """Write one new preregistration, refusing any mutation of an existing one."""
 
     path = path.resolve()
-    encoded = _canonical(preregistration.model_dump(mode="json")) + b"\n"
+    encoded = _canonical(preregistration.model_dump(mode="json", exclude_none=True)) + b"\n"
     canonical_hash = long_run_preregistration_sha256(preregistration)
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
@@ -3296,6 +3385,10 @@ def identity_matches_preregistration(
         "forward_contract_code_sha256": preregistration.forward_contract_code_sha256,
         "cadence_contract_code_sha256": preregistration.cadence_contract_code_sha256,
     }
+    if preregistration.launch_gate_code_sha256 is not None:
+        required["launch_gate_code_sha256"] = preregistration.launch_gate_code_sha256
+    if preregistration.launch_preflight_code_sha256 is not None:
+        required["launch_preflight_code_sha256"] = preregistration.launch_preflight_code_sha256
     return (
         attestation.repository_head == preregistration.repository_commit
         and attestation.worktree_clean
@@ -3317,7 +3410,7 @@ class LongRunReadinessCheck(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str
-    passed: bool
+    passed: StrictBool
     reason: str
 
 
@@ -3331,7 +3424,7 @@ class LongRunLaunchReadinessReport(BaseModel):
     actual_identity: LongRunIdentityAttestation
     actual_identity_hash: str
     report_hash: str
-    long_run_ready: bool = False
+    long_run_ready: StrictBool = False
 
     @field_validator("preregistration_sha256", "actual_identity_hash", "report_hash")
     @classmethod
@@ -4454,14 +4547,17 @@ __all__ = [
     "LONG_RUN_CONTEXT_RULE_ID",
     "LONG_RUN_EVIDENCE_CLASS",
     "LONG_RUN_FINALITY_RULE_ID",
+    "LONG_RUN_LAUNCH_WINDOW_SECONDS",
     "LONG_RUN_OUTCOME_RULE_ID",
     "LONG_RUN_PREDICTION_LATENESS_SECONDS",
     "LONG_RUN_PREREGISTRATION_SCHEMA",
+    "LONG_RUN_PREREGISTRATION_SCHEMA_V1",
     "LONG_RUN_READINESS_SCHEMA",
     "LONG_RUN_RECOVERY_POLICY_ID",
     "LONG_RUN_REQUIRED_PREFLIGHT_CHECKS",
     "LONG_RUN_RC_PREFLIGHT_SCHEMA",
     "LONG_RUN_TRANSPORT_FAILURE_SCHEMA",
+    "LONG_RUN_VERIFICATION_SCHEMA",
     "LongRunAccountingSnapshot",
     "LongRunCaseState",
     "LongRunCoordinator",
@@ -4494,6 +4590,7 @@ __all__ = [
     "fresh_long_run_minimum_interval_end",
     "identity_matches_preregistration",
     "load_long_run_preregistration",
+    "load_long_run_verification_results",
     "long_run_context_for_cutoff",
     "long_run_preregistration_sha256",
     "prediction_deadline",
