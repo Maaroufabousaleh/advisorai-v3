@@ -1,0 +1,42 @@
+# Declarative V1 policy values.  Loading this file never activates live
+# capital, obtains credentials, or creates an execution capability.
+policy_id: advisorai-human-governance
+policy_version: human-governance-v1
+live_capital_authorized: false
+initial_live_fraction_of_planned_allocation: 0.05
+allocation_stages:
+  - stage: 0
+    fraction: 0.05
+  - stage: 1
+    fraction: 0.10
+  - stage: 2
+    fraction: 0.20
+  - stage: 3
+    fraction: 0.35
+soft_daily_loss_fraction: -0.005
+hard_daily_loss_fraction: -0.01
+soft_drawdown_fraction: -0.04
+hard_drawdown_fraction: -0.06
+derisk_risk_multiplier: 0.50
+quarter_kelly_multiplier: 0.25
+max_single_asset_fraction: 0.15
+normal_max_gross_leverage: 1.00
+hard_max_gross_leverage: 1.25
+future_leverage_enabled: false
+high_confidence_threshold: 0.90
+medium_confidence_threshold: 0.70
+conservative_cost_safety_factor: 2.0
+correlated_exposure_groups:
+  - group_id: crypto_directional
+    instruments:
+      - BTCUSDT
+      - ETHUSDT
+aggregate_group_exposure_limits:
+  # No unreviewed production threshold is invented here.  A valid independent
+  # correlated-exposure assessment is required before risk may increase.
+  - group_id: crypto_directional
+    max_fraction: null
+risk_kernel_final_veto: true
+oms_authoritative: true
+llm_execution_authority: false
+human_silence_is_approval: false
