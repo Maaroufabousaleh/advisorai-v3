@@ -33,6 +33,8 @@ CAUSAL_BASELINE_IDENTITY_SCHEMA = "advisorai.phase4.v3-core-forward.baseline-ide
 CAUSAL_BASELINE_EVIDENCE_CLASS = "post_seal_causal_regeneration"
 CONTEXT_BARS = 48
 HORIZON_BARS = 12
+GIT_COMMIT_LENGTH = 40
+HEX = frozenset("0123456789abcdef")
 
 
 def _canonical(payload: object) -> bytes:
@@ -179,7 +181,7 @@ class CausalBaselineRegeneration(BaseModel):
 
     schema_version: str = CAUSAL_BASELINE_SCHEMA
     generated_at: datetime
-    repository_commit: str = Field(min_length=1)
+    repository_commit: str = Field(min_length=GIT_COMMIT_LENGTH, max_length=GIT_COMMIT_LENGTH)
     forecasting_code_sha256: str
     lightgbm_code_sha256: str
     case_ids: tuple[str, ...]
@@ -198,6 +200,16 @@ class CausalBaselineRegeneration(BaseModel):
     def valid_code_hash(cls, value: str, info: object) -> str:
         return _digest(value, getattr(info, "field_name", "code hash"))
 
+    @field_validator("repository_commit")
+    @classmethod
+    def valid_repository_commit(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if len(normalized) != GIT_COMMIT_LENGTH or any(
+            character not in HEX for character in normalized
+        ):
+            raise ValueError("repository_commit must be a Git SHA-1")
+        return normalized
+
     @model_validator(mode="after")
     def validate_batch(self) -> CausalBaselineRegeneration:
         if self.schema_version != CAUSAL_BASELINE_SCHEMA:
@@ -209,9 +221,13 @@ class CausalBaselineRegeneration(BaseModel):
         expected_ids = {
             f"{case_id}:{model}" for case_id in self.case_ids for model in V3_CORE_BASELINES
         }
-        actual_ids = {item.prediction_id for item in self.predictions}
-        if actual_ids != expected_ids:
+        actual_ids = tuple(item.prediction_id for item in self.predictions)
+        if len(actual_ids) != len(expected_ids) or len(set(actual_ids)) != len(actual_ids):
+            raise ValueError("causal baseline predictions must have unique identities")
+        if set(actual_ids) != expected_ids:
             raise ValueError("causal baseline predictions must cover every case and baseline")
+        if any(item.prediction_id != f"{item.case_id}:{item.model}" for item in self.predictions):
+            raise ValueError("causal baseline prediction identity must bind case and model")
         return self
 
 
@@ -248,6 +264,24 @@ def regenerate_causal_baselines(
             raise ValueError("causal regeneration requires admitted forward PIT cases")
         if timestamp < case.cutoff:
             raise ValueError("materialization timestamp must be after every case cutoff")
+    first = ordered_cases[0]
+    source_identity = (
+        first.source_id,
+        first.provider_identity,
+        first.endpoint,
+        first.source_snapshot_hash,
+    )
+    if any(
+        (
+            case.source_id,
+            case.provider_identity,
+            case.endpoint,
+            case.source_snapshot_hash,
+        )
+        != source_identity
+        for case in ordered_cases
+    ):
+        raise ValueError("causal baseline cases contain source identity substitution")
 
     predictions: list[CausalBaselinePrediction] = []
     for case in ordered_cases:
