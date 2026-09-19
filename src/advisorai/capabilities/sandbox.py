@@ -774,6 +774,8 @@ class SandboxLaunchSpec(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     backend: SandboxBackendKind
+    trust_class: TrustClass
+    fallback_authorization: str | None = None
     mission_id: str
     command: tuple[str, ...]
     environment: tuple[tuple[str, str], ...]
@@ -802,6 +804,18 @@ class SandboxLaunchSpec(BaseModel):
         }
         if any(key not in allowed_keys for key in keys):
             raise SandboxPolicyError("launch environment cannot contain secret values")
+        if self.trust_class in {TrustClass.TRUSTED_CORE, TrustClass.BLOCKED_EXECUTION}:
+            raise SandboxPolicyError("launch spec cannot execute core or blocked workloads")
+        if self.backend is SandboxBackendKind.HARDENED_DOCKER:
+            if self.trust_class is TrustClass.UNTRUSTED_NATIVE:
+                raise SandboxPolicyError("UNTRUSTED_NATIVE launch specs require Kata")
+            if (
+                self.trust_class is TrustClass.UNTRUSTED_RESEARCH
+                and not (self.fallback_authorization or "").strip()
+            ):
+                raise SandboxPolicyError(
+                    "UNTRUSTED_RESEARCH Docker launch requires fallback authorization"
+                )
         if self.provenance.sandbox_backend is not self.backend:
             raise ValueError("launch and provenance backend identities must match")
         return self
@@ -839,6 +853,23 @@ class BackendAvailability(BaseModel):
     reason: str
     runtime: str | None = None
     host_report: HostCapabilityReport
+
+
+class SandboxBackendSelectionRecord(BaseModel):
+    """Serializable audit record for every policy backend decision."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    record_type: str = "advisorai.sandbox.backend-selection.v1"
+    trust_class: TrustClass
+    requested_backend: SandboxBackendKind | None
+    selected_backend: SandboxBackendKind
+    fallback_used: bool
+    fallback_reason: str | None
+    policy_authorization: str | None
+    policy_hash: str
+
+    _policy_hash = field_validator("policy_hash")(_require_sha256)
 
 
 class SandboxBackend(ABC):
@@ -1008,6 +1039,25 @@ class _DockerSandboxBackend(SandboxBackend):
     def _host(self) -> HostCapabilityReport:
         return self._host_report or probe_host_capabilities(command_probe=self._command_probe)
 
+    def _validate_backend_compatibility(
+        self, mission: SandboxMission, policy: SandboxPolicy
+    ) -> None:
+        if mission.trust_class in {TrustClass.TRUSTED_CORE, TrustClass.BLOCKED_EXECUTION}:
+            raise SandboxPolicyError(
+                f"execution is prohibited for trust class {mission.trust_class.value}"
+            )
+        if self.kind is SandboxBackendKind.KATA:
+            return
+        if mission.trust_class is TrustClass.UNTRUSTED_NATIVE:
+            raise SandboxPolicyError("UNTRUSTED_NATIVE requires Kata and cannot use Docker")
+        if (
+            mission.trust_class is TrustClass.UNTRUSTED_RESEARCH
+            and not policy.allow_docker_fallback
+        ):
+            raise SandboxPolicyError(
+                "UNTRUSTED_RESEARCH Docker fallback requires explicit policy authorization"
+            )
+
     def _secret_mounts(
         self,
         mission: SandboxMission,
@@ -1113,6 +1163,13 @@ class _DockerSandboxBackend(SandboxBackend):
         )
         return SandboxLaunchSpec(
             backend=backend,
+            trust_class=mission.trust_class,
+            fallback_authorization=(
+                policy.fallback_authorization_reference
+                if backend is SandboxBackendKind.HARDENED_DOCKER
+                and mission.trust_class is TrustClass.UNTRUSTED_RESEARCH
+                else None
+            ),
             mission_id=mission.mission_id,
             command=tuple(command),
             environment=environment,
@@ -1180,6 +1237,7 @@ class KataSandboxBackend(_DockerSandboxBackend):
         )
 
     def prepare(self, mission: SandboxMission, policy: SandboxPolicy) -> SandboxLaunchSpec:
+        self._validate_backend_compatibility(mission, policy)
         availability = self.availability()
         if not availability.available:
             raise SandboxUnavailable(availability.reason)
@@ -1232,6 +1290,7 @@ class HardenedDockerSandboxBackend(_DockerSandboxBackend):
         )
 
     def prepare(self, mission: SandboxMission, policy: SandboxPolicy) -> SandboxLaunchSpec:
+        self._validate_backend_compatibility(mission, policy)
         availability = self.availability()
         if not availability.available:
             raise SandboxUnavailable(availability.reason)
@@ -1252,6 +1311,18 @@ class BackendSelection:
     fallback_used: bool
     fallback_reason: str | None
     policy_authorization: str | None
+    policy_hash: str
+
+    def audit_record(self) -> SandboxBackendSelectionRecord:
+        return SandboxBackendSelectionRecord(
+            trust_class=self.trust_class,
+            requested_backend=self.requested_backend,
+            selected_backend=self.selected_backend,
+            fallback_used=self.fallback_used,
+            fallback_reason=self.fallback_reason,
+            policy_authorization=self.policy_authorization,
+            policy_hash=self.policy_hash,
+        )
 
 
 def select_sandbox_backend(
@@ -1282,6 +1353,7 @@ def select_sandbox_backend(
             fallback_used=False,
             fallback_reason=None,
             policy_authorization=None,
+            policy_hash=policy.identity,
         )
 
     if requested is SandboxBackendKind.KATA:
@@ -1295,6 +1367,7 @@ def select_sandbox_backend(
             fallback_used=False,
             fallback_reason=None,
             policy_authorization=None,
+            policy_hash=policy.identity,
         )
 
     if (
@@ -1314,6 +1387,7 @@ def select_sandbox_backend(
                 fallback_used=False,
                 fallback_reason=None,
                 policy_authorization=None,
+                policy_hash=policy.identity,
             )
         if kata_available.available:
             return BackendSelection(
@@ -1324,6 +1398,7 @@ def select_sandbox_backend(
                 fallback_used=False,
                 fallback_reason="trusted research Docker backend unavailable",
                 policy_authorization=None,
+                policy_hash=policy.identity,
             )
     if kata_available.available and requested is None:
         return BackendSelection(
@@ -1334,6 +1409,7 @@ def select_sandbox_backend(
             fallback_used=False,
             fallback_reason=None,
             policy_authorization=None,
+            policy_hash=policy.identity,
         )
     if docker_available.available and (
         trust_class is TrustClass.TRUSTED_RESEARCH or policy.allow_docker_fallback
@@ -1351,6 +1427,7 @@ def select_sandbox_backend(
                 if trust_class is TrustClass.UNTRUSTED_RESEARCH
                 else None
             ),
+            policy_hash=policy.identity,
         )
     raise SandboxUnavailable(
         f"no policy-authorized backend is available; Kata={kata_available.reason}; Docker={docker_available.reason}"

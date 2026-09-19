@@ -28,7 +28,9 @@ The KVM, nested-virtualization, vsock, and container runtime prerequisites are
 present, but Kata cannot be operationally attested until a Kata runtime is
 installed and registered. No Windows virtualization setting or package was
 changed. The absence of `/dev/mshv` is not itself a blocker for the intended
-KVM-backed path.
+KVM-backed path. `KATA_HOST_FEASIBLE=FALSE` therefore means “runtime
+execution unverified”; it does not mean that `/dev/kvm` or nested
+virtualization is absent.
 
 Run the read-only report with:
 
@@ -131,3 +133,40 @@ host has not run the equivalent workload under either backend in this workstream
 Kata is unavailable, and no new Docker comparison is claimed. Existing Phase-8
 Docker evidence remains a separate, narrower measurement and
 `phase8_admitted` remains `FALSE`.
+
+## Future host qualification procedure
+
+This implementation is ready for independent review but is not runtime
+attested. A future qualification must be a separately recorded, immutable
+security run and must complete every step below without changing the
+AdvisorAI Phase-4 release or enabling untrusted-native execution by default:
+
+1. Install a Kata/containerd combination compatible with the host kernel and
+   supported hypervisor path; record package and runtime checksums.
+2. Register the explicit Kata runtime with containerd/Docker and record the
+   runtime name and configuration identity. No implicit runc fallback is valid.
+3. Start one disposable KVM-backed Kata guest from a reviewed immutable image
+   digest using `--pull=never`; verify the Kata, runtime-rs, hypervisor, guest
+   kernel, image, and rootfs identities.
+4. Run the bounded filesystem probes: no host repository, home, SSH, secret
+   file, Docker socket, containerd socket, host-path mount, privileged device,
+   or cross-mission output access.
+5. Run the network probes under default `NONE`, then under a separately
+   reviewed egress allowlist: deny metadata/private/LAN/arbitrary broker
+   destinations and verify only the declared destination class is reachable.
+6. Run name-only secret injection tests, proving that only the named
+   task-scoped reference is visible and that no secret value enters provenance
+   or process metadata.
+7. Run bounded native-code/C-extension and namespace/device adversarial probes
+   in a disposable mission. Treat any unexpected result as a fail-closed
+   qualification failure.
+8. Measure startup latency, idle/peak RAM, CPU overhead, disk overhead, wall
+   timeout, PID/memory/output enforcement, GPU lease release, and teardown.
+   Repeat the same workload under the explicitly hardened Docker comparator.
+9. Verify process and guest cleanup, no stale task overlay, no residual
+   network, and no surviving GPU lease or child process.
+10. Write an immutable evidence bundle containing all identities, policy
+    hashes, input/output hashes, probe results, resource measurements, exit
+    reasons, and limitations. Only an independent security review may then
+    decide whether a capability advances in the lifecycle; Kata success alone
+    cannot admit Phase 8 or promote a capability.

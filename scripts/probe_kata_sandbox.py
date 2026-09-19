@@ -60,7 +60,10 @@ def build_report() -> dict[str, object]:
     return {
         "schema": SCHEMA,
         "measured_at": datetime.now(UTC).isoformat(),
-        "host": host.model_dump(mode="json"),
+        "host": {
+            **host.model_dump(mode="json"),
+            "host_prerequisites_satisfied": host.host_prerequisites_satisfied,
+        },
         "backends": {
             "kata": kata_status.model_dump(mode="json"),
             "hardened_docker": docker_status.model_dump(mode="json"),

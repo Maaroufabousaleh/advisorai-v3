@@ -16,6 +16,7 @@ from advisorai.capabilities.sandbox import (
     NetworkMode,
     NetworkPolicy,
     ResourceLimits,
+    SandboxBackendSelectionRecord,
     SandboxMission,
     SandboxMount,
     SandboxPolicy,
@@ -57,7 +58,7 @@ def _mission(
     task_root = tmp_path / "mission"
     output_dir = task_root / "output"
     input_dir = tmp_path / "input"
-    task_root.mkdir()
+    task_root.mkdir(parents=True)
     output_dir.mkdir()
     input_dir.mkdir()
     return SandboxMission(
@@ -100,6 +101,8 @@ def _backends(*, kata: bool = False, docker: bool = True):
 
 def test_untrusted_native_fails_closed_when_kata_is_unavailable():
     kata, docker = _backends(kata=False)
+    assert kata.availability().host_report.host_prerequisites_satisfied
+    assert kata.availability().host_report.kata_host_feasible is False
 
     with pytest.raises(SandboxUnavailable, match="UNTRUSTED_NATIVE requires Kata"):
         select_sandbox_backend(
@@ -153,6 +156,53 @@ def test_docker_cannot_be_selected_as_an_implicit_native_fallback():
         )
 
 
+def test_direct_docker_prepare_still_fails_closed_without_fallback_authorization(tmp_path: Path):
+    _, docker = _backends(kata=False)
+    native_mission = _mission(tmp_path, trust_class=TrustClass.UNTRUSTED_NATIVE)
+    with pytest.raises(SandboxPolicyError, match="requires Kata"):
+        docker.prepare(
+            native_mission,
+            SandboxPolicy(
+                allow_docker_fallback=True,
+                fallback_authorization_reference="cannot-authorize-native",
+            ),
+        )
+
+    research_mission = _mission(tmp_path / "research", trust_class=TrustClass.UNTRUSTED_RESEARCH)
+    with pytest.raises(SandboxPolicyError, match="fallback requires explicit"):
+        docker.prepare(research_mission, SandboxPolicy())
+
+    authorized = SandboxPolicy(
+        allow_docker_fallback=True,
+        fallback_authorization_reference="security-review-direct-prepare",
+    )
+    spec = docker.prepare(research_mission, authorized)
+    assert spec.fallback_authorization == "security-review-direct-prepare"
+
+
+def test_backend_selection_produces_a_serializable_fallback_audit_record():
+    kata, docker = _backends(kata=False)
+    policy = SandboxPolicy(
+        allow_docker_fallback=True,
+        fallback_authorization_reference="security-review-audit-record",
+    )
+    selection = select_sandbox_backend(
+        TrustClass.UNTRUSTED_RESEARCH,
+        policy=policy,
+        kata=kata,
+        docker=docker,
+    )
+    record = selection.audit_record()
+
+    assert isinstance(record, SandboxBackendSelectionRecord)
+    assert record.fallback_used
+    assert record.policy_authorization == "security-review-audit-record"
+    assert record.policy_hash == policy.identity
+    assert record.model_dump(mode="json")["record_type"] == (
+        "advisorai.sandbox.backend-selection.v1"
+    )
+
+
 def test_kata_is_preferred_when_present_and_core_is_not_sandboxed():
     kata, docker = _backends(kata=True)
     selection = select_sandbox_backend(
@@ -204,6 +254,14 @@ def test_kata_launch_spec_is_immutable_and_has_no_authority_or_host_mounts(tmp_p
     assert spec.provenance.order_writes_attempted is False
     assert spec.provenance.execution_authority_present is False
     assert spec.provenance.sandbox_backend.value == "kata"
+    assert set(key for key, _ in spec.environment) == {
+        "ADVISORAI_MISSION_ID",
+        "ADVISORAI_SANDBOX_BACKEND",
+        "ADVISORAI_NETWORK_POLICY_HASH",
+        "HOME",
+        "PATH",
+        "PYTHONNOUSERSITE",
+    }
     assert not (mission.output_dir / "preflight-artifact").exists()
 
 
