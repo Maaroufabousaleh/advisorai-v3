@@ -1,0 +1,38 @@
+schema_version: advisorai.research.timesfm3-governance.v1
+
+model:
+  model: google/timesfm-3.0-pytorch
+  role: research_challenger
+  priority_class: PRIORITY_CHALLENGER
+  deployment_class: RESEARCH_ONLY
+  production_class: NON_PRODUCTION
+  weights_class: NON_COMMERCIAL_WEIGHTS
+  commercial_use: false
+  production_use: false
+  execution_use: false
+  automatic_promotion: false
+  license_class: research_only_nonproduction
+  allowed_activation_scope: research_only
+  order_authority: false
+  oms_authority: false
+  riskkernel_authority: false
+  credential_access: false
+  self_promotion: false
+  model_download_at_startup: false
+  permanent_gpu_residency: false
+  one_gpu_family_at_a_time: true
+
+runtime:
+  namespace: advisorai.research.challengers.timesfm3
+  dependency_mode: isolated_optional_research_environment
+  core_runtime_dependency: false
+  core_roster_member: false
+  acquisition: explicit_opt_in_only
+  unit_test_checkpoint_download: false
+  process_lifecycle: scoped_and_closed_after_qualification
+  forbidden_scopes:
+    - production
+    - live
+    - execution
+    - commercial_decision_service
+    - core_trading_hot_path

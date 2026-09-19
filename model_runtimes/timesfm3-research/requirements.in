@@ -1,0 +1,5 @@
+# Optional, isolated TimesFM 3 research environment only.
+# This file is intentionally not included in the AdvisorAI core uv.lock.
+# The official v3.0.2 source release is pinned; checkpoint acquisition remains
+# a separate explicit opt-in operation in the TimesFM3 adapter.
+timesfm[torch] @ git+https://github.com/google-research/timesfm.git@v3.0.2
