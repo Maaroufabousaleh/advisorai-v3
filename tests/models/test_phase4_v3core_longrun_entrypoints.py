@@ -262,6 +262,11 @@ def test_canonical_launch_preflight_writes_one_hash_bound_report(monkeypatch, tm
     monkeypatch.setattr(module, "attest_long_run_identity", lambda **_kwargs: attestation)
     monkeypatch.setattr(module, "_phase3_passed", lambda _path: True)
     monkeypatch.setattr(module, "_runtime_passed", lambda _path: True)
+    monkeypatch.setattr(
+        module,
+        "_candidate_startup_smoke",
+        lambda **_kwargs: (True, "startup smoke passed"),
+    )
     monkeypatch.setattr(module, "_gpu_lease_free", lambda: True)
     monkeypatch.setattr(module, "evaluate_long_run_readiness", evaluate)
     output = tmp_path / "readiness.json"
@@ -272,6 +277,8 @@ def test_canonical_launch_preflight_writes_one_hash_bound_report(monkeypatch, tm
         verification_results_path=tmp_path / "verification.json",
         requirements_lock_path=tmp_path / "requirements.lock",
         checkpoint_path=tmp_path / "checkpoint",
+        admission_path=tmp_path / "admission.json",
+        qualification_evidence_path=tmp_path / "qualification.json",
         phase3_gate_path=tmp_path / "phase3.json",
         model_runtime_qualification_path=tmp_path / "runtime.json",
         output_path=output,
@@ -279,6 +286,7 @@ def test_canonical_launch_preflight_writes_one_hash_bound_report(monkeypatch, tm
     assert result["decision"] == "LONG_RUN_READY"
     assert recorded["gpu_lease_free"] is True
     assert recorded["immutable_preregistration_created"] is True
+    assert recorded["preflight_check_reasons"] == {"runtime_attestation": "startup smoke passed"}
     assert json.loads(output.read_text())["report_hash"] == "d" * 64
     with pytest.raises(FileExistsError):
         module.run(
@@ -288,10 +296,275 @@ def test_canonical_launch_preflight_writes_one_hash_bound_report(monkeypatch, tm
             verification_results_path=tmp_path / "verification.json",
             requirements_lock_path=tmp_path / "requirements.lock",
             checkpoint_path=tmp_path / "checkpoint",
+            admission_path=tmp_path / "admission.json",
+            qualification_evidence_path=tmp_path / "qualification.json",
             phase3_gate_path=tmp_path / "phase3.json",
             model_runtime_qualification_path=tmp_path / "runtime.json",
             output_path=output,
         )
+
+
+def test_candidate_startup_smoke_fails_closed_on_the_original_runtime_pin_error(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script(
+        "phase4_longrun_candidate_startup_runtime_pin_test",
+        "preflight_phase4_v3core_longrun_launch.py",
+    )
+    from advisorai.phase0.runtime_qualification import QualificationError
+
+    smoke_root = tmp_path / "disposable-startup-smoke"
+    smoke_root.mkdir()
+
+    class DisposableRoot:
+        def __enter__(self):
+            return str(smoke_root)
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(module.tempfile, "TemporaryDirectory", lambda **_kwargs: DisposableRoot())
+    monkeypatch.setattr(module, "_gpu_lease_free", lambda: True)
+    monkeypatch.setattr(
+        module.ChronosRuntimeIdentity,
+        "from_admission",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            QualificationError("pinned runtime resolved Python binary hash mismatch")
+        ),
+    )
+
+    passed, reason = module._candidate_startup_smoke(
+        repository_root=tmp_path / "checkout",
+        admission_path=tmp_path / "admission.json",
+        qualification_evidence_path=tmp_path / "qualification.json",
+        checkpoint_path=tmp_path / "model.safetensors",
+    )
+
+    assert passed is False
+    assert reason == (
+        "candidate startup smoke failed (QualificationError): "
+        "pinned runtime resolved Python binary hash mismatch"
+    )
+    status = json.loads((smoke_root / "candidate-startup-status.json").read_text())
+    assert status["state"] == "FAILED"
+    assert status["model_loaded"] is False
+    assert status["prospective_prediction_written"] is False
+    assert status["credentials_loaded"] is False
+    assert status["order_writes_attempted"] is False
+    assert status["execution_authority_present"] is False
+
+
+def test_canonical_launch_preflight_cannot_pass_when_startup_smoke_fails(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script(
+        "phase4_longrun_canonical_launch_preflight_smoke_failure_test",
+        "preflight_phase4_v3core_longrun_launch.py",
+    )
+    preregistration = SimpleNamespace(
+        repository_commit="a" * 40,
+        branch_or_tag="phase4-v3core-longrun-r2",
+        verification_results_sha256="b" * 64,
+    )
+    attestation = SimpleNamespace(attestation_hash="c" * 64)
+    recorded: dict[str, object] = {}
+
+    class Report:
+        def model_dump(self, *, mode: str):
+            assert mode == "json"
+            return {"decision": "LONG_RUN_REFUSED", "report_hash": "d" * 64}
+
+    def evaluate(_contract, **kwargs):
+        recorded.update(kwargs)
+        assert kwargs["preflight_checks"]["runtime_attestation"] is False
+        assert kwargs["preflight_check_reasons"] == {
+            "runtime_attestation": "candidate startup smoke failed (QualificationError): "
+            "pinned runtime resolved Python binary hash mismatch"
+        }
+        return Report()
+
+    monkeypatch.setattr(module, "load_long_run_preregistration", lambda *_a, **_k: preregistration)
+    monkeypatch.setattr(
+        module,
+        "load_long_run_verification_results",
+        lambda *_a, **_k: {name: True for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS},
+    )
+    monkeypatch.setattr(module, "_git_tag_target", lambda *_a, **_k: "a" * 40)
+    monkeypatch.setattr(module, "_competing_component_exists", lambda: False)
+    monkeypatch.setattr(module, "long_run_component_files", lambda _root: {})
+    monkeypatch.setattr(module, "attest_long_run_identity", lambda **_kwargs: attestation)
+    monkeypatch.setattr(module, "_phase3_passed", lambda _path: True)
+    monkeypatch.setattr(module, "_runtime_passed", lambda _path: True)
+    monkeypatch.setattr(
+        module,
+        "_candidate_startup_smoke",
+        lambda **_kwargs: (
+            False,
+            "candidate startup smoke failed (QualificationError): "
+            "pinned runtime resolved Python binary hash mismatch",
+        ),
+    )
+    monkeypatch.setattr(module, "_gpu_lease_free", lambda: True)
+    monkeypatch.setattr(module, "evaluate_long_run_readiness", evaluate)
+
+    result = module.run(
+        repository_root=tmp_path / "repo",
+        preregistration_path=tmp_path / "prereg.json",
+        preregistration_sha256="e" * 64,
+        verification_results_path=tmp_path / "verification.json",
+        requirements_lock_path=tmp_path / "requirements.lock",
+        checkpoint_path=tmp_path / "checkpoint",
+        admission_path=tmp_path / "admission.json",
+        qualification_evidence_path=tmp_path / "qualification.json",
+        phase3_gate_path=tmp_path / "phase3.json",
+        model_runtime_qualification_path=tmp_path / "runtime.json",
+        output_path=tmp_path / "readiness.json",
+    )
+
+    assert result["decision"] == "LONG_RUN_REFUSED"
+
+
+def test_candidate_startup_smoke_uses_disposable_root_and_cleans_gpu_lease(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script(
+        "phase4_longrun_candidate_startup_success_test",
+        "preflight_phase4_v3core_longrun_launch.py",
+    )
+    cache_root = tmp_path / "cache"
+    model_root = cache_root / "revision" / "model"
+    model_root.mkdir(parents=True)
+    checkpoint = model_root / "model.safetensors"
+    checkpoint.write_bytes(b"synthetic-checkpoint")
+    identity = SimpleNamespace(
+        cache_path=str(cache_root),
+        cache_subdir="revision/model",
+        checkpoint_hash=sha256(b"synthetic-checkpoint").hexdigest(),
+        device="cuda",
+        runner_script=str(tmp_path / "worker.py"),
+    )
+    smoke_root = tmp_path / "disposable-startup-smoke"
+    smoke_root.mkdir()
+
+    class DisposableRoot:
+        def __enter__(self):
+            return str(smoke_root)
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(module.tempfile, "TemporaryDirectory", lambda **_kwargs: DisposableRoot())
+    monkeypatch.setattr(module, "_gpu_lease_free", lambda: True)
+    monkeypatch.setattr(
+        module.ChronosRuntimeIdentity, "from_admission", lambda *_args, **_kwargs: identity
+    )
+    monkeypatch.setattr(
+        module,
+        "infer_chronos",
+        lambda **_kwargs: SimpleNamespace(device="cuda", forecast=tuple(range(30))),
+    )
+
+    evidence_root = tmp_path / "prospective-evidence"
+    passed, reason = module._candidate_startup_smoke(
+        repository_root=tmp_path / "checkout",
+        admission_path=tmp_path / "admission.json",
+        qualification_evidence_path=tmp_path / "qualification.json",
+        checkpoint_path=checkpoint,
+    )
+
+    assert passed is True
+    assert "load/readiness smoke passed" in reason
+    status = json.loads((smoke_root / "candidate-startup-status.json").read_text())
+    assert status["state"] == "READY"
+    assert status["model_loaded"] is True
+    assert status["prospective_prediction_written"] is False
+    from advisorai.models.forecasting import GpuModelLease
+
+    assert GpuModelLease._active_family is None
+    assert not evidence_root.exists()
+
+
+def test_candidate_startup_smoke_fails_closed_when_worker_exits_before_readiness(
+    monkeypatch, tmp_path
+) -> None:
+    module = _load_script(
+        "phase4_longrun_candidate_startup_worker_exit_test",
+        "preflight_phase4_v3core_longrun_launch.py",
+    )
+    cache_root = tmp_path / "cache"
+    model_root = cache_root / "revision" / "model"
+    model_root.mkdir(parents=True)
+    checkpoint = model_root / "model.safetensors"
+    checkpoint.write_bytes(b"synthetic-checkpoint")
+    identity = SimpleNamespace(
+        cache_path=str(cache_root),
+        cache_subdir="revision/model",
+        checkpoint_hash=sha256(b"synthetic-checkpoint").hexdigest(),
+        device="cuda",
+        runner_script=str(tmp_path / "worker.py"),
+    )
+    monkeypatch.setattr(module, "_gpu_lease_free", lambda: True)
+    monkeypatch.setattr(
+        module.ChronosRuntimeIdentity, "from_admission", lambda *_args, **_kwargs: identity
+    )
+    monkeypatch.setattr(
+        module,
+        "infer_chronos",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("worker exited before publishing readiness")
+        ),
+    )
+
+    passed, reason = module._candidate_startup_smoke(
+        repository_root=tmp_path / "checkout",
+        admission_path=tmp_path / "admission.json",
+        qualification_evidence_path=tmp_path / "qualification.json",
+        checkpoint_path=checkpoint,
+    )
+
+    assert passed is False
+    assert reason == (
+        "candidate startup smoke failed (RuntimeError): worker exited before publishing readiness"
+    )
+
+
+def test_candidate_cli_preserves_sanitized_startup_failure_message(monkeypatch, capsys) -> None:
+    module = _load_script(
+        "phase4_longrun_candidate_failure_message_test",
+        "run_phase4_v3core_longrun_chronos.py",
+    )
+    monkeypatch.setattr(
+        module,
+        "run",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            RuntimeError("pinned runtime resolved Python binary hash mismatch")
+        ),
+    )
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            "run_phase4_v3core_longrun_chronos.py",
+            "--real",
+            "--preregistration",
+            "prereg.json",
+            "--preregistration-sha256",
+            "a" * 64,
+            "--admission",
+            "admission.json",
+            "--qualification-evidence",
+            "qualification.json",
+            "--source-root",
+            "source",
+            "--run-root",
+            "candidate",
+            "--coordinator-root",
+            "coordinator",
+        ],
+    )
+    with pytest.raises(SystemExit, match="pinned runtime resolved Python binary hash mismatch"):
+        module.main()
+    assert capsys.readouterr().out == ""
 
 
 def test_long_run_launch_wires_the_scheduler_to_the_outcome_root(tmp_path) -> None:

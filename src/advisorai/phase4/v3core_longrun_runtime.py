@@ -3510,15 +3510,29 @@ def _validate_readiness_check_set(
 
 
 def _required_preflight_checks(
-    supplied: Mapping[str, bool], *, reason: str
+    supplied: Mapping[str, bool],
+    *,
+    reason: str,
+    reasons: Mapping[str, str] | None = None,
 ) -> list[LongRunReadinessCheck]:
     """Materialize the complete named gate set, failing closed on omissions."""
 
+    supplied_reasons = reasons or {}
+    unknown_reasons = sorted(set(supplied_reasons) - set(LONG_RUN_REQUIRED_PREFLIGHT_CHECKS))
+    if unknown_reasons:
+        raise ValueError(
+            "unrecognized preflight reasons cannot authorize a launch: "
+            + ", ".join(unknown_reasons)
+        )
     checks = [
         LongRunReadinessCheck(
             name=name,
             passed=supplied.get(name) is True,
-            reason=reason if name in supplied else "required preflight result was not supplied",
+            reason=(
+                supplied_reasons.get(name, reason)
+                if name in supplied
+                else "required preflight result was not supplied"
+            ),
         )
         for name in LONG_RUN_REQUIRED_PREFLIGHT_CHECKS
     ]
@@ -3609,6 +3623,7 @@ def evaluate_long_run_readiness(
     order_writes_attempted: bool = False,
     gpu_lease_free: bool = True,
     immutable_preregistration_created: bool = False,
+    preflight_check_reasons: Mapping[str, str] | None = None,
 ) -> LongRunLaunchReadinessReport:
     checks = [
         LongRunReadinessCheck(
@@ -3653,6 +3668,7 @@ def evaluate_long_run_readiness(
         _required_preflight_checks(
             preflight_checks,
             reason="launch-critical preflight result",
+            reasons=preflight_check_reasons,
         )
     )
     decision = "LONG_RUN_READY" if all(check.passed for check in checks) else "LONG_RUN_REFUSED"
