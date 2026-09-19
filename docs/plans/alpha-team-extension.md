@@ -49,6 +49,30 @@ The following rules apply to every stage:
 6. An Alpha Team recommendation may tighten or recommend no-trade. It may
    never relax a RiskKernel limit.
 
+### TimesFM 3 challenger boundary
+
+TimesFM 3 is a `PRIORITY_CHALLENGER` and remains
+`RESEARCH_ONLY`/`NON_PRODUCTION` with `NON_COMMERCIAL_WEIGHTS`. It is a new
+post-design research candidate, not a V3-Core production/runtime dependency.
+Its separate Phase-4B-style track starts only after the current Phase-4
+evidence is sealed and ends in admit, narrow-role, or reject. It cannot change
+the frozen Chronos Phase-4 experiment and cannot block the core roadmap unless
+it finds a shared-contract correctness defect.
+
+The adapter uses the existing forecast/evaluation abstractions and a typed
+point-in-time contract with `TARGET_VARIATE`, `PAST_ONLY_COVARIATE`, and
+`KNOWN_FUTURE_COVARIATE`. Every value preserves `as_of`, `first_available_at`,
+event/effective time, ingestion time, and source lineage. Future values are
+accepted only for explicitly classified schedules/calendars known at the
+cutoff; future CPI/FOMC/earnings results, prices, and revised observations are
+rejected. Model acquisition is explicit and isolated, with no startup import,
+test download, or permanent GPU residency.
+
+TimesFM 3 never receives order, OMS, RiskKernel, credential, execution, or
+self-promotion authority. It remains outside the deterministic execution path
+(`TimesFM3 -> research Forecast artifact -> evaluation evidence`, never
+`TimesFM3 -> orders`).
+
 ## Typed research boundary
 
 E1 introduces typed artifacts and registries without changing canonical trading

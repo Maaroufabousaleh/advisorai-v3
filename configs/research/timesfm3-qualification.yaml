@@ -1,0 +1,62 @@
+schema_version: advisorai.research.timesfm3-qualification.v1
+status: non_blocking_phase4b_style_research_track
+model: google/timesfm-3.0-pytorch
+targets:
+  - return
+  - direction_calibration
+  - realized_volatility
+  - future_range
+  - volume_liquidity_state
+  - probabilistic_tail
+ablations:
+  - id: A
+    targets: [BTCUSDT]
+    variant: univariate
+    past_only_covariates: []
+    known_future_covariates: []
+    marginal_comparison: baseline_to_A
+  - id: B
+    targets: [BTCUSDT, ETHUSDT]
+    variant: multivariate
+    past_only_covariates: []
+    known_future_covariates: []
+    marginal_comparison: A_to_B
+  - id: C
+    targets: [BTCUSDT, ETHUSDT]
+    variant: multivariate
+    past_only_covariates: [realized_volatility, volume]
+    known_future_covariates: []
+    marginal_comparison: B_to_C
+  - id: D
+    targets: [BTCUSDT, ETHUSDT]
+    variant: multivariate
+    past_only_covariates: [realized_volatility, volume, funding, open_interest, basis]
+    known_future_covariates: []
+    marginal_comparison: C_to_D
+  - id: E
+    targets: [BTCUSDT, ETHUSDT]
+    variant: multivariate
+    past_only_covariates: [realized_volatility, volume, funding, open_interest, basis]
+    known_future_covariates: [calendar]
+    marginal_comparison: D_to_E
+comparison_set:
+  - naive
+  - drift
+  - seasonal
+  - linear
+  - lightgbm
+  - ttm-r2
+  - ttm-r3
+  - chronos-2-small
+  - timesfm-3-univariate
+  - timesfm-3-multivariate
+promotion_evidence:
+  - past_only_evaluation
+  - calibration
+  - regime_robustness
+  - latency_and_resource_cost
+  - directional_return_utility
+  - realistic_costs
+  - marginal_incremental_value
+automatic_promotion: false
+core_roadmap_blocking: false
