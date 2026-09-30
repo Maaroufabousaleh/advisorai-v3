@@ -54,7 +54,10 @@ The important rule is that higher-level proposal producers depend on typed contr
 
 ## Service ownership manifest
 
-`ServiceRegistry` currently declares these always-on ownership boundaries:
+`ServiceRegistry` currently declares these core ownership boundaries for an
+active session/deployment profile. Its `always_on` flag describes the service
+topology within that profile; it does not require services to remain resident
+between owner-operated workstation sessions:
 
 | Service | Owns |
 | --- | --- |
@@ -66,6 +69,20 @@ The important rule is that higher-level proposal producers depend on typed contr
 | `resource-governor` | Measured resource admission and load shedding |
 
 On-demand descriptors cover agent fabric, model gateway, quant/NLP/risk/TCA workers, Prefect, Hermes, browser, and archive work. The registry checks missing dependencies, ownership collisions, required core owners, and deterministic startup order. It does not launch or supervise them.
+
+## Planned architecture contracts
+
+The following target boundaries are documented but are not claims of current
+runtime implementation or admission:
+
+| Target boundary | Purpose | Authority limit |
+|---|---|---|
+| `DecisionModelPort` / `DecisionProposal` | Convert calibrated evidence into a typed stance/score with uncertainty, evidence references, and expiry | No portfolio, risk-policy, credential, broker, order, or self-promotion authority |
+| Session lifecycle records | Capture start, checkpoint, end, recovery, data-gap, and runtime-lease state | Recovery must reconcile authoritative venue/order state before accepting new proposals |
+| `DecisionTrainingRecord` / `OutcomeResolution` | Preserve immutable decision-time input and separately attach later outcomes | No future labels in pre-decision input; no training or promotion implied |
+
+See [session-oriented runtime](../plans/session-oriented-runtime.md) and the
+[Decision Model ADR](../decisions/0009-typed-decision-model-boundary.md).
 
 ## Where a change belongs
 

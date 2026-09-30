@@ -1,43 +1,58 @@
-# Phase 0 — Freeze contracts and run bake-offs
+# Phase 0 — Contracts and bounded integration qualification
 
 ## Objective
 
-Make all subsequent choices reproducible before production dependencies are
-adopted. This phase has no trading authority and no resident agent fleet.
+Freeze the typed boundaries needed to finish the complete AdvisorAI system.
+Use a small reference model fabric for integration. Broad model selection is
+deferred and is not a prerequisite for infrastructure or agentic workflows.
 
 ## Work packages
 
-1. Record architecture decisions for canonical ownership, Pydantic contracts,
-   `ModelGatewayPort`, `ArchiveBackend`, `EventBusPort`, and the rejection of
-   competing risk/execution authority.
-2. Define and contract-test the core typed artifacts: Snapshot, Evidence,
-   Forecast, TargetPortfolio, RiskPolicy/Decision, ExecutionPlan, Order/Fill,
-   Reconciliation, Attribution, ModelCard, AgentRun, and CapabilityCard.
-3. Run identical typed/tool-call tests for direct API, LiteLLM, and OmniRoute.
-   Measure route identity, privacy, idle/active RSS, failure handling, and
-   24-hour stability. LiteLLM is only a provisional baseline; OmniRoute remains
-   quarantined until it passes all tests.
-4. Compare TTM-R3 against the TTM-R2 control, Chronos-2-small,
-   Kronos-mini/small, and later TabPFN-TS. Qualify TSPulse separately for
-   anomaly/integrity/regime features; it is never a price forecaster. Compare
-   forecasting candidates against naive/statistical/LightGBM baselines for utility, calibration,
-   latency, RAM, and VRAM. Do not treat co-trained variants as independent.
-5. Measure Nautilus adapters/replay, Prefect, Hamilton, Parquet manifests versus
-   DuckLake, one isolated Hermes coordinator/subagent, and rclone-crypt upload,
-   verification, and two-provider restore.
+1. Maintain canonical ownership decisions for `ModelGatewayPort`,
+   `DecisionModelPort`, `ArchiveBackend`, `EventBusPort`, session lifecycle,
+   evidence, portfolio, and execution.
+2. Define and contract-test Snapshot, Evidence, Forecast, `DecisionProposal`,
+   `DecisionTrainingRecord`, TargetPortfolio, RiskPolicy/Decision,
+   ExecutionPlan, Order/Fill, Reconciliation, Attribution, ModelCard,
+   AgentRun, CapabilityCard, and session start/checkpoint/end/recovery records.
+3. Pin exact code/data/model/config/environment identity for every reference
+   adapter. A bounded Level A check covers typed inputs/outputs, PIT safety,
+   resource bounds, load/inference/unload, failures, and authority separation.
+4. Integrate the frozen references: Chronos-2-small, TTM-R2, Kronos-small,
+   LightGBM, the selected compact FinBERT-family implementation, the Laya or
+   equivalent local Decision Model adapter, and an on-demand remote reasoning
+   gateway route. Integration status is not comparative admission.
+5. Preserve existing gateway, Nautilus, Prefect, Hamilton, Parquet/DuckDB,
+   archive, and Hermes evidence; implement their required stable interfaces
+   and quarantine incomplete candidates.
 
 ## Required records
 
-Pinned versions, code/data/model hashes, environment lock, benchmark inputs,
-resource samples, privacy/identity result, failure trace, and admission decision
-belong in the model/capability/architecture ledgers.
+Versioned contracts, adapter identity manifests, exact inputs/outputs,
+resource and failure behavior, PIT/authority checks, and admission state belong
+in the appropriate model, source, runtime, capability, or lifecycle ledger.
+No prose, local test, or integration check may be projected as a promotion
+record.
 
-## Exit gate
+## Exit and admission semantics
 
-Selected components fit the resource envelopes, exact model/source versions are
-reproducible, and there is no unexplained 24-hour memory growth.
+**Implementation readiness:** the typed ports and reference adapter seams are
+available for integrated development, with missing/unavailable outputs
+represented explicitly.
+
+**Level A participation:** an exact component may participate only within its
+reviewed operating scope after identity, contract, PIT, resource, load/unload,
+failure, and authority checks. Comparative utility and wider promotion are
+separate admission decisions.
+
+Historical 24-hour evidence remains factual. The old mandatory 24-hour
+stability rule is a superseded planning requirement for the session
+workstation. Repeated model lifecycle and resource cleanup are assessed in
+integrated session validation. No model experiment or acquisition is initiated
+by this plan.
 
 ## Explicitly out of scope
 
-No live or paper orders, no automatic promotion, no browser workflow, no Hermes
-write authority, and no dependency on a cloud drive or remote event bus.
+No live orders, automatic promotion, Jev dependency, direct model-to-order
+path, broad model bake-off prerequisite, resident agent fleet, or model
+training. No update to historical artifacts or gate results.

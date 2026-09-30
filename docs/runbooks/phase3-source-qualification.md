@@ -1,5 +1,12 @@
 # Phase 3 V3-Core source qualification
 
+> **Current planning interpretation (2026-09-30):** source qualification must
+> prove identity, point-in-time availability, freshness during an active
+> session, gap detection/backfill, reconnect/recovery, and fail-closed behavior.
+> It does not require a continuously running workstation between owner
+> sessions. Preserve all dated roots and failure observations below; Phase 7
+> validates these behaviors within complete paper sessions.
+
 This runbook performs a bounded, read-only public source pass through the
 existing V3-Core collector factory. It is evidence collection only; it does
 not admit Phase 3, activate a venue, or create order authority.

@@ -1,11 +1,31 @@
-# AdvisorAI V3 — final architecture and implementation plan
+# AdvisorAI V3 — authoritative architecture and implementation plan
 
-**Plan date:** 2026-08-04  
-**Status:** final target architecture plus staged build plan  
+**Plan date:** 2026-08-04; session-oriented planning rebaseline: 2026-09-30
+
+**Status:** authoritative target architecture and two-lane implementation/admission plan
 **Target machine:** one Windows/WSL2 laptop, Intel i7, 16 GB host RAM, approximately 11 GB WSL RAM, RTX 4060 8 GB VRAM  
 **System goal:** one user-facing Advisor composed of deterministic trading services, independent quantitative and agentic analysts, point-in-time data, professional portfolio/risk/execution controls, durable memory, a sandboxed research and Skill Foundry, and controlled learning.
 
-This document supersedes the earlier AdvisorAI from-zero, federated V2, and interim V3 build recommendations. The longer architecture dossier remains useful as research evidence; this is the implementation authority.
+This document supersedes the earlier AdvisorAI from-zero, federated V2, and interim V3 build recommendations. The longer architecture dossier remains useful as research evidence; this is the architecture authority. It describes the target; it does not claim that planned components or gates have passed. Historical gate reports keep their original facts and hashes.
+
+The intended product is a robust, malleable, local-first quantitative and agentic workstation. The owner starts it when needed, typically uses it for approximately 5–8 hours, stops cleanly, and later restarts with authoritative state recovered, paper/testnet state reconciled, permitted data gaps caught up, and research workflows safely resumed. AdvisorAI does not require 24/7 operation. A server/always-on profile is optional and separately admitted.
+
+### Implementation readiness and operational admission
+
+The roadmap has two independent tracks:
+
+- **Implementation readiness** asks whether interfaces, services, workflows, lifecycle, sandbox, Research Brain, agents, adapters, and dashboard exist and are testable.
+- **Operational admission** asks whether an exact model, source, capability, strategy, or configuration has enough evidence for a particular operating scope.
+
+Phase order governs admission and promotion where safety requires it. It does not prohibit implementation of later components. A component may be built before an earlier admission gate passes when it remains typed, quarantined, research/shadow/paper-only, has no broker/order/risk-limit authority, and cannot grant itself admission. These tracks are reflected in the [phase plans](docs/plans/README.md), [gate matrix](docs/plans/gate-matrix.md), and [session lifecycle plan](docs/plans/session-oriented-runtime.md).
+
+Until the Integrated Alpha milestone, planning effort should focus roughly
+70–80% on infrastructure, session lifecycle/recovery, data catch-up,
+agent orchestration, Research Brain, evidence/Decision Model contracts,
+portfolio/risk/OMS/Nautilus integration, dashboard traceability, and complete
+system validation. The remaining roughly 20–30% supports frozen-roster
+adapters, Level A reliability, and only the calibration needed for integrated
+paper use. Broad model research follows integrated evidence.
 
 ---
 
@@ -29,6 +49,7 @@ The second rule is:
 |---|---|---|
 | User missions and operating mode | Advisor API + deterministic Mission Router | an LLM may advise, but policy selects the mode and budget |
 | Typed agents and evidence fusion | PydanticAI + Pydantic Graph | agents cannot submit orders or relax limits |
+| Structured action/stance synthesis | `DecisionModelPort` and typed `DecisionProposal` | no policy, portfolio, risk, broker, or order authority |
 | Deep research, Python work, environments and skills | Hermes Agent, on demand and sandboxed | no broker credentials, order tools, or live-repository mutation |
 | Durable schedules, retries, backfills and experiments | Prefect | no market-event or order ownership |
 | Feature and label dependencies | Hamilton | no orchestration or execution ownership |
@@ -36,6 +57,7 @@ The second rule is:
 | Portfolio and pre-trade safety | AdvisorAI deterministic Portfolio Constructor + RiskKernel sharing authoritative trading state | one veto path; no competing agent risk engine |
 | Orders, fills and reconciliation | deterministic OMS ledger + Nautilus adapters | every transition is idempotent and auditable |
 | Local analytical compute | small time-series, finance NLP, tabular and calibration workers | forecasts are evidence, never direct orders |
+| Research Brain | Parquet/DuckDB analytical truth, SQLite WAL registries, immutable evidence graph | retrieval indexes are not empirical or trading truth |
 | General reasoning models | replaceable `ModelGatewayPort` using APIs | exact provider/model/route is recorded |
 | Active data | local Parquet + DuckDB + SQLite WAL ledgers | cloud drives are never compute truth |
 | Cold archive | `rclone crypt` through `ArchiveBackend` | OmniCloud is optional visibility/allocation, not authority |
@@ -47,14 +69,14 @@ The second rule is:
 | Hermes Agent | **Adopt** as the on-demand Research/Builder/Skill Runtime |
 | Paperclip | defer; retain only an integration port for a future multi-user/multi-organization deployment |
 | LiteLLM | provisional gateway baseline after a Phase-0 test |
-| OmniRoute | quarantined gateway challenger; admit only if its free-route value survives stability, privacy and identity tests |
+| OmniRoute | optional gateway adapter/challenger; identity, privacy, resource and failure policies apply |
 | OmniCloud | optional archive UI/allocator after restore tests; never required |
 | TradingAgents | offline shadow council after V3-Core is stable |
 | RD-Agent/Qlib | isolated research challengers; do not own production features, risk, backtests or execution |
 | LEAN | selected cross-engine oracle cases only |
 | VectorBT | rapid research screen, never the realism gate |
 | NautilusTrader | canonical event replay and execution engine |
-| Local general LLM | exclude from V3 baseline; reserve GPU for quant models |
+| Local general LLM | no always-resident baseline; optional, on-demand challenger |
 | Browser-use | discovery/repair only; convert successful work into deterministic collectors |
 
 ---
@@ -73,10 +95,15 @@ flowchart TB
     HER --> ART["Quarantined immutable artifacts"]
     ART --> FUS
     QMF --> FUS
-    FUS --> TP["Target portfolio"]
+    FUS --> DM["DecisionModelPort"]
+    DM --> DP["Typed DecisionProposal"]
+    DP --> PC["Deterministic Portfolio Constructor"]
+    PC --> TP["Target portfolio"]
+    subgraph WALL["Deterministic authority wall"]
     TP --> RK["Deterministic RiskKernel"]
     RK --> OMS["OMS + execution policy"]
     OMS --> NT["NautilusTrader"]
+    end
     NT --> REC["Reconciliation + TCA"]
     REC --> ATTR["P&L / risk attribution"]
     ATTR --> LEARN["Scorecards + challenger lifecycle"]
@@ -84,7 +111,10 @@ flowchart TB
 
 The authoritative decision chain is:
 
-**validated snapshot → independent evidence → calibrated forecasts → target portfolio → risk decision → execution plan → orders/fills → reconciliation → TCA/attribution → controlled learning**
+**validated point-in-time snapshot → specialized evidence producers → Evidence Graph/calibrated evidence bundle → typed Decision Model proposal → deterministic Portfolio Constructor → RiskKernel → OMS → NautilusTrader → paper/testnet venue → reconciliation → TCA/attribution → outcome memory**
+
+No model output is an order. The Decision Model, Evidence Council, and Hermes
+remain above the deterministic authority wall.
 
 Every hand-off is a typed, versioned artifact. Large data stays in Parquet/object artifacts; queues and agents pass IDs rather than copied payloads or chat transcripts.
 
@@ -226,27 +256,58 @@ Respect access terms, robots/rate rules and authentication boundaries. Web conte
 
 The gateway records the concrete provider/model, fallback chain, schema mode, latency, tokens, cost estimate, prompt/tool versions and gateway version. High-value evaluation runs use pinned routes, not opaque automatic routing.
 
-### 5.2 Initial local roster
+### 5.2 Frozen reference model fabric
+
+The following small logical roster is the integration baseline. It is frozen to
+finish and exercise the complete system; it is not a declaration of admission,
+authority, permanent approval, or simultaneous model residency.
 
 | Model family | Role | Default state |
 |---|---|---|
 | naive/drift/seasonal, AR/linear and volatility baselines | mandatory falsification and fallback | always included |
-| LightGBM | strong tabular baseline and feature interactions | core |
-| Granite TTM-R3 | primary lightweight CPU forecasting candidate | core candidate |
-| TTM-R2 | previous-generation forecasting control | reference candidate |
-| TSPulse | anomaly, imputation, similarity and regime/integrity features | core candidate; not treated as a price forecaster |
-| Chronos-2-small | general probabilistic/covariate GPU forecast | choose in Phase 0 |
-| Kronos-mini/small | finance/OHLCV-specific forecast and representation | compete with Chronos; not automatically co-resident |
-| TabPFN-TS | independent tabular formulation | Deep-mode challenger |
-| TiRex/TTM-R3/newer models | benchmark quarantine | no baseline dependency |
-| ModernFinBERT | general-purpose financial sentiment on CPU | primary candidate |
-| FinBERT-MiniLM | high-throughput financial sentiment filter | fast-path candidate |
-| Finance DeBERTa-v3 | higher-capacity short-form financial sentiment | challenger |
+| LightGBM | deterministic structured/tabular baseline and factor interactions | reference adapter |
+| TTM-R2 | lightweight independent temporal forecast/control | use the already-integrated/measured R2 reference; do not reopen TTM experimentation for infrastructure work |
+| Chronos-2-small | general probabilistic/time-series forecast and uncertainty intervals | reference adapter; distinct role from Kronos |
+| Kronos-small | finance/OHLCV/K-line modeling and market-price-action representation | reference adapter; distinct role from Chronos |
+| FinBERT or currently selected compact financial sentiment implementation | financial language, news, event sentiment | reference adapter pinned to exact identity; broad sentiment bake-off deferred |
+| Laya typed-decision model or equivalent small local non-autoregressive decision model | local System-One synthesis through `DecisionModelPort` | initial reference adapter; qualification and admission remain pending |
+| One strong remote reasoning LLM via `ModelGatewayPort` | Deep/Research/complex-event synthesis | on demand; not required every trade cycle and has no order authority |
+| TSPulse and other existing specialized models | anomaly/integrity or other typed evidence where appropriate | optional; not required for the reference fabric |
+| Jev API, Kev 0.8B or equivalent | optional remote/local Decision Model challenger | quarantined challenger; Jev is never a required dependency |
+| future AdvisorAI-CDM | locally trained domain-specific decision model | long-term research target; no training authorized by this plan |
+| TimesFM 3, TTM-R3, Kronos-base, TabPFN-TS, newer TSFMs and other models | challenger research | deferred until integrated-system evidence exists |
 | small CPU embedder | retrieval candidate after lexical baseline | optional; FTS5 remains available |
 
-One GPU worker loads one family at a time and micro-batches across assets. A different checkpoint name is not independent evidence if it shares the same dataset, preprocessing, or architecture ancestor.
+Chronos and Kronos have complementary logical roles, not a winner-take-all
+relationship. Retain the global GPU lease and lazy loading. A typical forecast
+wave is Chronos → TTM-R2 when applicable → Kronos → release GPU; the scheduler
+may skip any optional worker when evidence is sufficient, required data is
+missing, the candidate is quarantined, latency would be exceeded, or the
+resource budget is exhausted. Run the local Decision Model in a separate
+resource-aware decision wave. FinBERT may use CPU or opportunistic GPU. Deep
+reasoning LLM calls and Hermes are on demand only. Never require all logical
+models to be resident together. A different checkpoint name is not independent
+evidence when data, preprocessing, or architecture ancestry is shared.
 
-### 5.3 Forecast contract and evaluation
+### 5.3 Typed Decision Model boundary
+
+`DecisionModelPort` consumes a validated point-in-time snapshot and a
+calibrated, provenance-bearing evidence bundle. It returns a versioned
+`DecisionModelArtifact` and typed `DecisionProposal`; it does not need to
+produce prose. The proposal may contain LONG/SHORT/FLAT/ABSTAIN, a probability
+distribution, calibrated confidence, opportunity score, horizon, optional
+regime/strategy class, uncertainty, evidence references, missing-evidence
+flags, disagreement, and expiry.
+
+Initial and challenger adapters are `LayaAdapter`, `KevAdapter`, optional
+remote `JevAdapter`, and future `AdvisorCDMAdapter`. All implement the same
+port. Decision output proceeds through a deterministic Portfolio Constructor
+and then the authority wall. A Decision Model cannot modify `RiskPolicy`,
+submit/cancel orders, read broker secrets, override a failed EvidenceGraph or
+stale/missing-data rejection, bypass portfolio construction or RiskKernel, or
+self-promote. Jev connectivity is optional; AdvisorAI must operate without it.
+
+### 5.4 Forecast contract and evaluation
 
 Each `ForecastArtifact` includes:
 
@@ -268,6 +329,18 @@ Evaluate decisions, not just price error:
 - error correlation and regime-specific failure.
 
 A TSFM is removed if it does not add stable net utility or useful calibrated uncertainty.
+
+Model evidence is staged so that integration can finish before model selection
+is reopened:
+
+| Level | Purpose | Required evidence |
+|---|---|---|
+| A — integration qualification | Permit a frozen reference adapter to participate in constrained integration | exact identity/version; typed inputs/outputs; PIT safety; resource bounds; load/inference/unload reliability; failure behavior; no authority leakage |
+| B — integrated paper evaluation | Assess the reference roster in the complete system | calibration, disagreement, decision utility, latency, costs, resource use, regime behavior, and incremental contribution |
+| C — challenger research | Improve or challenge models after the integrated application exists | preregistered, reproducible comparisons, including TimesFM 3, TTM-R3, Kronos-base, Kev variants, Jev, AdvisorAI-CDM, TabPFN, newer TSFMs, ensembles, and training methods |
+
+Level A is a bounded integration check, not a claim of comparative superiority
+or broad operational admission. Level C work does not block core infrastructure.
 
 ---
 
@@ -446,18 +519,30 @@ The Capability Broker exposes only a small permission- and resource-filtered set
 
 ## 9. Memory, observability and controlled learning
 
-### 9.0 Optional Alpha Team extension
+### 9.0 Research Brain and elastic Alpha Team
 
-After the Phase 7 V3-Core proof, the optional Alpha Team extension may provide
-a governed research-intake, hypothesis, factor-discovery, experiment, and
-validation plane. It emits only versioned research evidence and candidate
-artifacts; it cannot create orders, access broker credentials, relax limits,
-self-promote, or replace the canonical data plane, Portfolio Constructor,
-RiskKernel, OMS, or NautilusTrader. Its Research Brain uses the existing
-Parquet/DuckDB analytical history, SQLite WAL registries, immutable evidence
-graph, and retrieval-only semantic index. Its E0-E7 sequence and detailed
-admission gates are maintained in
-[`docs/plans/alpha-team-extension.md`](docs/plans/alpha-team-extension.md).
+Research Brain and Alpha Team foundations are first-class implementation work
+and may be built before Phase 7. Their outputs stay quarantined, research-only,
+or paper constrained until the relevant operational admission passes. The
+agents are elastic, cancellable jobs: begin with one coordinator and at most
+one or two research workers; research yields to trading health and requires no
+background work while AdvisorAI is shut down. Hermes remains an isolated
+builder/research capability runtime, not a forecast model or trading
+authority. See [`docs/plans/alpha-team-extension.md`](docs/plans/alpha-team-extension.md).
+
+Keep two Brain layers distinct:
+
+- **Knowledge/literature brain:** papers, concepts, equations, methods,
+  relationships, contradictions, and citations. LLM Wiki is a promising
+  candidate retrieval interface; Qanat is a promising isolated
+  research/experiment adapter. Both remain optional.
+- **Empirical/scientific brain:** AdvisorAI canonical truth in
+  DuckDB/Parquet/SQLite and immutable registries: `HypothesisCard`,
+  `CandidateFactor`, `ExperimentArtifact`, `ValidationReport`,
+  `PromotionDecision`, `OutcomeMemory`, and exact code/data/model/environment
+  identities. Vector/wiki/memory packages (including Cognee and Mem0) are
+  retrieval infrastructure, never empirical or trading truth. Every important
+  research claim retains provenance to its source.
 
 ### 9.1 Memory layers
 
@@ -471,6 +556,35 @@ admission gates are maintained in
 | model/agent scorecards | routing, calibration, drift and retirement |
 | trading ledger | authoritative proposals, risk decisions, orders, fills and accounting |
 | capability registry | tested tools, skills, models, collectors and permissions |
+
+#### Future Decision Model data pipeline (design only)
+
+Do not train an AdvisorAI custom Decision Model now. During normal eligible
+paper operation, plan to write an immutable `DecisionTrainingRecord` containing
+only information available at the decision cutoff: snapshot/cutoff IDs,
+market and technical/microstructure features, deterministic regime, Chronos,
+TTM-R2, Kronos, LightGBM and FinBERT evidence, source/evidence quality and
+ancestry/correlation, disagreement, uncertainty, portfolio state,
+costs/liquidity, exact model/version hashes, and Decision Model outputs.
+Optional teacher records may include Laya, Kev, selected Jev calls, selected
+frontier-model reviews, and explicit human annotations/overrides.
+
+Attach labels only after their horizons close through separate immutable IDs:
+
+```text
+DecisionRecord -> OutcomeResolution -> TrainingExample
+```
+
+Outcome fields may include realized returns by horizon, MAE/MFE, volatility,
+drawdown, costs/slippage, paper order/fill outcomes, portfolio incremental
+utility, decision correctness/abstention quality, and applicable regime.
+Future information must never be backfilled into the pre-decision input
+record. The future AdvisorAI-CDM objective combines typed decision
+supervision, calibration, realized outcomes, net utility after costs,
+abstention quality, regime robustness, risk-sensitive penalties, teacher
+disagreement, and human labels when available; it is not merely Jev
+distillation. This pipeline is design only and authorizes no experiment or
+training run.
 
 Summaries always link to evidence IDs. New conclusions supersede rather than overwrite history. Negative results and failed tools are retained.
 
@@ -492,7 +606,12 @@ Models, agents, sources and skills learn through challengers and scorecards. Pro
 
 ## 10. Process and repository design
 
-### 10.1 Always-on Trade/Fast services
+### 10.1 Session-owned core services
+
+The following ownership boundaries exist during an active owner session. They
+are not instructions to keep processes resident between sessions. A future
+server deployment may map them to supervised always-on services under a
+separate profile.
 
 - `advisor-api`: UI/API, mission routing, approvals and status;
 - `market-node`: Nautilus strategies, portfolio state, RiskKernel, OMS and adapters;
@@ -562,28 +681,45 @@ Dependency groups keep Trade mode from importing browser, Hermes, PyTorch traini
 
 ## 11. Build program and gates
 
-Expansion is gate-driven, not calendar-driven.
+The phase numbers organize work and admission evidence. They are not a
+waterfall for implementation. Work in the implementation lane may proceed in
+parallel when contracts are stable and permissions keep unadmitted work
+quarantined. The admission lane remains sequential where earlier safety,
+source, data, or operational evidence is a prerequisite. This changes when
+software may be built, not who owns authority or what evidence promotion
+requires.
 
-### Phase 0 — freeze contracts and run bake-offs
+### Phase 0 — contracts and integration qualification
 
-- write architecture decision records and core Pydantic contracts;
-- benchmark direct API, LiteLLM and OmniRoute on identical typed/tool calls, route identity, privacy, idle/active RSS, 24-hour stability and failure handling;
-- benchmark TTM-R3 with TTM-R2 as its control, then Chronos-2-small,
-  Kronos-mini/small and TabPFN-TS against baselines for
-  latency/RAM/VRAM/utility; qualify TSPulse only for regime/integrity features;
-- benchmark Nautilus adapters/replay, Prefect and Hamilton overhead;
-- benchmark plain Parquet manifests versus DuckLake;
-- benchmark one Hermes coordinator/one subagent in an isolated environment;
-- test rclone-crypt upload, verification and restore from two providers.
+- define typed `DecisionModelPort`, `DecisionProposal`, model/evidence
+  identities, lifecycle/session records, and DecisionRecord/OutcomeResolution
+  links alongside existing contracts;
+- integrate the frozen reference adapters behind deterministic ports;
+- perform bounded Level A checks: exact identity, typed inputs/outputs, PIT
+  safety, resource bounds, load/inference/unload, failure behavior, and no
+  authority leakage;
+- retain prior gateway, archive, Nautilus, Prefect, Hamilton, and component
+  evidence; implement their stable interfaces and quarantine incomplete
+  integrations;
+- pursue no broad model bake-off as a prerequisite for infrastructure and
+  start no model experiment under this planning update.
 
-**Gate:** selected components fit the resource envelopes; exact model/source versions are reproducible; no unexplained 24-hour memory growth.
+**Admission gate:** exact, versioned evidence for the operating scope being
+considered. Historical 24-hour measurements remain evidence, but unexplained
+24-hour memory growth is no longer a mandatory workstation gate. Repeated
+resource lifecycle behavior is assessed in integrated session validation.
 
 ### Phase 1 — safety, data truth and resource skeleton
 
-- implement Snapshot, Evidence, Forecast, TargetPortfolio, RiskPolicy/Decision, ExecutionPlan, Order/Fill, Reconciliation, Attribution, ModelCard, AgentRun and Capability contracts;
+- implement Snapshot, Evidence, Forecast, DecisionProposal,
+  DecisionTrainingRecord, TargetPortfolio, RiskPolicy/Decision,
+  ExecutionPlan, Order/Fill, Reconciliation, Attribution, ModelCard,
+  AgentRun, Capability, and session lifecycle contracts;
 - implement Bronze/Silver/Gold, time/origin rules, instrument identity and manifests;
 - create account/order/mission/model/capability/incident ledgers;
 - implement Resource Governor, structured tracing and immutable config/version bundles.
+- implement session start/stop, checkpoint, gap, recovery, lock, and runtime
+  lease foundations; implementation may begin before any model admission.
 
 **Gate:** Bronze rebuild is deterministic; leakage fixtures fail; idempotency and config rollback pass.
 
@@ -596,7 +732,9 @@ Expansion is gate-driven, not calendar-driven.
 - RiskKernel, kill switch and OMS state machine;
 - paper/testnet order lifecycle, reconciliation and simple TCA.
 
-**Gate:** duplicate, ambiguous acknowledgement, partial fill, reconnect, stale data, venue outage, price collar and kill-switch fixtures fail safely with every ledger reconciled.
+**Admission gate:** duplicate, ambiguous acknowledgement, partial fill,
+reconnect, stale data, venue outage, price collar and kill-switch fixtures fail
+safely with every ledger reconciled. Paper/testnet first.
 
 ### Phase 3 — V3-Core data spine
 
@@ -610,20 +748,31 @@ Expansion is gate-driven, not calendar-driven.
 
 ### Phase 4 — quantitative baseline council
 
-- naive/statistical and LightGBM baselines;
-- TTM-R3, TTM-R2 control, and TSPulse CPU wave;
-- choose **one** initial GPU family: Chronos-2-small or Kronos-mini;
-- common forecast contract, rolling calibration and abstention;
-- fast screen plus Nautilus replay with realistic fees, spread, impact and delay.
+- integrate naive/statistical and LightGBM baselines, TTM-R2, Chronos-2-small,
+  and Kronos-small through typed adapters;
+- keep Chronos for general probabilistic/interval evidence and Kronos for
+  finance/OHLCV evidence; use a single global GPU lease and sequential waves;
+- integrate the selected compact financial sentiment implementation as
+  specialized evidence;
+- implement common forecast contracts, calibration/abstention interfaces,
+  resource accounting, and realistic Nautilus replay hooks;
+- implement at minimum the bounded reference-adapter qualification. Comparative
+  utility and admission are distinct from integration completion.
 
-**Gate:** no model is admitted unless it adds past-only calibrated net utility or useful risk information over baselines within resource limits.
+**Admission gate:** no model/source is promoted beyond its permitted operating
+scope without past-only calibrated evidence, useful incremental contribution,
+identity, resource, and failure evidence. A failed candidate does not block
+implementation of the Evidence Council, Decision Model, lifecycle, or other
+quarantined components.
 
 ### Phase 5 — first typed evidence council
 
 - Mission Router and Snapshot Builder;
 - Data Verifier, Technical/Flow Analyst, Derivatives/Regime Analyst, News/Event Analyst, Skeptic/Base-Rate reviewer and Risk/Opportunity reviewers;
 - evidence-dependency graph, dissent preservation and adaptive waves;
-- `DecisionBundle` ending in a target portfolio, never an order.
+- Evidence Graph/calibrated evidence bundle and generic `DecisionModelPort`
+  with typed `DecisionProposal`; the proposal feeds deterministic Portfolio
+  Constructor, never an order.
 
 **Gate:** duplicated/syndicated evidence cannot create quorum; conflict escalates; an agent output cannot bypass portfolio/risk contracts.
 
@@ -634,43 +783,66 @@ Expansion is gate-driven, not calendar-driven.
 - full OMS/reconciliation/TCA and P&L/risk/execution attribution;
 - purged walk-forward, multiple-testing, sensitivity and regime fixtures;
 - model inventory, independent challenge, incidents and postmortems.
+- immutable pre-decision record and later outcome-resolution pipeline for
+  eligible paper cycles; labels remain temporally separate from input state.
 
 **Gate:** every paper order passes point-in-time, portfolio, cost, capacity, stress and hard-limit checks; attribution reconciles exactly enough to trigger incidents on unexplained residuals.
 
-### Phase 7 — unattended paper soak
+### Phase 7 — integrated paper session validation
 
-- operate V3-Core continuously;
-- run failure injection and restore drills;
-- track data/model/agent/risk/execution scorecards;
-- compare with no-trade and simple benchmark portfolios.
+Validate the complete chain across normal owner sessions, clean stops,
+restarts, gaps, crashes, temporary network failures, interrupted jobs, worker
+failures, and changing market conditions:
 
-**Gate:** at least 60 calendar days and a meaningful decision/trade sample, including adverse conditions; stable resources; no unresolved reconciliation or safety incident; positive evidence is net of realistic costs. Time alone never proves profitability.
+**data → features → frozen forecast fabric → Evidence Council → Decision Model
+→ TargetPortfolio → RiskKernel → OMS → Nautilus paper/testnet →
+reconciliation → TCA/attribution → outcome memory → next-session recovery**.
+
+Prioritize state equivalence, no duplicate orders, authoritative
+reconciliation, exact data-gap/backfill handling, PIT correctness, ledger
+rebuild, checkpoint/resume truth, worker/lease cleanup, lazy model lifecycle,
+bounded residual resources, and no authority escalation after restart. Use
+independent sessions and meaningful market/source/failure diversity. A
+provisional evidence target of 20–30 meaningful sessions and roughly 100–150
+operating hours may be reviewed against sample quality; neither calendar days
+nor hours alone prove readiness or profitability. Require no unresolved
+safety, reconciliation, or data-integrity incident in the admitted scope.
+Long continuous uptime is optional diagnostic evidence for this workstation.
 
 ### Phase 8 — Hermes and Skill Foundry
 
-- add isolated Hermes profiles/tasks and typed artifact exports;
+- implementation may begin earlier behind quarantine; complete isolated Hermes
+  profiles/tasks and typed artifact exports;
 - build capability registry/broker;
 - implement scout, importer/creator, test, security, performance and review pipeline;
 - create one missing deterministic collector or adapter end to end.
 
 **Gate:** Hermes can create a reproducible, quarantined capability that reaches active-read without accessing broker credentials, live deployment or order authority.
 
-If the optional Alpha Team extension has passed E0, only one E4 research
-capability adapter may enter through this same quarantine boundary at a time.
+Capability admission is per adapter and remains governed by its sandbox,
+security, reproducibility, and capability gate; it is not blocked from
+implementation by a Phase-7 duration gate.
 
 ### Phase 9 — controlled expansion
 
 - add SEC/ALFRED/equity paper sources, corporate actions and an equity daily council;
 - add browser collectors only where deterministic API/HTTP cannot work;
-- add TabPFN-TS, TradingAgents, RD-Agent/Qlib, selected LEAN or QuantLib only one at a time through challenger gates;
+- implement Research Brain and Alpha Team foundations early: experiment
+  registry, hypotheses, outcome memory, provenance, retrieval/literature
+  layer, and isolated Scout/Experiment Factory/Red Team workflows;
+- after integrated-system evidence exists, challenge with TimesFM 3, TTM-R3,
+  Kronos-base, TabPFN-TS, Kev/Jev and other models; also consider
+  TradingAgents, RD-Agent/Qlib, selected LEAN or QuantLib one at a time;
 - add archive automation and optional OmniCloud view;
 - expand asset universe and horizons only after capacity/data-quality tests.
 
 **Gate:** each addition shows positive marginal value and does not reduce core stability, safety, reproducibility or headroom.
 
-If the optional Alpha Team extension has passed E0, its E2-E6 work remains
-replayable challenger work. It cannot bypass the canonical data, portfolio,
-RiskKernel, OMS, or NautilusTrader owners.
+Research Brain and Alpha Team implementation can be quarantined and tested
+without Phase-7 admission. Experiment, source, capability, and strategy
+promotion still requires their own versioned gates. No Research Brain or
+Alpha Team output bypasses canonical data, portfolio, RiskKernel, OMS, or
+NautilusTrader ownership.
 
 ### Phase 10 — limited live capital
 
@@ -680,6 +852,21 @@ RiskKernel, OMS, or NautilusTrader owners.
 - no simultaneous framework/model/source expansion.
 
 **Gate:** the system remains correct with all AI/research/browser services offline; any serious incident returns it to paper.
+
+### Near-term integrated-system milestone — AdvisorAI Integrated Alpha
+
+The owner can start AdvisorAI and it recovers authoritative state, catches up
+permitted data, validates a PIT snapshot, initializes required collectors and
+workers, runs the frozen reference fabric and Evidence Council, invokes the
+Decision Model, constructs a target, passes through deterministic RiskKernel,
+routes only PAPER/TESTNET through OMS/Nautilus, reconciles, records
+TCA/attribution and later outcomes, writes leakage-safe decision/outcome
+records, and exposes the trace in the dashboard. The owner can stop cleanly;
+the next session resumes without lost authority state, duplicate actions,
+fabricated history, future leakage, stale order assumptions, or unreconciled
+paper positions. The system may abstain when any required evidence or
+admission is missing. This milestone is not a profitability, model superiority,
+or live-capital claim.
 
 ---
 
@@ -696,8 +883,11 @@ V3-Core is intentionally much smaller than the target system.
 | Primary data | native venue REST/WebSocket |
 | Context | Deribit plus GDELT/official RSS; LSE optional corroboration |
 | Deterministic models | naive/statistical + LightGBM |
-| Tiny local models | TTM-R3 + TTM-R2 control + TSPulse features |
-| GPU model | one winner: Chronos-2-small or Kronos-mini |
+| Temporal models | TTM-R2 reference; Chronos-2-small probabilistic forecast; Kronos-small OHLCV evidence |
+| Structured baseline | LightGBM plus naive/statistical controls |
+| Financial NLP | FinBERT or currently selected compact sentiment implementation |
+| Local Decision Model | Laya typed-decision reference through `DecisionModelPort`; exact adapter admission remains separate |
+| Remote reasoning | one on-demand strong LLM behind `ModelGatewayPort`; no Jev dependency |
 | Agent roles | Data Verifier, Technical/Flow, Derivatives/Regime, News/Event, Skeptic/Base-Rate, Risk/Opportunity and Synthesizer |
 | Research engines | direct Polars/NumPy or VectorBT screen + Nautilus replay |
 | Portfolio | no-trade, equal allocation, inverse-volatility and constrained target portfolio |
@@ -705,9 +895,13 @@ V3-Core is intentionally much smaller than the target system.
 | General AI | one selected gateway adapter plus direct recovery route |
 | Storage | local Parquet/DuckDB/SQLite |
 | Archive | manual/tested rclone-crypt restore before automation |
-| Excluded from Core | Hermes, Paperclip, browser-use, RD-Agent, TradingAgents, Qlib backtester, LEAN, OmniCloud, multiple optimizers and additional TSFMs |
+| Hot-path exclusions | Hermes, browser, research mining, unadmitted models, and deep remote reasoning are not required per cycle; optional isolated research implementation may proceed outside the hot path |
 
-V3-Core proves the hardest invariants first: point-in-time data, independent factors, calibrated forecasts, target portfolios, risk vetoes, realistic replay, safe order state, reconciliation, TCA, attribution, resource stability and recovery.
+V3-Core and the Integrated Alpha milestone prove the hardest invariants across
+sessions: point-in-time data, independent evidence, calibrated outputs,
+Decision Model contracts, target portfolios, risk vetoes, realistic replay,
+safe order state, reconciliation, TCA, attribution, resource cleanup and
+recovery.
 
 ---
 
@@ -717,7 +911,7 @@ V3-Core proves the hardest invariants first: point-in-time data, independent fac
 |---|---|
 | Data | point-in-time cutoff enforced; revisions/gaps/staleness/origin visible; raw replay deterministic |
 | Evidence | shared ancestry discounted; dissent retained; unsupported claims abstain |
-| Models | baselines mandatory; calibration and net utility measured past-only; model drift can disable authority |
+| Models and Decision Model | exact identity; PIT and typed contracts; calibration, missing evidence, disagreement, expiry, and abstention visible; no direct authority |
 | Strategy | economic rationale, independent implementation, realistic costs, regime/stress tests and no-trade comparison |
 | Portfolio | exposure/risk/cost/capacity constraints satisfied; unstable optimizer outputs rejected |
 | Risk | all hard-limit fixtures pass; AI cannot loosen limits; kill switch works without AI |
@@ -725,8 +919,9 @@ V3-Core proves the hardest invariants first: point-in-time data, independent fac
 | Accounting | cash/position/P&L and attribution reconcile; unexplained residual creates incident |
 | Security | least privilege; Hermes/browser/generated code have no trading credentials or live write authority |
 | Reproducibility | code/config/data/model/prompt/route/environment versions recorded for every material artifact |
-| Resources | mode ceilings and headroom respected; graceful load shedding; 24-hour stability before soak |
-| Recovery | local state can rebuild from Bronze/ledgers; cold archive restore and corruption tests pass |
+| Resources | mode ceilings/headroom respected; one GPU lease; lazy loading; bounded residual resources across repeated session/model lifecycle cycles |
+| Recovery | clean restart state equivalence; ledger rebuild; paper account/order reconciliation; permitted gap/backfill and PIT correctness; lock/lease cleanup |
+| Research memory | immutable pre-decision inputs and separately linked later outcomes; provenance and failed/rejected work retained |
 | Live | explicit approval, tiny bounded risk, stable paper evidence and immediate rollback path |
 
 ---
@@ -753,18 +948,23 @@ Do not:
 
 AdvisorAI V3 succeeds when it can:
 
-1. continuously maintain correct point-in-time market, account and evidence state;
-2. route one user mission between Fast, Standard, Deep, Builder and Recovery modes;
-3. obtain multi-factor conclusions without mistaking correlated opinions for independent evidence;
-4. use API agents and local quant models concurrently within laptop budgets;
-5. turn forecasts into a cost-aware target portfolio and deterministic risk decision;
-6. execute, reconcile and attribute paper trades with AI services completely offline;
-7. learn through measured challengers rather than uncontrolled self-modification;
-8. use Hermes to create reproducible, quarantined capabilities without crossing the trading boundary;
-9. add a new source, agent, model or program through stable contracts rather than architectural rewrites;
-10. reject trading when evidence, data, resources, risk or operational state is insufficient.
+1. start when the owner needs it, recover authoritative state, reconcile paper/testnet state, catch up permitted data, and become ready only when integrity checks pass;
+2. operate for a normal 5–8 hour session, then stop cleanly without requiring background agents or collectors while closed;
+3. route missions across Fast, Standard, Deep, Builder and Recovery modes under measured resource budgets;
+4. obtain multi-factor conclusions without mistaking correlated opinions for independent evidence;
+5. use the frozen reference fabric and typed Decision Model to propose a stance, then construct a cost-aware target through deterministic controls;
+6. paper/testnet execute, reconcile and attribute without requiring AI services for risk, order, or recovery authority;
+7. preserve leakage-safe decision records and attach outcomes only when later available;
+8. use Research Brain and Hermes through reproducible, quarantined workflows;
+9. repeat sessions, crashes, source gaps and worker failures without lost authority state, duplicate actions, or permission escalation;
+10. add sources, agents, models, and programs through stable contracts, then challenge models after integrated evidence accumulates;
+11. reject or abstain when evidence, data, resources, risk, admission, or operational state is insufficient.
 
-Profitability is not an architectural acceptance claim. It must be earned through past-only validation, realistic costs, long paper evidence, stress, capacity analysis and limited-live outcomes.
+Profitability is not an architectural acceptance claim. It must be earned
+through past-only validation, realistic costs, integrated paper evidence,
+stress, capacity analysis, and separate limited-live admission. Continuous
+uptime is optional diagnostic evidence for the workstation; it is not its
+primary readiness definition.
 
 ---
 

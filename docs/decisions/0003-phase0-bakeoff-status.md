@@ -47,3 +47,13 @@ by name, import availability, or synthetic probes: the role decisions use
 frozen public financial datasets and exact runtime/checkpoint evidence. The
 24-hour model stability window and non-model Phase-0 component gates remain
 open, so no `passed` Phase-0 gate or live-capital claim is made.
+
+## Planning-policy supersession — 2026-09-30
+
+The status and measurements above are historical and remain unchanged. The
+prior 24-hour threshold is superseded as the primary admission criterion for
+the owner-operated session workstation. Future reference adapters use bounded
+Level A identity, contract, PIT, resource, load/unload, failure, and authority
+checks; model comparative admission remains separate. See [ADR 0008](0008-reference-model-fabric-and-deferred-bakeoffs.md)
+and the [current phase plan](../plans/README.md). This addendum does not
+retroactively alter any roster state, gate result, or evidence hash.

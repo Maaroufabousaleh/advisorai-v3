@@ -16,7 +16,7 @@ The primary user is a single owner-operator running and reviewing AdvisorAI V3 f
 
 ## Product Purpose
 
-AdvisorAI V3 is a federated research and paper-trading system with one deterministic safety and execution spine. It turns point-in-time data and independent evidence into auditable target portfolios, risk decisions, paper execution plans, reconciliation, attribution, and controlled learning. The dashboard makes the complete operating state understandable and controllable without bypassing those canonical services.
+AdvisorAI V3 is a local-first, session-oriented quantitative and agentic workstation with one deterministic safety and execution spine. The owner starts it when needed, typically operates it for approximately 5–8 hours, stops cleanly, and restarts later after state recovery, paper/testnet reconciliation, and permitted data catch-up. It combines point-in-time data and specialized model evidence through an Evidence Council and typed Decision Model proposal, then constructs auditable target portfolios, risk decisions, paper execution plans, reconciliation, attribution, and controlled learning. The dashboard makes the complete operating state understandable without bypassing canonical services.
 
 ## Positioning
 
@@ -24,11 +24,11 @@ Many analytical agents may contribute evidence, but no forecast becomes a trade 
 
 ## Operating Context
 
-The operator works on a resource-bounded Windows/WSL laptop and uses explicit modes: Trade/Fast, Standard, Deep, Builder, and Recovery. The system is paper/testnet only until external phase gates, soak evidence, reconciliation, and explicit human approval pass. Immutable point-in-time data, SQLite WAL ledgers, manifest-managed Parquet, DuckDB/Polars analysis, service ownership, incidents, and recovery records are operational truth.
+The operator works on a resource-bounded Windows/WSL laptop and uses explicit modes: Trade/Fast, Standard, Deep, Builder, and Recovery. Paper/testnet is the initial operating scope. Session lifecycle and integrated paper evidence govern workstation readiness; phase gates govern operational admission and promotion. Live capital remains separate, explicitly human-approved, and tightly gated. Immutable point-in-time data, SQLite WAL ledgers, manifest-managed Parquet, DuckDB/Polars analysis, service ownership, incidents, and recovery records are operational truth. A server/always-on deployment is optional and has a separate endurance profile.
 
 ## Capabilities and Constraints
 
-- Existing Python services own missions, evidence councils, data, resource governance, account state, RiskKernel, OMS, reconciliation, incidents, and live readiness.
+- Existing Python services own missions, evidence councils, data, resource governance, account state, RiskKernel, OMS, reconciliation, incidents, and live readiness. Complete session start/stop/recovery and the generic Decision Model boundary are target implementation work, not current capability claims.
 - The dashboard may read projections and issue narrowly scoped commands through authenticated API boundaries; it must not write ledgers directly, loosen limits, submit live orders, expose credentials, or let AI services control orders.
 - V1 controls paper/testnet workflows and visibly reports live readiness while keeping Phase 10 activation locked.
 - The first deployment is private local/LAN with password, MFA, step-up re-authentication, TLS when exposed beyond localhost, strict session controls, and auditability.

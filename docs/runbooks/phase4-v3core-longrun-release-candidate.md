@@ -1,5 +1,15 @@
 # Phase-4 V3-Core long-run release candidate
 
+> **Planning status (2026-09-30):** this is a legacy, candidate-specific
+> long-run planning/control record. It is not a current model-selection
+> prerequisite, and no collector, Chronos worker, watchdog, scheduler, GPU
+> workload, or broker connection should be launched to unblock the
+> workstation roadmap. The new roadmap first completes infrastructure and the
+> integrated paper/session workflow using the frozen reference fabric; broad
+> model comparisons follow accumulated system evidence. Historical canary and
+> preregistration records below remain unchanged. Long-run execution may only
+> be reconsidered as separately scoped diagnostic/deployment evidence.
+
 This runbook describes the reviewed, no-launch release candidate. It is a
 planning and control contract, not a long-run preregistration. No collector,
 Chronos worker, watchdog, scheduler, GPU workload, broker connection, or

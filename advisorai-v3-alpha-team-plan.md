@@ -1,35 +1,70 @@
 # AdvisorAI V3 — Alpha Team Extensibility Plan
 
-**Status:** post-Core extension blueprint — paper/testnet first  
-**Scope:** optional, staged extensions to the existing AdvisorAI V3 architecture: a governed Alpha Team, continuous research intake, alpha discovery, and a local research brain.  
+**Status:** implementation-ready planning blueprint — authority gated; paper/testnet first
+
+**Scope:** governed Alpha Team, queued research intake, alpha discovery, and a local Research Brain as first-class implementation work.
 **Integration:** the phase binding, conformance rules, and E0-E7 admission map
 are now maintained in [`docs/plans/alpha-team-extension.md`](docs/plans/alpha-team-extension.md).
 This document remains the detailed design source; if wording diverges, the
 authoritative architecture and integrated phase plan govern.
-**Does not redesign V3:** PydanticAI/Pydantic Graph remains the typed decision layer; Prefect/Hamilton remain workflow and feature owners; the deterministic Portfolio Constructor, RiskKernel, OMS ledger, and NautilusTrader remain the only trading authority.
+**Does not redesign V3:** PydanticAI/Pydantic Graph remains the typed agent/evidence layer; the generic `DecisionModelPort` is the typed System-One proposal boundary; Prefect/Hamilton remain workflow and feature owners; the deterministic Portfolio Constructor, RiskKernel, OMS ledger, and NautilusTrader remain the only trading authority.
 
 ## 1. Extension decision
 
 The V3 base already defines the canonical data plane, Market Structure & Regime Engine, typed councils, hybrid ModelGateway, RiskKernel/OMS, NautilusTrader execution path, dashboard and Hermes Skill Foundry. **Do not replace or parallel any of them.**
 
-Build an **Alpha Team Extension Plane** as a bounded scientific-research factory that plugs into those base services. Its job is to continually find, implement, falsify, and monitor hypotheses. Its output is evidence and versioned candidates; it cannot create an order, change a risk limit, access broker credentials, or promote itself.
+Build an **Alpha Team research plane** as a bounded scientific-research factory that plugs into those base services. Its jobs find, implement, falsify, and monitor hypotheses when the owner runs AdvisorAI. Its output is evidence and versioned candidates; it cannot create an order, change a risk limit, access broker credentials, or promote itself. Implementation may proceed before Phase 7; operational promotion remains gated.
 
-The local “big brain” is **not one permanently-running giant LLM**. On the 16 GB RAM / RTX 4060 8 GB laptop, it is a durable research-memory and experiment-learning system: a local evidence store, factor registry, experiment registry, retrieval layer, and policy-controlled model gateway. API models reason over selected evidence; local models are compact and scheduled when the GPU lease is free.
+The local “big brain” is **not one permanently-running giant LLM**. On the 16 GB RAM / RTX 4060 8 GB laptop, it is a durable research-memory and experiment-learning system: a local evidence store, factor registry, experiment registry, retrieval layer, and policy-controlled model gateway. API models reason over selected evidence; local models are compact and scheduled when the single GPU lease is free. Jobs are elastic and cancellable; no agent or research process is required while AdvisorAI is shut down.
 
 ```mermaid
-flowchart TD
-    S["Research & data intake"] --> B["Research Brain\nprovenance + memory"]
-    B --> H["Alpha Team\nhypotheses + candidate factors"]
-    H --> X["Isolated experiment factory"]
-    X --> V["Independent validation & red team"]
-    V --> R["Approved factor / strategy registry"]
-    R --> P["Typed portfolio proposal"]
-    P --> K["Deterministic RiskKernel + OMS"]
-    K --> N["NautilusTrader paper/testnet"]
-    N --> B
+flowchart TB
+    AD["Advisor"] --> MR["Mission Router / Governor"]
+    MR --> TR["TRADE jobs"]
+    MR --> RE["RESEARCH jobs"]
+    MR --> BU["BUILDER jobs"]
+
+    subgraph TRADE["Trade lane"]
+        TR --> PIT["Validated PIT snapshot"]
+        PIT --> MF["Reference forecast / feature fabric"]
+        MF --> EC["Evidence Council"]
+    end
+
+    subgraph RESEARCH["Research lane: elastic jobs"]
+        RE --> RL["Research Lead"]
+        RL --> RB["Research Brain"]
+        RE --> SC["Scout"]
+        RB --> HY["Hypotheses / Candidate Factors"]
+        HY --> EF["Experiment Factory"]
+        BU --> HE["Hermes: isolated builder runtime"]
+        HE --> EF
+        EF --> RR["Statistical Red Team"]
+        RR --> EC
+        RB --> EC
+    end
+
+    EC --> EG["EvidenceGraph / calibrated evidence"]
+    EG --> DM["Decision Model Fabric"]
+    DM --> DP["Typed DecisionProposal"]
+    DP --> PC
+
+    subgraph WALL["Deterministic authority wall"]
+        PC["Portfolio Constructor / TargetPortfolio"] --> RK["RiskKernel"]
+        RK --> OMS["OMS"]
+        OMS --> NT["NautilusTrader"]
+    end
+    NT --> VEN["Paper / Testnet venue"]
+    VEN --> REC["Reconciliation / TCA / attribution"]
+    REC --> OM["Outcome Memory"]
+    OM --> RB
 ```
 
-The arrows to the right are one-way approval boundaries. No worker on the left can call `submit_order`, mutate a live strategy, relax a limit, or read a broker secret.
+All agent, model, research, and Hermes lanes are elastic jobs rather than
+permanent loops. Research yields to trading health, has no background
+requirement while AdvisorAI is shut down, and shares one global GPU lease.
+The deterministic wall is the only route to paper/testnet execution. No worker
+above it can call `submit_order`, mutate a live strategy, relax a limit, read a
+broker secret, or grant itself admission.
 
 ### 1.1 V3 interfaces the extension may use
 
@@ -39,19 +74,19 @@ The arrows to the right are one-way approval boundaries. No worker on the left c
 | Hamilton feature graph | register a proposed feature behind a versioned `FeatureCandidatePort` | modify active features or calculate from unavailable data |
 | Market Structure & Regime Engine | consume `MarketStateArtifact` and report regime-by-regime research results | replace its deterministic state calculation or declare regime from LLM prose |
 | PydanticAI councils / ModelGateway | ask for typed, policy-routed research work | use an LLM as risk, promotion, or order authority |
-| Prefect | schedule bounded research workflows | run unbounded 24/7 agent loops in Trade/Fast mode |
+| Prefect | schedule bounded research workflows within active sessions or approved deployment profiles | run unbounded agent loops or require background work while the workstation is closed |
 | Hermes Skill Foundry | build an isolated adapter, test, or research capability | access live credentials, alter production code, or activate itself |
 | Portfolio Constructor / RiskKernel / OMS / NautilusTrader | receive a fully approved candidate for independent replay then paper routing | delegate portfolio, risk, reconciliation, or execution to an imported framework |
 | Existing dashboard | add research inspection views that link to V3 decision/fill inspection | become a separate control surface for live trading |
 
 ## 2. Non-negotiable operating rules
 
-1. **Paper/testnet only until the existing V3 paper gates pass.** No live or withdrawal-enabled credentials are present in research, agent, browser, or generated-code environments.
+1. **Paper/testnet first.** No live or withdrawal-enabled credentials are present in research, agent, browser, or generated-code environments. Implementation readiness and operating-scope admission are tracked separately.
 2. **One canonical truth per concern:** Bronze/Silver/Gold Parquet + DuckDB for data; a versioned feature/factor registry; deterministic RiskKernel/OMS for trading state; NautilusTrader for replay and venue execution.
 3. **Research is not alpha.** An LLM idea, attractive chart, factor IC, in-sample Sharpe, or a library’s published result is a lead—not an approved signal.
 4. **Every candidate must be reproducible.** It receives immutable code, environment, data-snapshot, feature, parameter, seed, and result hashes.
-5. **No self-promotion.** The generator, evaluator, and promoter use separate processes and permissions. A candidate is promoted only by deterministic gates plus a recorded human approval during the early stages.
-6. **No always-on GPU swarm.** Trade mode owns the GPU lease when needed. Mining, training, article embedding, Hermes and large backtests are queued, cancellable jobs.
+5. **No self-promotion.** The generator, evaluator, and promoter use separate processes and permissions. A candidate is promoted only by deterministic gates plus a recorded human approval where policy requires it. Pending admission does not block quarantined implementation.
+6. **No always-on GPU swarm.** One global GPU lease is acquired only as needed. Mining, training, article embedding, Hermes and large backtests are queued, cancellable jobs that yield to trading health.
 7. **The Alpha Team may tighten or recommend a no-trade; it can never loosen RiskKernel limits.**
 
 ## 3. Alpha Team: roles and contracts
@@ -87,9 +122,43 @@ Use local Parquet/DuckDB for analytical history and SQLite WAL for transactional
 | Outcome memory | shadow/paper performance, drift, calibration, slippage, regime performance, retirements | supports measured adaptation rather than narrative memory |
 | Capability registry | code/skill/package hashes, tests, permissions, benchmark results and quarantine status | makes Hermes-created tools reviewable |
 
+Keep two knowledge layers explicit:
+
+- **Knowledge/literature brain:** papers, concepts, equations, methods,
+  relationships, contradictions, citations, licenses, and versions. LLM Wiki
+  is a promising candidate; Qanat is a promising isolated experiment adapter.
+- **Empirical/scientific brain:** AdvisorAI canonical truth in
+  DuckDB/Parquet/SQLite and immutable hypothesis, candidate, experiment,
+  validation, promotion, and outcome records with exact code/data/model/
+  environment hashes. A vector/wiki/memory system, including Cognee or Mem0,
+  is retrieval infrastructure only. Every material research claim links back
+  to its original source.
+
+### 4.4 Future AdvisorAI Decision Model data pipeline
+
+Do not train a custom AdvisorAI Decision Model as part of this plan. Every
+eligible future paper cycle should be able to write an immutable
+`DecisionTrainingRecord` containing only information available at decision
+time: snapshot/cutoff, market and technical/microstructure features,
+deterministic regime, Chronos/TTM-R2/Kronos/LightGBM/FinBERT evidence,
+source/evidence quality and ancestry/correlation, disagreement, uncertainty,
+portfolio state, costs/liquidity, exact model/version hashes, and Decision
+Model outputs. Optional Laya/Kev/Jev/frontier-model teachers and human labels
+are separately identified.
+
+Attach realized returns by horizon, MAE/MFE, volatility, drawdown,
+transaction costs, slippage, paper fills, incremental utility, decision or
+abstention quality, and regime only later through immutable links:
+`DecisionRecord -> OutcomeResolution -> TrainingExample`. Never write future
+outcomes into the pre-decision input. The eventual training objective should
+combine typed supervision, calibration, net utility after costs, abstention,
+regime robustness, risk-sensitive penalties, teacher disagreement, and human
+labels. The goal is AdvisorAI's own specialized model, not mere Jev
+distillation.
+
 ### 4.2 Retrieval and learning loop
 
-1. A daily Scout job collects only allow-listed sources and records the raw document/hash.
+1. A session-bounded Scout job processes allow-listed source updates and records the raw document/hash; no Scout is required while AdvisorAI is closed.
 2. The Librarian makes structured cards. Contributor models may see public text only; a private/no-training model sees minimized internal cards only when needed.
 3. The Lead retrieves related failed and successful experiments before proposing new work. It must state the economic story, expected failure mode, data-availability lag, and baseline.
 4. The miner searches the **registered DSL vocabulary**, not raw Python. It sees prior-trial accounting and factor redundancy so it does not repeatedly rediscover near-duplicates.
@@ -126,7 +195,7 @@ PromotionDecision
 - versioned policy, human approver, applicable scope, expiry, rollback condition
 ```
 
-## 5. Continuous research intake
+## 5. Session-bounded research intake
 
 ### 5.1 Start with these source families
 
@@ -138,7 +207,7 @@ PromotionDecision
 | OSS intelligence | GitHub releases, tags, commit/activity digest for an allow-list | weekly | source-license and supply-chain review before use |
 | Benchmarks | published datasets, reproducible papers, Numerai/other research benchmarks where permitted | weekly/monthly | benchmark evidence is never direct trading data |
 
-Do **not** indiscriminately scrape journals, paywalled portals, social networks, or arbitrary GitHub repos. Store metadata and permitted extracts; respect licenses, robots/rate limits, and terms of use. arXiv is valuable for rapid discovery but explicitly hosts preprints as well as papers, so it cannot serve as a validation stamp by itself.
+Process the source cadence in bounded jobs during an active AdvisorAI session or a separately admitted deployment profile. No research intake service is required while the workstation is shut down. Do **not** indiscriminately scrape journals, paywalled portals, social networks, or arbitrary GitHub repos. Store metadata and permitted extracts; respect licenses, robots/rate limits, and terms of use. arXiv is valuable for rapid discovery but explicitly hosts preprints as well as papers, so it cannot serve as a validation stamp by itself.
 
 ### 5.2 Research triage policy
 
@@ -235,7 +304,7 @@ Every transition is fully recorded. A candidate must pass all of the following:
 8. **Portfolio incrementality:** the candidate must improve the current portfolio after correlation, factor exposures, risk budget, concentration and costs—not merely have an attractive standalone statistic.
 9. **Paper evidence:** shadow signal then paper/testnet behavior agrees with simulated assumptions over a preregistered number of decisions and market states.
 
-Initial promotion should require your explicit approval. Only after a long stable paper record should promotion become policy-automated—and even then it means “eligible for a bounded paper strategy,” never an automatic live-capital increase.
+Initial promotion should require explicit human approval where policy requires it. Operational admission is based on accumulated evidence across independent sessions and relevant market states, not a fixed continuous-uptime interval. Any later policy-automated promotion means only eligibility for a bounded paper strategy, never an automatic live-capital increase.
 
 ## 9. Model and agent policy
 
@@ -267,22 +336,27 @@ Required screens:
 
 For this one-node deployment, use the existing `advisor-api` plus lightweight server-rendered/HTMX pages or Streamlit for research views. Persist traces in SQLite/Parquet. Do not add a permanently running Grafana/Prometheus stack unless the simple dashboard is demonstrably insufficient.
 
-## 11. Extension sequence and admission gates
+## 11. Implementation and operational admission sequence
 
-This is deliberately **not a second V3 roadmap**. The following optional extension tracks begin only at their named V3 integration point; all existing V3 phase ownership and gates stay unchanged.
+This is deliberately **not a second V3 roadmap**. These stages refine the
+existing Phase 8/9 research scope. Safe implementation may begin early; gates
+control operational admission and promotion only.
 
 | Stage | Deliverable | Gate to proceed |
 |---|---|---|
-| **E0 — V3-Core prerequisite** | no new component: confirm existing V3 Phase 0–7 paper/recovery/data/risk gates | all safety, reconciliation, resource and recovery gates pass with all AI services stopped |
-| **E1 — Research Brain add-on** *(after existing Phase 7)* | schemas, DuckDB/SQLite extension registries, evidence graph, source policy, paper/repo Scout, provenance and license checks | one paper and one failed strategy can be traced end-to-end and replayed |
-| **E2 — Controlled Alpha Lab** *(inside existing Phase 8/9 research scope)* | DSL, feature catalog, baseline suite, fast screen, full manifest, validation/red-team service and research dashboard views | intentionally leaky/overfit candidates are rejected; a known baseline reproduces |
+| **E0 — Authority/artifact contract** | Define ports, permissions, versioned artifacts, and replay boundary; no Phase-7 prerequisite for implementation | Contracts preserve canonical owners; quarantined results cannot acquire authority |
+| **E1 — Research Brain foundations** | Schemas, DuckDB/SQLite registries, evidence graph, source policy, session-bounded Scout, provenance and license checks | One source claim, failed experiment, and outcome trace/replay without provenance gaps |
+| **E2 — Controlled Alpha Lab** *(inside Phase 9 research scope)* | DSL, feature catalog, baseline suite, fast screen, full manifest, validation/red-team workflow and research dashboard | Intentionally leaky/overfit candidates are rejected; a known baseline reproduces |
 | **E3 — First V3 strategy challenger** | a small BTC/ETH research-only candidate set using existing MarketStateArtifact and independent Nautilus replay | incremental net value versus the existing V3 baseline across preregistered regimes; eligible for a paper shadow only |
 | **E4 — Optional capability adapters** | one isolated Hermes/QuantaAlpha/AlphaAgent/Qlib/DEAP/Optuna adapter at a time, with CapabilityCards and code-sandbox checks | adapter is removable, cannot escape sandbox, and produces a valid replayable artifact |
 | **E5 — Equity and long-horizon research extension** | SEC/IR/corporate-action snapshots, equity factor families, valuation/event research cards, paper ledger | clean point-in-time history and corporate-action correctness; no crypto assumption is reused blindly |
-| **E6 — Controlled candidate expansion** | limited approved-paper candidates, factor decay monitor and capital-allocation research | 60+ days of healthy unattended paper behavior per scope; no unresolved reconciliation or data-quality incident |
+| **E6 — Controlled candidate expansion** | limited approved-paper candidates, factor decay monitor and capital-allocation research | Accumulated evidence across independent sessions and relevant market states; no unresolved safety/reconciliation/data-quality incident. A provisional 20–30 meaningful sessions / 100–150 operating hours may inform review, not act as a calendar-time pass rule |
 | **E7 — Optional bounded-live scope** | no architecture change: use existing V3 live-capital gate, credential enclave, caps and emergency controls | explicit separate go-live review; paper results and operations demonstrate parity; immediate paper rollback is tested |
 
-Do not set calendar dates for promotion. Progress depends on evidence and gates, not agent activity volume.
+Do not set calendar dates for promotion. Progress depends on evidence quality
+and gates, not elapsed calendar time or agent activity volume. Historical
+24-hour/60-day evidence remains unchanged; continuous uptime is optional for
+the workstation and may be required by a separate future server profile.
 
 ## 12. Resource plan for the laptop
 
@@ -315,15 +389,26 @@ Measure the Alpha Team as a scientific system before judging it by P&L:
 - A vector database treated as memory truth, opaque agent consensus treated as independent evidence, or 3-D/“quantum” surfaces treated as predictive proof.
 - HFT/market-making claims on free data and a non-colocated laptop.
 
-## 15. First concrete sprint after V3-Core
+## 15. First implementation workstream
 
-1. Add the six typed artifacts in §4.3 and the SQLite/DuckDB registries.
-2. Implement an allow-listed arXiv/OpenAlex/GitHub Scout that produces `PaperCard`s and provenance records.
-3. Define the safe factor DSL and feature availability contract; register ten simple BTC/ETH factors with unit tests.
-4. Build the baseline suite plus a deliberately leaky factor to prove the Red Team rejects it.
-5. Export a single `ExperimentArtifact` from a Polars/VectorBT screen, then reproduce it through NautilusTrader replay.
-6. Add the Research Inbox, Factor Registry and Experiment Inspector dashboard views.
-7. Only then run the first bounded factor-mining mission: 50 candidates maximum, fixed universe/windows/budget, all trial accounting enabled.
+The next implementation work should establish complete-system foundations,
+without starting model experiments or training:
+
+1. Define session lifecycle records and start/stop/recovery ownership around
+   authoritative ledgers and paper/testnet reconciliation.
+2. Add the typed `DecisionModelPort`/`DecisionProposal` contracts and ensure
+   they terminate at deterministic Portfolio Constructor and RiskKernel.
+3. Define immutable `DecisionTrainingRecord` and later `OutcomeResolution`
+   identity so normal paper sessions can accumulate leakage-safe examples.
+4. Implement Research Brain's empirical registries and source provenance;
+   keep literature retrieval as an optional, isolated adapter.
+5. Connect one traceable paper decision through reconciliation, attribution,
+   outcome memory, and next-session recovery in the dashboard/read models.
+6. Implement session-bounded, cancellable Alpha Team jobs with one coordinator
+   and at most one or two research workers; preserve quarantine and resource
+   priority.
+7. Defer broad challenger comparisons and AdvisorAI-CDM training until the
+   integrated paper system has accumulated reviewable evidence.
 
 ## Sources reviewed
 

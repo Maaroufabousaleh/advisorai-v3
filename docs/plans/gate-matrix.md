@@ -1,5 +1,51 @@
 # AdvisorAI V3 gate matrix
 
+## Current planning interpretation — 2026-09-30
+
+This dated addendum changes planning policy, not measured evidence. The
+checkpoint sections below retain the facts, outcomes, hashes, timestamps, and
+gate states that were recorded under the prior roadmap. Any “24-hour”,
+“60-day”, “unattended”, or “blocked until Phase 7” language in those
+historical checkpoints describes that earlier plan and status as of its stated
+date; it is not the current workstation admission criterion.
+
+Current workstation policy separates **implementation readiness** from
+**operational admission**. Safe, typed, quarantined Phase 5–9 components may be
+implemented while earlier model/source/session admission remains pending.
+Admission and promotion remain sequential where safety requires them; no
+unqualified model/capability gains order, broker, risk-limit, or self-promotion
+authority.
+
+Phase 7 is now **Integrated Paper Session Validation**. It evaluates the
+complete paper/testnet loop across repeated owner sessions, clean stops,
+restarts, crashes, source gaps/backfills, worker failures, reconciliation,
+outcome memory, and resource/lease cleanup. Historical 24-hour/60-day
+requirements are superseded planning requirements for the workstation, not
+rewritten historical results. Continuous endurance may be optional diagnostic
+evidence or a separate future server-profile gate.
+
+### Current gate semantics (policy only)
+
+This overlay changes what future work is gated; it does not state that a gate
+has passed:
+
+| Work area | Implementation readiness | Operational admission |
+|---|---|---|
+| Phase 0 / reference adapters | Build typed ports and bounded adapter checks | Exact identity, PIT, resource, load/unload, failure, privacy, and authority evidence for each scope |
+| Phase 4 reference model fabric | Integrate Chronos-2-small, TTM-R2, Kronos-small, LightGBM, compact sentiment, and Decision Model adapter seams | Comparative promotion requires later evidence; broad challengers are deferred |
+| Phase 5–6 | Evidence Council, DecisionModelPort, deterministic portfolio/risk/OMS and outcome records may be implemented | Proposals remain constrained; risk/OMS/reconciliation gates govern actions |
+| Phase 8–9 | Hermes, Research Brain, Alpha Team, registries, and dashboard may be implemented in quarantine | Per-capability/source/strategy/model gates govern read/paper/promotion scope |
+| Phase 7 | Validate complete paper flow across sessions and failure/recovery states | Require state integrity, no duplicate orders, deterministic reconciliation, PIT-safe catch-up, bounded resources, and zero unresolved scoped incidents |
+| Phase 10 | No live implementation shortcut | Separate explicit human-approved live gate remains unchanged |
+
+For current historical implementation/admission snapshots and factual records,
+continue to the dated sections below. Their prior blocked states and
+long-duration thresholds are not current phase-dependency rules.
+
+See [the current phase plan](README.md),
+[session lifecycle plan](session-oriented-runtime.md), and
+[architecture ADR 0007](../decisions/0007-session-oriented-operating-model.md).
+
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 The follow-on implementation is draft PR #187 on
@@ -1178,3 +1224,25 @@ policy or silently substituting a source.
 No model, LLM route, Hermes task, browser task, dashboard, or Alpha Team plan
 has trading authority. `RiskKernel` remains the deterministic veto and `OMS`
 remains authoritative. Live-capital deployment is not approved.
+
+## Superseded planning requirements — current policy
+
+- Phase 0 no longer requires 24-hour runtime stability before infrastructure
+  implementation. Reference adapters use bounded Level A integration evidence;
+  repeated load/inference/unload and resource behavior are tested across
+  sessions.
+- Phase 4 no longer selects one GPU winner between Chronos and Kronos or
+  requires broad new-model comparisons before Phase 5–9 implementation. The
+  frozen reference fabric assigns them distinct roles and shares one lazy GPU
+  lease.
+- Phase 5 now includes `DecisionModelPort` and typed `DecisionProposal` between
+  EvidenceGraph and deterministic Portfolio Constructor.
+- Research Brain, Alpha Team, and Hermes implementation may begin before Phase
+  7 admission when their outputs remain quarantined and their authority is
+  constrained.
+- Phase 7 continuous 60-calendar-day operation is no longer the primary
+  workstation gate. Use session-level end-to-end recovery evidence and review
+  the provisional sample target in `session-oriented-runtime.md`.
+- The rows and checkpoint narratives above remain historical records. Their
+  observed outcomes, pending states, interrupted roots, hashes, and old
+  requirement values have not been converted into passes or rewritten.

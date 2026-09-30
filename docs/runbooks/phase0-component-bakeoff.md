@@ -1,5 +1,13 @@
 # Phase-0 component bake-off evidence
 
+> **Current planning interpretation (2026-09-30):** this page records the
+> bounded component drill and historical evidence interpretation. Historical
+> model 24-hour and Phase-7 60-day requirements remain facts, but they are
+> superseded as primary workstation admission criteria. Current model
+> integration uses bounded Level A checks; full-system readiness uses
+> repeated paper sessions and recovery evidence. This documentation update
+> does not run the drill or change any report.
+
 This runbook describes the bounded local component drill. It measures the
 repository's guarded seams without starting a provider, scheduler service,
 browser, archive remote, or venue. It uses no credentials, network calls,
@@ -43,10 +51,12 @@ therefore must retain:
 - quarantined status for any unavailable DuckLake, external Hermes, or real
   rclone/provider integration.
 
-Provider-specific catalog/archive setup, remote gateway evidence, selected-model
-24-hour stability, Phase-7 paper soak, and Phase-10 human approval remain
-separate gates. A changed dependency, source tree, or component boundary
-requires a fresh run; an existing report must never be edited into a pass.
+Provider-specific catalog/archive setup, gateway/source admission, later
+session-validation evidence, and Phase-10 human approval remain separate
+decisions. Old 24-hour/60-day thresholds may remain relevant to optional
+diagnostics or a future server profile, not the workstation default. A changed
+dependency, source tree, or component boundary requires a fresh run; an
+existing report must never be edited into a pass.
 
 The separate DuckLake challenger comparison was completed in an isolated
 environment and rejected on measured resource/catalog portability cost. Its

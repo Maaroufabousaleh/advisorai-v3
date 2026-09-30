@@ -1,32 +1,55 @@
-# Phase 9 — Controlled expansion
+# Phase 9 — Controlled expansion and Research Brain
 
 ## Objective
 
-Expand one independently valuable source, capability, model, asset slice, or
-research challenger at a time without degrading V3-Core.
+Implement the empirical Research Brain and elastic Alpha Team workflows as
+first-class infrastructure, then admit bounded sources, capabilities,
+strategies, and model challengers on their own evidence. Research foundations
+may begin before Phase 7; promotion remains gated.
 
 ## Work packages
 
-1. Add SEC/ALFRED/equity paper sources, corporate actions, and an equity daily
-   council only after point-in-time and capacity validation.
-2. Escalate to browser collectors only when compliant deterministic API/HTTP
-   cannot work; turn stable discoveries into tested deterministic collectors.
-3. Challenge one at a time with TabPFN-TS, TradingAgents, RD-Agent/Qlib,
-   selected LEAN, or QuantLib. Preserve Nautilus as the canonical engine.
-4. Add archive automation and optional OmniCloud visibility only after tested
-   local authority and rclone-crypt restores.
-5. If the optional [Alpha Team extension](alpha-team-extension.md) has passed
-   E0, admit E2-E6 work one bounded candidate, adapter, source, or asset scope
-   at a time. It must emit replayable research artifacts and preserve the
-   canonical data, RiskKernel, OMS, and NautilusTrader owners.
+1. Implement literature provenance and empirical registries for
+   `HypothesisCard`, `CandidateFactor`, `ExperimentArtifact`,
+   `ValidationReport`, `PromotionDecision`, and `OutcomeMemory` with exact
+   code/data/model/environment hashes.
+2. Keep DuckDB/Parquet/SQLite as empirical truth. Treat vector/wiki/memory
+   packages as optional retrieval. Preserve provenance from every material
+   research claim to the originating source.
+3. Implement Scout, Research Lead, Research Brain, Experiment Factory,
+   Statistical Red Team, and outcome workflows as cancellable elastic jobs.
+   Start with one coordinator and at most one or two research workers; one
+   global GPU lease; research yields to trading health; nothing must run while
+   AdvisorAI is shut down.
+4. Record immutable decision-time inputs for eligible paper decisions and
+   attach outcomes later through separate `OutcomeResolution` IDs. Do not
+   train AdvisorAI-CDM in this phase plan.
+5. After integrated paper evidence exists, compare challengers such as
+   TimesFM 3, TTM-R3, Kronos-base, TabPFN-TS, Kev/Jev variants, and future
+   AdvisorAI-CDM. Also add SEC/ALFRED/equity sources, browser collectors, or
+   challenger frameworks only as bounded, separately reviewed work.
 
-## Exit gate
+## Research Brain separation
 
-Each addition demonstrates positive marginal value and does not reduce core
-stability, safety, reproducibility, or headroom.
+- **Knowledge/literature layer:** papers, concepts, equations, methods,
+  relationships, contradictions, citations, and license/provenance. LLM Wiki
+  is a candidate; Qanat is an isolated adapter candidate.
+- **Empirical/scientific layer:** canonical experiment/outcome records,
+  immutable artifact identities, failed/rejected evidence, and promotion
+  decisions. Retrieval systems never replace this truth. Cognee, Mem0, and
+  alternatives remain optional challengers.
+
+## Admission gate
+
+Admit one new source, strategy, capability, model, or asset scope at a time.
+Require exact identity, point-in-time validity, replayability, realistic costs,
+independent review where applicable, and positive marginal evidence for the
+requested scope without safety/resource regression. The gate controls
+promotion and authority; a pending challenger does not block Research Brain,
+experiment registry, or other quarantined implementation.
 
 ## Explicitly out of scope
 
-No source, cloud UI, free gateway, or alternate backtester becomes a single point
-of failure or replaces the authoritative local spine. No Alpha Team research
-result becomes an order, a risk-limit change, or a self-promotion path.
+No autonomous strategy activation, no self-promotion, no broker credentials in
+research/sandbox processes, no live-capital authority, and no new model
+comparison prerequisite for infrastructure.
