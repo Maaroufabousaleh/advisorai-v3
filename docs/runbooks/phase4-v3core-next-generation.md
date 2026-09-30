@@ -2,9 +2,12 @@
 
 > This earlier 64-case runbook is retained for review history. The current
 > release-candidate contract is documented in
-> `phase4-v3core-longrun-release-candidate.md` and must be used for any future
-> long-run planning. V3B is qualified canary evidence only; no long run has
-> been launched and live capital remains unauthorized.
+> `phase4-v3core-longrun-release-candidate.md`. Under the 2026-09-30 planning
+> rebaseline, neither document is a prerequisite for workstation
+> implementation or Integrated Paper Session Validation. Do not launch a
+> candidate run to unblock infrastructure; broad model evaluation follows
+> complete-system evidence. V3B remains qualified canary evidence only; no
+> long run has been launched and live capital remains unauthorized.
 
 This runbook is for a future fresh Phase-4 generation. It does not authorize a
 launch while a protected source or CUDA worker is active, and it does not

@@ -6,8 +6,12 @@ This is an operational sub-plan for moving from deterministic fixtures to real
 external read APIs, real API-LLM calls, and one real paper/testnet venue. It is
 subordinate to the authoritative
 [`AdvisorAI V3 architecture`](../../advisorai-federated-multi-agent-quant-architecture-v3.md)
-and the existing Phase 0–7 plans. It creates no new admission path, does not
-relax a phase gate, and does not enable live capital.
+and the current phase plans. It creates no new admission path, does not relax
+authority gates, and does not enable live capital. The 2026-09-30 planning
+rebaseline makes the owner-operated session workstation authoritative. Old
+24-hour/60-day requirements in prior evidence remain historical; they are not
+the primary workstation gate. See
+[`session-oriented-runtime.md`](session-oriented-runtime.md).
 
 ```text
 real public/licensed data + real LLM reasoning + local deterministic services
@@ -15,6 +19,10 @@ real public/licensed data + real LLM reasoning + local deterministic services
                   one approved paper/testnet execution venue only
                                       ↓
        local reconciliation, attribution, incidents, replay, and scorecards
+
+The target decision chain inserts a typed Decision Model proposal before the
+deterministic Portfolio Constructor. The displayed high-level bridge above
+does not authorize an LLM or model to propose orders directly.
 ```
 
 LLMs, Hermes, browser tasks, collectors, capabilities, and dashboards never
@@ -23,10 +31,11 @@ until the Phase 10 human-approval gate.
 
 ## Objective and fixed V3-Core scope
 
-Operate the compact V3-Core loop continuously with actual external inputs while
-execution stays paper/testnet-only. Preserve point-in-time truth, typed evidence,
-deterministic RiskKernel/OMS authority, local state, reproducible replay, and
-controlled learning from paper-trading problems.
+Operate the compact V3-Core loop across owner-started sessions with actual
+external inputs while execution stays paper/testnet-only. Recover and reconcile
+state at startup, detect permitted data gaps, preserve point-in-time truth,
+typed evidence, deterministic RiskKernel/OMS authority, local state,
+reproducible replay, and controlled learning from paper-trading problems.
 
 | Area | Fixed transition scope |
 |---|---|
@@ -125,8 +134,10 @@ silently substituted.
 5. Apply Standard/Deep API budgets and Resource Governor admission.
 6. On failure, return deterministic recovery/abstention behavior. Recovery is not
    independent evidence.
-7. Admit LiteLLM/OmniRoute only after their independent Phase-0 privacy,
-   identity, resource, failure, and 24-hour stability evidence.
+7. Use exact gateway identity, typed output, privacy, resource, failure, and
+   authority evidence for the selected integration scope. Long route endurance
+   may be retained as optional diagnostic or server-profile evidence, not a
+   workstation infrastructure prerequisite.
 
 **Acceptance:** each output is attributable to a pinned route; malformed or late
 output, forbidden tool calls, or budget/circuit failure causes abstention and
@@ -151,19 +162,25 @@ cannot affect RiskKernel or OMS.
 stale-data, hash mismatch, and reconciliation mismatch fixtures fail safely and
 produce replayable ledger/incident evidence.
 
-## Workstream E — continuously operated decision loop
+## Workstream E — session-operated decision loop
 
-1. Run collector, data-writer, account-ledger, resource-governor, market-node,
-   and advisor API as separately owned local workers/processes.
+1. At session start, acquire the owner lock; validate code/config/ledger
+   identities; recover and reconcile paper/testnet state; find exact collector
+   watermarks and permitted data gaps; backfill and rebuild current PIT state;
+   then start only required collectors/workers.
 2. Schedule a decision only after closed 5-minute data is persisted and a valid
    one-hour snapshot exists.
-3. Enforce the chain: evidence council → `DecisionBundle`/target → Portfolio
-   Constructor → RiskKernel → OMS → testnet transport.
-4. Build a read-only local operator interface only after service ownership is
+3. Enforce the chain: EvidenceGraph → `DecisionModelPort`/typed proposal →
+   deterministic Portfolio Constructor → RiskKernel → OMS → Nautilus
+   paper/testnet transport.
+4. At stop, stop new proposals/jobs, finish or checkpoint bounded work,
+   reconcile orders/account state, persist ledgers/watermarks, unload workers,
+   release locks/leases, and write an immutable session-end record.
+5. Build a read-only local operator interface only after service ownership is
    stable. It may display health, freshness, resources, snapshots, gateway route
    and cost, evidence/dissent, targets, risk, orders/fills, reconciliation, TCA,
    attribution, and incidents.
-5. The operator interface has no direct order button, limit editor, secret viewer,
+6. The operator interface has no direct order button, limit editor, secret viewer,
    arbitrary SQL, or raw capability execution.
 
 **Acceptance:** UI/API failure cannot stop raw persistence, risk, OMS,
@@ -175,7 +192,8 @@ and immutable artifacts.
 Persist the complete chain for each decision:
 
 ```text
-snapshot → quality report → evidence → forecasts → target → risk → execution
+snapshot → quality report → evidence/forecasts → Decision Model proposal
+→ Portfolio Constructor → risk → execution
 plan/order/fill → reconciliation → TCA/attribution → realized outcome → scorecard
 ```
 
@@ -197,24 +215,30 @@ plan/order/fill → reconciliation → TCA/attribution → realized outcome → 
 offline replay, an incident or scorecard record, and a corrective regression
 test—never autonomous production modification.
 
-## Workstream G — controlled soak and existing gate evidence
+## Workstream G — integrated session and recovery evidence
 
-1. Produce the required Phase-0 24-hour resource/privacy/failure evidence for
-   selected runtime components.
-2. Run continuously, inject failures, and perform restart, corruption, and
-   archive-restore drills.
-3. Compare paper outcomes with no-trade, equal-allocation, inverse-volatility,
-   and simple risk-budget baselines after fees, spread, impact, delay, funding,
-   and borrowing where applicable.
-4. Retain adverse-condition evidence for outages, stale/duplicate data, spread/
-   depth deterioration, volatility jumps, correlation breakdown, and partial-fill
-   recovery.
-5. Accumulate the Phase-7 record for at least 60 calendar days and a meaningful
-   decision/trade sample. Time alone is not a profitability claim.
+1. Repeat clean start → operate → stop → restart; compare authoritative account,
+   order, position, P&L, ledger, and mission state.
+2. Exercise source/network outage, stale-data abstention, exact gap detection,
+   permitted backfill, and PIT snapshot rebuild after hours/days offline.
+3. Crash with an open/ambiguous paper order; reconcile with venue state before
+   retry and verify there is no duplicate action.
+4. Exercise unclean shutdown, ledger rebuild, interrupted-agent checkpoint,
+   model/GPU-worker failure, lock/lease cleanup, and repeated lazy model
+   load/inference/unload with bounded residual resources.
+5. Compare outcomes with no-trade, equal-allocation, inverse-volatility, and
+   simple risk-budget baselines after fees, spread, impact, delay, funding, and
+   borrowing where applicable.
+6. Accumulate evidence across independent sessions and varied market/source
+   states. A provisional 20–30 meaningful sessions and roughly 100–150
+   operating hours may inform review, subject to evidence quality; neither is a
+   magic threshold or calendar-time substitute.
 
-**Acceptance:** stable headroom, successful recovery/restore evidence, no
-unresolved safety or reconciliation incident, and measured net evidence after
-realistic costs. This remains a paper/testnet gate, not a live-capital decision.
+**Acceptance:** complete-chain traceability, state equivalence, no duplicate
+orders, deterministic reconciliation, PIT-safe gap recovery, truthful job
+status, bounded resources, and no unresolved safety/reconciliation/data
+integrity incident. Long continuous runtime is optional diagnostic or
+deployment-profile evidence.
 
 ## Test and evidence matrix
 
@@ -224,7 +248,7 @@ realistic costs. This remains a paper/testnet gate, not a live-capital decision.
 | Recorded replay | None | raw fixtures, schema drift, gaps, snapshots, decisions, fills |
 | Adapter integration | Explicit opt-in | auth, rate limit, timeout, reconnect, testnet state query |
 | Paper shadow | Real read APIs/testnet | full decision chain, reconciliation, TCA, scorecards |
-| Soak/recovery | Real paper environment | restarts, incidents, archive restore, timed Phase-7 evidence |
+| Session/recovery validation | Real paper environment | repeated sessions, crash/restart, gaps/backfill, reconciliation, job/worker failure, resources and state equivalence |
 
 Integration tests must be separately invoked, redact outputs, use a dedicated
 testnet account, and never run from an untrusted capability or pull request.
@@ -246,7 +270,8 @@ withdrawals/transfers, a second venue, equities, browser collectors, Hermes
 execution, permanent agent fleets, automatic self-modification, and any cloud
 service as authoritative state.
 
-It is complete when the real-data/testnet loop runs continuously with traceable,
-fail-closed hand-offs and reproducible paper-problem remediation. Completion is
-evidence for existing phases only; it does not mark Phase 0, Phase 7, or Phase 10
-as passed without their original timed and human evidence.
+It is complete for the workstation milestone when the real-data/testnet loop
+can start, recover, operate, and stop across sessions with traceable fail-closed
+hand-offs and reproducible paper-problem remediation. Completion is
+implementation/integration evidence only; it does not admit a model, strategy,
+live capital, or any capability beyond its recorded scope.

@@ -1,5 +1,22 @@
 # V3 implementation audit
 
+## Planning interpretation addendum — 2026-09-30
+
+The dated implementation/evidence audits below are preserved as historical
+snapshots. Their code identities, test results, active-root descriptions, and
+gate states are not updated by this planning addendum. Going forward, audit
+**implementation readiness** separately from **operational admission**. A
+quarantined component may be implemented and locally tested without implying
+model/source/capability promotion or changing any past gate result.
+
+The current product target is a session-oriented workstation. Audit start/stop,
+recovery, paper account/order reconciliation, PIT gap handling, interrupted
+job truth, worker/lease cleanup, and state equivalence across sessions as
+implementation work. Phase 7 admission is based on the complete integrated
+paper workflow across sessions, not a required 60-day uninterrupted process.
+See [session-oriented runtime](session-oriented-runtime.md) and the
+[current gate matrix interpretation](gate-matrix.md).
+
 This audit maps the authoritative architecture and its phase sub-plans to the
 current executable base. “Local” means the boundary, contract, or deterministic
 fixture exists in this repository. It does not convert an external, timed, or

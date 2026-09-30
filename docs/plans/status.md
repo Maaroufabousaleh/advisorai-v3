@@ -1,8 +1,32 @@
 # Implementation status and gate evidence
 
-This record distinguishes implementation coverage from an architecture gate that
-requires external, time-based evidence. A green unit test does not claim a 24-hour
-or 60-day operational gate.
+## Current planning policy addendum — 2026-09-30
+
+This addendum supersedes planning assumptions only; it does not update, erase,
+or reinterpret the factual measurements below. Those dated status entries,
+including model runs, failed/aborted roots, hashes, and old gate states, remain
+as recorded.
+
+The product target is an owner-operated session workstation, typically about
+5–8 hours per active session, with clean stop and safe restart after hours or
+days offline. Session lifecycle, state recovery, paper/testnet reconciliation,
+permitted data catch-up, PIT correctness, and bounded resource cleanup are
+primary future implementation/validation requirements. Continuous 24-hour or
+60-day uptime is no longer the primary workstation admission criterion.
+
+Implementation readiness and operational admission are separate. Safe typed
+and quarantined Evidence Council, Decision Model, session lifecycle, Hermes,
+Research Brain, Alpha Team, experiment registry, outcome memory, and dashboard
+work may proceed before earlier admission gates pass. Promotion and authority
+remain controlled by versioned gates. No historical gate result is changed by
+this policy note. See [phase plans](README.md) and
+[session-oriented runtime plan](session-oriented-runtime.md).
+
+The historical status entries below distinguish implementation coverage from
+external evidence and human authorization. A passing unit test does not itself
+create operational admission. Duration-specific rows below describe the
+previous plan where dated and do not supersede the 2026-09-30 workstation
+policy addendum.
 
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
@@ -1166,6 +1190,14 @@ PID `70598` remains the untouched selected-model stability process. Its latest
 read-only sample was sequence 81 at `2026-08-11T01:26:03.661578Z`, record
 SHA-256 `cd5525a4c0fe993999708fa10d0736623045604765e025a43e169340610c89fe`;
 the 24-hour gate remains `PENDING_STABILITY`.
+
+The phase table that follows is a historical implementation/admission
+snapshot under the prior plan. Its 24-hour and 60-day requirement cells are
+preserved as recorded and superseded as current workstation planning policy by
+the 2026-09-30 addendum above.
+The row stating that Alpha Team implementation was plan-only is also an as-of
+checkpoint, not a current dependency rule: quarantined Research Brain/Alpha
+Team implementation may begin before Phase 7.
 
 | Phase | Implementation | Automated evidence | Gate status |
 |---|---|---|---|

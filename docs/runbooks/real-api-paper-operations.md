@@ -1,5 +1,12 @@
 # Real API / paper-execution operations
 
+> **Current planning policy (2026-09-30):** this runbook is for supervised,
+> owner-operated paper/testnet sessions. Start/stop/recovery, reconciliation,
+> PIT-safe data catch-up, interrupted-work handling, and resource cleanup are
+> the primary workstation requirements. Historical 24-hour and 60-day records
+> remain unchanged; continuous uptime is an optional diagnostic or separate
+> future server-profile requirement.
+
 This runbook is the operator hand-off for the
 [real API and paper-execution transition plan](../plans/real-api-paper-transition.md).
 It keeps the V3-Core scope fixed at BTC/ETH, one reviewed paper/testnet venue,
@@ -187,43 +194,37 @@ The dashboard is read-only with respect to orders and risk limits. Its guarded
 paper halt/resume commands are control-plane requests recorded in the incident
 ledger; they cannot enable live capital.
 
-## Durable Phase-7 process boundary
+## Integrated Paper Session Validation
 
-`PaperRuntime.run_forever()` is the decision-loop library, not by itself a
-durable soak qualification. Once Phase 0–6 prerequisites are admitted, wrap an
-already-wired runtime/sample collector in
-`advisorai.soak.DurablePaperSoakRunner` and run it under the reviewed host
-supervisor:
+Phase 7 now validates the full paper/testnet workflow across repeated
+owner-operated sessions. The legacy `DurablePaperSoakRunner` and its
+hash-chained sample format may remain useful for bounded or optional endurance
+diagnostics; its former 60-calendar-day requirement is superseded for the
+workstation. Do not launch or resume a long-running root solely to satisfy that
+old requirement.
 
-```python
-from advisorai.soak import DurablePaperSoakRunner, SoakRunConfig
+The session evidence must cover:
 
-runner = DurablePaperSoakRunner(
-    config=SoakRunConfig(
-        run_id="operator-chosen-immutable-id",
-        started_at=operator_start_time,
-        code_sha256=reviewed_code_sha256,
-        configuration_sha256=reviewed_config_sha256,
-        policy_sha256=reviewed_policy_sha256,
-        model_roster_sha256=admitted_model_roster_sha256,
-        source_roster_sha256=admitted_source_roster_sha256,
-        venue_identity="binance_spot_testnet",
-        venue_environment="paper_testnet",
-        command="/reviewed/supervisor command with no secret-bearing arguments",
-    ),
-    evidence_root=state_root / "phase7-paper-soak",
-    sample_factory=collect_one_closed_paper_interval,
-)
-runner.run()
-```
+- clean start/operate/stop/restart with equivalent authoritative account,
+  order, position, P&L, ledger, and mission state;
+- stale-source abstention, network/source recovery, exact gap/backfill, and
+  PIT snapshot rebuild;
+- open/ambiguous paper order plus crash, followed by venue reconciliation and
+  no duplicate order;
+- unclean machine shutdown, ledger rebuild, paper account reconstruction,
+  interrupted research/Hermes checkpoint truth, and model/GPU worker death;
+- repeated lazy model load/inference/unload, bounded residual RAM/VRAM,
+  processes, file descriptors, locks, and runtime/GPU leases; and
+- end-to-end trace through evidence, Decision Model proposal when admitted,
+  RiskKernel, OMS/Nautilus, reconciliation, TCA/attribution, and later outcomes.
 
-The sample factory must call the existing evidence → target → RiskKernel → OMS
-→ Binance testnet chain and return only sanitized typed scorecard data. The
-runner itself exposes no order or credential methods. `config.json`,
-`samples.jsonl`, `status.json`, `runner.lock`, and the terminal-only
-`summary.json` are the resumable evidence artifacts. Do not launch this root
-before the earlier gates are admitted, and do not treat a bounded test run as a
-60-day result.
+The owner requests stop explicitly; new proposals and research scheduling
+cease, bounded jobs checkpoint or cancel, outstanding paper orders reconcile,
+ledgers/outbox/watermarks flush, workers unload, locks/leases release, and an
+immutable session-end record is written. Emergency shutdown prioritizes the
+kill switch, deterministic safety, and state integrity over research
+completion. Full lifecycle details are in
+[`../plans/session-oriented-runtime.md`](../plans/session-oriented-runtime.md).
 
 ## Required operator work that the agent cannot perform
 
@@ -237,15 +238,15 @@ before the earlier gates are admitted, and do not treat a bounded test run as a
   and rotate any value copied into an unsafe location.
 - Run the explicit network smoke test and inspect redacted evidence for auth,
   schema, rate-limit, timeout, reconnect, account-read, and cancel behavior.
-- Keep the supervised process online with correct system time, network,
-  storage, power, backups, and alerting; perform restart, corruption, and
-  archive-restore drills.
+- Keep system time, network, storage, power, and backups appropriate for the
+  active session; test clean stop, crash recovery, ledger rebuild, and archive
+  restore without assuming a permanently running process.
 - Review incidents, approve corrective regression tests, and decide whether a
   challenger may enter shadow evaluation. The learning loop never self-promotes
   a model, route, prompt, source, or risk change.
-- Accumulate the existing Phase 0 stability evidence and Phase 7 60-day soak
-  evidence, then make the explicit human decision required by the authoritative
-  V3 plan. No agent can attest to those timed external gates.
+- Review operating-scope admission evidence and make any required explicit
+  human decision. Historical timed evidence remains preserved; no agent can
+  grant admission or attest to a user/operator decision.
 
 ## Stop conditions
 

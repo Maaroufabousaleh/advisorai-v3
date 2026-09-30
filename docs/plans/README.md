@@ -2,62 +2,84 @@
 
 These plans decompose the authoritative architecture in
 [`advisorai-federated-multi-agent-quant-architecture-v3.md`](../../advisorai-federated-multi-agent-quant-architecture-v3.md).
-They do not add alternate ownership, bypasses, or live-trading scope. A phase may
-start only after all earlier gates pass; expansion remains gate-driven rather than
-calendar-driven.
+They preserve one roadmap and the existing deterministic owners. The 2026-09-30
+planning rebaseline makes implementation readiness and operational admission
+separate tracks.
 
-| Phase | Sub-plan | Delivery boundary | Exit gate |
+## Two-track phase model
+
+**Implementation readiness** covers architecture, interfaces, services,
+workflows, lifecycle, sandboxing, agents, adapters, Research Brain, and
+dashboard work. Safe components may be implemented in parallel across phase
+boundaries when they remain typed, quarantined, research/shadow/paper-only, do
+not receive broker/order/risk-limit authority, and cannot grant themselves
+admission.
+
+**Operational admission** covers whether an exact model/source/capability/
+strategy/configuration may operate in a particular scope. Its gates remain
+sequential where safety requires. A pending earlier model or timed gate blocks
+promotion or authority, not safe software implementation downstream.
+
+| Phase | Sub-plan | Implementation focus | Operational admission focus |
 |---|---|---|---|
-| 0 | [contracts and bake-offs](phase-00-contracts-and-bakeoffs.md) | Select reproducible, resource-safe candidates | Fits envelopes, reproducible versions, 24-hour stability |
-| 1 | [safety, data truth, resources](phase-01-safety-data-resources.md) | Typed immutable foundation | Deterministic rebuild, leakage, idempotency and rollback pass |
-| 2 | [deterministic paper core](phase-02-paper-core.md) | One-venue paper execution safety path | Failures reconcile and fail safely |
-| 3 | [V3-Core data spine](phase-03-v3-core-data-spine.md) | Crypto data, context and lineage | Replay, lineage and disagreements pass |
-| 4 | [quantitative baseline council](phase-04-quant-baselines.md) | Calibrated forecast candidates | Net utility/risk value within resources |
-| 5 | [typed evidence council](phase-05-evidence-council.md) | Independent evidence to target portfolio | No false quorum or contract bypass |
-| 6 | [institutional controls](phase-06-institutional-controls.md) | Portfolio/risk validity and attribution | Every paper order passes all checks |
-| 7 | [unattended paper soak](phase-07-paper-soak.md) | Continuous V3-Core proof | 60 days plus stable, safe evidence |
-| 0–7 bridge | [real API and paper-execution transition](real-api-paper-transition.md) | Real data/LLM APIs with one paper/testnet venue | Supplies evidence to existing gates; does not create a new gate |
-| Post-7; Phase 8/9 scope | [Alpha Team extension](alpha-team-extension.md) | Optional governed research intake, factor discovery, and validation plane | E0-E7 evidence gates; no new trading authority or altered V3 gate |
-| 8 | [Hermes and Skill Foundry](phase-08-hermes-skill-foundry.md) | Quarantined capability creation | Active-read only, no trading authority |
-| 9 | [controlled expansion](phase-09-controlled-expansion.md) | One challenger/source at a time | Positive marginal value without regression |
-| 10 | [limited live capital](phase-10-limited-live-capital.md) | Explicitly approved bounded live operation | Correctness survives all AI/research outages |
+| 0 | [contracts and bounded integration qualification](phase-00-contracts-and-bakeoffs.md) | Stable ports, reference adapters, PIT/identity/resource/failure contracts | Level A participation only for exact reviewed identity; broad bake-offs deferred |
+| 1 | [safety, data truth, resources](phase-01-safety-data-resources.md) | Immutable data, ledgers, resource and session lifecycle | Deterministic rebuild, leakage, idempotency, recovery and rollback evidence |
+| 2 | [deterministic paper core](phase-02-paper-core.md) | Paper/testnet execution and reconciliation spine | Reconcile failures safely before any paper scope is admitted |
+| 3 | [V3-Core data spine](phase-03-v3-core-data-spine.md) | PIT collection, quality, watermarks and backfill | Source-specific provenance, freshness, recovery and disagreement evidence |
+| 4 | [quantitative reference fabric](phase-04-quant-baselines.md) | Chronos-2-small, TTM-R2, Kronos-small, LightGBM, compact FinBERT adapter contracts | Level A integration; comparative model admission remains separate |
+| 5 | [Evidence Council and Decision Model](phase-05-evidence-council.md) | EvidenceGraph, typed DecisionModelPort, DecisionProposal, portfolio handoff | Evidence sufficiency, calibration, missing data and dissent remain fail-closed |
+| 6 | [institutional controls](phase-06-institutional-controls.md) | Portfolio/risk/OMS controls, attribution, outcome and experiment records | Every paper action stays under deterministic limits and reconciliation |
+| 7 | [Integrated Paper Session Validation](phase-07-integrated-paper-session-validation.md) | Complete end-to-end session, stop, restart, gap and failure validation | Repeated-session system evidence; no mandatory calendar uptime gate |
+| 8 | [Hermes and Skill Foundry](phase-08-hermes-skill-foundry.md) | Isolated research/build runtime; implementation may begin earlier | Per-capability sandbox/reproducibility/read-only admission |
+| 9 | [controlled expansion](phase-09-controlled-expansion.md) | Research Brain, Alpha Team, experiment/outcome memory; implementation may begin earlier | One versioned challenger/source/capability scope at a time |
+| 10 | [limited live capital](phase-10-limited-live-capital.md) | Separate live-control design and review | Explicit human approval and strictly separate bounded-live gate |
 
-The repository contains executable boundaries and deterministic fixtures across
-all phases, while external admission gates remain closed. It deliberately does
-not enable live credentials, live order submission, unmeasured named-model
-promotion, or automatic capability authority.
+The [session-oriented runtime plan](session-oriented-runtime.md) defines start,
+stop, crash recovery, session records, and validation scenarios. The primary
+near-term milestone is **AdvisorAI Integrated Alpha**: start, recover, run the
+paper/testnet chain through reconciliation and outcome memory, then stop and
+resume safely. It is not a profitability or live-capital claim.
 
-See [traceability.md](traceability.md) for the architecture-to-sub-plan mapping.
-See [implementation-audit.md](implementation-audit.md) for the package-to-code,
-test, and external-gate evidence matrix.
-See [gate-matrix.md](gate-matrix.md) for the current requirement-by-requirement
-state, blocker, and next admissible action.
-The durable-session handoff is maintained in
-[continuation-checkpoint.md](continuation-checkpoint.md).
+## Reference model policy
 
-The user-facing operator console and its security boundary are specified in
-[secure-operator-dashboard.md](secure-operator-dashboard.md); it is an interface
-over these phase-owned services, not a new trading authority.
+The frozen integration fabric is Chronos-2-small (probabilistic forecasting),
+TTM-R2 (lightweight temporal control), Kronos-small (finance/OHLCV evidence),
+LightGBM (structured baseline), FinBERT or the selected compact financial
+sentiment implementation, a local typed Decision Model reference (Laya or
+equivalent), and one on-demand strong reasoning LLM behind `ModelGatewayPort`.
+Chronos and Kronos have complementary roles and share a single lazy global GPU
+lease. Jev is optional and never required. This roster is for integration,
+not permanent approval. Broad model challenger work follows complete-system
+evidence.
 
-The transition's manual deployment and external-evidence work is recorded in
-[`docs/runbooks/real-api-paper-operations.md`](../runbooks/real-api-paper-operations.md).
+## Historical evidence and current policy
 
-The credential-free Phase-0 component evidence drill and its quarantine
-interpretation are recorded in
-[`docs/runbooks/phase0-component-bakeoff.md`](../runbooks/phase0-component-bakeoff.md).
+Historical 24-hour and 60-day evidence records, interrupted roots, old
+preregistrations, and hashes remain unchanged. Their old continuous-duration
+requirements are **superseded planning requirements** for the owner-operated
+workstation, not falsified historical facts. Long endurance tests remain
+optional diagnostics or profile-specific gates for a future always-on server
+deployment.
 
-The real two-provider rclone-crypt qualification boundary and its scoped
-operator procedure are recorded in
-[`docs/runbooks/rclone-archive-qualification.md`](../runbooks/rclone-archive-qualification.md).
+## Status and evidence references
 
-The pinned external Hermes runtime review, synthetic-task evidence, and OS
-namespace limitations are recorded in
-[`docs/runbooks/external-hermes-review.md`](../runbooks/external-hermes-review.md).
+The repository contains implementation and historical evidence at different
+maturity levels. A passing test, local probe, or short model integration check
+does not itself grant operational admission. See:
 
-The Phase-8 Hermes capability lifecycle evidence and active-read boundary are
-recorded in
-[`docs/runbooks/phase8-capability-evidence.md`](../runbooks/phase8-capability-evidence.md).
+- [traceability](traceability.md) for the implementation/admission ownership map;
+- [implementation audit](implementation-audit.md) for current and historical code/evidence summaries;
+- [gate matrix](gate-matrix.md) for the current policy interpretation and preserved evidence state;
+- [status dossier](status.md) for dated evidence records;
+- [continuation checkpoint](continuation-checkpoint.md) for append-only handoff history.
 
-The Alpha Team extension is an optional, post-Core research plan. It remains
-blocked until its E0 prerequisite and is not implementation or admission
-evidence for any existing phase.
+The secure operator console is specified in
+[`secure-operator-dashboard.md`](secure-operator-dashboard.md); it is a
+read/projection and guarded workflow surface, not another trading authority.
+
+Operational procedures remain in
+[`docs/runbooks/real-api-paper-operations.md`](../runbooks/real-api-paper-operations.md),
+[`docs/runbooks/phase0-component-bakeoff.md`](../runbooks/phase0-component-bakeoff.md),
+[`docs/runbooks/model-runtime-qualification.md`](../runbooks/model-runtime-qualification.md),
+and the provider-specific runbooks. Their historical measurements remain
+intact; current execution requirements follow the policies above.

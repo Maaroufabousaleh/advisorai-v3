@@ -2,17 +2,19 @@
 
 ## Status and authority
 
-This is the integrated, optional extension plan for the governed Alpha Team,
-continuous research intake, alpha discovery, and local Research Brain described
+This is the integrated implementation/admission plan for the governed Alpha
+Team, queued research intake, alpha discovery, and local Research Brain described
 in [`advisorai-v3-alpha-team-plan.md`](../../advisorai-v3-alpha-team-plan.md).
 It supplements the authoritative
 [`advisorai-federated-multi-agent-quant-architecture-v3.md`](../../advisorai-federated-multi-agent-quant-architecture-v3.md)
 and the existing Phase 0-10 plans; it does not create a second roadmap, replace
 their owners, or weaken any gate.
 
-The extension is plan-only. It cannot start until the E0 prerequisite below is
-met, and no implementation, admission, paper result, or live-readiness claim is
-implied by this document.
+This document is a target plan, not implementation, admission, paper-result,
+or live-readiness evidence. Research Brain and Alpha Team foundations may be
+implemented before Phase 7 if they remain quarantined and cannot grant
+themselves admission. E stages govern capability/operating-scope evidence, not
+permission to build safe infrastructure.
 
 ## Boundary and invariants
 
@@ -45,7 +47,9 @@ The following rules apply to every stage:
 4. Generation, evaluation, and promotion use separate processes and
    permissions. Early promotion also requires recorded human approval.
 5. Mining, training, embedding, Hermes, and large backtests are queued jobs;
-   they yield their GPU lease and resource budget to trading health.
+   they run within active owner sessions or separately admitted deployment
+   profiles, yield their GPU lease and resource budget to trading health, and
+   need not continue while AdvisorAI is shut down.
 6. An Alpha Team recommendation may tighten or recommend no-trade. It may
    never relax a RiskKernel limit.
 
@@ -73,6 +77,28 @@ Librarian, Quant Research Lead, Factor Miner, Strategy Engineer, Experiment
 Conductor, Statistical Red Team, Portfolio/Risk Reviewer, and Hermes Capability
 Engineer. On the target laptop, begin with one coordinator and at most two
 research workers; the coordinator serializes GPU work and caps API fan-out.
+
+Keep Research Brain layers separate:
+
+- **Knowledge/literature brain:** source-linked papers, concepts, equations,
+  methods, relationships, contradictions, citations, licenses, and versions.
+  LLM Wiki is a candidate retrieval interface; Qanat is a candidate isolated
+  research/experiment adapter.
+- **Empirical/scientific brain:** canonical AdvisorAI truth in DuckDB/Parquet/
+  SQLite and immutable registries for hypotheses, candidates, experiments,
+  validation, promotion, outcomes, and exact code/data/model/environment
+  hashes. Vector/wiki systems, including Cognee and Mem0, are optional
+  retrieval infrastructure only. Every material claim links to its source.
+
+The future custom Decision Model data pipeline is design-only. An eligible
+paper cycle stores immutable decision-time inputs, exact model/evidence
+identities, ancestry, disagreement, uncertainty, portfolio state, costs, and
+typed model outputs. Optional Laya/Kev/Jev/frontier-model teachers and human
+annotations have separate provenance. Later labels attach by immutable links:
+`DecisionRecord -> OutcomeResolution -> TrainingExample`. Realized returns,
+MAE/MFE, volatility, drawdown, fees/slippage, fills, incremental utility,
+decision/abstention quality, and regime are not added to the pre-decision
+record. No training is started by this plan.
 
 ## Research and experiment policy
 
@@ -109,22 +135,28 @@ independent NautilusTrader replay using the canonical event, cost, and latency
 model. Qlib, QuantaAlpha, external benchmarks, and other frameworks are
 challengers only; they cannot become a V3 truth source or execution authority.
 
-## Extension sequence and gates
+## Implementation and operational admission sequence
+
+The stages refine the existing Phase 8/9 research scope. Safe implementation
+may start early; each gate controls operational admission or promotion only.
 
 | Stage | Integration point and deliverable | Gate to proceed |
 |---|---|---|
-| E0 - V3-Core prerequisite | No extension component; confirm Phase 0-7 paper, recovery, data, risk, and resource gates with AI services stopped | All prerequisite gates pass |
-| E1 - Research Brain add-on | After Phase 7: typed artifacts, DuckDB/SQLite registries, evidence graph, source policy, Scout, provenance and license checks | One paper and one failed strategy trace and replay end-to-end |
-| E2 - Controlled Alpha Lab | Inside Phase 8/9 research scope: DSL, feature catalog, baseline suite, fast screen, full manifests, validation/red team, dashboard views | Deliberately leaky/overfit candidates are rejected and a known baseline reproduces |
+| E0 - Authority/artifact contract | Define ports, permissions, versioned artifacts, and replay boundary; no Phase-7 prerequisite for implementation | Contracts preserve canonical owners; quarantined results cannot acquire authority |
+| E1 - Research Brain foundations | Typed artifacts, DuckDB/SQLite registries, evidence graph, source policy, session-bounded Scout, provenance and license checks | One source claim, one failed experiment, and one outcome trace/replay with no provenance gaps |
+| E2 - Controlled Alpha Lab | Inside Phase 9: DSL, feature catalog, baseline suite, fast screen, manifests, validation/red-team workflow, dashboard views | Deliberately leaky/overfit candidates are rejected and a known baseline reproduces |
 | E3 - First V3 strategy challenger | Small BTC/ETH research-only candidate set using `MarketStateArtifact` and independent Nautilus replay | Incremental net value over the V3 baseline across preregistered regimes; eligible only for paper shadow |
 | E4 - Optional capability adapters | One Hermes, QuantaAlpha, AlphaAgent, Qlib, DEAP, or Optuna adapter at a time, with CapabilityCards and sandbox checks | Removable adapter cannot escape its sandbox and emits a replayable artifact |
 | E5 - Equity and long-horizon extension | SEC/IR/corporate-action snapshots, equity factor families, research cards, and paper ledger | Clean point-in-time/corporate-action history; crypto assumptions are not reused blindly |
-| E6 - Controlled candidate expansion | Limited approved-paper candidates, decay monitoring, and allocation research | At least 60 healthy unattended paper days per scope with no unresolved reconciliation or data-quality incident |
+| E6 - Controlled candidate expansion | Limited approved-paper candidates, decay monitoring, and allocation research | Accumulated evidence across independent sessions and relevant market states; no unresolved safety/reconciliation/data-quality incident. A provisional 20–30 meaningful sessions / 100–150 operating hours may inform review, not act as a calendar-time pass rule |
 | E7 - Optional bounded-live scope | No new architecture: use the existing Phase 10 credential enclave, caps, approvals, and emergency controls | Separate explicit go-live review, operational parity, and tested immediate paper rollback |
 
-Stages are evidence-driven, not calendar-driven. E1 is optional and must not
-delay or alter Phase 8. E2-E6 remain challenger work under Phase 8/9 ownership;
-E7 does not reduce the Phase 10 gate.
+Stages are evidence-driven, not calendar-driven. Research Brain implementation
+is not optional and does not wait for Phase 7. E2-E6 remain challenger work
+under Phase 9 ownership; E7 does not reduce the Phase 10 gate. Historical
+24-hour/60-day requirements remain facts about prior plans/evidence but are
+superseded as primary workstation readiness criteria. Optional server profiles
+may retain duration-specific gates.
 
 ## Capability and dependency admission
 
@@ -150,7 +182,8 @@ snapshot, market state, factor/forecast evidence, RiskKernel result, order/fill,
 TCA, and attribution. The existing `advisor-api` and lightweight local views are
 the default; no permanent Grafana/Prometheus stack is introduced without need.
 
-The first implementation slice after E0 is deliberately narrow:
+The first implementation slice is deliberately narrow and may begin while
+earlier model or session admission remains pending:
 
 1. Add the six artifacts and SQLite/DuckDB registries.
 2. Implement an allow-listed arXiv/OpenAlex/GitHub Scout with provenance.
@@ -160,8 +193,11 @@ The first implementation slice after E0 is deliberately narrow:
    rejection.
 5. Export one `ExperimentArtifact` from a screen and reproduce it in Nautilus.
 6. Add the Research Inbox, Factor Registry, and Experiment Inspector.
-7. Run at most one fixed-scope mining mission: 50 candidates, fixed windows and
-   budget, with all trials recorded.
+7. Before any candidate-mining mission, verify the full-system session loop and
+   immutable experiment/outcome lineage. Early Research Brain implementation
+   may use existing/historical or synthetic fixtures for contract development;
+   do not start a new model experiment or broad challenger search as part of
+   the infrastructure workstream.
 
 No stage authorizes a live order, live credential, withdrawal permission, or
 automatic live-capital increase.

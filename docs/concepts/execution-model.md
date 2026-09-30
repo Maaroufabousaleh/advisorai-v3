@@ -1,6 +1,6 @@
 # Execution model
 
-The implemented execution path is a deterministic paper/testnet transition loop. It accepts evidence and target proposals from the mission layer, but order authority remains below the agent boundary.
+The implemented execution path is a deterministic paper/testnet transition loop. It accepts evidence and target proposals from the mission layer, but order authority remains below the agent boundary. The target roadmap is session-oriented: an owner starts AdvisorAI when needed, recovers and reconciles state, operates for a working session, and stops cleanly. It does not require a permanently running service.
 
 ## One paper cycle
 
@@ -50,6 +50,41 @@ flowchart LR
 
 Evidence roles receive a snapshot and return typed results. `AdvisorService` converts a passing evidence gate into a target portfolio; it does not create an order. The runtime and OMS own order materialization, idempotency, routing, acknowledgement, and reconciliation.
 
+## Target Decision Model boundary — planned
+
+The future typed System-One layer belongs between calibrated evidence and
+portfolio construction:
+
+```text
+validated PIT snapshot
+  -> Chronos / TTM-R2 / Kronos / LightGBM / FinBERT / deterministic features
+  -> EvidenceGraph and calibrated evidence bundle
+  -> DecisionModelPort -> typed DecisionProposal
+  -> deterministic Portfolio Constructor
+  -> RiskKernel -> OMS -> NautilusTrader -> paper/testnet venue
+  -> reconciliation -> TCA/attribution -> outcome memory
+```
+
+This is a target contract, not a claim that the local runtime currently invokes
+a Decision Model. A proposal can carry LONG/SHORT/FLAT/ABSTAIN, probabilities,
+calibrated confidence, horizon, uncertainty, evidence references,
+missing-evidence flags, disagreement, and expiry. It cannot modify risk
+policy, access secrets, submit orders, override evidence/data rejection, bypass
+portfolio construction or RiskKernel, or self-promote. Missing or invalid
+output becomes permitted fallback evidence or abstention.
+
+## Target session lifecycle — planned
+
+At start, validate code/config/manifest identity and ledgers, inspect the prior
+session record, recover state, reconcile venue orders/account/positions, find
+exact source gaps, backfill only permitted data with original PIT availability,
+start needed workers, and restore only eligible checkpoints. At clean stop,
+stop new missions/proposals, checkpoint bounded jobs, reconcile outstanding
+paper state, flush ledgers/outbox/watermarks, unload model workers, release
+locks/leases, and persist an immutable end record. After a crash, reconcile
+before accepting new actions. These are planned implementation and Phase-7
+validation requirements; see [session-oriented runtime](../plans/session-oriented-runtime.md).
+
 ## Risk authority
 
 The risk kernel can approve, reduce, or reject. AI-originated suggestions cannot loosen the loaded policy. Checks include the policy version/effective time, independent kill switch, stale or disagreed data, model drift or unsupported state, expired decisions, reconciliation state, market marks, and configured hard limits. The configured V3-Core policy includes gross/net exposure, order, position, leverage, turnover, margin, and price-collar limits; see the [risk configuration reference](../reference/configuration.md).
@@ -96,3 +131,10 @@ This distinction matters:
 ## Learning and audit
 
 When configured, the paper runtime records paper decision records for later replay/learning. Mission, order, model, capability, and incident events are written through idempotent ledger events. A recorded event is evidence of what the local code observed and decided; it is not a claim that a live venue filled an order.
+
+The future custom Decision Model dataset keeps immutable decision-time input
+separate from outcomes. `DecisionRecord -> OutcomeResolution ->
+TrainingExample` links realized returns, costs, fills, utility, and
+abstention-quality labels only after those outcomes become available. No
+future data may be merged into a pre-decision record; this documentation does
+not authorize training.

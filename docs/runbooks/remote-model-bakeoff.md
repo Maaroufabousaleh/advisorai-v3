@@ -1,5 +1,13 @@
 # Phase 0 remote-model bake-off
 
+> **Current planning interpretation (2026-09-30):** broad remote-model
+> comparisons and 24-hour route windows no longer block infrastructure or the
+> session workstation. A selected on-demand reasoning route needs exact
+> identity, privacy, typed-output, resource, failure, and authority checks for
+> its intended scope. The existing route inventory and failed/quarantined
+> roots below are historical evidence and remain unchanged. Jev is optional;
+> no external Decision Model API is required for AdvisorAI to operate.
+
 This workstream measures remote text models only through the accepted
 `PolicyGateway`. It does not replace or weaken the gateway, and it never gives
 a model access to broker, order, portfolio, risk, reconciliation, or execution
@@ -88,7 +96,7 @@ latency, token counts, billed cost, safe failure classes, and whether a tool
 was called. They explicitly record `tool_execution_status=not_executed`; a
 gateway probe never claims that a deterministic evidence tool ran.
 
-## Exact-route stability window
+## Historical exact-route stability window / optional endurance diagnostic
 
 The short bake-off is not a 24-hour route gate. The resumable stability runner
 uses the same scoped credential resolver and `PolicyGateway`, freezes the live
@@ -107,7 +115,10 @@ setsid --fork ./.venv/bin/python scripts/run_remote_route_stability.py \
   > artifacts/phase0/remote-route-stability/<run-id>/runner.nohup.log 2>&1 < /dev/null &
 ```
 
-`setsid --fork` is required on the WSL host when the invoking terminal wrapper
+The historical command below creates a long-running route probe. Do not invoke
+it solely to progress the current workstation plan. A future server profile or
+separately justified route-endurance diagnostic may define a fresh, scoped
+run. `setsid --fork` is required on the WSL host when the invoking terminal wrapper
 cleans up ordinary background process groups. Capture the returned PID and
 verify that the runner has its own session plus a live `status.json` heartbeat;
 the evidence root and status PID are authoritative for resumption.

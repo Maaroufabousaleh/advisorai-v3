@@ -1,5 +1,15 @@
 # Phase 0 local model-runtime qualification
 
+> **Current planning interpretation (2026-09-30):** this runbook and its
+> candidate tables describe historical qualification work. The active
+> integration baseline is defined in the [architecture](../../advisorai-federated-multi-agent-quant-architecture-v3.md)
+> and [Phase 4 plan](../plans/phase-04-quant-baselines.md). Do not acquire
+> weights or launch a bake-off as part of this documentation change. A bounded
+> Level A adapter check is the integration requirement; the historical
+> 24-hour stability procedure is optional diagnostic/server-profile work,
+> not a workstation prerequisite. Existing reports and run roots are
+> unchanged.
+
 This workstream qualifies local model runtimes after the reviewed
 `transformers==5.5.4` / `huggingface-hub==1.26.1` migration. It is isolated
 from `PolicyGateway`, secrets, broker/execution, `RiskKernel`, and OMS code.
@@ -128,11 +138,13 @@ contract. One synthetic series is explicitly insufficient for superiority or
 promotion claims; point-in-time AdvisorAI datasets can implement the same
 versioned `BenchmarkDataset` interface later.
 
-The short run is not a stability admission. Phase-0/Phase-7 time gates and any
-model promotion remain pending until separately reviewed evidence exists. A
-single synthetic forecast series cannot establish superiority. Stochastic
-forecast candidates are characterized under their declared repeatability
-policy rather than being incorrectly required to produce byte-identical paths.
+The short run is integration evidence, not comparative model admission. Under
+the current workstation plan, repeated model load/inference/unload and bounded
+resource behavior are evaluated in full-system session validation; a
+24-hour-only threshold is no longer mandatory. A single synthetic forecast
+series cannot establish superiority. Stochastic forecast candidates are
+characterized under their declared repeatability policy rather than being
+incorrectly required to produce byte-identical paths.
 
 ## Real public-data bake-off (2026-08-07)
 
@@ -180,13 +192,15 @@ uv run python scripts/run_local_model_bakeoff.py \
   --admission-root artifacts/phase0/model-runtime-qualification/runtime-admission-final-20260808T020000Z
 ```
 
-## Stability runner
+## Historical stability runner and optional diagnostics
 
-`scripts/run_model_stability.py` repeatedly qualifies only the pending role
+`scripts/run_model_stability.py` was used to repeatedly qualify the pending role
 candidates through their pinned isolated interpreters. It stores an fsync'd,
 hash-chained JSONL log, verifies the immutable benchmark hashes, supports a
 fixed run directory for safe restart, and uses the existing `StabilityWindow`
-contract. A short smoke remains explicitly distinct from the 24-hour gate.
+contract. The historical 24-hour requirement is superseded for the workstation;
+the procedure remains available only for optional diagnostics or a separately
+admitted server profile. Do not run it solely to unblock current infrastructure.
 
 Admission manifests also pin the worker source hash. Any source or formatting
 change after a manifest is frozen must fail closed: stop the old supervisor,
@@ -228,9 +242,12 @@ cycles. Its last record at `2026-08-11T03:47:10.345140Z` has SHA-256
 The 24-hour result does not yet exist; preserve the process and do not
 concatenate predecessor roots.
 
-The 24-hour result must exist and pass before changing roster entries from
-`pending_stability` to `selected`. It does not approve paper execution or live
-capital.
+The 24-hour result was an admission condition under the historical roster
+policy. That condition is superseded for the workstation. Do not edit old
+roster manifests or report the old thresholds as passed/rejected differently;
+the current reference fabric and its per-scope admission decisions are
+documented in the architecture and phase plans. This historical result did
+not approve paper execution or live capital.
 
 On 2026-08-08, the pre-format run was interrupted after the finalized
 repository formatting made its old worker hashes invalid. Its failed cycles

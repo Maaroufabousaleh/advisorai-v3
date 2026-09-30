@@ -20,15 +20,16 @@
 
 ## What this is
 
-AdvisorAI V3 turns point-in-time market data and independent research evidence into an auditable target portfolio, then evaluates that target through deterministic risk and paper-execution controls. The project is designed for a single owner-operator on a resource-bounded workstation, with local Parquet/DuckDB/Polars analysis and SQLite WAL ledgers for operational truth.
+AdvisorAI V3 is designed as a local-first, session-oriented quantitative and agentic workstation. The owner starts it when needed, typically works for about 5–8 hours, stops cleanly, and restarts later after the system recovers authoritative state, reconciles paper/testnet state, and catches up permitted data gaps. The current repository implements important contracts and paper controls; complete session lifecycle and full-system integration remain planned work. It uses local Parquet/DuckDB/Polars analysis and SQLite WAL ledgers for operational truth.
 
 The central boundary is deliberately simple:
 
 ```text
-data snapshot → independent evidence → target portfolio → RiskKernel → paper OMS → reconciliation
+validated PIT snapshot → independent evidence → typed Decision Model proposal (planned)
+→ deterministic Portfolio Constructor → RiskKernel → paper OMS → reconciliation
 ```
 
-Models, agents, gateways, and the dashboard can propose or explain. They do not write ledgers directly, loosen risk limits, or become an order authority.
+Models, the planned Decision Model, agents, gateways, Hermes, and the dashboard can propose or explain. They do not write ledgers directly, loosen risk limits, or become an order authority. The owner-operated session profile is authoritative; a server/always-on profile is optional.
 
 ## Why this architecture
 
@@ -51,7 +52,8 @@ This makes the repository useful as a safety-oriented foundation and testbed. It
 | Implemented | React operator console with an optional FastAPI API, synthetic fixture mode, ledger projections, guarded paper controls, and protected password/TOTP mode | [`dashboard`](dashboard), [`src/advisorai/api/dashboard.py`](src/advisorai/api/dashboard.py) |
 | Implemented | Phase admission records, model lifecycle, connector lifecycle, and read-only capability lifecycle | [`src/advisorai/gates.py`](src/advisorai/gates.py), [`src/advisorai/models/authority.py`](src/advisorai/models/authority.py), [`src/advisorai/capabilities`](src/advisorai/capabilities) |
 | Gated / experimental | Optional PydanticAI/Graph, Prefect, Hamilton, LiteLLM, NautilusTrader, model runtimes, public-data qualification, and paper/testnet connector smoke tests | [`pyproject.toml`](pyproject.toml), [`docs/plans`](docs/plans), [`docs/runbooks`](docs/runbooks) |
-| Not enabled | Live-capital operation, unrestricted browser/agent authority, automatic model promotion, and the planned Alpha Team extension | [`docs/concepts/status.md`](docs/concepts/status.md) |
+| Planned / not integrated | Complete session start/stop/recovery lifecycle, generic Decision Model adapter layer, Research Brain/Alpha Team end-to-end workflow, and dashboard traceability for the full paper loop | [`docs/concepts/status.md`](docs/concepts/status.md), [`docs/plans/README.md`](docs/plans/README.md) |
+| Not enabled | Live-capital operation, unrestricted browser/agent authority, and automatic model promotion | [`docs/concepts/status.md`](docs/concepts/status.md) |
 
 ## Architecture at a glance
 
@@ -90,6 +92,12 @@ flowchart TD
 ```
 
 The detailed current-implementation view, ownership table, and target process boundaries are in [Architecture](docs/concepts/architecture.md). The end-to-end lifecycle is in [Execution model](docs/concepts/execution-model.md).
+
+The target [session lifecycle](docs/plans/session-oriented-runtime.md),
+[Integrated Paper Session Validation](docs/plans/phase-07-integrated-paper-session-validation.md), and
+[two-track phase roadmap](docs/plans/README.md) describe future work; they do
+not claim that a model, process, or phase has passed. The reference model fabric
+is frozen for integration while broad challenger comparisons are deferred.
 
 ## Quick start
 
@@ -144,6 +152,7 @@ These screenshots are captured from the current dashboard in local development m
 | Contracts | Immutable, hashable hand-off artifacts and authority deny-lists |
 | Collectors and data lake | Raw response spooling, source metadata, point-in-time observations, quality, failover, and local immutable storage |
 | Mission and evidence plane | Mode admission, role scheduling, typed evidence, independence checks, dissent, and expiring decision bundles |
+| Target Decision Model | Planned typed proposal boundary between the EvidenceGraph and deterministic portfolio construction; no authority |
 | Deterministic trading plane | Portfolio construction, RiskKernel, order state machine, paper/testnet transport, account state, reconciliation, and TCA |
 | Control and operations | Resource leases, phase gates, incidents, traces, recovery, model/connector/capability lifecycle, and configuration activation |
 | Operator console | Read-only projections plus narrowly scoped, audited paper controls; never canonical trading state |

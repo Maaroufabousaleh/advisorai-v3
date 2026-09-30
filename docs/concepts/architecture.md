@@ -1,6 +1,6 @@
 # Architecture
 
-This page describes the current implementation. The repository also contains a staged multi-agent architecture dossier and phase plans; those documents are design and admission authority, not proof that every proposed process is deployed. See [Project status](status.md) and the [phase plan index](../plans/README.md) for that distinction.
+This page describes the current implementation. The repository also contains a staged architecture and phase plans; those documents define target design and admission policy, not proof that every proposed process is deployed. Current product planning targets an owner-operated, session-oriented workstation with optional always-on deployment. See [Project status](status.md), the [phase plan index](../plans/README.md), and the [session lifecycle plan](../plans/session-oriented-runtime.md) for that distinction.
 
 ## Design goals
 
@@ -55,7 +55,7 @@ flowchart TD
     class BRONZE,SILVER,GOLD,PIT,LEDGER durable
 ```
 
-The diagram shows the authority path, not a promise of a permanently running distributed deployment. The local launcher starts the dashboard API and Vite UI only. `ServiceRegistry` describes ownership and dependency order for the broader topology; it is not a process supervisor.
+The diagram shows the currently implemented authority path, not a promise of a permanently running distributed deployment. The local launcher starts the dashboard API and Vite UI only. `ServiceRegistry` describes ownership and dependency order for the broader topology; it is not a process supervisor. The future Decision Model layer described below is a planning target and is not represented as implemented in this current-state diagram.
 
 ## Runtime boundaries
 
@@ -93,7 +93,45 @@ The optional runtime wrappers include PydanticAI/Graph, Prefect, Hamilton, LiteL
 
 ## Target process boundaries
 
-`src/advisorai/services/boundaries.py` defines an ownership manifest with always-on descriptors such as `advisor-api`, `market-node`, `collector-node`, `data-writer`, `account-ledger`, and `resource-governor`, plus on-demand workers such as `agent-fabric`, `model-gateway`, `quant-worker`, and `risk-worker`. The manifest validates dependency order and ownership collisions. It does not create these processes, monitor them, or make the repository a distributed service deployment.
+`src/advisorai/services/boundaries.py` defines an ownership manifest with core descriptors such as `advisor-api`, `market-node`, `collector-node`, `data-writer`, `account-ledger`, and `resource-governor`, plus on-demand workers such as `agent-fabric`, `model-gateway`, `quant-worker`, and `risk-worker`. “Core/always-on” in that manifest means core to an active deployment profile; it does not require processes to remain resident between owner sessions. The manifest validates dependency order and ownership collisions. It does not create these processes, monitor them, or make the repository a distributed service deployment.
+
+## Target session and Decision Model layers
+
+The target normal workflow is: start the application; verify identities and
+ledgers; recover authoritative state; reconcile paper/testnet account, order,
+and position state; detect and backfill permitted data gaps; rebuild the
+current PIT snapshot; start only required workers; operate for the session;
+then stop, reconcile, persist checkpoints/watermarks, release model/runtime
+leases, and write an immutable session-end record. Crash recovery enters
+recovery mode and reconciles before new actions. See the full typed flow in
+[session-oriented runtime](../plans/session-oriented-runtime.md). These
+lifecycle steps are planned work, not a claim about the local launcher.
+
+The target analysis path adds this typed boundary:
+
+```text
+validated PIT snapshot
+  -> forecast / tabular / financial NLP / deterministic evidence
+  -> EvidenceGraph and calibrated evidence bundle
+  -> DecisionModelPort -> typed DecisionProposal
+  -> deterministic Portfolio Constructor
+  -> RiskKernel -> OMS -> NautilusTrader
+  -> reconciliation -> TCA/attribution -> outcome memory
+```
+
+`DecisionModelPort` is planned. It may return stance/probabilities,
+confidence, horizon, uncertainty, evidence references, missing-evidence and
+disagreement flags, and expiry. It is not risk or execution authority and may
+not override EvidenceGraph failure, missing/stale data, portfolio constraints,
+or RiskKernel. The model roster and adapter admission levels are in the
+[authoritative architecture](../../advisorai-federated-multi-agent-quant-architecture-v3.md)
+and [ADR 0009](../decisions/0009-typed-decision-model-boundary.md).
+
+Implementation readiness is separate from operational admission: quarantined
+later-phase software may be built before a model/source/capability gate passes,
+but promotion and authority remain gated. Historical timed evidence is
+preserved; session recovery is the primary future workstation validation
+focus.
 
 ## Further reading
 
@@ -102,4 +140,7 @@ The optional runtime wrappers include PydanticAI/Graph, Prefect, Hamilton, LiteL
 - [Components reference](../reference/components.md)
 - [Canonical trading authority decision](../decisions/0001-canonical-trading-authority.md)
 - [Runtime dependency boundary decision](../decisions/0006-runtime-dependency-boundary.md)
+- [Session-oriented operating model decision](../decisions/0007-session-oriented-operating-model.md)
+- [Reference model fabric decision](../decisions/0008-reference-model-fabric-and-deferred-bakeoffs.md)
+- [Typed Decision Model decision](../decisions/0009-typed-decision-model-boundary.md)
 - [Architecture dossier](../../advisorai-federated-multi-agent-quant-architecture-v3.md)

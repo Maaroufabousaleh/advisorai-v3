@@ -1445,3 +1445,27 @@ gate is externally deferred and must not be touched in this continuation. No
 model, Hermes runtime, or remote route has trading authority.
 
 `LIVE-CAPITAL DEPLOYMENT IS NOT APPROVED.`
+
+## Planning supersession addendum — 2026-09-30
+
+This addendum is a planning interpretation only. All preceding continuation
+entries remain historical and unchanged; no active/historical process, root,
+timestamp, hash, or evidence outcome is updated here.
+
+For future work, the primary product is a single-owner, session-oriented
+workstation, typically used for 5–8 hours and then stopped cleanly. Recovery,
+venue reconciliation, exact data-gap detection/backfill, PIT correctness,
+interrupted-job truth, and bounded resource/lease cleanup are first-class
+requirements. The old 24-hour component and 60-day continuous-paper durations
+are superseded as primary workstation admission requirements. Preserve all
+historical evidence and do not resume or launch any long-running process as a
+consequence of this documentation update.
+
+Implementation readiness and operational admission are separate. Quarantined
+Evidence Council, Decision Model, session lifecycle, Hermes, Research Brain,
+Alpha Team, experiment/outcome registry, and dashboard work may proceed before
+an earlier timed/model gate passes. Promotion, order authority, credentials,
+RiskKernel/OMS ownership, and live-capital gates do not change. Refer to the
+[current phase plan](README.md) and
+[session-oriented runtime plan](session-oriented-runtime.md) for current
+requirements.
