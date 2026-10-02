@@ -19,7 +19,7 @@ The source tree is organized by contracts and ownership boundaries rather than b
 | `gates` / `live` | Phase-gate records and guarded paper/ready/live/rollback control model |
 | `gateway` / `integrations` | Governed model gateway, HTTP/LLM adapters, native venue and websocket integrations |
 | `models` / `learning` | Model authority, forecasting candidates, paper utility/replay, and learning records |
-| `capabilities` | Capability cards, broker permissions, Hermes isolation, and lifecycle evidence |
+| `capabilities` | Capability cards, broker permissions, Hermes isolation, governed per-mission Kata/Docker backends, and lifecycle evidence |
 | `services` | Immutable service ownership/dependency manifest and mode admission |
 | `recovery` / `resources` / `observability` | Restart/rollback evidence, resource governor, health, and operational records |
 
@@ -90,5 +90,6 @@ See [session-oriented runtime](../plans/session-oriented-runtime.md) and the
 - Add a provider behind an existing protocol in `ports`; keep credentials and network access in the adapter boundary.
 - Add a source parser/collector in `collectors`; persist provenance and add point-in-time/fixture coverage.
 - Change risk or order authority in `execution`; do not implement a second risk check in the dashboard or an agent.
+- Put untrusted-workload isolation in `capabilities`; see the [Kata sandbox runbook](../runbooks/kata-untrusted-sandbox.md). Never put sandbox code in `execution`, `risk`, OMS, or Phase-4 long-run modules.
 - Change operator presentation in `dashboard`/`api/dashboard.py`; preserve the `synthetic` distinction and command guardrails.
 - Change phase admission in `gates`/`live` and the relevant phase plan/runbook; a feature flag is not a gate record.
