@@ -880,7 +880,7 @@ def main() -> int:
             resume=args.resume,
         )
     except (OSError, KeyError, TypeError, ValueError, RuntimeError) as exc:
-        raise SystemExit(f"long-run Chronos run refused ({type(exc).__name__})") from exc
+        raise SystemExit(f"long-run Chronos run refused ({type(exc).__name__}): {exc}") from exc
     print(json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0 if result["state"] == LongRunState.DEADLINE_REACHED.value else 1
 

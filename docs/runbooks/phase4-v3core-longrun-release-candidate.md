@@ -128,6 +128,15 @@ The source and candidate path has no credentials, withdrawal/transfer
 capability, broker/order capability, or execution authority. The readiness
 checker is a refusal boundary; it does not acquire resources or start work.
 
+The final actual-file launch preflight also performs a bounded Chronos startup
+smoke using the exact admitted interpreter, qualification evidence, checkpoint
+cache, CUDA worker, and offline environment shape. It writes only a temporary
+readiness artifact outside the generation evidence root, performs no
+prospective prediction or outcome read, and must release its GPU lease and
+worker before returning. The existing static runtime-attestation check is
+therefore insufficient by itself: a startup smoke failure is a hard refusal
+with the sanitized runtime error recorded in the readiness check reason.
+
 ## Failure and recovery policy
 
 An isolated unresolved context, missed cutoff, candidate rejection, or
