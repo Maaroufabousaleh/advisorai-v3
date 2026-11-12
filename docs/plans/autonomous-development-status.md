@@ -32,7 +32,7 @@ Secret scan: clean. Phase 10: sealed.
 ## Active work package
 
 None pending verification — HEAD is fully verified (1280 + 11/11).
-Next eligible: J-credential-scope audit (read-only review of
+Next eligible: I-backtest comparison views or re-verification loop (J-credential audit done;
 credential scoping against the secrets/credential-boundary runbooks).
 
 ## Exact next action

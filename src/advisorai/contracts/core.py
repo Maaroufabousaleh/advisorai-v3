@@ -21,6 +21,16 @@ CONTRACT_VERSION = "v3.0"
 FORBIDDEN_CAPABILITY_ACTIONS = frozenset({"submit_order", "change_risk_limit", "live_deploy"})
 
 
+def _is_fund_movement(tokens: set[str], singular_tokens: set[str]) -> bool:
+    """Reject fund transfer/withdrawal authority, including common aliases."""
+    movement_verbs = {"withdraw", "transfer", "move_funds", "send_funds"}
+    if tokens.intersection(movement_verbs):
+        return True
+    fund_nouns = {"fund", "capital", "balance", "withdrawal", "payout"}
+    movement = {"withdraw", "transfer", "move", "send", "payout", "release"}
+    return bool(singular_tokens.intersection(fund_nouns) and tokens.intersection(movement))
+
+
 def normalize_authority_action(value: str) -> str:
     """Normalize an action name before applying the trading-boundary denylist."""
 
@@ -44,13 +54,15 @@ def is_forbidden_authority_action(value: str) -> bool:
         return True
     tokens = set(normalized.split("_"))
     singular_tokens = {token[:-1] if token.endswith("s") else token for token in tokens}
+    if _is_fund_movement(tokens, singular_tokens):
+        return True
     if tokens.intersection({"submitorder", "change_risk_limit", "livedeploy"}):
         return True
     if {"live", "deploy"}.issubset(tokens) or {"production", "deploy"}.issubset(tokens):
         return True
     if (
         "broker" in singular_tokens or "exchange" in singular_tokens or "venue" in singular_tokens
-    ) and tokens.intersection({"credential", "secret", "key", "token"}):
+    ) and singular_tokens.intersection({"credential", "secret", "key", "token"}):
         return True
     if singular_tokens.intersection({"order"}) and not tokens.intersection(
         {"read", "list", "query", "history", "status"}

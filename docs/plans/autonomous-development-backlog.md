@@ -23,3 +23,4 @@ Admission is tracked separately and never implied by implementation.
 | F-monitor | paper performance monitor + panel | `src/advisorai/learning/monitor.py`, `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/learning/test_monitor.py`, `tests/api/test_paper_orders.py` | IMPLEMENTED | VERIFIED (slices, comparison, expiry flags) |
 
 | H-kata probe | Kata adversarial boundary probe, live host run | `scripts/probe_kata_adversarial.py` (read-only `scripts/probe_kata_sandbox.py` untouched) | `tests/capabilities/test_kata_sandbox_probe.py` (4 passed) + live run `kata_boundary_measured: true` | MEASURED | formal Phase 8 admission still separate review |
+| J-credential audit | static import scan + deny-list hardening | `src/advisorai/contracts/core.py`, `tests/security/test_credential_scopes.py` | audit tests (4) | IMPLEMENTED | VERIFIED (plural-credential + withdraw gaps closed) |
