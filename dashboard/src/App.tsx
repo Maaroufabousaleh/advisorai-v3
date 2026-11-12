@@ -51,6 +51,7 @@ import type {
   PaperFillView,
   PaperOrderView,
   ResearchRecordView,
+  TraceLinkView,
   SourceHealthView,
   Tone,
 } from './types'
@@ -451,7 +452,7 @@ function AuditLine({ event }: { event: DashboardOverview['audit'][number] }) {
 function StatusPill({ tone, label }: { tone: Tone; label: string }) { return <span className={`status-pill ${toneClass(tone)}`}><span />{label}</span> }
 
 function MissionWorkspace({ data, onNavigate }: { data: DashboardOverview; onNavigate: (section: Section) => void }) {
-  return <div className="workspace-stack"><div className="feature-strip"><div className="feature-icon"><Sparkles size={20} /></div><div><strong>Evidence before action.</strong><span>Each mission expires, records dissent, and must pass source-family and factor-family gates before risk evaluation.</span></div><button className="text-button" onClick={() => onNavigate('risk')}>SEE GATE RULES <ArrowUpRight size={14} /></button></div><MissionBoard data={data} onNavigate={onNavigate} /><div className="detail-grid">{data.missions.map((mission) => <article className="detail-panel" key={mission.mission_id}><div className="detail-panel-top"><span className="section-kicker">{mission.mission_id}</span><StatusPill tone={mission.tone} label={mission.state} /></div><h2>{mission.title}</h2><div className="detail-facts"><span><small>MODE</small><strong>{mission.mode}</strong></span><span><small>CONFIDENCE</small><strong>{mission.confidence}</strong></span><span><small>EXPIRES</small><strong>{mission.expires}</strong></span></div><div className="evidence-line"><BookOpenCheck size={15} /><span>{mission.evidence}</span><em>{mission.dissent}</em></div><button className="secondary-button wide-button" onClick={() => onNavigate('audit')}>OPEN DECISION BUNDLE <ArrowUpRight size={14} /></button></article>)}</div></div>
+  return <div className="workspace-stack"><div className="feature-strip"><div className="feature-icon"><Sparkles size={20} /></div><div><strong>Evidence before action.</strong><span>Each mission expires, records dissent, and must pass source-family and factor-family gates before risk evaluation.</span></div><button className="text-button" onClick={() => onNavigate('risk')}>SEE GATE RULES <ArrowUpRight size={14} /></button></div><MissionBoard data={data} onNavigate={onNavigate} /><div className="detail-grid">{data.missions.map((mission) => <article className="detail-panel" key={mission.mission_id}><div className="detail-panel-top"><span className="section-kicker">{mission.mission_id}</span><StatusPill tone={mission.tone} label={mission.state} /></div><h2>{mission.title}</h2><div className="detail-facts"><span><small>MODE</small><strong>{mission.mode}</strong></span><span><small>CONFIDENCE</small><strong>{mission.confidence}</strong></span><span><small>EXPIRES</small><strong>{mission.expires}</strong></span></div><div className="evidence-line"><BookOpenCheck size={15} /><span>{mission.evidence}</span><em>{mission.dissent}</em></div><button className="secondary-button wide-button" onClick={() => onNavigate('audit')}>OPEN DECISION BUNDLE <ArrowUpRight size={14} /></button></article>)}</div><TraceabilityPanel /></div>
 }
 
 function PortfolioWorkspace({ data, onNavigate }: { data: DashboardOverview; onNavigate: (section: Section) => void }) {
@@ -483,6 +484,19 @@ function PaperOrdersPanel() {
       .catch((fetchError: Error) => setError(fetchError.message))
   }
   return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><CircleDollarSign size={14} /> PAPER ORDERS</div><h2>Lifecycle states from the ledger</h2></div><span className="panel-heading-meta">{orders ? orders.length : '—'} ORDERS</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Paper orders unavailable: {error}</span></div> : !orders ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading paper orders…</span></div> : orders.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No paper orders are recorded yet.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>ORDER</span><span>INSTRUMENT</span><span>SIDE</span><span>QTY</span><span>STATE</span><span /></div>{orders.slice(-10).map((order) => <div className="data-table-row" key={order.order_id}><span>{order.order_id.slice(0, 8)}</span><span>{order.instrument}</span><span>{order.side}</span><span>{order.quantity}</span><span>{order.state}</span><span><button className="text-button" onClick={() => showFills(order.order_id)}>FILLS <ChevronRight size={13} /></button></span></div>)}</div>}{selected && <div className="source-health-note"><span>Fills for {selected.slice(0, 8)}: {fills.length === 0 ? 'none recorded' : fills.map((fill) => `${fill.quantity} @ ${fill.price}`).join(', ')}</span><button className="text-button" onClick={() => setSelected(null)}>CLOSE <X size={13} /></button></div>}</section>
+}
+
+function TraceabilityPanel() {
+  const [chains, setChains] = useState<TraceLinkView[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.traceability()
+      .then((rows) => { if (!cancelled) setChains(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><FileClock size={14} /> TRACEABILITY</div><h2>Decision to outcome lineage</h2></div><span className="panel-heading-meta">{chains ? chains.length : '—'} CHAINS</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Traceability unavailable: {error}</span></div> : !chains ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading lineage…</span></div> : chains.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No decision chains are recorded yet. Chains appear after a mission produces a proposal and paper decision records link orders, fills, and outcomes.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>MISSION</span><span>STANCE</span><span>RISK</span><span>ORDERS</span><span>RECONCILED</span><span>OUTCOME</span></div>{chains.slice(-10).map((chain) => <div className="data-table-row" key={chain.mission_id}><span>{chain.mission_id.slice(0, 8)}</span><span>{chain.abstained ? 'ABSTAIN' : chain.proposal_stance}</span><span>{chain.risk_outcome}</span><span>{chain.order_ids.length} orders / {chain.fill_ids.length} fills</span><span>{chain.reconciled ? 'clean' : 'pending'}</span><span>{chain.outcome_recorded ? chain.net_utility : '—'}</span></div>)}</div>}</section>
 }
 
 function RiskWorkspace({ data, onCommand }: { data: DashboardOverview; onCommand: (command: CommandKind) => void }) {

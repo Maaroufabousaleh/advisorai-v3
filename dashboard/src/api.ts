@@ -6,6 +6,7 @@ import type {
   ResearchRecordView,
   PaperFillView,
   PaperOrderView,
+  TraceLinkView,
   SourceHealthView,
 } from './types'
 
@@ -40,6 +41,8 @@ export const dashboardApi = {
     request<PaperOrderView[]>('/api/v1/paper/orders'),
   paperFills: (orderId?: string) =>
     request<PaperFillView[]>(orderId ? `/api/v1/paper/fills?order_id=${orderId}` : '/api/v1/paper/fills'),
+  traceability: () =>
+    request<TraceLinkView[]>('/api/v1/traceability'),
   researchRecords: () =>
     request<ResearchRecordView[]>('/api/v1/research/records'),
   researchLineage: (artifactId: string) =>

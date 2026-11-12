@@ -182,6 +182,20 @@ export interface PaperFillView {
   tone: Tone
 }
 
+export interface TraceLinkView {
+  mission_id: string
+  snapshot_id: string
+  proposal_stance: string
+  abstained: boolean
+  risk_outcome: string
+  order_ids: string[]
+  fill_ids: string[]
+  reconciled: boolean
+  outcome_recorded: boolean
+  net_utility: string
+  tone: Tone
+}
+
 export interface ResearchRecordView {
   artifact_id: string
   record_type: string

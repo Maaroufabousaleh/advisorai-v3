@@ -129,6 +129,24 @@ class PaperFillView(BaseModel):
     tone: SystemTone
 
 
+class TraceLinkView(BaseModel):
+    """One source-to-decision-to-outcome chain link, joined by exact IDs."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mission_id: str = Field(min_length=1)
+    snapshot_id: str = Field(min_length=1)
+    proposal_stance: str = Field(min_length=1)
+    abstained: bool = False
+    risk_outcome: str = Field(default="unknown", min_length=1)
+    order_ids: tuple[str, ...] = ()
+    fill_ids: tuple[str, ...] = ()
+    reconciled: bool = False
+    outcome_recorded: bool = False
+    net_utility: str = Field(default="not recorded", min_length=1)
+    tone: SystemTone
+
+
 class RiskLimitView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -1397,6 +1415,104 @@ class DashboardProjection:
             )
         return tuple(views)
 
+    def traceability(self) -> tuple[TraceLinkView, ...]:
+        """Project source-to-decision-to-outcome chains joined by exact IDs.
+
+        Joins mission decisions + proposals (MISSION) with paper decision
+        records (MISSION paper_decision_chain), orders/fills/reconciliation
+        (ORDER), and scorecards/outcomes (MODEL). Missing links are reported
+        as absent, never invented.
+        """
+        if self._ledgers is None:
+            return ()
+        proposals: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.MISSION):
+            payload = event.payload
+            if event.event_type == "proposal_recorded" and isinstance(
+                payload.get("proposal"), dict
+            ):
+                proposal = payload["proposal"]
+                proposals[str(proposal.get("mission_id", ""))] = proposal
+            elif event.event_type == "decision_built" and isinstance(payload.get("decision"), dict):
+                decision = payload["decision"]
+                proposals.setdefault(
+                    str(decision.get("mission_id", "")),
+                    {"__decision_only__": True, "snapshot_id": decision.get("snapshot_id", "")},
+                )
+        chains: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.MISSION):
+            if event.event_type != "paper_decision_chain":
+                continue
+            record = event.payload.get("decision")
+            if not isinstance(record, dict):
+                continue
+            mission_id = str(record.get("mission_id", ""))
+            if mission_id:
+                chains[mission_id] = record
+        fills_by_order: dict[str, str] = {}
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            if event.event_type != "fill_recorded":
+                continue
+            artifact = event.payload.get("artifact")
+            if isinstance(artifact, dict):
+                fills_by_order[
+                    str(artifact.get("venue_fill_id", artifact.get("artifact_id", "")))
+                ] = str(artifact.get("order_id", ""))
+        reconciled_orders: set[str] = set()
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            if event.event_type == "order_reconciled":
+                artifact = event.payload.get("artifact")
+                if isinstance(artifact, dict):
+                    reconciled_orders.add(str(artifact.get("artifact_id", "")))
+            elif event.event_type == "reconciliation_recorded":
+                artifact = event.payload.get("artifact")
+                if isinstance(artifact, dict) and artifact.get("reconciled"):
+                    for order_id in artifact.get("order_ids", []) or []:
+                        reconciled_orders.add(str(order_id))
+        outcomes: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.MODEL):
+            if event.event_type != "paper_scorecard_recorded":
+                continue
+            decision_id = event.payload.get("decision_id")
+            scorecard = event.payload.get("scorecard")
+            outcome = event.payload.get("outcome")
+            if isinstance(decision_id, str):
+                outcomes[decision_id] = {
+                    "scorecard": scorecard if isinstance(scorecard, dict) else {},
+                    "outcome": outcome if isinstance(outcome, dict) else {},
+                }
+        views: list[TraceLinkView] = []
+        for mission_id in sorted(set(proposals) | set(chains)):
+            proposal = proposals.get(mission_id, {})
+            chain = chains.get(mission_id, {})
+            order_ids = tuple(str(item) for item in chain.get("order_ids", []) or [])
+            fill_ids = tuple(str(item) for item in chain.get("fill_ids", []) or [])
+            risk_id = str(chain.get("risk_decision_id", "") or "")
+            risk_outcome = "evaluated" if risk_id else "none"
+            decision_id = str(chain.get("decision_id", "") or "")
+            outcome = outcomes.get(decision_id, {})
+            outcome_payload = outcome.get("outcome", {})
+            net_utility = str(outcome_payload.get("net_utility", "not recorded"))
+            views.append(
+                TraceLinkView(
+                    mission_id=mission_id,
+                    snapshot_id=str(
+                        proposal.get("snapshot_id", chain.get("snapshot_id", "")) or ""
+                    ),
+                    proposal_stance=str(proposal.get("stance", "unknown") or "unknown"),
+                    abstained=bool(proposal.get("abstained", False)),
+                    risk_outcome=risk_outcome,
+                    order_ids=order_ids,
+                    fill_ids=fill_ids,
+                    reconciled=bool(order_ids)
+                    and all(item in reconciled_orders for item in order_ids),
+                    outcome_recorded=bool(outcome),
+                    net_utility=net_utility,
+                    tone=SystemTone.INFO if order_ids else SystemTone.NEUTRAL,
+                )
+            )
+        return tuple(views[-20:])
+
     def execute(self, command: DashboardCommandRequest, *, actor: str) -> CommandReceipt:
         prior = self._receipts.get(command.idempotency_key)
         if prior is not None:
@@ -1793,6 +1909,10 @@ def create_dashboard_app(
     @app.get("/api/v1/paper/fills", response_model=tuple[PaperFillView, ...])
     async def paper_fills(_: Principal = Depends(principal_for)) -> tuple[PaperFillView, ...]:  # noqa: B008
         return store.paper_fills()
+
+    @app.get("/api/v1/traceability", response_model=tuple[TraceLinkView, ...])
+    async def traceability(_: Principal = Depends(principal_for)) -> tuple[TraceLinkView, ...]:  # noqa: B008
+        return store.traceability()
 
     @app.get("/api/v1/dashboard/source-health", response_model=tuple[SourceHealthView, ...])
     async def source_health(_: Principal = Depends(principal_for)) -> tuple[SourceHealthView, ...]:  # noqa: B008
