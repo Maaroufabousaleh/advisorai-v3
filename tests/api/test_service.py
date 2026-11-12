@@ -43,7 +43,16 @@ def test_advisor_service_ends_at_target_then_runs_risk_gate(btc_usdt, timestamp)
         risk_policy_version="risk-v1",
     )
     assert result.risk_decision is None
-    assert result.decision.target_portfolio.positions[0].target_quantity == Decimal("1")
+    # Caller targets are not authority: this gate fails (single source
+    # family), so the executable target is forced to no-trade and the
+    # proposal abstains. A caller can never smuggle quantity past the gate.
+    assert result.proposal is not None
+    assert result.proposal.abstained is True
+    assert result.decision.abstained is True
+    assert all(
+        position.target_quantity == Decimal("0")
+        for position in result.decision.target_portfolio.positions
+    )
     policy = RiskPolicy(
         policy_version="risk-v1",
         effective_at=timestamp,

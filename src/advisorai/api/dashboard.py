@@ -953,47 +953,81 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
 
 
 def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
-    """Project session start/recovery/checkpoint/lease/gap state from the ledger."""
+    """Project per-session start/recovery/checkpoint/lease/gap state.
+
+    Every count is scoped to its own session ID: checkpoint, lease, and
+    data-gap events carry the session they belong to (leases via the lease
+    payload, checkpoints and gaps via the most recent session_started event
+    at or before them in ledger order). Global totals are never smeared
+    across sessions.
+    """
     starts: dict[str, dict] = {}
     recoveries: dict[str, dict] = {}
-    checkpoints = 0
-    gaps = 0
-    backfilled = 0
-    acquired: set[str] = set()
-    released: set[str] = set()
+    per_session_checkpoints: dict[str, int] = {}
+    per_session_gaps: dict[str, int] = {}
+    per_session_backfilled: dict[str, int] = {}
+    lease_session: dict[str, str] = {}
+    lease_acquired: set[str] = set()
+    lease_released: set[str] = set()
+    current_session: str | None = None
     for event in mission_events:
         payload = event.payload
         if event.event_type == "session_started" and isinstance(payload.get("start"), dict):
             start = payload["start"]
-            starts[str(start.get("session_id", ""))] = start
+            session_id = str(start.get("session_id", ""))
+            starts[session_id] = start
+            current_session = session_id
         elif event.event_type == "recovery_recorded" and isinstance(payload.get("recovery"), dict):
             recovery = payload["recovery"]
             recoveries[str(recovery.get("session_id", ""))] = recovery
         elif event.event_type == "session_checkpoint":
-            checkpoints += 1
+            checkpoint = payload.get("checkpoint")
+            owner = (
+                str(checkpoint.get("session_id", ""))
+                if isinstance(checkpoint, dict)
+                else (current_session or "")
+            )
+            if owner:
+                per_session_checkpoints[owner] = per_session_checkpoints.get(owner, 0) + 1
         elif event.event_type == "data_gap_recorded":
-            gaps += 1
-            gap = payload.get("gap")
-            if isinstance(gap, dict) and gap.get("backfilled"):
-                backfilled += 1
+            owner = current_session or ""
+            if owner:
+                per_session_gaps[owner] = per_session_gaps.get(owner, 0) + 1
+                gap = payload.get("gap")
+                if isinstance(gap, dict) and gap.get("backfilled"):
+                    per_session_backfilled[owner] = per_session_backfilled.get(owner, 0) + 1
         elif event.event_type == "lease_acquired" and isinstance(payload.get("lease"), dict):
-            acquired.add(str(payload["lease"].get("lease_id", "")))
+            lease = payload["lease"]
+            lease_id = str(lease.get("lease_id", ""))
+            owner = str(lease.get("session_id", "")) or (current_session or "")
+            lease_session[lease_id] = owner
+            lease_acquired.add(lease_id)
         elif event.event_type == "lease_released" and isinstance(payload.get("lease"), dict):
-            released.add(str(payload["lease"].get("lease_id", "")))
+            lease_released.add(str(payload["lease"].get("lease_id", "")))
     views: list[SessionLifecycleView] = []
     for session_id, start in starts.items():
         recovery = recoveries.get(session_id, {})
         mode = str(recovery.get("recovery_mode", "normal"))
+        open_leases = sum(
+            1
+            for lease_id in lease_acquired - lease_released
+            if lease_session.get(lease_id) == session_id
+        )
+        tone = (
+            SystemTone.WARNING
+            if mode in {"recovery", "abstain"}
+            else SystemTone.INFO
+        )
         views.append(
             SessionLifecycleView(
                 session_id=session_id,
                 recovery_classification=str(start.get("recovery_classification", "unknown")),
                 recovery_mode=mode,
-                open_leases=len(acquired - released),
-                checkpoints=checkpoints,
-                data_gaps=gaps,
-                backfilled_gaps=backfilled,
-                tone=SystemTone.WARNING if mode == "recovery" else SystemTone.INFO,
+                open_leases=open_leases,
+                checkpoints=per_session_checkpoints.get(session_id, 0),
+                data_gaps=per_session_gaps.get(session_id, 0),
+                backfilled_gaps=per_session_backfilled.get(session_id, 0),
+                tone=tone,
             )
         )
     return tuple(views[-20:])

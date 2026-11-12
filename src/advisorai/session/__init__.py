@@ -10,7 +10,14 @@ from .records import (
     SessionOutcome,
     SessionStartRecord,
 )
-from .supervisor import SessionSupervisor, SessionZeroStateError
+from .supervisor import (
+    SessionCheckpointHash,
+    SessionRecoveryChecks,
+    SessionStopChecks,
+    SessionSupervisor,
+    SessionZeroStateError,
+    WorkerRegistry,
+)
 
 __all__ = [
     "DataGapRecord",
@@ -18,9 +25,13 @@ __all__ = [
     "RecoveryRecord",
     "RuntimeLeaseRecord",
     "SessionCheckpoint",
+    "SessionCheckpointHash",
     "SessionEndRecord",
     "SessionOutcome",
+    "SessionRecoveryChecks",
     "SessionStartRecord",
+    "SessionStopChecks",
     "SessionSupervisor",
     "SessionZeroStateError",
+    "WorkerRegistry",
 ]

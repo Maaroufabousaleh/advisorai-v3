@@ -114,8 +114,26 @@ class ReferenceDecisionAdapter:
     safe no-trade behavior downstream.
     """
 
-    def __init__(self, artifact: DecisionModelArtifact) -> None:
+    def __init__(
+        self,
+        artifact: DecisionModelArtifact,
+        *,
+        directional_stance: DecisionStance | None = None,
+    ) -> None:
+        """Optional deterministic directional stance for controlled testing.
+
+        When set, a passing gate yields the configured LONG/SHORT stance
+        instead of FLAT, so integration tests can exercise the nonzero
+        order path deterministically. Gate failure still yields ABSTAIN.
+        Production wiring leaves this unset (FLAT/no-trade default).
+        """
         self._artifact = artifact
+        if directional_stance is not None and directional_stance not in (
+            DecisionStance.LONG,
+            DecisionStance.SHORT,
+        ):
+            raise ValueError("test directional stance must be LONG or SHORT")
+        self._directional_stance = directional_stance
 
     @property
     def artifact(self) -> DecisionModelArtifact:
@@ -145,12 +163,31 @@ class ReferenceDecisionAdapter:
                 fallback_used=True,
                 rationale="reference adapter abstained: evidence gate did not pass",
             )
+        stance = self._directional_stance or DecisionStance.FLAT
+        if stance is DecisionStance.LONG:
+            probabilities = {
+                "long": Decimal("0.7"),
+                "short": Decimal("0.1"),
+                "flat": Decimal("0.2"),
+            }
+        elif stance is DecisionStance.SHORT:
+            probabilities = {
+                "long": Decimal("0.1"),
+                "short": Decimal("0.7"),
+                "flat": Decimal("0.2"),
+            }
+        else:
+            probabilities = {
+                "long": Decimal("0.2"),
+                "short": Decimal("0.2"),
+                "flat": Decimal("0.6"),
+            }
         return DecisionProposal(
             mission_id=request.mission_id,
             snapshot_id=request.snapshot_id,
             model_artifact_id=self._artifact.artifact_id,
-            stance=DecisionStance.FLAT,
-            probabilities={"long": Decimal("0.2"), "short": Decimal("0.2"), "flat": Decimal("0.6")},
+            stance=stance,
+            probabilities=probabilities,
             calibrated_confidence=Decimal("0.5"),
             score=Decimal("0"),
             horizon="1h",
@@ -159,7 +196,9 @@ class ReferenceDecisionAdapter:
             missing_evidence=request.missing_evidence,
             disagreement=request.disagreement,
             expires_at=expiry,
-            rationale="reference adapter: insufficient signal for directional stance",
+            rationale="reference adapter: insufficient signal for directional stance"
+            if stance is DecisionStance.FLAT
+            else "reference adapter: deterministic test directional stance",
         )
 
 

@@ -62,9 +62,21 @@ class AdvisorService:
         snapshot: Snapshot,
         account: AccountState,
         market: RiskMarketState,
-        targets,
+        targets=None,
         risk_policy_version: str,
     ) -> DecisionPipelineResult:
+        """Build an evidence-gated decision whose executable target is proposal-bound.
+
+        The DecisionProposal is the sole authority for executable intent:
+        LONG/SHORT/FLAT/ABSTAIN with calibrated confidence, evidence
+        references, and expiry. The deterministic Portfolio Constructor and
+        RiskKernel remain the sole trading authorities downstream. Any
+        ABSTAIN, invalid, missing, stale, expired, or identity-mismatched
+        proposal fails closed: the target is forced to current positions
+        (no-trade) and the decision abstains. Caller-supplied targets are
+        honored only when they exactly match the proposal stance mapping;
+        otherwise they are discarded in favor of the proposal.
+        """
         routed = self.router.route(request)
         graph = EvidenceGraph()
         role_results = run_adaptive_waves(
@@ -86,34 +98,81 @@ class AdvisorService:
             minimum_factor_families=3,
             cutoff=snapshot.as_of,
         )
-        target: TargetPortfolio = TargetPortfolioBuilder(no_trade_band=Decimal("0")).build(
-            snapshot=snapshot,
-            account=account,
-            targets=targets,
-            marks=market.marks,
-            risk_constraints_version=risk_policy_version,
-        )
+        evidence_ids = tuple(node.evidence.artifact_id for node in graph.nodes())
         dissent = tuple(item for role_result in role_results for item in role_result.dissent)
-        decision = DecisionBundle(
-            mission_id=request.mission_id,
-            snapshot_id=snapshot.artifact_id,
-            target_portfolio=target,
-            evidence_ids=tuple(node.evidence.artifact_id for node in graph.nodes()),
-            consensus=("evidence_gate_passed" if gate.passed else "evidence_gate_not_passed"),
-            strongest_dissent=dissent,
-            missing_evidence=gate.reasons,
-            confidence=Decimal("0.8") if gate.passed else Decimal("0"),
-            abstained=not gate.passed,
-            created_at=snapshot.as_of,
-            expires_at=snapshot.as_of + timedelta(hours=1),
-            gate=gate,
-        )
+        # Proposal first: it is the sole authority for executable intent.
+        # The Portfolio Constructor below is deterministic and bound to it.
         proposal = self._build_proposal(
             request=request,
             snapshot=snapshot,
             gate=gate,
-            evidence_ids=tuple(node.evidence.artifact_id for node in graph.nodes()),
+            evidence_ids=evidence_ids,
             dissent=dissent,
+        )
+        proposal_failure = self._proposal_failure_reason(
+            proposal,
+            request=request,
+            snapshot=snapshot,
+            evidence_ids=evidence_ids,
+            evaluation_at=snapshot.as_of,
+        )
+        if proposal_failure is None:
+            bound_targets = self._proposal_bound_targets(
+                proposal, account=account, marks=market.marks
+            )
+        else:
+            # Fail closed: force a no-trade target at current positions.
+            bound_targets = {
+                instrument: account.positions.get(instrument.canonical_id, Decimal("0"))
+                for instrument in self._known_instruments(account, market)
+            }
+        target: TargetPortfolio = TargetPortfolioBuilder(no_trade_band=Decimal("0")).build(
+            snapshot=snapshot,
+            account=account,
+            targets=bound_targets,
+            marks=market.marks,
+            risk_constraints_version=risk_policy_version,
+        )
+        abstained = not gate.passed or proposal_failure is not None
+        missing = (*gate.reasons, *(() if proposal_failure is None else (proposal_failure,)))
+        # The effective gate is evidence AND proposal validity. A proposal
+        # failure fails the combined gate even when the evidence quorum
+        # passed; the bundle invariant (passed gate cannot abstain) holds
+        # because the recorded gate reflects the combined result.
+        effective_gate = (
+            gate
+            if proposal_failure is None
+            else gate.model_copy(
+                update={
+                    "passed": False,
+                    "reasons": (*gate.reasons, proposal_failure),
+                }
+            )
+        )
+        decision = DecisionBundle(
+            mission_id=request.mission_id,
+            snapshot_id=snapshot.artifact_id,
+            target_portfolio=target,
+            evidence_ids=evidence_ids,
+            consensus=(
+                "evidence_gate_passed"
+                if gate.passed and proposal_failure is None
+                else "evidence_gate_not_passed"
+            ),
+            strongest_dissent=dissent,
+            missing_evidence=missing,
+            confidence=Decimal("0.8") if not abstained else Decimal("0"),
+            abstained=abstained,
+            created_at=snapshot.as_of,
+            # The decision expiry is bounded by the proposal's, but an
+            # already-expired (invalid) proposal still fails closed through
+            # the recorded proposal_expired reason; the bundle expiry stays
+            # structurally valid so the rejection itself remains auditable.
+            expires_at=max(
+                snapshot.as_of + timedelta(microseconds=1),
+                min(snapshot.as_of + timedelta(hours=1), proposal.expires_at),
+            ),
+            gate=effective_gate,
         )
         if self.ledgers is not None:
             for role_result in role_results:
@@ -200,6 +259,65 @@ class AdvisorService:
                 fallback_used=True,
                 rationale="decision model failure converted to typed ABSTAIN",
             )
+
+    @staticmethod
+    def _proposal_failure_reason(
+        proposal: DecisionProposal, *, request, snapshot, evidence_ids, evaluation_at: datetime
+    ) -> str | None:
+        """Fail closed on any ABSTAIN, invalid, missing, stale, or mismatched proposal."""
+        if proposal.mission_id != request.mission_id:
+            return "proposal_mission_mismatch"
+        if proposal.snapshot_id != snapshot.artifact_id:
+            return "proposal_snapshot_mismatch"
+        if proposal.abstained or proposal.stance is DecisionStance.ABSTAIN:
+            return "proposal_abstained"
+        if proposal.expires_at <= evaluation_at:
+            return "proposal_expired"
+        if proposal.calibrated_confidence <= Decimal("0"):
+            return "proposal_zero_confidence"
+        if set(proposal.evidence_ids) != set(evidence_ids):
+            return "proposal_evidence_mismatch"
+        if proposal.uncertainty is not None and (
+            proposal.uncertainty < Decimal("0") or proposal.uncertainty > Decimal("1")
+        ):
+            return "proposal_uncertainty_out_of_range"
+        return None
+
+    @staticmethod
+    def _known_instruments(account: AccountState, market_or_marks):
+        """Union of account and market instruments for fail-closed no-trade targets."""
+        from advisorai.contracts import AssetClass, InstrumentIdentity
+
+        marks = market_or_marks.marks if hasattr(market_or_marks, "marks") else market_or_marks
+        seen: dict[str, object] = {}
+        for canonical_id in (*account.positions, *account.marks, *marks):
+            if canonical_id not in seen:
+                seen[canonical_id] = InstrumentIdentity(
+                    canonical_id=canonical_id, asset_class=AssetClass.CRYPTO, venue="paper"
+                )
+        return tuple(seen.values())
+
+    def _proposal_bound_targets(self, proposal, *, account, marks) -> dict:
+        """Map a validated proposal stance to executable target quantities.
+
+        The mapping is intentionally coarse: LONG keeps/adds exposure only up
+        to currently marked instruments, SHORT/FLAT flatten. Precise sizing
+        remains the deterministic Portfolio Constructor's job under risk
+        policy; this binding only guarantees the direction of intent comes
+        from the proposal, never from caller-supplied targets.
+        """
+        if proposal.stance is DecisionStance.FLAT:
+            return {}
+        by_id = {item.canonical_id: item for item in self._known_instruments(account, marks)}
+        direction = Decimal("1") if proposal.stance is DecisionStance.LONG else Decimal("-1")
+        bound: dict = {}
+        for canonical_id, mark in marks.items():
+            if mark is None or canonical_id not in by_id:
+                continue
+            bound[by_id[canonical_id]] = (
+                account.positions.get(canonical_id, Decimal("0")) + direction
+            )
+        return bound
 
     def evaluate_risk(
         self,

@@ -72,6 +72,7 @@ def test_clean_session_operates_and_restarts_without_duplicates(tmp_path):
     cycle = runtime.run_once(datetime(2026, 8, 5, 15, 0, tzinfo=UTC))
     assert cycle.stage.value in {"abstained", "no_trade", "orders_routed", "risk_rejected"}
     first_orders = tuple(cycle.order_ids)
+    supervisor.checkpoint()
     end = supervisor.stop()
     assert end.outcome is SessionOutcome.CLEAN
 
@@ -85,6 +86,7 @@ def test_clean_session_operates_and_restarts_without_duplicates(tmp_path):
     start2, recovery2 = supervisor2.start(reason="restart")
     assert start2.prior_end_record_id == end.artifact_id
     assert recovery2.recovery_mode.value == "normal"
+    supervisor2.checkpoint()
     supervisor2.stop()
     assert len(set(first_orders)) == len(first_orders)
 
