@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from scripts.probe_kata_sandbox import boundary_passed, parse_kata_output
+from scripts.probe_kata_adversarial import boundary_passed, parse_kata_output
 
 
 def _good_output() -> str:
