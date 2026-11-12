@@ -100,6 +100,7 @@ def test_scheduler_uses_wall_clock_guard_and_authoritative_status_file() -> None
     assert 'if [ "$now_ns" -ge "$target_ns" ]' in source
     assert 'sleep "$RECHECK_SLEEP_SECONDS"' in source
     assert '"$output_root/status.json"' in source
+    assert '--history-root "$WATCHDOG_ROOT"' in source
     assert "status_value()" in source
     assert "CHECKPOINT_DECISION=$checkpoint_decision" in source
 

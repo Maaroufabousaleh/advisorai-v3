@@ -611,6 +611,7 @@ class CanaryFinalityTracker:
         self._versions: dict[tuple[str, datetime], dict[str, list[tuple[int, datetime]]]] = (
             defaultdict(lambda: defaultdict(list))
         )
+        self._admissions: dict[tuple[str, datetime], dict[str, object]] = {}
         self.revisions: list[CanaryPostAdmissionRevision] = []
         previous: str | None = None
         if revision_path.exists():
@@ -741,6 +742,25 @@ class CanaryFinalityTracker:
                 continue
             final_bar = self._admitted_bar(bar, raw.collected_at)
             self.normalized.append(final_bar)
+            supporting = sorted(versions[content_hash], key=lambda item: (item[1], item[0]))
+            pre_admission_hashes = sorted(
+                version_hash for version_hash in versions if version_hash != content_hash
+            )
+            self._admissions[key] = {
+                "instrument": bar.instrument,
+                "interval_end": bar.interval_end,
+                "admission_observed_at": raw.collected_at,
+                "admission_raw_sequence": raw.sequence,
+                "admitted_content_hash": content_hash,
+                "supporting_receipt_sequences": tuple(
+                    sequence for sequence, _timestamp in supporting[: self.repeat_receipts]
+                ),
+                "supporting_receipt_timestamps": tuple(
+                    timestamp for _sequence, timestamp in supporting[: self.repeat_receipts]
+                ),
+                "pre_admission_content_hashes": tuple(pre_admission_hashes),
+                "pre_admission_variation_count": len(pre_admission_hashes),
+            }
             admitted_now.append(final_bar)
         return tuple(admitted_now)
 
@@ -795,6 +815,25 @@ class CanaryFinalityTracker:
             "admitted_final_intervals": len(admitted),
             "unresolved_intervals": len(observed - admitted),
             "post_admission_revision_count": len(self.revisions),
+            "pre_admission_variation_intervals": sum(
+                1
+                for admission in self._admissions.values()
+                if int(admission["pre_admission_variation_count"]) > 0
+            ),
+            "admissions": [
+                {
+                    **admission,
+                    "interval_end": admission["interval_end"].isoformat(),
+                    "admission_observed_at": admission["admission_observed_at"].isoformat(),
+                    "supporting_receipt_timestamps": [
+                        timestamp.isoformat()
+                        for timestamp in admission["supporting_receipt_timestamps"]
+                    ],
+                    "supporting_receipt_sequences": list(admission["supporting_receipt_sequences"]),
+                    "pre_admission_content_hashes": list(admission["pre_admission_content_hashes"]),
+                }
+                for _key, admission in sorted(self._admissions.items(), key=lambda item: item[0])
+            ],
             "first_post_close_receipt_latency_seconds": first_receipts,
             "first_revision_latency_seconds": first_revisions,
             "last_revision_latency_seconds": last_revisions,
