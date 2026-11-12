@@ -19,3 +19,4 @@ Admission is tracked separately and never implied by implementation.
 
 | I-portfolio order views | paper orders/fills API + dashboard panel | `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/api/test_paper_orders.py` (3 passed) | IMPLEMENTED | VERIFIED; next: order→fill→outcome trace view |
 | I-traceability chain | decision→fill→outcome joined view + mission panel | `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/api/test_traceability.py` (2 passed) | IMPLEMENTED | VERIFIED |
+| J-tamper-evidence | hash-chained ledger audit + endpoint + panel | `src/advisorai/ledger/audit.py`, `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/ledger/test_audit.py`, `tests/api/test_traceability.py` | IMPLEMENTED | VERIFIED (deletion/reorder/mutation detection) |
