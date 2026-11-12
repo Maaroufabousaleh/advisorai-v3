@@ -26,14 +26,10 @@ by this work. Implementation readiness only.
 - Base env: `uv sync --group dev`; Python 3.12; no extras required.
 - Dashboard: `npm run build --prefix dashboard` — success.
 
-## 3. Tests and evidence
-
-- Pre-change full suite: 1213 passed.
-- Owned modules: 53 passed → 55 with outcome tests
-  (`tests/session`, `tests/decision`, `tests/research`, `tests/api`).
-- Phase 7 runner (new semantics): 26 passed.
-- Full post-change suite: bg_4 (pending at dossier write; rerun before push).
-- Dashboard build: success (33.8s).
+- Full post-change suite: **1229 passed** (1213 baseline + 16 new), 48 warnings
+  (pre-existing pydantic `schema` shadowing + fork deprecation), ~4.3min.
+- Full acceptance runner: pending (bg_6); rerun confirmed before push.
+- Dashboard build: success (~34s).
 
 ## 4. E2E scenarios proven (offline deterministic fixtures)
 
