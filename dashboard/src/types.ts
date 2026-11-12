@@ -164,6 +164,14 @@ export interface DashboardOverview {
   research?: ResearchActivityView | null
 }
 
+export interface ResearchRecordView {
+  artifact_id: string
+  record_type: string
+  summary: string
+  approved: boolean | null
+  payload: Record<string, unknown>
+}
+
 export type CommandKind =
   | 'halt_paper'
   | 'resume_paper'

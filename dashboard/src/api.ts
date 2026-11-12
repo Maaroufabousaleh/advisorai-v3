@@ -3,6 +3,7 @@ import type {
   CommandReceipt,
   CommandRequest,
   DashboardOverview,
+  ResearchRecordView,
   SourceHealthView,
 } from './types'
 
@@ -33,6 +34,10 @@ export const dashboardApi = {
   status: () => request<AuthStatus>('/api/v1/auth/status'),
   overview: () => request<DashboardOverview>('/api/v1/dashboard/overview'),
   sourceHealth: () => request<SourceHealthView[]>('/api/v1/dashboard/source-health'),
+  researchRecords: () =>
+    request<ResearchRecordView[]>('/api/v1/research/records'),
+  researchLineage: (artifactId: string) =>
+    request<ResearchRecordView[]>(`/api/v1/research/lineage/${artifactId}`),
   login: (password: string, totpCode: string) =>
     request<{ csrf_token: string; subject: string }>('/api/v1/auth/login', {
       method: 'POST',

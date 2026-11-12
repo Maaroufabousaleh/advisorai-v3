@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -195,6 +196,18 @@ class ResearchActivityView(BaseModel):
     proposals_recorded: int = Field(ge=0)
     proposals_abstained: int = Field(ge=0)
     tone: SystemTone
+
+
+class ResearchRecordView(BaseModel):
+    """One immutable research artifact projected for operator inspection."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    artifact_id: str = Field(min_length=1)
+    record_type: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    approved: bool | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class ServiceView(BaseModel):
@@ -952,6 +965,40 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
     )
 
 
+_RECORD_TYPE_NAMES = {
+    "PaperCard": "paper",
+    "HypothesisCard": "hypothesis",
+    "CandidateFactorArtifact": "factor",
+    "ExperimentArtifact": "experiment",
+    "ValidationReport": "validation",
+    "PromotionDecision": "promotion",
+}
+
+
+def _record_type_name(record: object) -> str:
+    """Map a research record instance to its registry record type."""
+    return _RECORD_TYPE_NAMES.get(type(record).__name__, "unknown")
+
+
+def _research_summary(record_type: str, payload: dict) -> str:
+    """One-line operator summary per research artifact type."""
+    get = payload.get if isinstance(payload, dict) else {}.get
+    if record_type == "paper":
+        return str(get("claimed_result", get("source_url", "paper")) or "paper")
+    if record_type == "hypothesis":
+        return str(get("economic_rationale", "hypothesis") or "hypothesis")
+    if record_type == "factor":
+        return str(get("dsl_source", get("universe", "factor")) or "factor")
+    if record_type == "experiment":
+        return str(get("metrics", "experiment") or "experiment")
+    if record_type == "validation":
+        verdict = "approved" if get("approved") else "rejected"
+        return f"{verdict}: {get('rationale', '') or 'validation'}".strip()
+    if record_type == "promotion":
+        return f"scope={get('scope', '?')} policy={get('policy_version', '?')}"
+    return record_type
+
+
 def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
     """Project per-session start/recovery/checkpoint/lease/gap state.
 
@@ -1042,6 +1089,7 @@ class DashboardProjection:
         runtime: Any | None = None,
         config_store: ConfigBundleStore | None = None,
         source_health_path: Path | None = None,
+        research_registry_path: Path | None = None,
     ) -> None:
         self._ledgers = ledgers
         self._runtime = runtime
@@ -1049,6 +1097,11 @@ class DashboardProjection:
         self._source_health_path = source_health_path or (
             Path(os.environ["ADVISORAI_PHASE3_HEALTH_SNAPSHOT"])
             if os.getenv("ADVISORAI_PHASE3_HEALTH_SNAPSHOT")
+            else None
+        )
+        self._research_registry_path = research_registry_path or (
+            Path(os.environ["ADVISORAI_RESEARCH_REGISTRY_PATH"])
+            if os.getenv("ADVISORAI_RESEARCH_REGISTRY_PATH")
             else None
         )
         self._overview = (
@@ -1161,6 +1214,103 @@ class DashboardProjection:
             if event.event_type == "paper_runtime_cycle"
             and isinstance(event.payload.get("cycle"), dict)
         )
+
+    def research_records(self, record_type: str | None = None) -> tuple[ResearchRecordView, ...]:
+        """Project immutable research artifacts for operator inspection.
+
+        Read-only projection over the ResearchRegistry; empty when no
+        registry is configured. Never mutates, promotes, or executes.
+        """
+        if self._research_registry_path is None or not self._research_registry_path.exists():
+            return ()
+        import sqlite3
+
+        with sqlite3.connect(self._research_registry_path) as connection:
+            connection.row_factory = sqlite3.Row
+            if record_type is None:
+                rows = connection.execute(
+                    "SELECT artifact_id, record_type, payload_json FROM research_records"
+                    " ORDER BY rowid DESC LIMIT 100"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT artifact_id, record_type, payload_json FROM research_records"
+                    " WHERE record_type = ? ORDER BY rowid DESC LIMIT 100",
+                    (record_type,),
+                ).fetchall()
+        import json as _json
+
+        views: list[ResearchRecordView] = []
+        for row in rows:
+            try:
+                payload = _json.loads(row["payload_json"])
+            except Exception:
+                continue
+            views.append(
+                ResearchRecordView(
+                    artifact_id=row["artifact_id"],
+                    record_type=row["record_type"],
+                    summary=_research_summary(row["record_type"], payload),
+                    approved=payload.get("approved")
+                    if isinstance(payload.get("approved"), bool)
+                    else None,
+                    payload=payload if isinstance(payload, dict) else {},
+                )
+            )
+        return tuple(views)
+
+    def research_lineage(self, artifact_id: str) -> tuple[ResearchRecordView, ...]:
+        """Project the full lineage neighborhood for one research artifact."""
+        if self._research_registry_path is None or not self._research_registry_path.exists():
+            return ()
+        from advisorai.research.registry import ResearchRegistry
+
+        registry = ResearchRegistry(self._research_registry_path)
+        try:
+            target = registry.get(uuid.UUID(artifact_id))
+        except Exception:
+            return ()
+        if target is None:
+            return ()
+        seen: set[str] = set()
+        ordered: list[str] = [str(target.artifact_id)]
+        stack = [str(target.artifact_id)]
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            try:
+                edges = registry.lineage(uuid.UUID(current))
+            except Exception:
+                continue
+            for from_id, to_id, _relation in edges:
+                for member in (from_id, to_id):
+                    if member not in seen and member not in ordered:
+                        ordered.append(member)
+                    if member not in seen:
+                        stack.append(member)
+        views: list[ResearchRecordView] = []
+        for member in ordered:
+            try:
+                record = registry.get(uuid.UUID(member))
+            except Exception:
+                continue
+            if record is None:
+                continue
+            payload = record.model_dump(mode="json", round_trip=True)
+            rtype = _record_type_name(record)
+            approved = payload.get("approved")
+            views.append(
+                ResearchRecordView(
+                    artifact_id=member,
+                    record_type=rtype,
+                    summary=_research_summary(rtype, payload),
+                    approved=approved if isinstance(approved, bool) else None,
+                    payload=payload,
+                )
+            )
+        return tuple(views)
 
     def execute(self, command: DashboardCommandRequest, *, actor: str) -> CommandReceipt:
         prior = self._receipts.get(command.idempotency_key)
@@ -1354,6 +1504,7 @@ def create_dashboard_app(
     ledger = SqliteLedgers(Path(ledger_path)) if ledger_path else None
     config_root = os.getenv("ADVISORAI_CONFIG_BUNDLE_PATH")
     bundle_store = ConfigBundleStore(Path(config_root)) if config_root else None
+    research_registry_path = os.getenv("ADVISORAI_RESEARCH_REGISTRY_PATH")
     store = projection or DashboardProjection(
         ledgers=ledger,
         config_store=bundle_store,
@@ -1362,6 +1513,7 @@ def create_dashboard_app(
             if os.getenv("ADVISORAI_PHASE3_HEALTH_SNAPSHOT")
             else None
         ),
+        research_registry_path=Path(research_registry_path) if research_registry_path else None,
     )
     login_limiter = LoginRateLimiter()
     password_hash = configured_password_hash()
@@ -1552,6 +1704,22 @@ def create_dashboard_app(
     @app.get("/api/v1/dashboard/source-health", response_model=tuple[SourceHealthView, ...])
     async def source_health(_: Principal = Depends(principal_for)) -> tuple[SourceHealthView, ...]:  # noqa: B008
         return store.source_health()
+
+    @app.get("/api/v1/research/records", response_model=tuple[ResearchRecordView, ...])
+    async def research_records(
+        _: Principal = Depends(principal_for),  # noqa: B008
+        record_type: str | None = None,
+    ) -> tuple[ResearchRecordView, ...]:
+        return store.research_records(record_type)
+
+    @app.get(
+        "/api/v1/research/lineage/{artifact_id}", response_model=tuple[ResearchRecordView, ...]
+    )
+    async def research_lineage(
+        artifact_id: str,
+        _: Principal = Depends(principal_for),  # noqa: B008
+    ) -> tuple[ResearchRecordView, ...]:
+        return store.research_lineage(artifact_id)
 
     @app.post("/api/v1/control/command", response_model=CommandReceipt)
     async def command(

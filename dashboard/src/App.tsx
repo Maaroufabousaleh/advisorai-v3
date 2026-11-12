@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  FlaskConical,
   Wifi,
   X,
   Zap,
@@ -47,12 +48,13 @@ import type {
   CommandRequest,
   DashboardOverview,
   DashboardMetric,
+  ResearchRecordView,
   SourceHealthView,
   Tone,
 } from './types'
 import './styles.css'
 
-type Section = 'overview' | 'missions' | 'portfolio' | 'risk' | 'data' | 'system' | 'incidents' | 'audit' | 'settings'
+type Section = 'overview' | 'missions' | 'research' | 'portfolio' | 'risk' | 'data' | 'system' | 'incidents' | 'audit' | 'settings'
 
 interface NavItem {
   id: Section
@@ -64,6 +66,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'overview', label: 'Overview', hint: 'Control room', icon: LayoutDashboard },
   { id: 'missions', label: 'Missions', hint: 'Evidence councils', icon: Sparkles },
+  { id: 'research', label: 'Research', hint: 'Brain & experiments', icon: FlaskConical },
   { id: 'portfolio', label: 'Portfolio', hint: 'Paper execution', icon: CircleDollarSign },
   { id: 'risk', label: 'Risk & limits', hint: 'Deterministic gate', icon: ShieldCheck },
   { id: 'data', label: 'Data & models', hint: 'Point-in-time spine', icon: Database },
@@ -351,6 +354,7 @@ function WorkspaceView({ section, data, onCommand, onNavigate }: { section: Sect
         <div className="workspace-actions"><button className="secondary-button" onClick={() => onCommand('refresh_data')}><RefreshCw size={15} /> REFRESH STATE</button>{section === 'settings' && <button className="danger-outline" onClick={() => onCommand('halt_paper')}><PauseCircle size={15} /> HALT PAPER</button>}</div>
       </div>
       {section === 'missions' && <MissionWorkspace data={data} onNavigate={onNavigate} />}
+      {section === 'research' && <ResearchWorkspace />}
       {section === 'portfolio' && <PortfolioWorkspace data={data} onNavigate={onNavigate} />}
       {section === 'risk' && <RiskWorkspace data={data} onCommand={onCommand} />}
       {section === 'data' && <DataWorkspace data={data} />}
@@ -371,6 +375,7 @@ function workspaceDescription(section: Section) {
     data: 'Point-in-time availability, source families, models, and quality findings.',
     system: 'Service ownership, measured resources, and load-shedding state.',
     incidents: 'Containment, reconciliation, runbooks, and corrective-test links.',
+    research: 'Paper, hypothesis, factor, experiment, validation, and promotion records with lineage.',
     audit: 'Append-only evidence for every mission, decision, control, and approval.',
     settings: 'Guarded configuration proposals and local security posture.',
   }
@@ -480,6 +485,29 @@ function ModelLane({ title, detail, state, icon }: { title: string; detail: stri
 
 function SystemWorkspace({ data }: { data: DashboardOverview }) {
   return <div className="workspace-stack"><div className="system-overview"><div className="system-stat"><span className="section-kicker"><Cpu size={14} /> RESOURCE HEADROOM</span><strong>{data.status.resource_headroom_gib.toFixed(1)} <small>GiB</small></strong><span>of required 1.5 GiB minimum</span></div><div className="system-stat"><span className="section-kicker"><Activity size={14} /> ALWAYS-ON SERVICES</span><strong>4 <small>/ 4</small></strong><span>one degraded source worker</span></div><div className="system-stat"><span className="section-kicker"><HardDrive size={14} /> LEDGER</span><strong>WAL <small>live</small></strong><span>last event {formatTime(data.status.last_ledger_event_at)} UTC</span></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><ServerCog size={14} /> SERVICE REGISTRY</div><h2>Ownership and runtime state</h2></div><span className="panel-heading-meta">MODE {data.status.operating_mode.toUpperCase()}</span></div><div className="data-table service-table"><div className="data-table-row table-head"><span>SERVICE</span><span>KIND</span><span>STATE</span><span>OWNS</span><span>LATENCY</span><span>ADMISSION</span></div>{data.services.map((row) => <div className="data-table-row" key={row.name}><span><strong>{row.name}</strong><small>resource bounded</small></span><span>{row.kind}</span><span><StatusPill tone={row.tone} label={row.state} /></span><span className="muted">{row.owns}</span><span className="mono">{row.latency}</span><span className="mono">{row.tone === 'warning' ? 'review' : 'admitted'}</span></div>)}</div></section><section className="panel load-panel"><div className="panel-heading"><div><div className="section-kicker"><Zap size={14} /> LOAD SHEDDING ORDER</div><h2>Protect the spine first</h2></div></div><div className="load-order">{['archive', 'browser', 'Hermes / Skill Foundry', 'low-priority research', 'training / backtests', 'optional challengers', 'noncritical collectors'].map((item, index) => <div className={`load-step ${index === 6 ? 'last' : ''}`} key={item}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item}</strong>{index < 3 && <small>shed first</small>}</div>)}</div></section></div>
+}
+
+function ResearchWorkspace() {
+  const [records, setRecords] = useState<ResearchRecordView[] | null>(null)
+  const [lineage, setLineage] = useState<ResearchRecordView[] | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.researchRecords()
+      .then((rows) => { if (!cancelled) { setRecords(rows); setLoading(false) } })
+      .catch((fetchError: Error) => { if (!cancelled) { setError(fetchError.message); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [])
+  const inspect = (artifactId: string) => {
+    setSelected(artifactId)
+    setLineage(null)
+    dashboardApi.researchLineage(artifactId)
+      .then((rows) => setLineage(rows))
+      .catch((fetchError: Error) => setError(fetchError.message))
+  }
+  return <div className="workspace-stack"><div className="data-health-strip"><div><FlaskConical size={20} /><strong>Research Brain inspection</strong><span>Immutable registry records with lineage. Retrieval only — nothing here promotes, executes, or admits.</span></div><div className="health-number"><strong>{records ? records.length : '—'}</strong><span>records</span></div></div>{loading ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading research records…</span></div> : error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>No research registry is available: {error}</span></div> : records && records.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No research records are recorded yet. Run the paper-to-approval workflow to populate the registry.</span></div> : <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><FlaskConical size={14} /> REGISTRY</div><h2>Paper to promotion chain</h2></div><span className="panel-heading-meta">{records ? records.length : 0} RECORDS</span></div><div className="data-table"><div className="data-table-row table-head"><span>TYPE</span><span>SUMMARY</span><span>VERDICT</span><span /></div>{(records ?? []).map((record) => <div className="data-table-row" key={record.artifact_id}><span>{record.record_type}</span><span>{record.summary.slice(0, 90)}</span><span>{record.approved === null || record.approved === undefined ? '—' : record.approved ? 'approved' : 'rejected'}</span><span><button className="text-button" onClick={() => inspect(record.artifact_id)}>LINEAGE <ChevronRight size={13} /></button></span></div>)}</div></section>}{selected && lineage && <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker">LINEAGE</div><h2>Chain for {selected.slice(0, 8)}</h2></div><button className="text-button" onClick={() => setSelected(null)}>CLOSE <X size={13} /></button></div><div className="data-table">{lineage.map((item) => <div className="data-table-row" key={item.artifact_id}><span>{item.record_type}</span><span>{item.summary.slice(0, 90)}</span><span>{item.artifact_id.slice(0, 8)}</span></div>)}</div></section>}</div>
 }
 
 function IncidentWorkspace({ data }: { data: DashboardOverview }) {
