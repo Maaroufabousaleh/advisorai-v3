@@ -129,6 +129,23 @@ class PaperFillView(BaseModel):
     tone: SystemTone
 
 
+class StrategyComparisonView(BaseModel):
+    """Baseline vs challenger on shared recorded slices. Read-only evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    baseline_subject: str = Field(min_length=1)
+    challenger_subject: str = Field(min_length=1)
+    baseline_utility: str = Field(min_length=1)
+    challenger_utility: str = Field(min_length=1)
+    delta_utility: str = Field(min_length=1)
+    shared_slices: int = Field(ge=0)
+    verdict: str = Field(min_length=1)
+    beats_no_trade: bool = False
+    expiry_action: str = Field(default="none", min_length=1)
+    tone: SystemTone
+
+
 class TraceLinkView(BaseModel):
     """One source-to-decision-to-outcome chain link, joined by exact IDs."""
 
@@ -1516,6 +1533,50 @@ class DashboardProjection:
             )
         return tuple(views)
 
+    def strategy_comparison(self) -> tuple[StrategyComparisonView, ...]:
+        """Compare the baseline subject against recorded challengers.
+
+        Baseline identity is the most-sampled non-no-trade subject; every
+        comparison uses shared slices only. Evidence for human review, never
+        admission.
+        """
+        if self._ledgers is None:
+            return ()
+        from advisorai.learning.monitor import compare_strategies, load_scorecards
+
+        scorecards = load_scorecards(self._ledgers)
+        present = sorted({card.subject for card in scorecards} - {"no-trade"})
+        if not present:
+            return ()
+        baseline = max(
+            present, key=lambda subject: sum(1 for card in scorecards if card.subject == subject)
+        )
+        views: list[StrategyComparisonView] = []
+        for item in compare_strategies(scorecards, baseline_subject=baseline):
+            if item.challenger_subject == baseline:
+                continue
+            views.append(
+                StrategyComparisonView(
+                    baseline_subject=item.baseline_subject,
+                    challenger_subject=item.challenger_subject,
+                    baseline_utility=str(item.baseline_utility),
+                    challenger_utility=str(item.challenger_utility),
+                    delta_utility=str(item.delta_utility),
+                    shared_slices=item.shared_slices,
+                    verdict=item.verdict,
+                    beats_no_trade=item.beats_no_trade,
+                    expiry_action=item.expiry_action,
+                    tone=(
+                        SystemTone.WARNING
+                        if item.expiry_action != "none"
+                        else SystemTone.POSITIVE
+                        if item.delta_utility > 0
+                        else SystemTone.NEUTRAL
+                    ),
+                )
+            )
+        return tuple(views)
+
     def traceability(self) -> tuple[TraceLinkView, ...]:
         """Project source-to-decision-to-outcome chains joined by exact IDs.
 
@@ -2013,9 +2074,15 @@ def create_dashboard_app(
 
     @app.get("/api/v1/performance", response_model=tuple[PerformanceSliceView, ...])
     async def performance(
-        _: Principal = Depends(principal_for),
-    ) -> tuple[PerformanceSliceView, ...]:  # noqa: B008
+        _: Principal = Depends(principal_for),  # noqa: B008
+    ) -> tuple[PerformanceSliceView, ...]:
         return store.performance()
+
+    @app.get("/api/v1/strategies/comparison", response_model=tuple[StrategyComparisonView, ...])
+    async def strategy_comparison(
+        _: Principal = Depends(principal_for),  # noqa: B008
+    ) -> tuple[StrategyComparisonView, ...]:
+        return store.strategy_comparison()
 
     @app.get("/api/v1/traceability", response_model=tuple[TraceLinkView, ...])
     async def traceability(_: Principal = Depends(principal_for)) -> tuple[TraceLinkView, ...]:  # noqa: B008

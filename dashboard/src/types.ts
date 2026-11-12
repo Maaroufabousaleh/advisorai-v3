@@ -189,6 +189,19 @@ export interface LedgerChainView {
   tone: Tone
 }
 
+export interface StrategyComparisonView {
+  baseline_subject: string
+  challenger_subject: string
+  baseline_utility: string
+  challenger_utility: string
+  delta_utility: string
+  shared_slices: number
+  verdict: string
+  beats_no_trade: boolean
+  expiry_action: string
+  tone: Tone
+}
+
 export interface PerformanceSliceView {
   asset: string
   regime: string

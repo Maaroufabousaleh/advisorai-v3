@@ -214,11 +214,92 @@ def load_outcomes(ledgers: SqliteLedgers) -> tuple[tuple[PaperDecisionRecord, Pa
     return tuple(pairs)
 
 
+class StrategyComparison(BaseModel):
+    """Baseline vs challenger on shared slices + validation gates.
+
+    Read-only evidence for human review. A leading challenger is reported
+    as a candidate for paper shadow only; admission remains separate.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    baseline_subject: str = Field(min_length=1)
+    challenger_subject: str = Field(min_length=1)
+    baseline_utility: Decimal
+    challenger_utility: Decimal
+    delta_utility: Decimal
+    baseline_samples: int = Field(ge=0)
+    challenger_samples: int = Field(ge=0)
+    shared_slices: int = Field(ge=0)
+    verdict: str = Field(min_length=1)
+    no_trade_baseline: Decimal
+    beats_no_trade: bool = False
+    expiry_action: str = Field(default="none", min_length=1)
+
+
+def compare_strategies(
+    scorecards: tuple[Scorecard, ...],
+    *,
+    baseline_subject: str,
+    challenger_subjects: tuple[str, ...] = (),
+    no_trade_subject: str = "no-trade",
+) -> tuple[StrategyComparison, ...]:
+    """Compare each challenger (and the baseline) against shared-slice evidence.
+
+    Subjects default to every non-baseline, non-no-trade subject present.
+    The no-trade baseline utility is the recorded no-trade subject total when
+    present, else zero. Every comparison carries its own expiry review flag.
+    """
+    present = sorted({card.subject for card in scorecards})
+    challengers = tuple(challenger_subjects) or tuple(
+        subject for subject in present if subject not in {baseline_subject, no_trade_subject}
+    )
+    no_trade_total = sum(
+        (card.net_utility for card in scorecards if card.subject == no_trade_subject),
+        Decimal("0"),
+    )
+    flagged_subjects = {(flag.subject, flag.subject_version) for flag in expiry_flags(scorecards)}
+    comparisons: list[StrategyComparison] = []
+    subjects = (baseline_subject, *challengers)
+    for subject in subjects:
+        if subject == baseline_subject:
+            base, chal = baseline_subject, baseline_subject
+        else:
+            base, chal = baseline_subject, subject
+        result = compare_champion(scorecards, baseline_subject=base, challenger_subject=chal)
+        shared = {
+            (card.asset, card.regime, card.horizon) for card in scorecards if card.subject == base
+        } & {(card.asset, card.regime, card.horizon) for card in scorecards if card.subject == chal}
+        subject_versions = {
+            (card.subject, card.subject_version) for card in scorecards if card.subject == chal
+        }
+        under_review = bool(subject_versions) and subject_versions <= flagged_subjects
+        comparisons.append(
+            StrategyComparison(
+                baseline_subject=result.baseline_subject,
+                challenger_subject=result.challenger_subject,
+                baseline_utility=result.baseline_utility,
+                challenger_utility=result.challenger_utility,
+                delta_utility=result.delta_utility,
+                baseline_samples=result.baseline_samples,
+                challenger_samples=result.challenger_samples,
+                shared_slices=len(shared),
+                verdict=result.verdict,
+                no_trade_baseline=no_trade_total,
+                beats_no_trade=result.challenger_utility > no_trade_total,
+                expiry_action="review_for_retirement" if under_review else "none",
+            )
+        )
+    return tuple(comparisons)
+
+
 __all__ = [
     "ChampionComparison",
     "ExpiryFlag",
+    "StrategyComparison",
     "PerformanceSlice",
     "compare_champion",
+    "compare_strategies",
     "expiry_flags",
     "load_outcomes",
     "load_scorecards",

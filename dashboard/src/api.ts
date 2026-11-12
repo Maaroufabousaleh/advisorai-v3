@@ -8,6 +8,7 @@ import type {
   PaperOrderView,
   LedgerChainView,
   PerformanceSliceView,
+  StrategyComparisonView,
   TraceLinkView,
   SourceHealthView,
 } from './types'
@@ -45,6 +46,8 @@ export const dashboardApi = {
     request<PaperFillView[]>(orderId ? `/api/v1/paper/fills?order_id=${orderId}` : '/api/v1/paper/fills'),
   performance: () =>
     request<PerformanceSliceView[]>('/api/v1/performance'),
+  strategyComparison: () =>
+    request<StrategyComparisonView[]>('/api/v1/strategies/comparison'),
   traceability: () =>
     request<TraceLinkView[]>('/api/v1/traceability'),
   ledgerChain: () =>

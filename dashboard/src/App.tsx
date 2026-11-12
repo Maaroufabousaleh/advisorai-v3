@@ -50,6 +50,7 @@ import type {
   DashboardMetric,
   LedgerChainView,
   PaperFillView,
+  StrategyComparisonView,
   PerformanceSliceView,
   PaperOrderView,
   ResearchRecordView,
@@ -463,6 +464,7 @@ function PortfolioWorkspace({ data, onNavigate }: { data: DashboardOverview; onN
       <div className="portfolio-summary"><Metric metric={data.metrics[0]} /><Metric metric={data.metrics[1]} /><div className="portfolio-callout"><div className="section-kicker"><ShieldCheck size={14} /> EXECUTION BOUNDARY</div><strong>Paper / testnet only</strong><span>Target portfolios never become orders without RiskKernel approval.</span><button className="text-button" onClick={() => onNavigate('risk')}>VIEW POLICY <ArrowUpRight size={14} /></button></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> POSITION REGISTER</div><h2>All positions at authoritative mark</h2></div><span className="panel-heading-meta">{data.exposures.length} LINES · {formatTime(data.as_of)} UTC</span></div><div className="data-table"><div className="data-table-row table-head"><span>INSTRUMENT</span><span>SIDE</span><span>MARK</span><span>NOTIONAL</span><span>WEIGHT</span><span>P&L</span><span>STATE</span></div>{data.exposures.map((row) => <div className="data-table-row" key={row.instrument}><span><strong>{row.instrument}</strong><small>{row.asset_class}</small></span><span className="mono">{row.side}</span><span className="mono">{row.mark}</span><span className="mono">{row.notional}</span><span className="mono">{row.weight}</span><span className={toneClass(row.tone)}>{row.pnl}</span><span><StatusPill tone={row.tone} label="marked" /></span></div>)}</div></section>
       <PaperOrdersPanel />
       <PerformancePanel />
+      <StrategyComparisonPanel />
     </div>
   );
 }
@@ -526,6 +528,19 @@ function PerformancePanel() {
     return () => { cancelled = true }
   }, [])
   return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> PAPER PERFORMANCE</div><h2>Utility by regime</h2></div><span className="panel-heading-meta">{slices ? slices.length : '—'} SLICES</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Performance unavailable: {error}</span></div> : !slices ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading performance…</span></div> : slices.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No realized outcomes are recorded yet. Slices appear after paper horizons close.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>ASSET</span><span>REGIME</span><span>TRADES</span><span>TOTAL</span><span>WIN</span><span>DRAWDOWN</span><span>REVIEW</span></div>{slices.map((slice) => <div className="data-table-row" key={`${slice.asset}-${slice.regime}-${slice.horizon}`}><span>{slice.asset} / {slice.horizon}</span><span>{slice.regime}</span><span>{slice.samples}</span><span>{slice.total_utility}</span><span>{slice.win_rate}</span><span>{slice.max_drawdown}</span><span>{slice.expiry_action === 'none' ? '—' : slice.expiry_action}</span></div>)}</div>}</section>
+}
+
+function StrategyComparisonPanel() {
+  const [comparisons, setComparisons] = useState<StrategyComparisonView[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.strategyComparison()
+      .then((rows) => { if (!cancelled) setComparisons(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> STRATEGY COMPARISON</div><h2>Challengers vs baseline</h2></div><span className="panel-heading-meta">{comparisons ? comparisons.length : '—'} CHALLENGERS</span></div><div className="source-health-note"><span>Shared recorded slices only. A lead is evidence for human-reviewed paper shadow, never admission.</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Comparison unavailable: {error}</span></div> : !comparisons ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading comparison…</span></div> : comparisons.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No challenger has recorded outcomes yet. Comparisons appear after paper horizons close.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>CHALLENGER</span><span>BASELINE</span><span>DELTA</span><span>SHARED</span><span>NO-TRADE</span><span>REVIEW</span></div>{comparisons.map((row) => <div className="data-table-row" key={row.challenger_subject}><span>{row.challenger_subject}</span><span>{row.baseline_utility}</span><span>{row.delta_utility}</span><span>{row.shared_slices}</span><span>{row.beats_no_trade ? 'beats' : '—'}</span><span>{row.expiry_action === 'none' ? '—' : row.expiry_action}</span></div>)}</div>}</section>
 }
 
 function RiskWorkspace({ data, onCommand }: { data: DashboardOverview; onCommand: (command: CommandKind) => void }) {

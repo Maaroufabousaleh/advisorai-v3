@@ -111,3 +111,22 @@ def test_load_outcomes_joins_by_decision_id(tmp_path):
     assert len(pairs) == 4
     for decision, outcome in pairs:
         assert outcome.decision_id == decision.decision_id
+
+
+def test_compare_strategies_covers_baseline_and_challengers(tmp_path):
+    from advisorai.learning import compare_strategies
+
+    ledgers = _seed(tmp_path)
+    from advisorai.learning import load_scorecards
+
+    scorecards = load_scorecards(ledgers)
+    comparisons = compare_strategies(scorecards, baseline_subject="baseline-v1")
+    subjects = {item.challenger_subject for item in comparisons}
+    assert {"baseline-v1", "challenger-v1"} <= subjects
+    challenger = next(item for item in comparisons if item.challenger_subject == "challenger-v1")
+    assert challenger.delta_utility == Decimal("12")
+    assert challenger.shared_slices == 1
+    assert challenger.beats_no_trade is True
+    assert challenger.expiry_action == "none"
+    baseline = next(item for item in comparisons if item.challenger_subject == "baseline-v1")
+    assert baseline.delta_utility == Decimal("0")
