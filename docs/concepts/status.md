@@ -14,8 +14,7 @@ AdvisorAI V3 contains a substantial set of contracts, local data/ledger primitiv
 | Model gateway and model candidates | Optional / phase-gated | Routes and adapters are policy checked; no model is silently treated as authoritative |
 | PydanticAI/Prefect/Hamilton/LiteLLM/Nautilus runtime wrappers | Optional / phase-gated | Install extras only for the relevant qualification or development workflow |
 | Multi-process service topology | Target architecture | `ServiceRegistry` is an ownership/dependency manifest, not a supervisor |
-| Session lifecycle / crash recovery | Planned target | Start/stop/checkpoint/reconciliation/data-gap lifecycle is not yet represented as a complete runtime |
-| `DecisionModelPort` / typed Decision Model proposal | Planned target | Architecture boundary is specified; local adapter and admission are not claimed as complete |
+| Session lifecycle / crash recovery | Implemented (local) | `src/advisorai/session/` records start/checkpoint/end/recovery/data-gap/leases and supervises one owner session; operational admission remains separate |
 | Live capital operation | Not enabled by the quickstart | Requires external timed evidence, readiness, authorization, and phase admission |
 | Production deployment, certificates, monitoring, and incident response | Not supplied as a turnkey package | Operators must provide and review those controls outside this checkout |
 | Technology decision register | Planning-only inventory | External tools and sources are not installed, admitted, or authorized by appearing in the register |
