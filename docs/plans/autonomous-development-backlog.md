@@ -18,3 +18,4 @@ Admission is tracked separately and never implied by implementation.
 | J-live | Phase 10 approval | governance | `docs/plans/phase-10*` | human gate | EXTERNALLY BLOCKED | owner decision, never autonomous |
 
 | I-portfolio order views | paper orders/fills API + dashboard panel | `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/api/test_paper_orders.py` (3 passed) | IMPLEMENTED | VERIFIED; next: order→fill→outcome trace view |
+| I-traceability chain | decision→fill→outcome joined view + mission panel | `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/api/test_traceability.py` (2 passed) | IMPLEMENTED | VERIFIED |
