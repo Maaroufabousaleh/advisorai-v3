@@ -20,7 +20,9 @@ and the capability lifecycle.
 4. Deliver one missing deterministic collector or adapter through the
    complete quarantined lifecycle.
 5. Permit Research Brain/Alpha Team integration behind the same capability
-   and permission boundary, one admitted adapter at a time.
+   and permission boundary, one admitted adapter at a time. Qanat may be
+   evaluated as an optional research-only MCP adapter; independent AdvisorAI
+   checks remain authoritative.
 
 ## Exit and admission gate
 
@@ -33,3 +35,22 @@ access, write authority, self-promotion, or a live-trading permission.
 No Hermes order tool, limit change, broker credentials, live-repository
 mutation, automatic live-capital write authority, Hermes memory as authority,
 or automatic capability admission.
+
+## Permission classes and backend qualification
+
+Assign every job an explicit trust class and capability profile before launch.
+Filesystem access, network destinations, secret scopes, process and resource
+limits, GPU visibility, timeout, artifact export, cleanup, and audit identity
+default to deny. The class definitions and backend-independent policy are in
+[ADR 0012](../decisions/0012-agent-permission-and-sandbox-boundary.md).
+
+Hardened Docker is a convenience baseline and is not a VM-equivalent claim.
+gVisor and Kata are host-qualified prototypes; Firecracker is deferred until a
+concrete workload justifies it. Missing or failed isolation must fail closed,
+without silent fallback to a weaker backend. A backend being installed or
+starting a container is not an admission record.
+
+As of the 2026-11-11 PR review, [PR #207](https://github.com/Maaroufabousaleh/advisorai-v3/pull/207)
+is an open draft. Its description says Kata is not installed, guest/adversarial
+runtime tests were not performed, and Phase 8 is not admitted. This workstream
+does not treat it as current-main Kata evidence.

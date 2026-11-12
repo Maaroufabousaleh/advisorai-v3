@@ -24,10 +24,17 @@ may begin before Phase 7; promotion remains gated.
 4. Record immutable decision-time inputs for eligible paper decisions and
    attach outcomes later through separate `OutcomeResolution` IDs. Do not
    train AdvisorAI-CDM in this phase plan.
-5. After integrated paper evidence exists, compare challengers such as
-   TimesFM 3, TTM-R3, Kronos-base, TabPFN-TS, Kev/Jev variants, and future
-   AdvisorAI-CDM. Also add SEC/ALFRED/equity sources, browser collectors, or
-   challenger frameworks only as bounded, separately reviewed work.
+5. After integrated paper evidence exists, reopen a challenger only for a
+   measured deficiency in the frozen reference fabric. TimesFM 3, TTM-R3,
+   Kronos-base, TabPFN-TS, Kev/Jev variants, and future AdvisorAI-CDM remain
+   separately gated; model release novelty is not a trigger.
+6. Add SEC/ALFRED/equity sources, selected OpenBB providers, browser collectors,
+   external validation tools, and optional cloud workers only as bounded,
+   separately reviewed work behind existing ports.
+7. Prototype official-text-first event evidence after Integrated Alpha. Defer
+   broad third-party transcript and audio ingestion until access, recording,
+   storage, transformation, retention, latency, and redistribution rights are
+   established. Verify material numbers against an official filing or release.
 
 ## Research Brain separation
 
@@ -38,6 +45,13 @@ may begin before Phase 7; promotion remains gated.
   immutable artifact identities, failed/rejected evidence, and promotion
   decisions. Retrieval systems never replace this truth. Cognee, Mem0, and
   alternatives remain optional challengers.
+
+The [technology and integration decision register](../reference/technology-decision-register.md)
+is the canonical inventory for source tiers and tool decisions. It records
+implementation and admission separately. OpenBB is only a provider experiment;
+Optuna is a bounded experiment-search candidate; Qlib is a comparison
+environment; cloud workers remain optional escape hatches. None may write
+canonical data or gain trading authority.
 
 ## Admission gate
 

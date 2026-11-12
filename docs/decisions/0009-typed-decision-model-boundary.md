@@ -34,3 +34,9 @@ must lead to missing evidence, a separately permitted fallback, or abstention.
 `JevAdapter`, and a future `AdvisorCDMAdapter` implement the same port. Jev is
 never mandatory. All outputs retain model/version and evidence ancestry for
 replay and admission review.
+
+The adapter contract remains vendor-neutral. Qualification includes exact
+artifact and license identity, typed schema validation, timeout/fallback and
+abstention behavior, calibration, privacy, and measured workstation resources.
+Jev requires authoritative provider terms before any concrete integration is
+planned. See the [technology decision register](../reference/technology-decision-register.md).

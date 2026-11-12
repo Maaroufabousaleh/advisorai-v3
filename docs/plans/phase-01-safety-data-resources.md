@@ -21,11 +21,19 @@ auditable, point-in-time safe, resource-bounded, and recoverable.
 5. Seed only the resource/mode configuration required by V3-Core. Preserve the
    specified mode ceilings and concurrency caps; no agent may self-report
    capacity.
+6. Define the source-registration contract before adding providers: exact
+   source identity, rights, access/delay limits, publication and retrieval
+   times, revision/vintage behavior, point-in-time fields, fallback, quality
+   checks, and failure policy. The source tiers and candidate register are in
+   [ADR 0011](../decisions/0011-provider-source-authority-and-pit.md) and the
+   [technology decision register](../reference/technology-decision-register.md).
 
 ## Exit gate
 
 Bronze rebuild is deterministic; point-in-time leakage fixtures fail;
-idempotency and config rollback pass.
+idempotency and config rollback pass. A source cannot enter a trusted
+point-in-time path without a completed source record and explicit rights and
+availability review.
 
 ## Explicitly out of scope
 

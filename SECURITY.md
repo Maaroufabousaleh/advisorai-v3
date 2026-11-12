@@ -20,6 +20,44 @@ AdvisorAI V3 handles data, credentials, model/provider boundaries, paper executi
 
 The repository does not provide a process supervisor, TLS termination, certificate management, secret manager, network firewall, production monitoring stack, or public incident-response service. The default dashboard launcher is for local development and synthetic paper state. Operators are responsible for reviewing those controls before any non-local use.
 
+## Workstation threat and release lifecycle
+
+The planning threat model covers local-file disclosure, untrusted or generated
+research code, dependency and model supply-chain changes, malicious data/news
+payloads, prompt or tool injection, stolen provider credentials, corrupt or
+stale state, and unauthorized operating-mode changes. Research and builder
+jobs remain untrusted by default and receive no broker, OMS, or RiskKernel
+authority. Permission classes are defined independently of sandbox backends
+in [ADR 0012](docs/decisions/0012-agent-permission-and-sandbox-boundary.md).
+
+The owner-workstation release and recovery plan requires:
+
+- Keep credentials out of Git, logs, prompts, reports, generated artifacts,
+  and research sandboxes. Use narrow purpose-specific scopes, avoid copying
+  secrets into child processes, and document creation, ownership, rotation,
+  revocation, and incident steps.
+- Pin dependencies, model code, checkpoints, provider schemas, and source
+  adapters to reviewed identities. Record hashes and license/data-rights
+  findings. Produce an SBOM where the existing release workflow supports it;
+  do not add a new release platform solely for this plan.
+- Review dependency, model, provider-schema, and configuration updates before
+  activation. Keep the previous known-good version available for rollback.
+- Verify backup integrity and restore from a checkpoint before relying on it.
+  Recovery reconciles authoritative state before resuming work; uncertain
+  state fails closed.
+- Record security incidents and operator decisions without copying secret
+  values. Revoke or rotate exposed credentials at the provider and preserve
+  only redacted evidence.
+
+For Integrated Alpha, record exact code/config/schema/provider/model identities,
+confirm secrets are scoped and redacted, exercise checkpoint integrity,
+backup/restore and configuration rollback, and verify that recovery cannot
+escalate authority. These are planned workstation controls, not a claim that a
+central secret manager, signed release process, production monitoring service,
+or incident-response service is supplied. This owner-operated baseline follows
+the risk-based practices in [NIST SSDF](https://csrc.nist.gov/projects/ssdf)
+and [OWASP Secrets Management](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet).
+
 Phase gates are operational controls, not security theater: installed dependencies, passing tests, or a configured endpoint do not establish provider trust, timed soak evidence, human approval, or live readiness. See [Project status](docs/concepts/status.md) and [Transition configuration](docs/getting-started/configuration.md).
 
 ## Reporting a vulnerability
