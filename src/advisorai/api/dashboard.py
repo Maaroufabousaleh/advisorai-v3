@@ -172,6 +172,31 @@ class MissionView(BaseModel):
     tone: SystemTone
 
 
+class SessionLifecycleView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    session_id: str = Field(min_length=1)
+    recovery_classification: str = Field(min_length=1)
+    recovery_mode: str = Field(min_length=1)
+    open_leases: int = Field(ge=0)
+    checkpoints: int = Field(ge=0)
+    data_gaps: int = Field(ge=0)
+    backfilled_gaps: int = Field(ge=0)
+    tone: SystemTone
+
+
+class ResearchActivityView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decisions_recorded: int = Field(ge=0)
+    outcomes_recorded: int = Field(ge=0)
+    problems_open: int = Field(ge=0)
+    replays_passed: int = Field(ge=0)
+    proposals_recorded: int = Field(ge=0)
+    proposals_abstained: int = Field(ge=0)
+    tone: SystemTone
+
+
 class ServiceView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -224,6 +249,8 @@ class DashboardOverview(BaseModel):
     audit: tuple[AuditEventView, ...]
     live_readiness: LiveReadinessView
     source_health: tuple[SourceHealthView, ...] = ()
+    sessions: tuple[SessionLifecycleView, ...] = ()
+    research: ResearchActivityView | None = None
 
     @model_validator(mode="after")
     def require_aware_as_of(self) -> DashboardOverview:
@@ -817,6 +844,35 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
         for descriptor in DEFAULT_SERVICES
     )
     open_incidents = sum(1 for item in incidents if item.status == "open")
+    mission_events_by_type: dict[str, int] = {}
+    proposals_abstained = 0
+    for event in mission_events:
+        mission_events_by_type[event.event_type] = (
+            mission_events_by_type.get(event.event_type, 0) + 1
+        )
+        if event.event_type == "proposal_recorded":
+            proposal = event.payload.get("proposal")
+            if isinstance(proposal, dict) and proposal.get("abstained"):
+                proposals_abstained += 1
+    model_events = ledgers.events(LedgerNamespace.MODEL)
+    outcomes_recorded = sum(
+        1 for event in model_events if event.event_type == "paper_scorecard_recorded"
+    )
+    decisions_recorded = mission_events_by_type.get("paper_decision_chain", 0)
+    problems_open = mission_events_by_type.get(
+        "paper_learning_problem", 0
+    ) - mission_events_by_type.get("paper_replay_recorded", 0)
+    replays_passed = mission_events_by_type.get("paper_replay_recorded", 0)
+    sessions = _project_sessions(mission_events)
+    research = ResearchActivityView(
+        decisions_recorded=decisions_recorded,
+        outcomes_recorded=outcomes_recorded,
+        problems_open=max(0, problems_open),
+        replays_passed=replays_passed,
+        proposals_recorded=mission_events_by_type.get("proposal_recorded", 0),
+        proposals_abstained=proposals_abstained,
+        tone=SystemTone.INFO,
+    )
     return DashboardOverview(
         as_of=current,
         environment=DashboardEnvironment.PAPER_TESTNET,
@@ -891,7 +947,56 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
             blockers=("Phase 7 paper soak evidence not admitted", "Live activation is disabled"),
             approval="sealed by paper-only boundary",
         ),
+        sessions=sessions,
+        research=research,
     )
+
+
+def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
+    """Project session start/recovery/checkpoint/lease/gap state from the ledger."""
+    starts: dict[str, dict] = {}
+    recoveries: dict[str, dict] = {}
+    checkpoints = 0
+    gaps = 0
+    backfilled = 0
+    acquired: set[str] = set()
+    released: set[str] = set()
+    for event in mission_events:
+        payload = event.payload
+        if event.event_type == "session_started" and isinstance(payload.get("start"), dict):
+            start = payload["start"]
+            starts[str(start.get("session_id", ""))] = start
+        elif event.event_type == "recovery_recorded" and isinstance(payload.get("recovery"), dict):
+            recovery = payload["recovery"]
+            recoveries[str(recovery.get("session_id", ""))] = recovery
+        elif event.event_type == "session_checkpoint":
+            checkpoints += 1
+        elif event.event_type == "data_gap_recorded":
+            gaps += 1
+            gap = payload.get("gap")
+            if isinstance(gap, dict) and gap.get("backfilled"):
+                backfilled += 1
+        elif event.event_type == "lease_acquired" and isinstance(payload.get("lease"), dict):
+            acquired.add(str(payload["lease"].get("lease_id", "")))
+        elif event.event_type == "lease_released" and isinstance(payload.get("lease"), dict):
+            released.add(str(payload["lease"].get("lease_id", "")))
+    views: list[SessionLifecycleView] = []
+    for session_id, start in starts.items():
+        recovery = recoveries.get(session_id, {})
+        mode = str(recovery.get("recovery_mode", "normal"))
+        views.append(
+            SessionLifecycleView(
+                session_id=session_id,
+                recovery_classification=str(start.get("recovery_classification", "unknown")),
+                recovery_mode=mode,
+                open_leases=len(acquired - released),
+                checkpoints=checkpoints,
+                data_gaps=gaps,
+                backfilled_gaps=backfilled,
+                tone=SystemTone.WARNING if mode == "recovery" else SystemTone.INFO,
+            )
+        )
+    return tuple(views[-20:])
 
 
 class DashboardProjection:

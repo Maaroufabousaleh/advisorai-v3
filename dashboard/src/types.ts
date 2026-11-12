@@ -122,6 +122,27 @@ export interface LiveReadinessView {
   approval: string
 }
 
+export interface SessionLifecycleView {
+  session_id: string
+  recovery_classification: string
+  recovery_mode: string
+  open_leases: number
+  checkpoints: number
+  data_gaps: number
+  backfilled_gaps: number
+  tone: Tone
+}
+
+export interface ResearchActivityView {
+  decisions_recorded: number
+  outcomes_recorded: number
+  problems_open: number
+  replays_passed: number
+  proposals_recorded: number
+  proposals_abstained: number
+  tone: Tone
+}
+
 export interface DashboardOverview {
   schema_version: string
   as_of: string
@@ -139,6 +160,8 @@ export interface DashboardOverview {
   audit: AuditEventView[]
   live_readiness: LiveReadinessView
   source_health: SourceHealthView[]
+  sessions?: SessionLifecycleView[]
+  research?: ResearchActivityView | null
 }
 
 export type CommandKind =

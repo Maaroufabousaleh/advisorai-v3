@@ -327,6 +327,7 @@ function Overview({ data, onCommand, onNavigate }: { data: DashboardOverview; on
         <RiskPanel data={data} onNavigate={onNavigate} />
       </section>
       <MissionBoard data={data} onNavigate={onNavigate} />
+      <SessionRecoveryPanel data={data} />
       <section className="lower-grid">
         <ExposurePanel data={data} onNavigate={onNavigate} />
         <QualityPanel data={data} onNavigate={onNavigate} />
@@ -374,6 +375,12 @@ function workspaceDescription(section: Section) {
     settings: 'Guarded configuration proposals and local security posture.',
   }
   return descriptions[section]
+}
+
+function SessionRecoveryPanel({ data }: { data: DashboardOverview }) {
+  const sessions = data.sessions ?? []
+  const research = data.research
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker">SESSION LIFECYCLE</div><h2>Recovery and research state</h2></div><span className="panel-heading-meta">{sessions.length} SESSION{sessions.length === 1 ? '' : 'S'}</span></div>{sessions.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No supervised session is recorded in the ledger. Start, checkpoint, and stop events appear here.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>SESSION</span><span>CLASSIFICATION</span><span>MODE</span><span>LEASES</span><span>GAPS</span></div>{sessions.slice(-5).map((session) => <div className="data-table-row" key={session.session_id}><span>{session.session_id.slice(0, 8)}</span><span>{session.recovery_classification}</span><span>{session.recovery_mode}</span><span>{session.open_leases} open</span><span>{session.data_gaps} gaps / {session.backfilled_gaps} backfilled</span></div>)}</div>}{research && <div className="source-health-note"><span>Research: {research.decisions_recorded} decisions, {research.outcomes_recorded} outcomes, {research.proposals_recorded} proposals ({research.proposals_abstained} abstained), {research.problems_open} open problems.</span></div>}</section>
 }
 
 function Metric({ metric }: { metric: DashboardMetric }) {
