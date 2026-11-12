@@ -16,6 +16,14 @@ from advisorai.agents import (
 )
 from advisorai.agents.fusion import DecisionBundle
 from advisorai.contracts import RiskDecision, RiskPolicy, Snapshot, TargetPortfolio
+from advisorai.decision import (
+    DecisionModelArtifact,
+    DecisionModelInput,
+    DecisionModelPort,
+    DecisionProposal,
+    DecisionStance,
+    ReferenceDecisionAdapter,
+)
 from advisorai.execution import (
     AccountState,
     RiskKernel,
@@ -30,15 +38,22 @@ from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
 class DecisionPipelineResult:
     decision: DecisionBundle
     risk_decision: RiskDecision | None
+    proposal: DecisionProposal | None = None
 
 
 class AdvisorService:
     """The API owns missions and approvals; deterministic controls own risk."""
 
-    def __init__(self, council: EvidenceCouncil, ledgers: SqliteLedgers | None = None) -> None:
+    def __init__(
+        self,
+        council: EvidenceCouncil,
+        ledgers: SqliteLedgers | None = None,
+        decision_model: DecisionModelPort | None = None,
+    ) -> None:
         self.ledgers = ledgers
         self.router = MissionRouter(ledgers)
         self.council = council
+        self.decision_model = decision_model
 
     def build_decision(
         self,
@@ -93,6 +108,13 @@ class AdvisorService:
             expires_at=snapshot.as_of + timedelta(hours=1),
             gate=gate,
         )
+        proposal = self._build_proposal(
+            request=request,
+            snapshot=snapshot,
+            gate=gate,
+            evidence_ids=tuple(node.evidence.artifact_id for node in graph.nodes()),
+            dissent=dissent,
+        )
         if self.ledgers is not None:
             for role_result in role_results:
                 if role_result.agent_run is None:
@@ -107,15 +129,77 @@ class AdvisorService:
                         },
                     )
                 )
+            decision_hash = sha256(
+                decision.model_dump_json(exclude={"created_at", "expires_at"}).encode()
+            ).hexdigest()
             self.ledgers.append(
                 LedgerEvent(
                     namespace=LedgerNamespace.MISSION,
                     event_type="decision_built",
-                    idempotency_key=(f"decision:{request.mission_id}:{decision.canonical_hash()}"),
+                    idempotency_key=(f"decision:{request.mission_id}:{decision_hash}"),
                     payload={"decision": decision.model_dump(mode="json", round_trip=True)},
                 )
             )
-        return DecisionPipelineResult(decision=decision, risk_decision=None)
+            self.ledgers.append(
+                LedgerEvent(
+                    namespace=LedgerNamespace.MISSION,
+                    event_type="proposal_recorded",
+                    idempotency_key=(f"proposal:{request.mission_id}:{proposal.canonical_hash()}"),
+                    payload={"proposal": proposal.model_dump(mode="json", round_trip=True)},
+                )
+            )
+        return DecisionPipelineResult(decision=decision, risk_decision=None, proposal=proposal)
+
+    def _build_proposal(self, *, request, snapshot, gate, evidence_ids, dissent):
+        """Typed proposal behind the port; never order or risk authority."""
+        adapter = self.decision_model
+        if adapter is None:
+            fallback_artifact = DecisionModelArtifact(
+                model_name="reference",
+                adapter_name="reference-fallback",
+                code_hash="0" * 64,
+                config_hash="0" * 64,
+                snapshot_id=snapshot.artifact_id,
+            )
+            adapter = ReferenceDecisionAdapter(fallback_artifact)
+        try:
+            return adapter.propose(
+                DecisionModelInput(
+                    mission_id=request.mission_id,
+                    snapshot_id=snapshot.artifact_id,
+                    evidence_ids=evidence_ids,
+                    consensus="evidence_gate_passed" if gate.passed else "evidence_gate_not_passed",
+                    missing_evidence=gate.reasons,
+                    disagreement=dissent,
+                    gate_passed=gate.passed,
+                ),
+                now=snapshot.as_of,
+            )
+        except Exception:
+            fallback_artifact = DecisionModelArtifact(
+                model_name="reference",
+                adapter_name="reference-fallback",
+                code_hash="0" * 64,
+                config_hash="0" * 64,
+                snapshot_id=snapshot.artifact_id,
+            )
+            return DecisionProposal(
+                mission_id=request.mission_id,
+                snapshot_id=snapshot.artifact_id,
+                model_artifact_id=fallback_artifact.artifact_id,
+                stance=DecisionStance.ABSTAIN,
+                calibrated_confidence=Decimal("0"),
+                score=Decimal("0"),
+                horizon="1h",
+                uncertainty=Decimal("1"),
+                evidence_ids=(),
+                missing_evidence=("decision_model_failure", *gate.reasons),
+                disagreement=dissent,
+                expires_at=snapshot.as_of + timedelta(hours=1),
+                abstained=True,
+                fallback_used=True,
+                rationale="decision model failure converted to typed ABSTAIN",
+            )
 
     def evaluate_risk(
         self,
@@ -146,6 +230,7 @@ class AdvisorService:
                         *result.decision.gate.reasons,
                     ),
                 ),
+                proposal=result.proposal,
             )
         if evaluation_at is None:
             decision_cutoff = account.as_of.astimezone(UTC)
@@ -165,6 +250,7 @@ class AdvisorService:
                     authoritative_state_hash=state_hash,
                     reasons=("decision_expired",),
                 ),
+                proposal=result.proposal,
             )
         risk_decision = RiskKernel().evaluate(
             request=RiskRequest(
@@ -174,4 +260,6 @@ class AdvisorService:
                 policy=policy,
             )
         )
-        return DecisionPipelineResult(decision=result.decision, risk_decision=risk_decision)
+        return DecisionPipelineResult(
+            decision=result.decision, risk_decision=risk_decision, proposal=result.proposal
+        )

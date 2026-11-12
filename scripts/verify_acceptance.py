@@ -79,8 +79,15 @@ PHASE_SUITES: tuple[PhaseSuite, ...] = (
     PhaseSuite(6, "institutional controls", ("tests/institutional",)),
     PhaseSuite(
         7,
-        "unattended paper soak",
-        ("tests/recovery/test_soak.py", "tests/recovery/test_durable_soak.py", "tests/learning"),
+        "integrated paper session validation",
+        (
+            "tests/session",
+            "tests/decision",
+            "tests/recovery/test_soak.py",
+            "tests/recovery/test_durable_soak.py",
+            "tests/recovery/test_phase1_local_rebuild.py",
+            "tests/learning",
+        ),
     ),
     PhaseSuite(8, "Hermes and Skill Foundry", ("tests/capabilities",)),
     PhaseSuite(9, "controlled expansion", ("tests/expansion",)),
