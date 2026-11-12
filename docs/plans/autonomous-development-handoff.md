@@ -7,6 +7,6 @@ If this session ends, resume here without redoing the audit.
   `overnight-canary-monitor/`, `plan-refact.md` (pre-existing untracked).
 - PR #211 OPEN, unmerged. Last verified: 1286 passed, 11/11 acceptance (Phase 5: 46, Phase 7: 46, Phase 8: 31), dashboard builds, scans clean. Kata probe live run: boundary true.
 - Done: E-retrieval, G cross-engine replay, I-portfolio orders/fills, I-traceability chain + panel, J-tamper-evidence, F-monitor, H-kata probe (measured true).
-- Exact next action: full pytest + acceptance for the credential-audit HEAD, push, update PR. Next eligible: I-backtest comparison views or H-host Kata re-check.
+- Exact next action: none pending — HEAD fully verified (1286 + 11/11). Next eligible work is all externally gated (see blockers file).
 - Constraints: one global GPU lease; no parallel GPU; WSL2 ~11GB; no live
   orders/credentials/approvals; Phase 10 sealed; TimesFM3 files untouched.
