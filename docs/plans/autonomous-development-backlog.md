@@ -5,7 +5,7 @@ evidence or human approval never substitutes for unfinished code.
 
 | ID | Work package | Implementation status | Local evidence | Next action |
 |---|---|---|---|---|
-| A-runtime | Long-lived owner app, durable lock, scheduled local paper runtime, graceful stop, recovery | IMPLEMENTED for local deterministic profile; production adapter composition PARTIAL | `tests/session/test_app_entry.py`, `tests/session/test_lifecycle.py` | Continue with the adapter composition layer; keep local fixture as offline acceptance profile |
+| A-runtime | Long-lived owner app, durable lock, scheduled local paper runtime, graceful stop, recovery, typed adapter and outcome composition | IMPLEMENTED for local deterministic profile and injected data/model/paper venue/outcome boundaries; provider implementations and scoring policies PARTIAL | `tests/session/test_app_entry.py`, `tests/session/test_application_adapters.py`, `tests/session/test_lifecycle.py` | Implement provider-specific paper adapters without enabling live capital |
 | A-reconcile | Latest authoritative order state, current account/open-order state, current watermark/PIT and gap coverage checks | IMPLEMENTED | `tests/session/test_lifecycle.py`, runtime reconciliation and subprocess lifecycle tests | Maintain fail-closed behavior |
 | B-authority | Proposal-bound targets and decision/model no-authority boundary | IMPLEMENTED | `tests/decision`, `tests/api` | Maintain |
 | B-paper | RiskKernel/OMS/venue/reconciliation/fill/outcome chain | IMPLEMENTED for local simulator and approved adapter ports | `tests/execution`, `tests/runtime`, `tests/session/test_app_entry.py` | Preserve provider-specific admission records; do not add live authority |

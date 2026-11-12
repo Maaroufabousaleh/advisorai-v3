@@ -23,7 +23,7 @@ it does not qualify a model, source, venue, sandbox, or trading scope.
 | P4 | Baselines, forecast contracts, forward evaluation, cost-aware utility, and challenger decision records | IMPLEMENTED | `tests/models` runs as Phase 4 acceptance | Candidate promotion remains pending exact immutable utility/calibration evidence and review |
 | P5 | Evidence Council, typed Decision Model, evidence gates, proposal-bound targets, and no-authority adapter boundary | IMPLEMENTED | `tests/agents`, `tests/api`, and `tests/decision` | Real-source/model evaluation and any adapter qualification are separate admission decisions |
 | P6 | Institutional controls, paper order/fill attribution, and outcome linkage by immutable ID | IMPLEMENTED | `tests/institutional`, `tests/learning`, and the strong paper lifecycle test | A real paper fill sample and external attribution remain operational evidence |
-| P7 | Owner session lifecycle, current-state recovery, scheduled paper runtime, bounded resources, graceful stop, and restart | IMPLEMENTED for the deterministic local paper profile; external production-adapter wiring remains PARTIAL | `tests/session/test_app_entry.py` is a black-box subprocess flow through decision, simulated venue fill, reconciliation, outcome, clean restart, process crash, interrupted-cycle retention, reconciliation, and continued scheduling. Lifecycle, latest-order projection, current watermark/PIT and data-gap checks are in `tests/session/test_lifecycle.py` | Real provider/model/venue operation and independent multi-session evidence remain pending. They do not block the local software implementation |
+| P7 | Owner session lifecycle, current-state recovery, scheduled paper runtime, bounded resources, graceful stop, restart, and reviewed adapter composition | IMPLEMENTED for the deterministic local profile and typed data/model/paper-venue/outcome injection seam; provider-specific adapters and scoring policies remain PARTIAL | `tests/session/test_app_entry.py` is a black-box subprocess flow through decision, simulated venue fill, reconciliation, outcome, clean restart, process crash, interrupted-cycle retention, reconciliation, and continued scheduling. `tests/session/test_application_adapters.py` exercises injected data, model, paper venue, and outcome adapters under the same supervisor and current-state verifiers. Lifecycle recovery checks are in `tests/session/test_lifecycle.py` | Real provider/model/venue operation and independent multi-session evidence remain pending. These are separate from the remaining provider-specific software work |
 | P8 | Hermes/capability lifecycle, typed candidate export, default-deny broker, and bounded sandbox boundary | IMPLEMENTED for the local fixture workflow and tested backends | `tests/capabilities` and `scripts/run_phase8_capability_evidence.py` verify reproducible active-read evidence; the fixture remains unadmitted | Formal host/native isolation attestation and Phase 8 review remain separate; this is not a reason to leave local lifecycle software unimplemented |
 | P9 | Research Brain records, Factor DSL, cancellable bounded jobs, outcome memory, and controlled expansion | IMPLEMENTED for quarantined local workflows | `tests/research`, `tests/expansion`, concurrency/cancellation/budget/restart/checkpoint tests, and Phase 9 acceptance | New providers, capabilities, strategies, assets, and models require their own admission evidence |
 | P10 | Readiness evaluation, kill/rollback boundaries, and AI-offline controls | IMPLEMENTED as a closed guard | `tests/live` verifies refusal paths; Phase 10 acceptance does not activate capital | Human approval is mandatory and remains absent; Phase 10 stays sealed |
@@ -34,6 +34,7 @@ it does not qualify a model, source, venue, sandbox, or trading scope.
 | Area | Explicit acceptance | Evidence |
 |---|---|---|
 | Owner process | `start` remains alive with its lock held; a concurrent process is refused; the managed scheduler runs cycles; stop verifies and releases resources; restart classifies clean and crashed sessions; an interrupted cycle is retained and later cutoffs continue only after state reconciliation | Real subprocesses in `tests/session/test_app_entry.py`; stale/live lease recovery in `tests/session/test_lifecycle.py` |
+| Adapter composition | Data, model, paper-venue, and outcome adapters are injected only through a typed Python composition object; all remain under the same owner lock, resource envelope, OMS/RiskKernel path, and current watermark/PIT/gap/account verifiers; non-paper venue identity is rejected | `tests/session/test_application_adapters.py` runs an injected paper cycle under the supervisor, verifies current-state checks, and asserts the outcome adapter reports forecasts as unknown when no numeric forecast is present |
 | Order recovery | Historical `routed` or ambiguous events do not veto a later authoritative terminal state; latest unresolved state does; account/open-order state is queried through a permitted verifier | `tests/session/test_lifecycle.py`, runtime reconciliation tests, and the subprocess flow |
 | Recovery watermarks/PIT | Durable records alone are insufficient: non-empty watermarks and PIT snapshots require current-state verifiers; checkpoints belong to the latest session and current PIT record | `tests/session/test_lifecycle.py` and black-box restart |
 | Data gaps | An unresolved or uncovered gap fails recovery; a resolved gap passes only when exact source/instrument coverage is confirmed by a current permitted-source verifier | `tests/session/test_lifecycle.py` |
@@ -42,13 +43,11 @@ it does not qualify a model, source, venue, sandbox, or trading scope.
 
 ## Next implementation work
 
-The next software item is the production-profile adapter composition for the
-owner application: inject reviewed data, model, and paper-venue adapters into
-the same supervised lifecycle while retaining the deterministic local profile
-as the offline acceptance fixture. The present owner CLI constructs only the
-local simulator. This integration is software work and is **not** classified as
-externally blocked by pending credentials, model qualification, venue evidence,
-or human admission.
+The typed owner adapter-composition and outcome-semantics seams are implemented.
+The next software item is provider-specific paper adapter implementations;
+the current CLI remains on the deterministic fixture. This is still software
+work and is **not** classified as externally blocked by pending credentials,
+model qualification, venue evidence, or human admission.
 
 Never infer implementation completion from a green test suite, and never infer
 operational admission from implementation completion. Keep model/source/venue

@@ -7,11 +7,14 @@ import json
 import os
 import tempfile
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from inspect import getattr_static
 from pathlib import Path
+from typing import Protocol
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import psutil
@@ -23,13 +26,16 @@ from advisorai.api.service import AdvisorService
 from advisorai.contracts import (
     AssetClass,
     Evidence,
+    Fill,
     InstrumentIdentity,
+    Order,
     RiskLimit,
     RiskPolicy,
     Snapshot,
 )
 from advisorai.decision import (
     DecisionModelArtifact,
+    DecisionModelPort,
     DecisionStance,
     ReferenceDecisionAdapter,
 )
@@ -39,18 +45,258 @@ from advisorai.execution import (
     OrderManager,
     RiskMarketState,
     SimulatedPaperVenueAdapter,
+    VenueAccountSnapshot,
+    VenueAcknowledgement,
 )
-from advisorai.learning import PaperLearningLoop, PaperOutcome
+from advisorai.learning import PaperDecisionRecord, PaperLearningLoop, PaperOutcome
 from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.runtime import PaperRuntime, PaperRuntimeConfig
 
-from .records import RecoveryMode, SessionOutcome
+from .records import (
+    DataGapRecord,
+    DataGapResolutionRecord,
+    PITSnapshotVerification,
+    RecoveryMode,
+    SessionOutcome,
+)
 from .supervisor import SessionRecoveryChecks, SessionStopChecks, SessionSupervisor, WorkerRegistry
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _BTC = InstrumentIdentity(
     canonical_id="BTC", asset_class=AssetClass.CRYPTO, venue="paper", venue_symbol="BTC-USD"
 )
+
+
+class OwnerDataAdapter(Protocol):
+    """Data boundary required by the supervised paper owner.
+
+    The adapter must expose current-state verification methods as well as
+    snapshot builders. Durable records alone never verify recovery.
+    """
+
+    source: str
+    dataset: str
+    watermark_key: str
+
+    def snapshot_at(self, cutoff: datetime) -> Snapshot: ...
+
+    def market_at(self, snapshot: Snapshot) -> RiskMarketState: ...
+
+    def watermark_value(self, snapshot: Snapshot) -> str: ...
+
+    def verify_current_watermarks(
+        self, ledgers: SqliteLedgers, watermarks: dict[str, str]
+    ) -> bool: ...
+
+    def verify_current_pit(
+        self, ledgers: SqliteLedgers, verification: PITSnapshotVerification
+    ) -> bool: ...
+
+    def verify_gap_coverage(
+        self,
+        ledgers: SqliteLedgers,
+        gap: DataGapRecord,
+        resolution: DataGapResolutionRecord,
+    ) -> bool: ...
+
+
+class OwnerPaperVenueAdapter(Protocol):
+    """Current-state paper adapter consumed by OMS and recovery checks."""
+
+    venue: str
+
+    def submit(self, order: Order) -> VenueAcknowledgement: ...
+
+    def reconcile(self, order: Order) -> dict[str, object] | None: ...
+
+    def open_orders(self) -> tuple[VenueAcknowledgement, ...]: ...
+
+    def cancel(self, order: Order) -> bool: ...
+
+    def account_snapshot(self) -> VenueAccountSnapshot: ...
+
+    @property
+    def fills(self) -> tuple[Fill, ...]: ...
+
+
+class OwnerOutcomeAdapter(Protocol):
+    """Profile-specific realized-value, fill-quality, and cost semantics."""
+
+    def build_outcome(
+        self,
+        *,
+        decision: PaperDecisionRecord,
+        as_of: datetime,
+        snapshot: Snapshot,
+        market: RiskMarketState,
+        fills: tuple[Fill, ...],
+        orders: Mapping[UUID, Order],
+        initial_marks: Mapping[str, Decimal],
+    ) -> PaperOutcome: ...
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerApplicationAdapters:
+    """Reviewed adapters composed under one local, paper-only owner session.
+
+    ``initial_account`` is the profile's durable baseline. The injected venue
+    must report the same current state after OMS/account-ledger recovery. This
+    seam does not load plugins, credentials, or endpoints from configuration.
+    """
+
+    data: OwnerDataAdapter
+    evidence_council: EvidenceCouncil
+    decision_model_factory: Callable[[Snapshot], DecisionModelPort]
+    paper_venue: OwnerPaperVenueAdapter
+    outcome_adapter: OwnerOutcomeAdapter
+    initial_account: AccountState
+
+    def __post_init__(self) -> None:
+        if not self.data.source.strip() or not self.data.dataset.strip():
+            raise ValueError("owner data adapter requires source and dataset identities")
+        if self.data.watermark_key != f"{self.data.source}/{self.data.dataset}":
+            raise ValueError("owner data adapter watermark identity is inconsistent")
+        data_methods = (
+            "snapshot_at",
+            "market_at",
+            "watermark_value",
+            "verify_current_watermarks",
+            "verify_current_pit",
+            "verify_gap_coverage",
+        )
+        if any(not callable(getattr(self.data, name, None)) for name in data_methods):
+            raise ValueError("owner data adapter is missing a required current-state method")
+        if not callable(self.decision_model_factory):
+            raise ValueError("owner profile requires a decision model factory")
+        if not callable(getattr(self.outcome_adapter, "build_outcome", None)):
+            raise ValueError("owner profile requires explicit outcome semantics")
+        if getattr(self.paper_venue, "venue", None) != "paper":
+            raise ValueError("owner application only accepts the paper venue identity")
+        venue_methods = ("submit", "reconcile", "open_orders", "cancel", "account_snapshot")
+        if any(not callable(getattr(self.paper_venue, name, None)) for name in venue_methods):
+            raise ValueError("paper venue adapter is missing a current-state method")
+        try:
+            getattr_static(self.paper_venue, "fills")
+        except AttributeError:
+            raise ValueError("paper venue adapter must expose authoritative fills") from None
+        if not isinstance(self.initial_account, AccountState):
+            raise ValueError("owner profile requires an AccountState baseline")
+
+
+class LocalPaperOutcomeAdapter:
+    """Local mark-to-market outcome semantics without fabricated forecasts."""
+
+    def build_outcome(
+        self,
+        *,
+        decision: PaperDecisionRecord,
+        as_of: datetime,
+        snapshot: Snapshot,
+        market: RiskMarketState,
+        fills: tuple[Fill, ...],
+        orders: Mapping[UUID, Order],
+        initial_marks: Mapping[str, Decimal],
+    ) -> PaperOutcome:
+        mark = market.marks[decision.asset]
+        related_fills = tuple(fill for fill in fills if fill.artifact_id in decision.fill_ids)
+        costs = sum((fill.fee for fill in related_fills), Decimal("0"))
+        position = sum(
+            (
+                fill.quantity if orders[fill.order_id].side == "buy" else -fill.quantity
+                for fill in related_fills
+            ),
+            Decimal("0"),
+        )
+        baseline_mark = initial_marks.get(decision.asset, mark)
+        return PaperOutcome(
+            decision_id=decision.decision_id,
+            as_of=as_of,
+            forecast_value=None,
+            realized_value=mark,
+            net_utility=(mark - baseline_mark) * position - costs,
+            cost_usd=costs,
+            fill_quality=(
+                Decimal("1") if related_fills or not decision.order_ids else Decimal("0")
+            ),
+            data_reliability=Decimal("1"),
+            latency_ms=0,
+            failure_rate=Decimal("0"),
+        )
+
+
+class LocalPaperDataAdapter:
+    """Offline deterministic data profile used by the CLI and acceptance tests."""
+
+    source = "local-paper-fixture"
+    dataset = "BTC-USD-1h"
+
+    def __init__(self, owner: PaperOwnerApplication) -> None:
+        self.owner = owner
+
+    @property
+    def watermark_key(self) -> str:
+        return f"{self.source}/{self.dataset}"
+
+    def snapshot_at(self, cutoff: datetime) -> Snapshot:
+        return self.owner._snapshot_at(cutoff)
+
+    def market_at(self, snapshot: Snapshot) -> RiskMarketState:
+        return self.owner._market_at(snapshot)
+
+    @staticmethod
+    def watermark_value(snapshot: Snapshot) -> str:
+        return snapshot.as_of.isoformat()
+
+    def verify_current_watermarks(
+        self, _ledgers: SqliteLedgers, watermarks: dict[str, str]
+    ) -> bool:
+        try:
+            for key, value in watermarks.items():
+                if key != self.watermark_key:
+                    return False
+                cutoff = datetime.fromisoformat(value).astimezone(UTC)
+                if self.watermark_value(self.snapshot_at(cutoff)) != value:
+                    return False
+            return True
+        except Exception:
+            return False
+
+    def verify_current_pit(
+        self, _ledgers: SqliteLedgers, verification: PITSnapshotVerification
+    ) -> bool:
+        try:
+            if verification.source != self.source:
+                return False
+            snapshot = self.snapshot_at(verification.cutoff)
+            return (
+                snapshot.artifact_id == verification.snapshot_id
+                and self.owner._snapshot_hash(snapshot) == verification.snapshot_hash
+                and verification.first_available_at <= verification.cutoff
+                and self.watermark_value(snapshot)
+                == verification.watermarks.get(self.watermark_key)
+            )
+        except Exception:
+            return False
+
+    def verify_gap_coverage(
+        self,
+        _ledgers: SqliteLedgers,
+        gap: DataGapRecord,
+        resolution: DataGapResolutionRecord,
+    ) -> bool:
+        try:
+            if (
+                gap.source != self.source
+                or resolution.source != self.source
+                or gap.instrument != "BTC"
+                or resolution.instrument != "BTC"
+                or resolution.covered_through < gap.gap_end
+            ):
+                return False
+            snapshot = self.snapshot_at(resolution.covered_through)
+            return self.watermark_value(snapshot) == resolution.watermark
+        except Exception:
+            return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,10 +320,11 @@ class OwnerApplicationConfig:
 class PaperOwnerApplication:
     """Own a durable, scheduled, resource-bounded paper session.
 
-    The qualification scenario feeds deterministic local evidence to the
-    normal Evidence Council, Decision Model, Portfolio Constructor,
-    RiskKernel, OMS, and simulated paper venue. The venue has its own durable
-    state ledger and no network or credential access.
+    The CLI uses deterministic local evidence with the normal Evidence
+    Council, Decision Model, Portfolio Constructor, RiskKernel, OMS, and
+    simulated paper venue. Python callers may inject reviewed paper-scoped
+    adapters through :class:`OwnerApplicationAdapters`; they remain under the
+    same lock, resource envelope, and current-state recovery requirements.
     """
 
     def __init__(
@@ -91,6 +338,7 @@ class PaperOwnerApplication:
         config: OwnerApplicationConfig,
         supervisor: SessionSupervisor | None = None,
         stop_requested: threading.Event | None = None,
+        adapters: OwnerApplicationAdapters | None = None,
     ) -> None:
         self.ledgers = ledgers
         self.state_dir = state_dir
@@ -109,27 +357,41 @@ class PaperOwnerApplication:
         self._scheduler_error: BaseException | None = None
         self._scheduler_thread: threading.Thread | None = None
         self._owner_session_id: UUID | None = None
-        self._last_cutoff: datetime | None = self._checkpoint_cutoff()
         self._snapshots: dict[datetime, Snapshot] = {}
         self._worker_registry = WorkerRegistry()
         self._lease_id = None
 
         self._marks = {"BTC": Decimal("50000")}
-        self.venue = SimulatedPaperVenueAdapter(
-            ledgers,
-            venue="paper",
-            initial_cash=Decimal("100000"),
-            marks=self._marks,
-            as_of=_EPOCH,
-            auto_fill=config.scenario == "qualification",
-            fee_bps=Decimal("1"),
-        )
-        self.venue_snapshot = self.venue.account_snapshot()
-        self.account = AccountState(
-            cash=Decimal("100000"),
-            marks=dict(self._marks),
-            as_of=_EPOCH,
-        )
+        if adapters is None:
+            venue: OwnerPaperVenueAdapter = SimulatedPaperVenueAdapter(
+                ledgers,
+                venue="paper",
+                initial_cash=Decimal("100000"),
+                marks=self._marks,
+                as_of=_EPOCH,
+                auto_fill=config.scenario == "qualification",
+                fee_bps=Decimal("1"),
+            )
+            account = AccountState(
+                cash=Decimal("100000"),
+                marks=dict(self._marks),
+                as_of=_EPOCH,
+            )
+            adapters = OwnerApplicationAdapters(
+                data=LocalPaperDataAdapter(self),
+                evidence_council=(
+                    self._council() if config.scenario == "qualification" else EvidenceCouncil({})
+                ),
+                decision_model_factory=self._reference_decision_model,
+                paper_venue=venue,
+                outcome_adapter=LocalPaperOutcomeAdapter(),
+                initial_account=account,
+            )
+        self.adapters = adapters
+        self.venue = adapters.paper_venue
+        self.account = deepcopy(adapters.initial_account)
+        self._marks = dict(self.account.marks) or dict(self._marks)
+        self._last_cutoff: datetime | None = self._checkpoint_cutoff()
         self.account_ledger = AccountLedger(ledgers, self.account)
         self.orders = OrderManager(ledgers, self.venue)
         self.learning = PaperLearningLoop(ledgers)
@@ -142,8 +404,8 @@ class PaperOwnerApplication:
                 run_id="advisorai-owner-paper",
                 max_order_count_per_cycle=1,
             ),
-            snapshot_provider=self._snapshot_at,
-            market_provider=self._market_at,
+            snapshot_provider=self.adapters.data.snapshot_at,
+            market_provider=self.adapters.data.market_at,
             decision_builder=self._decision_at,
             account=self.account,
             account_ledger=self.account_ledger,
@@ -267,9 +529,7 @@ class PaperOwnerApplication:
         self.runtime.stop()
         if self._scheduler_thread is not None:
             self._scheduler_thread.join(timeout=30)
-        scheduler_alive = (
-            self._scheduler_thread is not None and self._scheduler_thread.is_alive()
-        )
+        scheduler_alive = self._scheduler_thread is not None and self._scheduler_thread.is_alive()
         if not scheduler_alive:
             self._worker_registry.deregister("thread:paper-scheduler")
         open_orders = tuple(item.order_id for item in self.venue.open_orders())
@@ -304,25 +564,29 @@ class PaperOwnerApplication:
             while not self.stop_requested.is_set():
                 cutoff = self._next_cutoff()
                 if self._last_cutoff is None or cutoff > self._last_cutoff:
-                    snapshot = self._snapshot_at(cutoff)
-                    self.runtime.run_once(cutoff)
+                    snapshot = self.adapters.data.snapshot_at(cutoff)
+                    cycle = self.runtime.run_once(cutoff)
                     # ``run_once`` marks a durable STARTED cycle as failed
                     # instead of replaying it.  Recovery has already
                     # reconciled the venue, orders, fills, and account before
                     # this scheduler starts, so preserve the failed cycle and
                     # move forward to the next cutoff without repeating work.
-                    watermark = self._watermark_value(snapshot)
-                    marks = {"local-paper-fixture/BTC-USD-1h": watermark}
+                    watermark = self.adapters.data.watermark_value(snapshot)
+                    if cycle.snapshot_id not in {None, snapshot.artifact_id}:
+                        raise RuntimeError(
+                            "data adapter returned inconsistent snapshots for one paper cutoff"
+                        )
+                    marks = {self.adapters.data.watermark_key: watermark}
                     self.supervisor.record_watermark(
-                        source="local-paper-fixture",
-                        dataset="BTC-USD-1h",
+                        source=self.adapters.data.source,
+                        dataset=self.adapters.data.dataset,
                         value=watermark,
                         observed_at=cutoff,
                     )
                     self.supervisor.record_pit_snapshot(
                         snapshot_id=snapshot.artifact_id,
                         snapshot_hash=self._snapshot_hash(snapshot),
-                        source="local-paper-fixture",
+                        source=self.adapters.data.source,
                         cutoff=cutoff,
                         first_available_at=cutoff,
                         watermarks=marks,
@@ -345,7 +609,7 @@ class PaperOwnerApplication:
                 self._remove_owner_record(self._owner_session_id)
 
     def _prepare_current_state(self) -> None:
-        """Recover OMS/account projections from the local paper venue ledger."""
+        """Recover OMS/account projections from the configured paper venue."""
         for order_id in tuple(self.orders.ambiguous_orders):
             self.orders.reconcile_ambiguous(order_id)
         for order_id, order in tuple(self.orders.orders.items()):
@@ -377,6 +641,7 @@ class PaperOwnerApplication:
             current_order_account_verifier=lambda _ledgers: self._verify_current_order_account(),
             current_watermark_verifier=self._verify_current_watermarks,
             current_pit_verifier=self._verify_current_pit,
+            current_gap_coverage_verifier=self._verify_current_gap_coverage,
         )
 
     def _prepare_current_state_result(self) -> bool:
@@ -403,85 +668,44 @@ class PaperOwnerApplication:
     def _verify_current_watermarks(
         self, _ledgers: SqliteLedgers, watermarks: dict[str, str]
     ) -> bool:
-        try:
-            for key, value in watermarks.items():
-                if key != "local-paper-fixture/BTC-USD-1h":
-                    return False
-                cutoff = datetime.fromisoformat(value).astimezone(UTC)
-                snapshot = self._snapshot_at(cutoff)
-                if self._watermark_value(snapshot) != value:
-                    return False
-            return True
-        except Exception:
-            return False
+        return self.adapters.data.verify_current_watermarks(_ledgers, watermarks)
+
+    def _verify_current_gap_coverage(
+        self,
+        ledgers: SqliteLedgers,
+        gap: DataGapRecord,
+        resolution: DataGapResolutionRecord,
+    ) -> bool:
+        return self.adapters.data.verify_gap_coverage(ledgers, gap, resolution)
 
     def _verify_current_pit(self, _ledgers: SqliteLedgers, verification) -> bool:
-        try:
-            if verification.source != "local-paper-fixture":
-                return False
-            snapshot = self._snapshot_at(verification.cutoff)
-            return (
-                snapshot.artifact_id == verification.snapshot_id
-                and self._snapshot_hash(snapshot) == verification.snapshot_hash
-                and verification.first_available_at <= verification.cutoff
-                and self._watermark_value(snapshot)
-                == verification.watermarks.get("local-paper-fixture/BTC-USD-1h")
-            )
-        except Exception:
-            return False
+        return self.adapters.data.verify_current_pit(_ledgers, verification)
 
     def _record_due_outcomes(self, cutoff: datetime) -> None:
-        snapshot = self._snapshot_at(cutoff)
-        mark = self._market_at(snapshot).marks["BTC"]
+        snapshot = self.adapters.data.snapshot_at(cutoff)
+        market = self.adapters.data.market_at(snapshot)
         for decision in self.learning.unresolved_decisions(as_of=cutoff):
-            fill_ids = decision.fill_ids
-            fills = [fill for fill in self.orders.fills.values() if fill.artifact_id in fill_ids]
-            costs = sum((fill.fee for fill in fills), Decimal("0"))
-            position = next(
-                (
-                    fill.quantity
-                    if self.orders.orders[fill.order_id].side == "buy"
-                    else -fill.quantity
-                    for fill in fills
-                ),
-                Decimal("0"),
-            )
-            outcome = PaperOutcome(
-                decision_id=decision.decision_id,
+            relevant_orders = {
+                order_id: self.orders.orders[order_id]
+                for order_id in decision.order_ids
+                if order_id in self.orders.orders
+            }
+            outcome = self.adapters.outcome_adapter.build_outcome(
+                decision=decision,
                 as_of=cutoff,
-                forecast_value=mark - Decimal("50"),
-                realized_value=mark,
-                net_utility=(mark - Decimal("50000")) * position - costs,
-                cost_usd=costs,
-                fill_quality=Decimal("1") if fills or not decision.order_ids else Decimal("0"),
-                data_reliability=Decimal("1"),
-                latency_ms=0,
-                failure_rate=Decimal("0"),
+                snapshot=snapshot,
+                market=market,
+                fills=tuple(self.orders.fills.values()),
+                orders=relevant_orders,
+                initial_marks=self._marks,
             )
             self.learning.record_outcome(outcome)
 
     def _decision_at(self, snapshot: Snapshot, account: AccountState, market: RiskMarketState):
-        model_artifact = DecisionModelArtifact(
-            artifact_id=uuid5(
-                NAMESPACE_URL, f"advisorai-v3/owner-reference-model/{snapshot.artifact_id}"
-            ),
-            model_name="reference",
-            adapter_name="owner-paper-reference-v1",
-            code_hash=hashlib.sha256(b"advisorai-owner-paper-reference-v1").hexdigest(),
-            config_hash=hashlib.sha256(self.config.scenario.encode()).hexdigest(),
-            snapshot_id=snapshot.artifact_id,
-            created_at=snapshot.as_of,
-        )
-        adapter = ReferenceDecisionAdapter(
-            model_artifact,
-            directional_stance=(
-                DecisionStance.LONG if self.config.scenario == "qualification" else None
-            ),
-        )
         service = AdvisorService(
-            self._council() if self.config.scenario == "qualification" else EvidenceCouncil({}),
+            self.adapters.evidence_council,
             self.ledgers,
-            adapter,
+            self.adapters.decision_model_factory(snapshot),
         )
         mission_id = uuid5(
             NAMESPACE_URL, f"advisorai-v3/owner-paper-mission/{snapshot.as_of.isoformat()}"
@@ -499,6 +723,26 @@ class PaperOwnerApplication:
             targets={_BTC: Decimal("0")},
             risk_policy_version="owner-paper-v1",
         )
+
+    def _reference_decision_model(self, snapshot: Snapshot) -> DecisionModelPort:
+        model_artifact = DecisionModelArtifact(
+            artifact_id=uuid5(
+                NAMESPACE_URL, f"advisorai-v3/owner-reference-model/{snapshot.artifact_id}"
+            ),
+            model_name="reference",
+            adapter_name="owner-paper-reference-v1",
+            code_hash=hashlib.sha256(b"advisorai-owner-paper-reference-v1").hexdigest(),
+            config_hash=hashlib.sha256(self.config.scenario.encode()).hexdigest(),
+            snapshot_id=snapshot.artifact_id,
+            created_at=snapshot.as_of,
+        )
+        adapter = ReferenceDecisionAdapter(
+            model_artifact,
+            directional_stance=(
+                DecisionStance.LONG if self.config.scenario == "qualification" else None
+            ),
+        )
+        return adapter
 
     @staticmethod
     def _council() -> EvidenceCouncil:
@@ -590,7 +834,7 @@ class PaperOwnerApplication:
             marks = payload.get("watermarks")
             if not isinstance(marks, dict):
                 continue
-            value = marks.get("local-paper-fixture/BTC-USD-1h")
+            value = marks.get(self.adapters.data.watermark_key)
             if isinstance(value, str):
                 try:
                     return datetime.fromisoformat(value).astimezone(UTC)
@@ -682,4 +926,13 @@ class PaperOwnerApplication:
             pass
 
 
-__all__ = ["OwnerApplicationConfig", "PaperOwnerApplication"]
+__all__ = [
+    "LocalPaperDataAdapter",
+    "LocalPaperOutcomeAdapter",
+    "OwnerApplicationAdapters",
+    "OwnerApplicationConfig",
+    "OwnerDataAdapter",
+    "OwnerOutcomeAdapter",
+    "OwnerPaperVenueAdapter",
+    "PaperOwnerApplication",
+]
