@@ -1,10 +1,12 @@
 # Autonomous development status — AdvisorAI V3
 
-Last verified: 2026-11-12. HEAD: `9da443a` (`codex/roadmap-completion-20261112`).
-PR #211 OPEN, unmerged. Full suite: 1256 passed. Acceptance: 11/11 phases (Phase 7: 41).
+Last verified: 2026-11-12. HEAD: `d6664f3` (`codex/roadmap-completion-20261112`).
+PR #211 OPEN, unmerged. Full suite: 1259 passed. Acceptance: 11/11 phases (Phase 7: 41).
 Dashboard build: success. Phase 10: sealed.
 
 ## Completed this loop
+
+- E-retrieval: rebuildable FTS5 index + `librarian_search` wired into Librarian jobs (3 tests).
 
 - E-inspect: research registry inspection API + dashboard research browser (3 tests).
 - Autonomous control docs created (status/backlog/test-matrix/blockers/handoff).
