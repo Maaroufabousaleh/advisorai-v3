@@ -32,11 +32,10 @@ Secret scan: clean. Phase 10: sealed.
 ## Active work package
 
 None pending verification — HEAD is fully verified (1276 + 11/11).
-Next eligible: H-sandbox host check (no Kata/gVisor binaries on this host —
-likely stays blocked) or J-credential-scope audit (read-only review of
+Next eligible: J-credential-scope audit (read-only review of
 credential scoping against the secrets/credential-boundary runbooks).
 
 ## Exact next action
 
 Verify control-doc numbers match HEAD evidence, push, update PR #211.
-Then pick H-host-check (expect BLOCKED confirmation) or J-credential audit.
+Then pick J-credential audit (H-sandbox measured true, admission separate).
