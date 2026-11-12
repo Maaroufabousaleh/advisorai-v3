@@ -16,6 +16,8 @@ from advisorai.phase4 import (
     CANARY_EVIDENCE_CLASS,
     CANARY_FINALITY_GUARD_SECONDS,
     CANARY_REPEAT_RECEIPTS,
+    CANARY_STATUS_OUTPUT_CONTRACT,
+    CANARY_WARMUP_POLICY_ID,
     CanaryPreflightCheck,
     CanaryPreflightReport,
     ChronosRuntimeIdentity,
@@ -168,6 +170,31 @@ def run_preflight(
         ),
         "60-second guard, two distinct receipts, and cutoff-minus-10-minute context are frozen",
     )
+    add(
+        "warmup_contract",
+        (
+            prereg.warmup_policy_id == CANARY_WARMUP_POLICY_ID
+            and prereg.warmup_until_at == prereg.first_mandatory_cutoff_at
+            and bool(prereg.mandatory_cutoffs)
+            and prereg.mandatory_cutoffs[0] == prereg.first_mandatory_cutoff_at
+        ),
+        "deterministic warm-up and first mandatory cutoff are preregistered",
+    )
+    add(
+        "mandatory_cutoff_schedule",
+        len(prereg.mandatory_cutoffs) == prereg.minimum_cutoffs_per_symbol,
+        "mandatory hourly cutoff schedule has the required four entries",
+    )
+    add(
+        "status_output_contract",
+        prereg.status_output_contract == CANARY_STATUS_OUTPUT_CONTRACT,
+        "canonical watcher status.json is authoritative",
+    )
+    add(
+        "status_parser",
+        shutil.which("jq") is not None,
+        "jq is available for the shell scheduler's authoritative status.json parsing",
+    )
     add("credentials_prohibited", prereg.credentials_prohibited is True, "credentials prohibited")
     add("orders_prohibited", prereg.orders_prohibited is True, "orders prohibited")
 
@@ -198,6 +225,7 @@ def run_preflight(
         "chronos_runner": REPOSITORY_ROOT / "scripts/run_phase4_v3core_canary_chronos.py",
         "watchdog": REPOSITORY_ROOT / "scripts/watch_phase4_v3core_canary.py",
         "terminal_audit": REPOSITORY_ROOT / "scripts/audit_phase4_v3core_canary.py",
+        "scheduler": REPOSITORY_ROOT / "scripts/schedule_phase4_v3core_canary.sh",
     }
     expected_hashes = {
         "collector_code": prereg.collector_code_sha256,
@@ -206,6 +234,7 @@ def run_preflight(
         "chronos_runner": prereg.chronos_runner_sha256,
         "watchdog": prereg.watchdog_sha256,
         "terminal_audit": prereg.terminal_audit_sha256,
+        "scheduler": prereg.scheduler_sha256,
     }
     for name, path in files.items():
         add(
@@ -223,6 +252,11 @@ def run_preflight(
         "clock_window",
         datetime.now(UTC) <= prereg.target_end_at,
         "wall clock is before fixed canary deadline",
+    )
+    add(
+        "start_window",
+        datetime.now(UTC) >= prereg.start_at,
+        "wall clock is at or after the immutable canary start time",
     )
     add(
         "disk_space",

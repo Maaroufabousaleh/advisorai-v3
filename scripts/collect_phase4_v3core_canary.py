@@ -188,6 +188,21 @@ def run_collection(
             repository_root / "src/advisorai/phase4/v3core_forward.py"
         ),
     }
+    warmup_identity = {
+        "warmup_policy_id": prereg.warmup_policy_id,
+        "warmup_until_at": (
+            prereg.warmup_until_at.isoformat() if prereg.warmup_until_at is not None else None
+        ),
+        "first_mandatory_cutoff_at": (
+            prereg.first_mandatory_cutoff_at.isoformat()
+            if prereg.first_mandatory_cutoff_at is not None
+            else None
+        ),
+        "mandatory_cutoffs": [cutoff.isoformat() for cutoff in prereg.mandatory_cutoffs],
+        "scheduler_identity": prereg.scheduler_identity,
+        "scheduler_sha256": prereg.scheduler_sha256,
+        "status_output_contract": prereg.status_output_contract,
+    }
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         expected = {
@@ -202,6 +217,7 @@ def run_collection(
             "credentials_loaded": False,
             "order_writes_attempted": False,
             **code_files,
+            **warmup_identity,
         }
         if any(manifest.get(key) != value for key, value in expected.items()):
             raise RuntimeError(
@@ -239,6 +255,7 @@ def run_collection(
             "distinct_receipts_required": prereg.distinct_receipts_required,
             "context_newest_lag_seconds": prereg.context_newest_lag_seconds,
             **code_files,
+            **warmup_identity,
         }
         _write_atomic(manifest_path, manifest)
 

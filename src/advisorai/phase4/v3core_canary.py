@@ -48,6 +48,12 @@ CANARY_CONTEXT_LAG_SECONDS = 600
 CANARY_FINALITY_GUARD_SECONDS = 60
 CANARY_REPEAT_RECEIPTS = 2
 CANARY_MIN_CUTOFFS_PER_SYMBOL = 4
+CANARY_WARMUP_POLICY_ID = "v3core-prospective-canary-warmup-v2"
+CANARY_WARMUP_NOT_ELIGIBLE = "WARMUP_NOT_ELIGIBLE"
+CANARY_WAITING_FOR_CONTEXT = "WAITING_FOR_MANDATORY_CONTEXT"
+CANARY_SOURCE_CONTEXT_UNAVAILABLE = "SOURCE_CONTEXT_UNAVAILABLE"
+CANARY_MISSED_MANDATORY_CUTOFF = "CANDIDATE_MISSED_MANDATORY_CUTOFF"
+CANARY_STATUS_OUTPUT_CONTRACT = "watchdog/status.json-authoritative-v1"
 
 
 def _aware(value: datetime, field_name: str) -> datetime:
@@ -72,6 +78,51 @@ def _commit(value: str, field_name: str) -> str:
     ):
         raise ValueError(f"{field_name} must be a Git commit identity")
     return normalized
+
+
+def derive_first_mandatory_cutoff(
+    start_at: datetime,
+    *,
+    context_bars: int = CANARY_CONTEXT_BARS,
+    interval_seconds: int = 300,
+    context_lag_seconds: int = CANARY_CONTEXT_LAG_SECONDS,
+) -> datetime:
+    """Derive the first hourly cutoff that can legally have a full context.
+
+    The canary source contract starts with the closed interval ending at the
+    UTC-hour ``start_at``.  The latest bar in a context of ``context_bars``
+    therefore ends ``(context_bars - 1)`` intervals later.  The hourly cutoff
+    must be at least ``context_lag_seconds`` after that bar and is rounded up
+    to the next UTC hour.  This is a schedule calculation only; it never uses
+    model output or observed utility.
+    """
+
+    normalized_start = _aware(start_at, "start_at")
+    if normalized_start.minute or normalized_start.second or normalized_start.microsecond:
+        raise ValueError("canary start_at must be aligned to a UTC hour")
+    if context_bars < 1 or interval_seconds <= 0 or context_lag_seconds < interval_seconds:
+        raise ValueError("warm-up timing parameters are invalid")
+    latest_required_bar = normalized_start + timedelta(
+        seconds=interval_seconds * (context_bars - 1)
+    )
+    earliest_cutoff = latest_required_bar + timedelta(seconds=context_lag_seconds)
+    hour_floor = earliest_cutoff.replace(minute=0, second=0, microsecond=0)
+    if hour_floor < earliest_cutoff:
+        hour_floor += timedelta(hours=1)
+    return hour_floor
+
+
+def derive_mandatory_cutoffs(
+    start_at: datetime,
+    *,
+    count: int = CANARY_MIN_CUTOFFS_PER_SYMBOL,
+) -> tuple[datetime, ...]:
+    """Return the preregistered hourly cutoff schedule after warm-up."""
+
+    if count < 1:
+        raise ValueError("mandatory cutoff count must be positive")
+    first = derive_first_mandatory_cutoff(start_at)
+    return tuple(first + timedelta(hours=index) for index in range(count))
 
 
 class CanaryPreregistration(BaseModel):
@@ -121,11 +172,33 @@ class CanaryPreregistration(BaseModel):
     acceptance_criteria: tuple[str, ...] = Field(min_length=1)
     minimum_cutoffs_per_symbol: int = CANARY_MIN_CUTOFFS_PER_SYMBOL
     maximum_cutoffs_per_symbol: int = CANARY_MIN_CUTOFFS_PER_SYMBOL
+    # These fields are optional only so historical v1 preregistrations remain
+    # readable.  A replacement canary must populate the complete v2 warm-up
+    # contract; preflight rejects legacy preregistrations for new launches.
+    warmup_policy_id: str | None = None
+    warmup_until_at: datetime | None = None
+    first_mandatory_cutoff_at: datetime | None = None
+    mandatory_cutoffs: tuple[datetime, ...] = ()
+    scheduler_identity: str | None = None
+    scheduler_sha256: str | None = None
+    status_output_contract: str | None = None
 
     @field_validator("created_at", "start_at", "target_end_at")
     @classmethod
     def aware_timestamps(cls, value: datetime, info: object) -> datetime:
         return _aware(value, getattr(info, "field_name", "timestamp"))
+
+    @field_validator("warmup_until_at", "first_mandatory_cutoff_at")
+    @classmethod
+    def optional_aware_timestamps(cls, value: datetime | None, info: object) -> datetime | None:
+        if value is None:
+            return None
+        return _aware(value, getattr(info, "field_name", "timestamp"))
+
+    @field_validator("mandatory_cutoffs")
+    @classmethod
+    def aware_cutoffs(cls, value: tuple[datetime, ...]) -> tuple[datetime, ...]:
+        return tuple(_aware(item, "mandatory_cutoff") for item in value)
 
     @field_validator("repository_commit")
     @classmethod
@@ -144,6 +217,7 @@ class CanaryPreregistration(BaseModel):
         "fail_fast_policy_sha256",
         "watchdog_sha256",
         "terminal_audit_sha256",
+        "scheduler_sha256",
     )
     @classmethod
     def valid_digests(cls, value: str, info: object) -> str:
@@ -182,6 +256,40 @@ class CanaryPreregistration(BaseModel):
             raise ValueError("canary requires four complete cutoffs per symbol")
         if self.maximum_cutoffs_per_symbol != CANARY_MIN_CUTOFFS_PER_SYMBOL:
             raise ValueError("the bounded canary is capped at four cutoffs per symbol")
+        warmup_fields = (
+            self.warmup_policy_id,
+            self.warmup_until_at,
+            self.first_mandatory_cutoff_at,
+            self.scheduler_identity,
+            self.scheduler_sha256,
+            self.status_output_contract,
+        )
+        has_warmup_contract = any(value is not None for value in warmup_fields) or bool(
+            self.mandatory_cutoffs
+        )
+        if has_warmup_contract:
+            if self.warmup_policy_id != CANARY_WARMUP_POLICY_ID:
+                raise ValueError("replacement canary warm-up policy identity is required")
+            if (
+                self.warmup_until_at is None
+                or self.first_mandatory_cutoff_at is None
+                or self.scheduler_identity is None
+                or self.scheduler_sha256 is None
+                or self.status_output_contract != CANARY_STATUS_OUTPUT_CONTRACT
+            ):
+                raise ValueError("replacement canary warm-up and scheduler fields are incomplete")
+            expected_first = derive_first_mandatory_cutoff(self.start_at)
+            expected_cutoffs = derive_mandatory_cutoffs(
+                self.start_at, count=self.minimum_cutoffs_per_symbol
+            )
+            if self.warmup_until_at != expected_first:
+                raise ValueError("warm-up boundary does not match the deterministic schedule")
+            if self.first_mandatory_cutoff_at != expected_first:
+                raise ValueError("first mandatory cutoff does not match the deterministic schedule")
+            if self.mandatory_cutoffs != expected_cutoffs:
+                raise ValueError("mandatory cutoff schedule does not match the deterministic rule")
+            if self.target_end_at < expected_cutoffs[-1] + timedelta(hours=1):
+                raise ValueError("canary deadline must leave time for the final one-hour outcome")
         return self
 
 

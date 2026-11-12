@@ -102,7 +102,7 @@ def audit(
     require_canary_artifact(candidate_status)
     if source_status.get("state") != "deadline_reached":
         raise ValueError("canary source is not terminal")
-    if candidate_status.get("state") != "deadline_reached":
+    if candidate_status.get("state") not in {"deadline_reached", "CANARY_FAILED"}:
         raise ValueError("canary candidate is not terminal")
     if source_manifest.get("preregistration_sha256") != preregistration_sha256:
         raise ValueError("source preregistration identity mismatch")
@@ -187,6 +187,11 @@ def audit(
                 "status_sha256": sha256_file(source_root / "status.json"),
             },
             "candidate": {
+                "state": candidate_status.get("state"),
+                "failure_reason": candidate_status.get("failure_reason"),
+                "failure_detail": candidate_status.get("failure_detail"),
+                "warmup_state": candidate_status.get("warmup_state"),
+                "last_eligibility_status": candidate_status.get("last_eligibility_status"),
                 "prediction_counts": counts,
                 "predictions": len(predictions.records),
                 "rejections": len(rejections.records),
@@ -204,6 +209,7 @@ def audit(
             ),
             "notes": [
                 "This is a canary qualification report, not Phase-4 admission evidence.",
+                "A CANARY_FAILED candidate state is terminal diagnostic evidence and cannot qualify the canary.",
                 "No baseline, utility, materialization, or formal reviewer was run.",
                 "The long multi-day generation remains separately blocked pending human review.",
             ],

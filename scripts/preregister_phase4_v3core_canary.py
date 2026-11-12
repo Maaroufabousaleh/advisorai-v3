@@ -13,8 +13,12 @@ from pathlib import Path
 from advisorai.phase4 import (
     CANARY_EVIDENCE_CLASS,
     CANARY_MIN_CUTOFFS_PER_SYMBOL,
+    CANARY_STATUS_OUTPUT_CONTRACT,
+    CANARY_WARMUP_POLICY_ID,
     CanaryPreregistration,
     ChronosRuntimeIdentity,
+    derive_first_mandatory_cutoff,
+    derive_mandatory_cutoffs,
     sha256_file,
     write_canary_preregistration,
 )
@@ -58,6 +62,9 @@ def build_preregistration(
     finality = REPOSITORY_ROOT / "src/advisorai/phase4/v3core_canary.py"
     worker = REPOSITORY_ROOT / "src/advisorai/phase4/v3core_chronos.py"
     runner = REPOSITORY_ROOT / "scripts/run_phase4_v3core_canary_chronos.py"
+    scheduler = REPOSITORY_ROOT / "scripts/schedule_phase4_v3core_canary.sh"
+    first_mandatory_cutoff = derive_first_mandatory_cutoff(start_at)
+    mandatory_cutoffs = derive_mandatory_cutoffs(start_at, count=CANARY_MIN_CUTOFFS_PER_SYMBOL)
     return CanaryPreregistration(
         canary_id=canary_id,
         created_at=datetime.now(UTC),
@@ -84,9 +91,13 @@ def build_preregistration(
         terminal_audit_sha256=sha256_file(
             REPOSITORY_ROOT / "scripts/audit_phase4_v3core_canary.py"
         ),
-        start_rule="start collector and corrected Chronos before the first eligible hourly cutoff",
+        start_rule=(
+            "start_at must be a UTC hour; warm-up ends at the derived first mandatory cutoff; "
+            "start collector and corrected Chronos before that cutoff"
+        ),
         terminal_rule="fixed target_end_at; no extension after observing failures",
         acceptance_criteria=(
+            "warm-up cutoffs before the derived first mandatory cutoff are WARMUP_NOT_ELIGIBLE and never rejections",
             "four complete eligible hourly cutoffs for BTCUSDT",
             "four complete eligible hourly cutoffs for ETHUSDT",
             "zero post-admission revisions",
@@ -95,6 +106,13 @@ def build_preregistration(
             "credentials_loaded=false and order_writes_attempted=false",
         ),
         minimum_cutoffs_per_symbol=CANARY_MIN_CUTOFFS_PER_SYMBOL,
+        warmup_policy_id=CANARY_WARMUP_POLICY_ID,
+        warmup_until_at=first_mandatory_cutoff,
+        first_mandatory_cutoff_at=first_mandatory_cutoff,
+        mandatory_cutoffs=mandatory_cutoffs,
+        scheduler_identity="v3core-prospective-canary-scheduler-v2",
+        scheduler_sha256=sha256_file(scheduler),
+        status_output_contract=CANARY_STATUS_OUTPUT_CONTRACT,
     )
 
 
