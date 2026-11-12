@@ -2,16 +2,33 @@
 
 Target profile: owner-operated workstation, one session at a time, paper/testnet only.
 
-## 1. Launch
+> The dashboard launcher starts ONLY the inspection UI + API. It does not
+> start the trading system. The application entry point below starts the
+> supervised paper session with verified recovery.
+
+## 1. Launch the supervised application
 
 ```bash
 uv sync --group dev
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q tests/session tests/decision
+ADVISORAI_STATE_DIR=var/advisorai uv run python -m advisorai.app start --reason "owner session"
+```
+
+Expected: `classification=...`, `recovery_mode=normal`, a verified
+`checkpoint=...`, then `SESSION READY`. A `recovery` mode means reconcile
+venue/orders before operating; `abstain` (exit 2) means failed checks must
+be resolved first. Inspect history without mutating:
+`python -m advisorai.app status`.
+
+## 1b. Launch the inspection UI (separate surface)
+
+```bash
 ./scripts/launch_dashboard.sh
 ```
 
 Open <http://localhost:5173>. The launcher starts the API on `127.0.0.1:8787`
 and waits for `/api/v1/health` (`{"status":"ok","environment":"paper_testnet"}`).
+The Overview `SESSION LIFECYCLE` panel mirrors the supervised session above.
 
 ## 2. Operate (paper only)
 

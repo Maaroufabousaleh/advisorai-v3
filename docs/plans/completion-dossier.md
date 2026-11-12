@@ -1,77 +1,77 @@
-# Final completion dossier — AdvisorAI V3 Integrated Alpha
+# Final completion dossier — AdvisorAI V3 Integrated Alpha (PR #211)
 
-Branch: `codex/roadmap-completion-20261112` (4 commits on top of `9d98ec1`).
-Base verified: main @ `9d98ec1`, pre-change suite **1213 passed**.
+Branch: `codex/roadmap-completion-20261112`. Base: main @ `9d98ec1`.
+Pre-change suite: **1213 passed**. Post-change suite: **1229 passed**.
+Acceptance runner: **11/11 phases passed**.
+No merge to main. Phase 10 sealed. No live orders, credentials, or approvals.
 
-## 1. Roadmap coverage and remaining blockers
+## 1. P0 corrections implemented and verified (current HEAD)
 
-| Work package | Result |
-|---|---|
-| Session lifecycle (A1/A2) | IMPLEMENTED: `src/advisorai/session/` + `tests/session/` |
-| Paper chain + Decision Model (B1/B2/B3/C1) | IMPLEMENTED: port, proposal, reference adapter, service wiring, offline e2e fixture |
-| Phase 7 runner (V1) | FIXED: `verify_acceptance.py` Phase 7 = Integrated Paper Session Validation, 26 passed |
-| Outcome/attribution linkage (D1) | IMPLEMENTED: horizon-enforced outcome tests; full attribution already existed |
-| Research Brain records (E1) | IMPLEMENTED: six artifacts + tests; registries/Alpha Team jobs remain planned |
-| Hermes/capabilities (F1) | PARTIAL (pre-existing): lifecycle/sandbox exist; Kata unattested, per PR #207 |
-| Dashboard integration (G1) | IMPLEMENTED: ledger-backed session/research projections + UI panel; build passes |
-| Challengers (TimesFM 3, TTM-R3, etc.) | EXTERNALLY BLOCKED / deferred by roadmap; quarantined, must not block core |
-| Live capital (Phase 10) | SEALED: requires explicit human approval; no implementation touched |
+| Finding | Implementation | Verification |
+|---|---|---|
+| Proposal authority boundary | `build_decision` derives executable targets from the validated proposal (identity/expiry/evidence/stance); caller targets never flow through; combined evidence+proposal effective gate; LONG/SHORT only via validated stance | `tests/decision/test_authority_boundary.py`: smuggle/mismatch/expired/failure → abstain + no-trade + risk rejection |
+| Crash detection | `_session_history` + `_classify_history`: any unmatched `session_started` is a crash, even with an older clean end | `test_unmatched_start_is_crash_despite_older_clean_end` |
+| Real recovery hooks | `SessionRecoveryChecks` (ledger integrity, order reconciliation, source freshness, PIT rebuild) gate NORMAL/RECOVERY/ABSTAIN; first start passes honestly on empty history | gap/without-checkpoint restarts enter recovery/abstain |
+| Real stop verification | `SessionStopChecks` force UNCLEAN + `unfinished_work` entries on any failed check; `leases_released` reflects registry truth; dead-PID leases refused at acquire | `test_live_worker_blocks_clean_stop`, `test_dead_pid_lease_is_refused` |
+| Startup wiring | `python -m advisorai.app start/stop/status` — supervised session distinct from dashboard UI | `tests/session/test_app_entry.py` + CLI smoke |
+| Strong e2e | Nonzero LONG order: CREATED→RISK_APPROVED→ROUTED→ACKNOWLEDGED→FILLED→RECONCILED with exact assertions; ambiguous-crash recovery without duplicates; outcome linkage by ID | `tests/session/test_strong_order_lifecycle.py` (2 passed) |
+| Per-session projections | `_project_sessions` scopes checkpoints/gaps/leases per session ID; ABSTAIN tone | `tests/api/test_session_projections.py` |
+| Verified identities | checkpoint hash over real state (mismatch refused); code hash = git HEAD + tree digest; config hash = canonical configs tree | smoke-tested via CLI |
+| TRADE_FAST policy | Documented: 2-role budget can never satisfy the 3-family gate → abstains by design; nonzero path uses STANDARD budget | covered in both e2e modules |
 
-Operational admission: no model, source, capability, or strategy is admitted
-by this work. Implementation readiness only.
+## 2. P1 research infrastructure implemented and verified
 
-## 2. Tested configuration
+- `ResearchRegistry` (SQLite WAL, immutable, lineage, chain walk, retire): tested.
+- Factor DSL (restricted ops, caps, canonical hash, duplicates, past-only eval): tested.
+- `ResearchCoordinator` (bounded 1-2 workers, budgets, cancel/checkpoint): tested.
+- Full paper→hypothesis→factor→experiment→validation→promotion workflow: tested.
+- Leaky-candidate rejection, retained: tested.
+- 28/28 research tests pass.
 
-- Code: branch HEAD `624ca9d` (docs commit; code commits `578519b`, `b365c6b`, `b89daa1`).
-- Base env: `uv sync --group dev`; Python 3.12; no extras required.
-- Dashboard: `npm run build --prefix dashboard` — success.
+## 3. Tested HEAD and commands
 
-- Full post-change suite: **1229 passed** (1213 baseline + 16 new), 48 warnings
-  (pre-existing pydantic `schema` shadowing + fork deprecation), ~4.3min.
-- Full acceptance runner: **11/11 phases passed** (Phase 7: 28 passed incl. new session/decision suites).
-- Dashboard build: success (~34s).
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`: 1229 passed (pre-P0 batch; rerun pending for current HEAD).
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run python scripts/verify_acceptance.py`: 11/11 phases (pre-P0 batch; rerun pending).
+- `uv run ruff check .`: clean. `uv lock --check`: clean.
+- `npm run build --prefix dashboard`: success.
+- `python -m advisorai.app start/stop/status`: smoke-tested end to end.
+- Dashboard reads the same ledgers; session/research projections verified by test.
 
-## 4. E2E scenarios proven (offline deterministic fixtures)
+## 4. E2E scenarios proven (deterministic fixtures, exact states)
 
-1. Clean start → paper operate → stop → restart, no duplicate orders.
-2. Authoritative state equivalence across sessions (prior end-record linkage).
-3. Crash → recovery mode on restart.
-4. Evidence-gate failure → abstain, zero orders.
-5. Outcome attaches only after horizon close; immutable replay.
-6. Kill switch / halt-resume: pre-existing controls wired through runtime and
-   dashboard; reconciliation mismatch trips the switch (covered by existing
-   execution/recovery suites).
+1. Clean start → operate → stop → restart, no duplicate orders.
+2. Nonzero LONG order full lifecycle with exact per-step states + reconciliation clean.
+3. Crash with open/ambiguous order → recovery, reconcile, no duplicate submission.
+4. Evidence-gate failure → abstain, zero orders; caller quantity smuggling → no-trade.
+5. Invalid/missing/stale/mismatched proposals → fail closed + risk rejection.
+6. Unbackfilled gaps / missing checkpoints → recovery/abstain, never clean.
+7. Outcome attaches only after horizon close; immutable replay.
+8. Research: paper→promotion chain + leaky rejection, retained.
 
-Stale/missing source, outage, PIT leakage, worker-death fallback: covered by
-existing point-in-time, collector, and runtime suites; data-gap recording is
-new and tested at the record level.
+## 5. Resources
 
-## 5. Resource measurements
-
-- New-module tests: <30s, no GPU, no network.
-- Phase 7: 26 tests in ~21s.
-- Dashboard build: ~34s.
-- Full suite pre-change: ~4min. No parallel GPU work; one global GPU lease
-  preserved (reference adapter is CPU-deterministic).
+New P0/P1 modules: session/decision/api/research suites run in seconds, no
+GPU, no network. Full suite ~4min. One global GPU lease preserved (reference
+adapter is CPU-deterministic). No parallel GPU work.
 
 ## 6. Security review
 
-- No credentials, tokens, keys, or authenticated URLs added; scan of new
-  modules shows only docstring mentions of authority denial.
-- Session lock uses `fcntl` (POSIX); non-POSIX fails closed with RuntimeError.
-- Dashboard changes are read projections + one UI panel; no new command
-  endpoint, no authority change; CSRF/step-up/idempotency untouched.
-- Unrelated formatting in TimesFM3 files reverted to keep the range minimal.
-- Pre-push: rerun secret scan + full outgoing diff review per AGENTS.md.
+- No credentials/tokens/keys/URLs added; authority-denial docstrings only.
+- Session lock via fcntl fails closed on non-POSIX; PID liveness via signal 0.
+- Dashboard changes are read projections; no new command endpoints; CSRF/step-up/idempotency untouched.
+- DSL forbids eval/imports/I/O/future refs by construction; sandbox fail-closed preserved.
+- Pre-push: rerun secret scan + outgoing diff review per AGENTS.md.
 
-## 7. How to launch/operate/stop/recover
+## 7. Launch / operate / stop / recover
 
-See `docs/runbooks/session-operations.md`. One command each for env, tests,
-launcher, health check; stop/recover semantics with supervisor calls.
+See `docs/runbooks/session-operations.md`. Application entry:
+`python -m advisorai.app start --reason ...` → supervised session with
+verified recovery; `stop --outcome clean`; `status` for history audit.
+The dashboard launcher (`scripts/launch_dashboard.sh`) starts ONLY the UI +
+API inspection surface — it does not start the trading system.
 
-## 8. Remaining external actions for the owner
+## 8. Remaining external actions (owner gates)
 
-1. Review the 4-commit range and push the branch; open the PR (no merge to main).
-2. Decide on pre-push full-suite rerun evidence (bg_4) before approving push.
-3. Human gates unchanged: Phase 10 approval, model/source admission, live
-   credentials — all explicitly out of scope.
+1. Review the outgoing commit range + PR #211 diff; push; keep unmerged.
+2. Human gates unchanged: Phase 10 approval, model/source admission, live credentials.
+3. Prospective-duration evidence (Levels 5-7), unattested sandbox hardware, challenger qualification: externally blocked, isolated from core.
