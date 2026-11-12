@@ -48,7 +48,7 @@ from advisorai.execution import (
 )
 from advisorai.learning import PaperDecisionRecord, PaperLearningLoop, PaperOutcome
 from advisorai.ledger import SqliteLedgers
-from advisorai.session import SessionSupervisor
+from advisorai.session import SessionStopChecks, SessionSupervisor
 
 
 def _evidence(timestamp, *, origin, family, claim, factor):
@@ -252,7 +252,13 @@ def test_long_proposal_drives_full_order_lifecycle(tmp_path):
     )
     assert outcome.net_utility == Decimal("10")
     supervisor.checkpoint()
-    end = supervisor.stop()
+    end = supervisor.stop(
+        stop_checks=SessionStopChecks(
+            current_order_account_verifier=lambda _ledgers: ReconciliationService()
+            .run(account=account, orders=orders, venue_snapshot=venue_snapshot)
+            .reconciled
+        )
+    )
     assert end.outcome.value == "clean"
 
 

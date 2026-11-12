@@ -413,6 +413,22 @@ class PaperLearningLoop:
     def decision(self, decision_id: UUID) -> PaperDecisionRecord | None:
         return self._decisions.get(decision_id)
 
+    def decisions(self) -> tuple[PaperDecisionRecord, ...]:
+        """Return durable decision records in their ledger projection order."""
+        return tuple(self._decisions.values())
+
+    def unresolved_decisions(self, *, as_of: datetime) -> tuple[PaperDecisionRecord, ...]:
+        """Decisions whose horizons closed without an immutable outcome."""
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("outcome query time must include a timezone")
+        cutoff = as_of.astimezone(UTC)
+        recorded = {decision_id for decision_id, _at in self._outcomes}
+        return tuple(
+            decision
+            for decision in self._decisions.values()
+            if decision.horizon_end <= cutoff and decision.decision_id not in recorded
+        )
+
     def problems(self) -> tuple[LearningProblem, ...]:
         return tuple(self._problems.values())
 

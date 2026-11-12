@@ -5,7 +5,12 @@ from .events import MarketEvent, NativeMarketMessageParser, RawEventSpool, Repla
 from .native import NativeVenueAdapter, NativeVenueProjectionError
 from .nautilus import NautilusRuntimeError, NautilusTraderPipeline
 from .oms import OrderManager, OrderStateError
-from .paper import AmbiguousAcknowledgement, PaperVenueAdapter, VenueAcknowledgement
+from .paper import (
+    AmbiguousAcknowledgement,
+    PaperVenueAdapter,
+    SimulatedPaperVenueAdapter,
+    VenueAcknowledgement,
+)
 from .policies import (
     DeterministicExecutionPolicy,
     ExecutionChoice,
@@ -34,6 +39,7 @@ __all__ = [
     "OrderRiskCheck",
     "OrderStateError",
     "PaperVenueAdapter",
+    "SimulatedPaperVenueAdapter",
     "RawEventSpool",
     "ReconciliationService",
     "VenueAccountSnapshot",

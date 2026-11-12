@@ -51,7 +51,8 @@ def test_session_projections_are_per_session(tmp_path):
     assert first_view.data_gaps == 1
     assert first_view.backfilled_gaps == 0
     assert first_view.open_leases == 0
-    # Second session: 1 checkpoint, no gaps, lease opened and released.
-    assert second_view.checkpoints == 1
+    # The session has one explicit checkpoint plus the final shutdown
+    # checkpoint after lease cleanup.
+    assert second_view.checkpoints == 2
     assert second_view.data_gaps == 0
     assert second_view.open_leases == 0

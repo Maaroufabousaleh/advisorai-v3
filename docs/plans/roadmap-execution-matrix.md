@@ -1,31 +1,56 @@
-# Roadmap execution matrix — AdvisorAI V3 completion (updated 2026-11-12, PR #211)
+# Roadmap implementation audit — AdvisorAI V3
 
-Machine-readable queue for the Integrated Alpha mission. Status values:
-IMPLEMENTED / PARTIAL / MISSING / FAILING / EXTERNALLY BLOCKED.
-Columns separate code implementation, end-to-end integration, test
-verification, operational admission, and external blockers; no phase is
-complete merely because one component passed.
+Audited 2026-11-12 against code and tests on branch
+`codex/roadmap-completion-20261112`, starting from base `195c0df`; the
+implementation updates described below are part of this audited state. PR #211
+remains unmerged.
 
-| # | Phase / work package | Required behavior + acceptance | Implementing files | Tests | Code | Integrated | Verified | Admission / blocker |
-|---|---|---|---|---|---|---|---|---|
-| A1 | Session lifecycle records | SessionStart/Checkpoint/End/Recovery/DataGap/RuntimeLease immutable records | `src/advisorai/session/records.py` | `tests/session/test_lifecycle.py` | IMPLEMENTED | yes (supervisor + app entry) | yes (10 lifecycle tests) | not admitted |
-| A2 | Session supervisor | full-history crash detection; verified recovery/stop checks; single-owner lock; per-session records | `src/advisorai/session/supervisor.py` | `tests/session/test_lifecycle.py` | IMPLEMENTED | yes (`python -m advisorai.app start/stop/status`) | yes (unmatched-start, failed-check, leak tests) | not admitted |
-| A3 | Application entry points | supervised start/operate/stop/recover CLI distinct from dashboard UI | `src/advisorai/app.py` | `tests/session/test_app_entry.py` | IMPLEMENTED | yes | yes (start/stop/status + orphan detection) | not admitted |
-| B1 | Decision Model port + authority boundary | Port, Proposal (LONG/SHORT/FLAT/ABSTAIN), proposal-bound targets, effective-gate fail-closed, no authority | `src/advisorai/decision/`, `src/advisorai/api/service.py` | `tests/decision/test_authority_boundary.py` | IMPLEMENTED | yes (service enforces identity/expiry/evidence match) | yes (smuggle/mismatch/expired/failure tests) | not admitted |
-| B2 | Paper chain wiring | proposal → Portfolio Constructor → RiskKernel → OMS → venue → reconciliation → TCA/attribution → outcome memory | `src/advisorai/api/service.py`, `src/advisorai/runtime/paper.py` | `tests/runtime/`, `tests/session/test_strong_order_lifecycle.py` | IMPLEMENTED | yes (strong e2e) | yes (exact-state order lifecycle) | not admitted |
-| B3 | Offline deterministic e2e fixture | clean start → paper operate → stop → restart with no duplicate orders, full lineage | `tests/session/test_integrated_paper_session.py` | same | IMPLEMENTED | yes | yes | not admitted |
-| B4 | Strong order/fill/reconcile e2e | nonzero LONG order through FILL→RECONCILED; ambiguous-crash recovery without duplicates; outcome linkage by ID | `tests/session/test_strong_order_lifecycle.py` | same | IMPLEMENTED | yes | yes | not admitted |
-| C1 | Local typed Decision Model reference | deterministic reference adapter (FLAT default; LONG/SHORT test stance); unqualified model → ABSTAIN/no-trade | `src/advisorai/decision/` | `tests/decision/` | IMPLEMENTED | yes | yes | not admitted (reference only) |
-| D1 | Outcome/attribution linkage | DecisionRecord → outcome after horizon; immutable replay; reconciliation-gated | `src/advisorai/learning/paper.py` | `tests/session/test_outcome_linkage.py`, `tests/learning/` | IMPLEMENTED | yes (strong e2e links IDs) | yes | not admitted |
-| E1 | Research Brain records + registry | six artifacts + SQLite WAL registry, lineage links, chain walk, retire-never-delete | `src/advisorai/research/cards.py`, `src/advisorai/research/registry.py` | `tests/research/test_registry_dsl_jobs.py` | IMPLEMENTED | yes | yes | not admitted |
-| E2 | Factor DSL | restricted operators, depth/node caps, canonical hash, duplicate detection, past-only evaluation | `src/advisorai/research/factors.py` | same | IMPLEMENTED | yes (brain workflow) | yes (forbidden-op + leak tests) | not admitted |
-| E3 | Bounded research jobs | coordinator, 1-2 workers, budgets, cancel/checkpoint, ledger events | `src/advisorai/research/jobs.py` | same | IMPLEMENTED | yes | yes | not admitted |
-| E4 | Paper→approval workflow | Scout→hypothesis→factor→experiment→validation→promotion + leaky-candidate rejection, retained | `tests/research/test_brain_workflow.py` | same | IMPLEMENTED | yes | yes | not admitted (paper-shadow scope only) |
-| F1 | Hermes/capability lifecycle | quarantine → review → active-read-only; trust classes; sandbox fail-closed | `src/advisorai/capabilities/` | `tests/capabilities/` | PARTIAL (pre-existing) | partial | yes (existing suites) | Kata unattested → fail-closed (PR #207, EXTERNALLY BLOCKED hardware) |
-| G1 | Dashboard real-state wiring | per-session projections + research activity; synthetic mode separated; session UI panel | `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/api/test_session_projections.py` | IMPLEMENTED | yes (ledger-backed overview) | yes | not admitted |
-| V1 | Phase 7 runner semantics | `verify_acceptance.py` Phase 7 = Integrated Paper Session Validation | `scripts/verify_acceptance.py` | runner | IMPLEMENTED | yes | yes (11/11 phases) | n/a |
+## Status rules
 
-Deferred / externally blocked (must not block core): TimesFM 3 / TTM-R3 /
-Kronos-base challengers (quarantined, need exact qualification + prospective
-evidence); real provider credentials; unattested sandbox hardware; Phase 10
-human approval; multi-week prospective paper operation (Level 5-7).
+This matrix reports software implementation, local integration, local test
+verification, and operational admission separately. `EXTERNALLY BLOCKED` is
+reserved for evidence or approval that must come from a provider, elapsed
+operation, qualified host, or human owner. It must not describe unfinished
+software. A fixture pass proves only the behavior named in its acceptance row;
+it does not qualify a model, source, venue, sandbox, or trading scope.
+
+| ID | Software requirement and acceptance | Implementation | Integration and verification | Operational admission / remaining external evidence |
+|---|---|---|---|---|
+| P0 | Contracts, qualification harnesses, and deterministic model/data comparison boundaries | IMPLEMENTED | `tests/phase0`, `tests/gates`, and contract suites run by `scripts/verify_acceptance.py` | Exact role qualification and time-based stability evidence remain separate; no model authority is implied |
+| P1 | Typed safety, PIT, ledger, data, resource, and recovery controls | IMPLEMENTED | Phase 1 suites cover contracts, immutable data, PIT, resources, recovery, memory, and services | Provider rights and operational data availability remain source-specific evidence |
+| P2 | RiskKernel → OMS → paper/testnet adapter → current-state reconciliation | IMPLEMENTED | `tests/execution`, `tests/runtime`, integration tests, and Phase 2 acceptance | Venue-specific operation is only admitted for the immutable scope and evidence recorded in `docs/plans/gate-matrix.md` |
+| P3 | V3-Core acquisition, source health, raw-first lineage, replay, freshness, and PIT | IMPLEMENTED | `tests/phase3` is included in Phase 3 acceptance | Live continuity, source disagreement, recovery, and provider availability remain measured per source; failed providers are not silently substituted |
+| P4 | Baselines, forecast contracts, forward evaluation, cost-aware utility, and challenger decision records | IMPLEMENTED | `tests/models` runs as Phase 4 acceptance | Candidate promotion remains pending exact immutable utility/calibration evidence and review |
+| P5 | Evidence Council, typed Decision Model, evidence gates, proposal-bound targets, and no-authority adapter boundary | IMPLEMENTED | `tests/agents`, `tests/api`, and `tests/decision` | Real-source/model evaluation and any adapter qualification are separate admission decisions |
+| P6 | Institutional controls, paper order/fill attribution, and outcome linkage by immutable ID | IMPLEMENTED | `tests/institutional`, `tests/learning`, and the strong paper lifecycle test | A real paper fill sample and external attribution remain operational evidence |
+| P7 | Owner session lifecycle, current-state recovery, scheduled paper runtime, bounded resources, graceful stop, and restart | IMPLEMENTED for the deterministic local paper profile; external production-adapter wiring remains PARTIAL | `tests/session/test_app_entry.py` is a black-box subprocess flow through decision, simulated venue fill, reconciliation, outcome, clean restart, process crash, interrupted-cycle retention, reconciliation, and continued scheduling. Lifecycle, latest-order projection, current watermark/PIT and data-gap checks are in `tests/session/test_lifecycle.py` | Real provider/model/venue operation and independent multi-session evidence remain pending. They do not block the local software implementation |
+| P8 | Hermes/capability lifecycle, typed candidate export, default-deny broker, and bounded sandbox boundary | IMPLEMENTED for the local fixture workflow and tested backends | `tests/capabilities` and `scripts/run_phase8_capability_evidence.py` verify reproducible active-read evidence; the fixture remains unadmitted | Formal host/native isolation attestation and Phase 8 review remain separate; this is not a reason to leave local lifecycle software unimplemented |
+| P9 | Research Brain records, Factor DSL, cancellable bounded jobs, outcome memory, and controlled expansion | IMPLEMENTED for quarantined local workflows | `tests/research`, `tests/expansion`, concurrency/cancellation/budget/restart/checkpoint tests, and Phase 9 acceptance | New providers, capabilities, strategies, assets, and models require their own admission evidence |
+| P10 | Readiness evaluation, kill/rollback boundaries, and AI-offline controls | IMPLEMENTED as a closed guard | `tests/live` verifies refusal paths; Phase 10 acceptance does not activate capital | Human approval is mandatory and remains absent; Phase 10 stays sealed |
+| CI | Repeatable automation for Python, phase acceptance, quality/dependencies, and dashboard output | IMPLEMENTED in `.github/workflows/ci.yml` | Four independent jobs install the locked environment, run full pytest and phase acceptance, check Ruff/lock/installed dependencies/licenses, and build the dashboard | GitHub execution is pending the next push/PR event; no operational admission is implied |
+
+## Acceptance details for the recent correctness work
+
+| Area | Explicit acceptance | Evidence |
+|---|---|---|
+| Owner process | `start` remains alive with its lock held; a concurrent process is refused; the managed scheduler runs cycles; stop verifies and releases resources; restart classifies clean and crashed sessions; an interrupted cycle is retained and later cutoffs continue only after state reconciliation | Real subprocesses in `tests/session/test_app_entry.py`; stale/live lease recovery in `tests/session/test_lifecycle.py` |
+| Order recovery | Historical `routed` or ambiguous events do not veto a later authoritative terminal state; latest unresolved state does; account/open-order state is queried through a permitted verifier | `tests/session/test_lifecycle.py`, runtime reconciliation tests, and the subprocess flow |
+| Recovery watermarks/PIT | Durable records alone are insufficient: non-empty watermarks and PIT snapshots require current-state verifiers; checkpoints belong to the latest session and current PIT record | `tests/session/test_lifecycle.py` and black-box restart |
+| Data gaps | An unresolved or uncovered gap fails recovery; a resolved gap passes only when exact source/instrument coverage is confirmed by a current permitted-source verifier | `tests/session/test_lifecycle.py` |
+| Research jobs | Parallel workers stay within the one/two-worker cap; cancellation, deadline accounting, restart state, and repeated checkpoint identity are durable and tested | `tests/research/test_registry_dsl_jobs.py` |
+| Phase restrictions | Default app path is paper-only and local; no live endpoint, broker credential, or live-capital action is added. Phase 10 remains closed | `tests/session/test_app_entry.py`, `tests/live`, and capability authority tests |
+
+## Next implementation work
+
+The next software item is the production-profile adapter composition for the
+owner application: inject reviewed data, model, and paper-venue adapters into
+the same supervised lifecycle while retaining the deterministic local profile
+as the offline acceptance fixture. The present owner CLI constructs only the
+local simulator. This integration is software work and is **not** classified as
+externally blocked by pending credentials, model qualification, venue evidence,
+or human admission.
+
+Never infer implementation completion from a green test suite, and never infer
+operational admission from implementation completion. Keep model/source/venue
+qualification, timed operation, and Phase 10 approval in their authoritative
+gate records.

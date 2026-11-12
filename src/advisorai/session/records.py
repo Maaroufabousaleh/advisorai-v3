@@ -127,6 +127,67 @@ class DataGapRecord(ArtifactModel):
         return self
 
 
+class DataGapResolutionRecord(ArtifactModel):
+    """Verified backfill coverage for one exact, previously recorded gap."""
+
+    gap_id: UUID
+    source: str = Field(min_length=1)
+    instrument: str = Field(min_length=1)
+    covered_through: datetime
+    watermark: str = Field(min_length=1)
+    evidence_id: UUID
+    verified_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    _covered_through = field_validator("covered_through")(_require_aware)
+    _verified_at = field_validator("verified_at")(_require_aware)
+
+
+class SourceWatermarkRecord(ArtifactModel):
+    """Durable source progress observed from the permitted source adapter."""
+
+    source: str = Field(min_length=1)
+    dataset: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+    observed_at: datetime
+
+    _observed_at = field_validator("observed_at")(_require_aware)
+
+    @property
+    def key(self) -> str:
+        return f"{self.source}/{self.dataset}"
+
+
+class PITSnapshotVerification(ArtifactModel):
+    """Source-bound PIT snapshot verification tied to one owner session."""
+
+    session_id: UUID
+    snapshot_id: UUID
+    snapshot_hash: str = Field(min_length=64, max_length=64)
+    source: str = Field(min_length=1)
+    cutoff: datetime
+    first_available_at: datetime
+    watermarks: dict[str, str] = Field(default_factory=dict)
+    verified_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    _cutoff = field_validator("cutoff")(_require_aware)
+    _first_available_at = field_validator("first_available_at")(_require_aware)
+    _verified_at = field_validator("verified_at")(_require_aware)
+
+    @field_validator("snapshot_hash")
+    @classmethod
+    def valid_snapshot_hash(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if any(character not in "0123456789abcdef" for character in normalized):
+            raise ValueError("snapshot_hash must be a lowercase SHA-256 digest")
+        return normalized
+
+    @model_validator(mode="after")
+    def point_in_time(self) -> PITSnapshotVerification:
+        if self.first_available_at > self.cutoff:
+            raise ValueError("PIT snapshot was not available at its cutoff")
+        return self
+
+
 class RuntimeLeaseRecord(ArtifactModel):
     """Worker/model lease with explicit acquire/release and cleanup outcome."""
 
@@ -160,9 +221,12 @@ class _Strict(BaseModel):
 
 __all__ = [
     "DataGapRecord",
+    "DataGapResolutionRecord",
+    "PITSnapshotVerification",
     "RecoveryMode",
     "RecoveryRecord",
     "RuntimeLeaseRecord",
+    "SourceWatermarkRecord",
     "SessionCheckpoint",
     "SessionEndRecord",
     "SessionOutcome",

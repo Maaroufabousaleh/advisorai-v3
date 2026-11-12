@@ -24,6 +24,7 @@ from advisorai.contracts import (
     Snapshot,
 )
 from advisorai.execution import (
+    AccountLedger,
     AccountState,
     DeterministicExecutionPolicy,
     ExecutionPolicyKind,
@@ -62,6 +63,7 @@ class PaperRuntimeConfig(BaseModel):
     decision_interval_seconds: int = Field(default=3600, ge=300, le=86_400)
     run_id: str = Field(default_factory=lambda: f"paper-{uuid4()}", min_length=1)
     max_order_count_per_cycle: int = Field(default=8, ge=0, le=100)
+    owner_session_id: UUID | None = None
 
     @field_validator("environment")
     @classmethod
@@ -87,6 +89,7 @@ class RuntimeCycle(BaseModel):
 
     cycle_id: UUID = Field(default_factory=uuid4)
     run_id: str = Field(min_length=1)
+    owner_session_id: UUID | None = None
     cutoff: datetime
     stage: RuntimeStage
     snapshot_id: UUID | None = None
@@ -129,6 +132,11 @@ def build_default_orders(
         return ()
     target = result.decision.target_portfolio
     plan = ExecutionPlan(
+        artifact_id=uuid5(
+            NAMESPACE_URL,
+            f"advisorai-v3/paper-plan/{result.decision.mission_id}/"
+            f"{result.decision.snapshot_id}/{target.artifact_id}",
+        ),
         risk_decision_id=risk.artifact_id,
         target_portfolio_id=target.artifact_id,
         policy_version=target.risk_constraints_version,
@@ -146,15 +154,21 @@ def build_default_orders(
         if choice is None:
             continue
         fingerprint = sha256(
-            f"{result.decision.mission_id}:{target.artifact_id}:{instrument_id}:{choice.side}:{choice.quantity}".encode()
+            f"{result.decision.mission_id}:{result.decision.snapshot_id}:"
+            f"{target.artifact_id}:{instrument_id}:{choice.side}:{choice.quantity}".encode()
         ).hexdigest()[:32]
+        order = build_order_from_choice(
+            choice=choice,
+            parent_intent_id=result.decision.mission_id,
+            execution_plan=plan,
+            instrument=position.instrument,
+            idempotency_key=f"paper:{fingerprint}",
+        )
         orders.append(
-            build_order_from_choice(
-                choice=choice,
-                parent_intent_id=result.decision.mission_id,
-                execution_plan=plan,
-                instrument=position.instrument,
-                idempotency_key=f"paper:{fingerprint}",
+            order.model_copy(
+                update={
+                    "artifact_id": uuid5(NAMESPACE_URL, f"advisorai-v3/paper-order/{fingerprint}")
+                }
             )
         )
     return tuple(orders)
@@ -171,6 +185,7 @@ class PaperRuntime:
         market_provider: MarketProvider,
         decision_builder: DecisionBuilder,
         account: AccountState,
+        account_ledger: AccountLedger | None = None,
         risk_policy: RiskPolicy,
         orders: OrderManager,
         ledgers: SqliteLedgers,
@@ -186,6 +201,7 @@ class PaperRuntime:
         self.market_provider = market_provider
         self.decision_builder = decision_builder
         self.account = account
+        self.account_ledger = account_ledger
         self.risk_policy = risk_policy
         self.orders = orders
         self.ledgers = ledgers
@@ -202,7 +218,21 @@ class PaperRuntime:
 
     def run_once(self, cutoff: datetime) -> RuntimeCycle:
         cutoff = self._closed_cutoff(cutoff)
-        cycle = RuntimeCycle(run_id=self.config.run_id, cutoff=cutoff, stage=RuntimeStage.STARTED)
+        prior = self._prior_cycle(cutoff)
+        if prior is not None:
+            return prior
+        cycle_id = uuid5(
+            NAMESPACE_URL,
+            f"advisorai-v3/runtime-cycle/{self.config.run_id}/{cutoff.isoformat()}",
+        )
+        cycle = RuntimeCycle(
+            cycle_id=cycle_id,
+            run_id=self.config.run_id,
+            owner_session_id=self.config.owner_session_id,
+            cutoff=cutoff,
+            stage=RuntimeStage.STARTED,
+            created_at=cutoff,
+        )
         self._record(cycle)
         try:
             self._sync_dashboard_control()
@@ -311,9 +341,39 @@ class PaperRuntime:
                         order_ids=pending,
                     )
                 routed.append(created.artifact_id)
+            fills = self._settle_simulated_paper_fills()
+            for order_id, order in tuple(self.orders.orders.items()):
+                if order.state in {
+                    OrderState.FILLED,
+                    OrderState.CANCELLED,
+                    OrderState.REJECTED,
+                    OrderState.EXPIRED,
+                }:
+                    self.orders.reconcile(order_id)
+            reconciliation = self.reconcile_once()
+            if not reconciliation.reconciled:
+                self._record_learning_decision(
+                    result,
+                    snapshot=snapshot,
+                    risk=risk,
+                    order_ids=tuple(routed),
+                    fill_ids=tuple(fill.artifact_id for fill in fills),
+                    reconciliation_id=reconciliation.artifact_id,
+                )
+                return self._finish(
+                    with_risk,
+                    RuntimeStage.RECONCILIATION_FAILED,
+                    reasons=reconciliation.discrepancies,
+                    order_ids=tuple(routed),
+                )
             stage = RuntimeStage.NO_TRADE if not routed else RuntimeStage.ORDERS_ROUTED
             self._record_learning_decision(
-                result, snapshot=snapshot, risk=risk, order_ids=tuple(routed)
+                result,
+                snapshot=snapshot,
+                risk=risk,
+                order_ids=tuple(routed),
+                fill_ids=tuple(fill.artifact_id for fill in fills),
+                reconciliation_id=reconciliation.artifact_id,
             )
             return self._finish(with_risk, stage, order_ids=tuple(routed))
         except Exception as exc:
@@ -339,11 +399,29 @@ class PaperRuntime:
                     self.risk_kernel.kill_switch.trip("paper_venue_reconciliation_error")
                     raise
         result = self.reconciliation.run(
-            account=self.account, orders=self.orders, venue_snapshot=venue_snapshot
+            account=self.account,
+            orders=self.orders,
+            account_ledger=self.account_ledger,
+            venue_snapshot=venue_snapshot,
         )
         if not result.reconciled:
             self.risk_kernel.kill_switch.trip("paper_reconciliation_mismatch")
         return result
+
+    def _settle_simulated_paper_fills(self):
+        execute_pending = getattr(self.orders.adapter, "execute_pending", None)
+        if not callable(execute_pending):
+            return ()
+        if self.account_ledger is None:
+            raise RuntimeError("simulated paper fills require a durable AccountLedger")
+        fills = execute_pending(at=datetime.now(UTC))
+        for fill in fills:
+            order = self.orders.orders.get(fill.order_id)
+            if order is None:
+                raise RuntimeError("simulated venue fill references an unknown local order")
+            self.orders.record_fill(fill, order.side)
+            self.account_ledger.apply_fill(fill, order.side, order.instrument.canonical_id)
+        return fills
 
     def run_forever(
         self,
@@ -434,6 +512,8 @@ class PaperRuntime:
         snapshot: Snapshot,
         risk,
         order_ids: Sequence[UUID],
+        fill_ids: Sequence[UUID] = (),
+        reconciliation_id: UUID | None = None,
     ) -> None:
         if self.learning is None:
             return
@@ -447,6 +527,8 @@ class PaperRuntime:
             target_id=target.artifact_id,
             risk_decision_id=risk.artifact_id if risk is not None else None,
             order_ids=tuple(order_ids),
+            fill_ids=tuple(fill_ids),
+            reconciliation_id=reconciliation_id,
             subject="decision-pipeline",
             subject_version="paper-runtime-v1",
             role="synthesizer",
@@ -475,6 +557,30 @@ class PaperRuntime:
                 occurred_at=cycle.created_at,
                 payload={"cycle": cycle.model_dump(mode="json", round_trip=True)},
             )
+        )
+
+    def _prior_cycle(self, cutoff: datetime) -> RuntimeCycle | None:
+        prior: RuntimeCycle | None = None
+        for event in self.ledgers.events(LedgerNamespace.MISSION):
+            if event.event_type != "paper_runtime_cycle":
+                continue
+            payload = event.payload.get("cycle")
+            if not isinstance(payload, dict):
+                continue
+            try:
+                cycle = RuntimeCycle.model_validate(payload)
+            except Exception:
+                continue
+            if cycle.run_id == self.config.run_id and cycle.cutoff == cutoff:
+                prior = cycle
+        if prior is None:
+            return None
+        if prior.stage is not RuntimeStage.STARTED:
+            return prior
+        return self._finish(
+            prior,
+            RuntimeStage.FAILED,
+            reasons=("interrupted_cycle_requires_recovery",),
         )
 
     def _finish(

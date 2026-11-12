@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -169,3 +171,181 @@ def test_coordinator_runs_cancels_and_checkpoints(tmp_path):
     done2 = coordinator.run(job2.job_id, slow)
     assert done2.state is JobState.CANCELLED
     assert coordinator.jobs(JobState.COMPLETED) != ()
+
+
+def test_coordinator_enforces_parallel_worker_cap(tmp_path):
+    from advisorai.ledger import SqliteLedgers
+
+    coordinator = ResearchCoordinator(
+        SqliteLedgers(tmp_path / "bounded-jobs.sqlite3"), max_workers=2
+    )
+    jobs = [coordinator.submit(ResearchRole.SCOUT) for _ in range(3)]
+    lock = threading.Lock()
+    active = 0
+    peak = 0
+    two_started = threading.Event()
+    release = threading.Event()
+    finished: list[JobState] = []
+
+    def worker(_job, cancelled):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active == 2:
+                two_started.set()
+        while not release.wait(0.01):
+            if cancelled():
+                break
+        with lock:
+            active -= 1
+        return "bounded"
+
+    threads = [
+        threading.Thread(
+            target=lambda job=job: finished.append(coordinator.run(job.job_id, worker).state)
+        )
+        for job in jobs
+    ]
+    for thread in threads:
+        thread.start()
+    assert two_started.wait(timeout=3)
+    time.sleep(0.1)
+    assert active == 2
+    assert coordinator.active_workers == 2
+    assert coordinator.peak_workers == 2
+    release.set()
+    for thread in threads:
+        thread.join(timeout=3)
+        assert not thread.is_alive()
+    assert peak == 2
+    assert finished == [JobState.COMPLETED] * 3
+    assert coordinator.active_workers == 0
+
+
+def test_concurrent_submissions_respect_durable_queue_capacity(tmp_path):
+    from advisorai.ledger import LedgerNamespace, SqliteLedgers
+
+    ledgers = SqliteLedgers(tmp_path / "concurrent-submissions.sqlite3")
+    coordinator = ResearchCoordinator(ledgers, max_queued_jobs=4)
+    barrier = threading.Barrier(12)
+    lock = threading.Lock()
+    accepted = []
+    refused = 0
+
+    def submit_one() -> None:
+        nonlocal refused
+        barrier.wait(timeout=3)
+        try:
+            job = coordinator.submit(ResearchRole.SCOUT)
+        except RuntimeError as exc:
+            assert "queue is full" in str(exc)
+            with lock:
+                refused += 1
+        else:
+            with lock:
+                accepted.append(job)
+
+    threads = [threading.Thread(target=submit_one) for _ in range(12)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=3)
+        assert not thread.is_alive()
+
+    submissions = [
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "research_job_submitted"
+    ]
+    assert len(accepted) == 4
+    assert refused == 8
+    assert len(submissions) == 4
+    assert len(coordinator.jobs(JobState.QUEUED)) == 4
+
+
+def test_external_cancellation_is_durable_across_restart(tmp_path):
+    from advisorai.ledger import SqliteLedgers
+
+    ledger_path = tmp_path / "external-cancel.sqlite3"
+    ledgers = SqliteLedgers(ledger_path)
+    coordinator = ResearchCoordinator(ledgers)
+    job = coordinator.submit(ResearchRole.SCOUT)
+    started = threading.Event()
+    result = []
+
+    def worker(_running, cancelled):
+        started.set()
+        while not cancelled():
+            time.sleep(0.005)
+        return "cancelled before acceptance"
+
+    thread = threading.Thread(target=lambda: result.append(coordinator.run(job.job_id, worker)))
+    thread.start()
+    assert started.wait(timeout=3)
+    assert coordinator.cancel(job.job_id).state is JobState.RUNNING
+    thread.join(timeout=3)
+    assert not thread.is_alive()
+    assert result[0].state is JobState.CANCELLED
+
+    restarted = ResearchCoordinator(SqliteLedgers(ledger_path))
+    hydrated = next(item for item in restarted.jobs() if item.job_id == job.job_id)
+    assert hydrated.state is JobState.CANCELLED
+    assert restarted.active_workers == 0
+
+
+def test_execution_budget_is_deadline_aware_and_over_budget_results_fail(tmp_path):
+    from advisorai.ledger import SqliteLedgers
+
+    coordinator = ResearchCoordinator(
+        SqliteLedgers(tmp_path / "budget-jobs.sqlite3"),
+        default_execution_budget_seconds=0.05,
+        max_execution_budget_seconds=1,
+    )
+    job = coordinator.submit(ResearchRole.FACTOR_MINER, execution_budget_seconds=0.05)
+
+    def cooperative(_running, cancelled):
+        while not cancelled():
+            time.sleep(0.005)
+        return "late result is not accepted"
+
+    completed = coordinator.run(job.job_id, cooperative)
+    assert completed.state is JobState.INTERRUPTED
+    assert completed.detail == "execution_budget_exceeded"
+    assert completed.budget_consumed_seconds == 0.05
+
+
+def test_checkpoints_are_idempotent_durable_and_resumable(tmp_path):
+    from advisorai.ledger import LedgerNamespace, SqliteLedgers
+
+    ledger_path = tmp_path / "restartable-jobs.sqlite3"
+    ledgers = SqliteLedgers(ledger_path)
+    coordinator = ResearchCoordinator(ledgers)
+    job = coordinator.submit(ResearchRole.QUANT_LEAD)
+
+    def interrupted(running, _cancelled):
+        coordinator.checkpoint(running.job_id, detail="cursor=7")
+        coordinator.checkpoint(running.job_id, detail="cursor=7")
+        raise RuntimeError("worker stopped")
+
+    failed = coordinator.run(job.job_id, interrupted)
+    assert failed.state is JobState.INTERRUPTED
+    assert failed.checkpoint_detail == "cursor=7"
+    checkpoint_events = [
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "research_job_checkpointed"
+        and event.payload.get("job", {}).get("job_id") == str(job.job_id)
+    ]
+    assert len(checkpoint_events) == 1
+
+    restarted = ResearchCoordinator(SqliteLedgers(ledger_path))
+    hydrated = next(item for item in restarted.jobs() if item.job_id == job.job_id)
+    assert hydrated.state is JobState.INTERRUPTED
+    assert hydrated.checkpoint_detail == "cursor=7"
+    resumed = restarted.run(
+        job.job_id,
+        lambda current, _cancelled: f"resumed:{current.checkpoint_detail}",
+    )
+    assert resumed.state is JobState.COMPLETED
+    assert resumed.detail == "resumed:cursor=7"

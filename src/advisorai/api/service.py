@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from hashlib import sha256
+from uuid import NAMESPACE_URL, uuid5
 
 from advisorai.agents import (
     EvidenceCouncil,
@@ -132,6 +133,32 @@ class AdvisorService:
             targets=bound_targets,
             marks=market.marks,
             risk_constraints_version=risk_policy_version,
+        )
+        stable_positions = tuple(
+            position.model_copy(
+                update={
+                    "artifact_id": uuid5(
+                        NAMESPACE_URL,
+                        f"advisorai-v3/target-position/{request.mission_id}/{snapshot.artifact_id}/"
+                        f"{position.instrument.canonical_id}/{position.target_quantity}",
+                    )
+                }
+            )
+            for position in target.positions
+        )
+        position_key = ",".join(
+            f"{position.instrument.canonical_id}:{position.target_quantity}"
+            for position in stable_positions
+        )
+        target = target.model_copy(
+            update={
+                "artifact_id": uuid5(
+                    NAMESPACE_URL,
+                    f"advisorai-v3/target/{request.mission_id}/{snapshot.artifact_id}/"
+                    f"{target.risk_constraints_version}/{position_key}",
+                ),
+                "positions": stable_positions,
+            }
         )
         abstained = not gate.passed or proposal_failure is not None
         missing = (*gate.reasons, *(() if proposal_failure is None else (proposal_failure,)))

@@ -1,62 +1,55 @@
-"""AdvisorAI workstation application: supervised start, operate, stop, recover.
+"""Long-lived, supervised, paper-only AdvisorAI owner application.
 
-This is the real application entry point for the owner-operated session. It
-owns the lifecycle that the dashboard alone cannot provide:
+Usage::
 
-dashboard API + UI  -> inspection and guarded commands (NOT the trading system)
-advisorai.app       -> supervised session: start -> verify recovery ->
-                       reconcile venue/orders -> run paper cycles -> checkpoint
-                       -> clean stop -> restart
-
-Usage:
     python -m advisorai.app start --reason "owner session"
     python -m advisorai.app status
     python -m advisorai.app stop --outcome clean
 
-Environment:
-    ADVISORAI_STATE_DIR     session lock + state (default: <cwd>/var/advisorai)
-    ADVISORAI_LEDGER_PATH   SQLite WAL ledgers (default: state/ledgers.sqlite3)
+The start command holds the durable single-owner lock while a bounded paper
+scheduler runs. ``stop`` requests graceful shutdown through a private local
+control file; a process crash releases the OS lock and is classified on the
+next start. No live venue adapter or credential path is created here.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import os
+import signal
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from advisorai.ledger import SqliteLedgers
-from advisorai.session import SessionOutcome, SessionSupervisor
+import psutil
+
+from advisorai.ledger import LedgerNamespace, SqliteLedgers
+from advisorai.session.records import SessionOutcome
+from advisorai.session.supervisor import SessionSupervisor
 
 
 def _state_dir() -> Path:
-    import os
-
     raw = os.getenv("ADVISORAI_STATE_DIR", "var/advisorai")
     return Path(raw).expanduser().resolve()
 
 
 def _ledger_path(state_dir: Path) -> Path:
-    import os
-
     raw = os.getenv("ADVISORAI_LEDGER_PATH")
     return Path(raw).expanduser().resolve() if raw else state_dir / "ledgers.sqlite3"
 
 
 def _repo_identity() -> tuple[str, str]:
-    """Measured code/config identities; verified, never placeholder zeros.
-
-    Code identity is the git HEAD commit hash plus a content hash of the
-    live ``src/advisorai`` tree, so uncommitted working-tree changes alter
-    the identity instead of silently reusing the committed hash. Config
-    identity is the SHA-256 of the canonical active configuration bundle.
-    """
+    """Measure working code/config identities for durable recovery records."""
     import subprocess
+
+    root = Path(__file__).resolve().parents[2]
 
     try:
         head = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -64,97 +57,192 @@ def _repo_identity() -> tuple[str, str]:
         ).stdout.strip()
     except Exception:
         head = "no-git-head"
-    tree_digest = hashlib.sha256()
-    tree_digest.update(f"head:{head}".encode())
-    root = Path(__file__).resolve().parent
-    for path in sorted(root.rglob("*.py")):
+
+    def tree_hash(relative_path: str) -> str:
+        digest = hashlib.sha256()
+        digest.update(f"head:{head};tree:{relative_path}".encode())
         try:
-            tree_digest.update(path.read_bytes())
-        except OSError:
-            continue
-    code_hash = tree_digest.hexdigest()
-    config_digest = hashlib.sha256()
-    config_root = Path("configs")
-    found = False
-    if config_root.is_dir():
-        for path in sorted(config_root.rglob("*")):
-            if path.is_file() and path.suffix in {".yaml", ".yml", ".json"}:
-                try:
-                    config_digest.update(str(path.relative_to(config_root)).encode())
-                    config_digest.update(path.read_bytes())
-                    found = True
-                except OSError:
+            tree = subprocess.run(
+                ["git", "-C", str(root), "rev-parse", f"HEAD:{relative_path}"],
+                capture_output=True,
+                timeout=5,
+                check=True,
+            ).stdout
+            diff = subprocess.run(
+                ["git", "-C", str(root), "diff", "--binary", "HEAD", "--", relative_path],
+                capture_output=True,
+                timeout=10,
+                check=True,
+            ).stdout
+            untracked = subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(root),
+                    "ls-files",
+                    "--others",
+                    "--exclude-standard",
+                    "-z",
+                    "--",
+                    relative_path,
+                ],
+                capture_output=True,
+                timeout=10,
+                check=True,
+            ).stdout
+            digest.update(tree)
+            digest.update(diff)
+            for raw_path in untracked.split(b"\0"):
+                if not raw_path:
                     continue
-    config_hash = (
-        config_digest.hexdigest() if found else hashlib.sha256(b"no-config-tree").hexdigest()
-    )
-    return code_hash, config_hash
+                path = root / os.fsdecode(raw_path)
+                digest.update(raw_path)
+                digest.update(path.read_bytes())
+        except Exception:
+            # When Git is unavailable, measure the entry module itself and
+            # retain a non-placeholder identity rather than accepting zeros.
+            digest.update(Path(__file__).read_bytes())
+        return digest.hexdigest()
+
+    return tree_hash("src/advisorai"), tree_hash("configs")
 
 
 def cmd_start(args: argparse.Namespace) -> int:
     state_dir = _state_dir()
     ledgers = SqliteLedgers(_ledger_path(state_dir))
-    code_hash, config_hash = _repo_identity()
     supervisor = SessionSupervisor(
         ledgers,
         state_dir=state_dir,
         lock_identity=args.lock_identity,
-        code_hash=code_hash,
-        config_hash=config_hash,
+        code_hash="pending-code-identity",
+        config_hash="pending-config-identity",
     )
-    start, recovery = supervisor.start(reason=args.reason)
-    print(f"session_id={start.session_id}")
-    print(f"classification={start.recovery_classification}")
-    print(f"recovery_mode={recovery.recovery_mode.value}")
-    for decision in recovery.decisions:
-        print(f"decision={decision}")
-    if recovery.recovery_mode.value == "abstain":
-        print("RECOVERY INCOMPLETE: resolve failed checks before operating.")
+    try:
+        supervisor._acquire_lock()
+    except RuntimeError as exc:
+        print(f"SESSION START REFUSED: {exc}", flush=True)
         return 2
-    if recovery.recovery_mode.value == "recovery":
-        print("RECOVERY MODE: reconcile venue/orders before new proposals.")
-        return 1
-    checkpoint = supervisor.checkpoint(pending_work=("session_active",))
-    print(f"checkpoint={checkpoint.checkpoint_hash[:16]}...")
-    print("SESSION READY. Stop with: python -m advisorai.app stop")
-    # The start command records readiness and leaves the session supervised
-    # by the lock file; long-running operation continues under the runtime.
-    return 0
+    try:
+        code_hash, config_hash = _repo_identity()
+        supervisor.code_hash = code_hash
+        supervisor.config_hash = config_hash
+    except BaseException:
+        supervisor._release_lock()
+        raise
+    stop_event = __import__("threading").Event()
+    try:
+        from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
+
+        app = PaperOwnerApplication(
+            ledgers=ledgers,
+            state_dir=state_dir,
+            lock_identity=args.lock_identity,
+            code_hash=code_hash,
+            config_hash=config_hash,
+            supervisor=supervisor,
+            config=OwnerApplicationConfig(
+                scenario=args.scenario,
+                interval_seconds=args.interval_seconds,
+                accelerated_clock=args.accelerated_clock,
+                max_rss_mb=args.max_rss_mb,
+            ),
+            stop_requested=stop_event,
+        )
+    except BaseException:
+        supervisor._release_lock()
+        raise
+    previous_handlers: dict[int, object] = {}
+
+    def request_stop(_signum, _frame) -> None:
+        stop_event.set()
+
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        previous_handlers[signum] = signal.signal(signum, request_stop)
+    try:
+        return app.run(reason=args.reason)
+    finally:
+        for signum, previous in previous_handlers.items():
+            signal.signal(signum, previous)
+
+
+def _read_owner_record(state_dir: Path) -> dict[str, object] | None:
+    try:
+        payload = json.loads((state_dir / "owner.json").read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError):
+        raise ValueError("owner process record is unreadable") from None
+    if not isinstance(payload, dict):
+        raise ValueError("owner process record has an invalid shape")
+    return payload
+
+
+def _owner_is_live(owner: dict[str, object]) -> bool:
+    try:
+        process = psutil.Process(int(owner["pid"]))
+        expected_start = float(owner["process_create_time"])
+        return abs(process.create_time() - expected_start) < 0.01
+    except (KeyError, TypeError, ValueError, psutil.Error):
+        return False
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
     state_dir = _state_dir()
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
-    code_hash, config_hash = _repo_identity()
-    supervisor = SessionSupervisor(
-        ledgers,
-        state_dir=state_dir,
-        lock_identity=args.lock_identity,
-        code_hash=code_hash,
-        config_hash=config_hash,
-    )
-    # Reattach: find the session with an unmatched start.
-    history = supervisor._session_history()
-    unmatched = [sid for sid in history["starts"] if sid not in history["ends"]]
-    if not unmatched:
-        print("no active session to stop")
-        return 1
-    supervisor.session_id = unmatched[-1]
-    supervisor._acquire_lock()
     try:
-        end = supervisor.stop(
-            outcome=SessionOutcome(args.outcome),
-            open_orders=tuple(UUID(item) for item in args.open_order),
-            unfinished_work=tuple(args.unfinished),
-        )
-    finally:
-        supervisor.session_id = None
-        supervisor._release_lock()
-    print(f"session_id={end.session_id}")
-    print(f"outcome={end.outcome.value}")
-    print(f"reconciliation={end.reconciliation_state}")
-    print(f"leases_released={end.leases_released}")
-    return 0 if end.outcome is SessionOutcome.CLEAN else 2
+        owner = _read_owner_record(state_dir)
+    except ValueError as exc:
+        print(f"STOP REFUSED: {exc}")
+        return 2
+    if owner is None or not _owner_is_live(owner):
+        print("no live supervised application owner")
+        return 1
+    if str(owner.get("lock_identity")) != args.lock_identity:
+        print("STOP REFUSED: lock identity does not match the active owner")
+        return 2
+    try:
+        session_id = UUID(str(owner["session_id"]))
+        outcome = SessionOutcome(args.outcome)
+    except (KeyError, ValueError):
+        print("STOP REFUSED: active owner record is invalid")
+        return 2
+    request_path = state_dir / f"stop-request-{session_id}.json"
+    request = {
+        "session_id": str(session_id),
+        "outcome": outcome.value,
+        "requested_at": datetime.now(UTC).isoformat(),
+        "requester_pid": os.getpid(),
+    }
+    try:
+        descriptor = os.open(request_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(request, handle, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+    print(f"stop_requested={session_id}", flush=True)
+
+    ledgers = SqliteLedgers(_ledger_path(state_dir))
+    deadline = time.monotonic() + args.timeout_seconds
+    while time.monotonic() < deadline:
+        ended = False
+        for event in ledgers.events(LedgerNamespace.MISSION):
+            if event.event_type != "session_ended":
+                continue
+            payload = event.payload.get("end")
+            if isinstance(payload, dict) and str(payload.get("session_id")) == str(session_id):
+                ended = True
+                actual = str(payload.get("outcome", "unclean"))
+                print(f"outcome={actual}", flush=True)
+                return 0 if actual == "clean" else 2
+        if not _owner_is_live(owner) and not ended:
+            print("owner exited before a verified session end record", flush=True)
+            return 2
+        time.sleep(0.1)
+    print(f"STOP TIMEOUT: owner {session_id} has not written a session end", flush=True)
+    return 2
 
 
 def cmd_status(_args: argparse.Namespace) -> int:
@@ -169,9 +257,18 @@ def cmd_status(_args: argparse.Namespace) -> int:
         config_hash=config_hash,
     )
     history = supervisor._session_history()
-    print(f"starts={len(history['starts'])} ends={len(history['ends'])}")
     unmatched = [str(sid) for sid in history["starts"] if sid not in history["ends"]]
+    print(f"starts={len(history['starts'])} ends={len(history['ends'])}")
     print(f"unmatched_starts={unmatched}")
+    try:
+        owner = _read_owner_record(state_dir)
+    except ValueError:
+        owner = None
+        print("owner_record=unreadable")
+    if owner is not None and _owner_is_live(owner):
+        print(f"active_session={owner.get('session_id')} pid={owner.get('pid')}")
+    else:
+        print("active_session=none")
     latest = history["latest_end"]
     if latest is not None:
         print(f"latest_end={latest.session_id} outcome={latest.outcome.value}")
@@ -183,17 +280,31 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="advisorai.app", description=__doc__)
     parser.add_argument("--lock-identity", default="owner-workstation")
     sub = parser.add_subparsers(dest="command", required=True)
-    p_start = sub.add_parser("start", help="start a supervised owner session")
+    p_start = sub.add_parser("start", help="run a supervised paper owner session")
     p_start.add_argument("--reason", default="owner_start")
+    p_start.add_argument(
+        "--scenario",
+        choices=("quiet", "qualification"),
+        default="quiet",
+        help="local paper data profile; qualification uses deterministic evidence and fills",
+    )
+    p_start.add_argument("--interval-seconds", type=float, default=3600.0)
+    p_start.add_argument(
+        "--accelerated-clock",
+        action="store_true",
+        help="advance local paper cutoffs by one hour each cycle for integration qualification",
+    )
+    p_start.add_argument("--max-rss-mb", type=int, default=2048)
     p_start.set_defaults(func=cmd_start)
-    p_stop = sub.add_parser("stop", help="stop the active supervised session")
+    p_stop = sub.add_parser("stop", help="request a graceful stop of the active owner process")
     p_stop.add_argument("--outcome", default="clean", choices=["clean", "emergency", "unclean"])
-    p_stop.add_argument("--open-order", action="append", default=[])
-    p_stop.add_argument("--unfinished", action="append", default=[])
+    p_stop.add_argument("--timeout-seconds", type=float, default=30.0)
     p_stop.set_defaults(func=cmd_stop)
-    p_status = sub.add_parser("status", help="show session history without mutating")
+    p_status = sub.add_parser("status", help="show durable session and owner-process state")
     p_status.set_defaults(func=cmd_status)
     args = parser.parse_args(argv)
+    if args.command == "stop" and not 0.1 <= args.timeout_seconds <= 600:
+        parser.error("--timeout-seconds must be between 0.1 and 600")
     return int(args.func(args))
 
 

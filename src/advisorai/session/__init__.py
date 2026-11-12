@@ -2,6 +2,8 @@
 
 from .records import (
     DataGapRecord,
+    DataGapResolutionRecord,
+    PITSnapshotVerification,
     RecoveryMode,
     RecoveryRecord,
     RuntimeLeaseRecord,
@@ -9,6 +11,7 @@ from .records import (
     SessionEndRecord,
     SessionOutcome,
     SessionStartRecord,
+    SourceWatermarkRecord,
 )
 from .supervisor import (
     SessionCheckpointHash,
@@ -21,6 +24,8 @@ from .supervisor import (
 
 __all__ = [
     "DataGapRecord",
+    "DataGapResolutionRecord",
+    "PITSnapshotVerification",
     "RecoveryMode",
     "RecoveryRecord",
     "RuntimeLeaseRecord",
@@ -30,6 +35,7 @@ __all__ = [
     "SessionOutcome",
     "SessionRecoveryChecks",
     "SessionStartRecord",
+    "SourceWatermarkRecord",
     "SessionStopChecks",
     "SessionSupervisor",
     "SessionZeroStateError",

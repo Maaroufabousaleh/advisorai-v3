@@ -1,4 +1,12 @@
-# Final completion dossier — AdvisorAI V3 Integrated Alpha (PR #211)
+# Historical completion snapshot — AdvisorAI V3 Integrated Alpha (PR #211)
+
+> This is a dated record of an earlier implementation review, not a current
+> completion claim. A later review at base `195c0df` found implementable gaps
+> in owner-process lifetime/recovery, current-state verification, research job
+> controls, black-box lifecycle proof, CI, and roadmap status. The current
+> implementation/admission audit is
+> [roadmap-execution-matrix.md](roadmap-execution-matrix.md); PR #211 remains
+> unmerged.
 
 Branch: `codex/roadmap-completion-20261112`. Base: main @ `9d98ec1`.
 Pre-change suite: **1213 passed**. Post-change suite: **1229 passed**.

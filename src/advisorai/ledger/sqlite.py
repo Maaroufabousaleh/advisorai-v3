@@ -37,6 +37,7 @@ class LedgerNamespace(StrEnum):
     MODEL = "model"
     CAPABILITY = "capability"
     INCIDENT = "incident"
+    VENUE = "venue"
 
 
 class LedgerEvent(BaseModel):

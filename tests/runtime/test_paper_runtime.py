@@ -1,6 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from advisorai.agents.fusion import DecisionBundle, EvidenceGateResult
 from advisorai.api.service import DecisionPipelineResult
@@ -21,11 +21,12 @@ from advisorai.execution import (
     VenueAccountSnapshot,
 )
 from advisorai.learning import PaperLearningLoop
-from advisorai.ledger import LedgerNamespace, SqliteLedgers
+from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
 from advisorai.runtime import (
     CadenceGate,
     PaperRuntime,
     PaperRuntimeConfig,
+    RuntimeCycle,
     RuntimeStage,
     build_default_orders,
 )
@@ -170,6 +171,41 @@ def test_runtime_routes_only_after_risk_and_records_cycle(tmp_path):
         event.event_type == "paper_runtime_cycle"
         for event in ledgers.events(LedgerNamespace.MISSION)
     )
+
+
+def test_interrupted_cycle_is_not_replayed_and_following_cutoff_can_run(tmp_path):
+    runtime, cutoff, ledgers, _ = _runtime(tmp_path, admitted=True)
+    cycle_id = uuid5(
+        NAMESPACE_URL,
+        f"advisorai-v3/runtime-cycle/{runtime.config.run_id}/{cutoff.isoformat()}",
+    )
+    interrupted = RuntimeCycle(
+        cycle_id=cycle_id,
+        run_id=runtime.config.run_id,
+        cutoff=cutoff,
+        stage=RuntimeStage.STARTED,
+        created_at=cutoff,
+    )
+    ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.MISSION,
+            event_type="paper_runtime_cycle",
+            idempotency_key=f"runtime:{runtime.config.run_id}:{cycle_id}:started",
+            occurred_at=cutoff,
+            payload={"cycle": interrupted.model_dump(mode="json", round_trip=True)},
+        )
+    )
+
+    recovered = runtime.run_once(cutoff)
+    assert recovered.stage is RuntimeStage.FAILED
+    assert recovered.reasons == ("interrupted_cycle_requires_recovery",)
+    # The idempotent record stays failed; no old decision or order is replayed.
+    assert runtime.run_once(cutoff) == recovered
+
+    next_cycle = runtime.run_once(cutoff + timedelta(hours=1))
+    assert next_cycle.stage is RuntimeStage.ORDERS_ROUTED
+    assert len(next_cycle.order_ids) == 1
+    assert len(runtime.orders.orders) == 1
 
 
 def test_runtime_requires_closed_hourly_cutoff(tmp_path):
