@@ -119,7 +119,6 @@ def test_only_reviewed_modules_consume_the_resolver():
 
 def test_sandbox_launch_carries_only_allowlisted_env():
     """Launch specs admit exactly six env keys; secrets cannot ride along."""
-    from advisorai.capabilities.sandbox import SandboxLaunchSpec
 
     allowed = {
         field
