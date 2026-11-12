@@ -11,7 +11,7 @@ Admission is tracked separately and never implied by implementation.
 | E-inspect | Registry inspection API + UI | api/dashboard | `src/advisorai/api/dashboard.py`, `dashboard/src/` | new | MISSING | **build now** |
 | E-retrieval | FTS retrieval over registry | research | new `src/advisorai/research/retrieval.py` | new | MISSING | build after E-inspect |
 | I-research-ui | Research browser views | dashboard | `dashboard/src/` | build | MISSING | build with E-inspect |
-| G-replay | Nautilus replay qualification | execution | `src/advisorai/execution/nautilus.py` | Phase 0 gate | EXTERNALLY BLOCKED | needs pinned runtime + gate |
+| G-replay | Nautilus replay qualification | execution | `src/advisorai/execution/nautilus.py` | Phase 0 gate | EXTERNALLY BLOCKED (production) / IMPLEMENTED (comparison) | pinned runtime still needs Phase 0 gate; boundary semantics proven by `tests/execution/test_cross_engine_replay.py` (2 passed) |
 | H-sandbox | Kata/gVisor attestation | capabilities | `src/advisorai/capabilities/sandbox.py` | host tests | EXTERNALLY BLOCKED | needs host hardware (PR #207) |
 | B-sources | New source adapters | collectors | per-source | qualification | EXTERNALLY BLOCKED | needs rights + review per source |
 | C-models | Challenger qualification | models/research | `challengers/` | prospective | EXTERNALLY BLOCKED | needs elapsed market time |
