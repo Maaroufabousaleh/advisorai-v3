@@ -30,8 +30,8 @@ No merge to main. Phase 10 sealed. No live orders, credentials, or approvals.
 
 ## 3. Tested HEAD and commands
 
-- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`: 1229 passed (pre-P0 batch; rerun pending for current HEAD).
-- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run python scripts/verify_acceptance.py`: 11/11 phases (pre-P0 batch; rerun pending).
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q`: **1253 passed** (1229 + 24 new P0/P1 tests), 48 warnings.
+- `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run python scripts/verify_acceptance.py`: **11/11 phases passed** (Phase 7: 41 passed incl. strong order lifecycle, per-session projections, authority suites).
 - `uv run ruff check .`: clean. `uv lock --check`: clean.
 - `npm run build --prefix dashboard`: success.
 - `python -m advisorai.app start/stop/status`: smoke-tested end to end.
