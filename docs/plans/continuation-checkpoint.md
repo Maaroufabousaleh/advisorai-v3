@@ -112,6 +112,56 @@
   process in this generation. Phase 4 remains `PENDING`, with no terminal
   audit or utility scoring.
 
+## Current post-merge TTM-R2 continuation — 2026-08-17
+
+- PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The TTM
+  follow-up is isolated in `/mnt/c/projects/advisorai-v3-ttm-followup`, branch
+  `agent/phase4-ttm-r2-followup`, currently at implementation commit `4b75dd7`
+  before this documentation checkpoint.
+- The operator confirmed that collector PID `160717`, resource-sidecar PID
+  `161130`, and baseline-ledger PID `173057` were intentionally stopped before
+  the prior continuation. The preserved forward root is therefore classified
+  `OPERATOR_INTERRUPTED / INCOMPLETE`, not as a collector crash, provider
+  failure, or implementation failure. No root was checked out, restarted,
+  repaired, appended to, backfilled, concatenated, or deadline-extended.
+- The collector root retains 734 valid raw records, 86 normalized bars (43 per
+  symbol), 2 health transitions, 8 rejected cutoffs, 0 failures, and 0
+  completed cases. Its manifest/status hashes are
+  `f5661f1f098b265113bc1349419edbd605ddee0ad63eae17dc4e6e463b17a7ea` /
+  `781250ea49d06ec6a3d061f900c4851334f75dbf2a597cd789bbf1546913f7c4`.
+- The fixed root target was 64 completed cases per BTCUSDT/ETHUSDT through
+  `2026-08-17T20:45:11.984069Z`; a fresh evidence generation is required.
+- The baseline root remains preserved with 0 predictions and 5 missed cutoffs;
+  its manifest/status hashes are
+  `da1bc9da2e9a4b1dad76c69782db552d354705827693c07d744840f80985078d` /
+  `deb98748eca1ac9d48b9af2d1184fd8429d067a699252568639e755e02ff6ffa`.
+- Future baseline resume validation now binds exact source manifest/snapshot,
+  preregistration, Phase-3 gate, repository and forecasting/LightGBM code,
+  roster, context bars, and horizon bars. The active baseline root was not
+  resumed. The shared `ForwardPredictionLedger` rejects conflicting duplicate
+  payloads, while outcome linkage remains a separate immutable ledger.
+- The new TTM-R2 worker reads only normalized bars and an immutable local runtime
+  admission. The actual approved admission was verified read-only: checkpoint
+  `ibm-granite/granite-timeseries-ttm-r2` revision
+  `d6a79570cac0f33d526601cd3a0fc7c80a8f9a2f`, model artifact SHA-256
+  `a706726a7eb01bbcb42994b7dcb3c06ea9557898dbae8d480eb04fe8ccb89710`, runner
+  SHA-256 `5c4e3ca38512bbf4ccea3929c17b578b9d88cf80298d991c739124abc126c7b2`,
+  and runner-script SHA-256
+  `358150e0544bb416d42eaa6ef0fc3862d69d5a3c475ef1c537cb0ba60d0c9550`.
+- The qualified runner requires an exact 512-value input, while frozen V3-Core
+  prospective cases require 48 closed 5-minute bars. The worker therefore
+  quarantines the candidate and generates no admission prediction; it does not
+  pad/interpolate, call the direct model path, load credentials, make network
+  calls, backfill a cutoff, or submit orders. A separate 48-bar runtime
+  qualification is the next legitimate TTM prerequisite.
+- Target state: Phase 2 and Phase 3 remain `PASSED`; Phase 4 remains `PENDING`
+  on fresh independent cadence evidence and robust candidate admission; Phase
+  5–7 remain `CLOSED`; archive/rclone remains deferred; live capital remains
+  prohibited; the laptop remains running.
+- Focused verification: baseline/ledger/TTM tests pass (`26` tests); the merged
+  collector head passed `746` full pytest tests with 28 warnings, plus Ruff,
+  format, lock, compilation, diff, tracked-secret, and tracked-weight checks.
+
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.

@@ -310,6 +310,21 @@ from .v3core_prediction_ledger import (
     ForwardPredictionOutcomeLink,
     ForwardPredictionOutcomeLinkLedger,
 )
+from .v3core_ttm import (
+    QUALIFIED_TTM_R2_RUNNER_CONTEXT_BARS,
+    TTM_R2_CONTEXT_BARS,
+    TTM_R2_HORIZON_BARS,
+    TTM_R2_MODEL,
+    TTM_R2_OUTPUT_BARS,
+    TTM_R2_PREPROCESSING_IDENTITY,
+    TTMR2InferenceFailure,
+    TTMR2InferenceResult,
+    TTMR2RuntimeContractMismatch,
+    TTMR2RuntimeIdentity,
+    build_ttm_prediction,
+    context_for_cutoff as ttm_context_for_cutoff,
+    infer_ttm_r2,
+)
 
 __all__ = [
     "CANDIDATE_MODELS",
@@ -509,6 +524,20 @@ __all__ = [
     "STABILITY_RULE_VERSION",
     "audit_forward_root",
     "build_exclusion_overlay",
+
+    "QUALIFIED_TTM_R2_RUNNER_CONTEXT_BARS",
+    "TTM_R2_CONTEXT_BARS",
+    "TTM_R2_HORIZON_BARS",
+    "TTM_R2_MODEL",
+    "TTM_R2_OUTPUT_BARS",
+    "TTM_R2_PREPROCESSING_IDENTITY",
+    "TTMR2InferenceFailure",
+    "TTMR2InferenceResult",
+    "TTMR2RuntimeContractMismatch",
+    "TTMR2RuntimeIdentity",
+    "build_ttm_prediction",
+    "ttm_context_for_cutoff",
+    "infer_ttm_r2",
     "CADENCE_CONTRACT_VERSION",
     "EVALUATION_INPUT_SCHEMA",
     "PREREGISTRATION_SCHEMA",

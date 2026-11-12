@@ -686,6 +686,21 @@ class ForwardPredictionRecord(BaseModel):
     predicted_return_bps: Decimal
     generated_at: datetime
     runtime_latency_ms: Decimal = Field(ge=0)
+    source_snapshot_hash: str | None = None
+    checkpoint_hash: str | None = None
+    runner_hash: str | None = None
+    preprocessing_identity: str | None = None
+    preprocessing_hash: str | None = None
+    dependency_lock_hash: str | None = None
+    runtime_environment_hash: str | None = None
+    device: str | None = None
+    native_interval_lower_bps: Decimal | None = None
+    native_interval_upper_bps: Decimal | None = None
+    native_confidence: Decimal | None = None
+    resource_peak_rss_mib: Decimal | None = None
+    resource_peak_cpu_percent: Decimal | None = None
+    resource_sample_count: int | None = Field(default=None, ge=0)
+    provenance: tuple[tuple[str, str], ...] = ()
     outcome_case_id: str | None = None
 
     # Candidate inference timing is optional for backward compatibility with

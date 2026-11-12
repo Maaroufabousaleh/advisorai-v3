@@ -97,6 +97,32 @@ allows one GPU family at a time through `GpuModelLease` and the global GPU
 lease cap. The correction at `9c33fc4` remains isolated; PID `80779` and
 its rejection root were not modified.
 
+## Current post-merge forward-run continuation — 2026-08-17
+
+PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator
+confirmed that its recorded collector, resource-sidecar, and baseline-ledger
+processes were intentionally stopped before the prior continuation. Their roots
+are preserved unchanged and classified `OPERATOR_INTERRUPTED / INCOMPLETE`;
+there is no evidence of a collector crash, provider failure, or implementation
+failure. No replacement process or backfill was used.
+
+The baseline prediction boundary now has a complete future-resume identity,
+including source root and manifest hash, source snapshot, preregistration,
+Phase-3 gate, repository/code hashes, model roster, and cadence. The shared
+prediction record remains immutable before outcome linkage and now binds optional
+candidate runtime provenance. Conflicting reuse of a prediction ID is rejected.
+
+The TTM-R2 worker is a separate read-only boundary. It uses the qualified local
+admission record and exact isolated runtime identity, but fails closed before
+inference because that qualified worker requires 512 input values and the
+frozen V3-Core prospective contract provides 48. This is recorded as a runtime
+contract quarantine; no unqualified 48-bar adapter is claimed. The current
+qualified admission was independently verified without network or credentials.
+
+No model, worker, dashboard, Hermes task, or research process gained execution
+authority. Phase 4 remains pending a fresh forward root, and no downstream
+phase was opened.
+
 ## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head

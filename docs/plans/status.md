@@ -113,6 +113,40 @@ resource contract permits only one GPU family resident at once
 isolated at `9c33fc4`; no old root was patched or backfilled. This is the
 resource-safety decision, not a claim that Chronos coverage is complete.
 
+## Current post-merge forward-run continuation — 2026-08-17
+
+PR #187 merged at `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The operator
+confirmed that collector PID `160717`, resource sidecar PID `161130`, and
+baseline ledger PID `173057` were intentionally stopped before the prior
+continuation. The preserved roots are classified
+`OPERATOR_INTERRUPTED / INCOMPLETE`, not as a crash, provider failure, or
+implementation failure. No root was restarted, edited, backfilled,
+concatenated, or deadline-extended.
+
+The forward root validated read-only with 734 raw records, 86 normalized bars
+(43 per symbol), 2 health transitions, 8 rejected cutoffs, 0 failures, and 0
+completed cases. The baseline root has 0 predictions and 5 missed cutoffs. A
+fresh root is required for the 64-per-symbol target.
+
+The isolated branch adds two future-run safeguards. Baseline resume now requires
+exact equality of source manifest/snapshot, preregistration, Phase-3 gate,
+repository and forecasting code, LightGBM code, model roster, context, and
+horizon. The shared prediction schema carries candidate runtime identity and
+provenance, rejects outcome mutation, and rejects conflicting duplicate payloads.
+
+The separate TTM-R2 worker consumes only normalized forward bars and the exact
+approved local runtime admission. The admission files were verified read-only,
+including the checkpoint, lock, environment, launcher, pyvenv, and runner
+hashes. The approved runner's 512-value input contract does not match the frozen
+48-bar V3-Core context. The worker therefore records a sanitized quarantine
+state and emits no predictions; it does not pad, interpolate, call an alternate
+model path, load credentials, make network calls, or submit orders.
+
+Phase 4 remains `PENDING` on fresh independent cadence evidence and robust
+candidate admission. Phase 2/3 remain passed; Phase 5–7 remain closed. The TTM
+follow-up remains separate from the merged collector PR. The laptop remains
+running.
+
 ## Current V3-Core forward PIT collector — 2026-08-12T21:18:35Z
 
 PR #186 is merged on main at `5514a4cac8771d23c9f7e113e922c9ba9df1ecee`.
