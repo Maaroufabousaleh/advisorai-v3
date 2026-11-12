@@ -31,6 +31,7 @@ from .factors import (
 )
 from .jobs import JobState, ResearchCoordinator, ResearchJob, ResearchRole
 from .registry import ResearchRegistry
+from .retrieval import ResearchRetrieval, RetrievalHit, librarian_search
 from .strategy import StrategyValidation, validate_strategy
 from .validity import (
     MultipleTestingAudit,
@@ -64,6 +65,9 @@ __all__ = [
     "ResearchCoordinator",
     "ResearchJob",
     "ResearchRegistry",
+    "ResearchRetrieval",
+    "RetrievalHit",
+    "librarian_search",
     "ResearchRole",
     "evaluate_factor",
     "factor_duplicates",
