@@ -50,6 +50,7 @@ import type {
   DashboardMetric,
   LedgerChainView,
   PaperFillView,
+  PerformanceSliceView,
   PaperOrderView,
   ResearchRecordView,
   TraceLinkView,
@@ -461,6 +462,7 @@ function PortfolioWorkspace({ data, onNavigate }: { data: DashboardOverview; onN
     <div className="workspace-stack">
       <div className="portfolio-summary"><Metric metric={data.metrics[0]} /><Metric metric={data.metrics[1]} /><div className="portfolio-callout"><div className="section-kicker"><ShieldCheck size={14} /> EXECUTION BOUNDARY</div><strong>Paper / testnet only</strong><span>Target portfolios never become orders without RiskKernel approval.</span><button className="text-button" onClick={() => onNavigate('risk')}>VIEW POLICY <ArrowUpRight size={14} /></button></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> POSITION REGISTER</div><h2>All positions at authoritative mark</h2></div><span className="panel-heading-meta">{data.exposures.length} LINES · {formatTime(data.as_of)} UTC</span></div><div className="data-table"><div className="data-table-row table-head"><span>INSTRUMENT</span><span>SIDE</span><span>MARK</span><span>NOTIONAL</span><span>WEIGHT</span><span>P&L</span><span>STATE</span></div>{data.exposures.map((row) => <div className="data-table-row" key={row.instrument}><span><strong>{row.instrument}</strong><small>{row.asset_class}</small></span><span className="mono">{row.side}</span><span className="mono">{row.mark}</span><span className="mono">{row.notional}</span><span className="mono">{row.weight}</span><span className={toneClass(row.tone)}>{row.pnl}</span><span><StatusPill tone={row.tone} label="marked" /></span></div>)}</div></section>
       <PaperOrdersPanel />
+      <PerformancePanel />
     </div>
   );
 }
@@ -511,6 +513,19 @@ function ChainAttestationPanel() {
     return () => { cancelled = true }
   }, [])
   return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><ClipboardList size={14} /> TAMPER EVIDENCE</div><h2>Ledger hash chain</h2></div><span className="panel-heading-meta">{chain ? `${chain.total_events} EVENTS` : '—'}</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Chain attestation unavailable: {error}</span></div> : !chain ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading chain attestation…</span></div> : <div><div className="source-health-note"><span>Chain head <code>{chain.chain_hash.slice(0, 16)}…</code> over {chain.total_events} events. Any deletion, reorder, or mutation changes this hash.</span></div><div className="data-table"><div className="data-table-row table-head"><span>NAMESPACE</span><span>EVENTS</span><span>HEAD</span></div>{chain.chains.map((entry) => <div className="data-table-row" key={entry.namespace}><span>{entry.namespace}</span><span>{entry.events}</span><span>{entry.head_hash.slice(0, 16)}…</span></div>)}</div></div>}</section>
+}
+
+function PerformancePanel() {
+  const [slices, setSlices] = useState<PerformanceSliceView[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.performance()
+      .then((rows) => { if (!cancelled) setSlices(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> PAPER PERFORMANCE</div><h2>Utility by regime</h2></div><span className="panel-heading-meta">{slices ? slices.length : '—'} SLICES</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Performance unavailable: {error}</span></div> : !slices ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading performance…</span></div> : slices.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No realized outcomes are recorded yet. Slices appear after paper horizons close.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>ASSET</span><span>REGIME</span><span>TRADES</span><span>TOTAL</span><span>WIN</span><span>DRAWDOWN</span><span>REVIEW</span></div>{slices.map((slice) => <div className="data-table-row" key={`${slice.asset}-${slice.regime}-${slice.horizon}`}><span>{slice.asset} / {slice.horizon}</span><span>{slice.regime}</span><span>{slice.samples}</span><span>{slice.total_utility}</span><span>{slice.win_rate}</span><span>{slice.max_drawdown}</span><span>{slice.expiry_action === 'none' ? '—' : slice.expiry_action}</span></div>)}</div>}</section>
 }
 
 function RiskWorkspace({ data, onCommand }: { data: DashboardOverview; onCommand: (command: CommandKind) => void }) {

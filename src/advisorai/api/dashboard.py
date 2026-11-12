@@ -147,6 +147,24 @@ class TraceLinkView(BaseModel):
     tone: SystemTone
 
 
+class PerformanceSliceView(BaseModel):
+    """One paper performance slice with review flags. Read-only."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    asset: str = Field(min_length=1)
+    regime: str = Field(min_length=1)
+    horizon: str = Field(min_length=1)
+    samples: int = Field(ge=0)
+    total_utility: str = Field(min_length=1)
+    mean_utility: str = Field(min_length=1)
+    win_rate: str = Field(min_length=1)
+    max_drawdown: str = Field(min_length=1)
+    total_cost: str = Field(min_length=1)
+    expiry_action: str = Field(default="none", min_length=1)
+    tone: SystemTone
+
+
 class RiskLimitView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -1452,6 +1470,52 @@ class DashboardProjection:
             tone=SystemTone.POSITIVE if report.total_events else SystemTone.NEUTRAL,
         )
 
+    def performance(self) -> tuple[PerformanceSliceView, ...]:
+        """Project paper performance slices with expiry review flags.
+
+        A slice is marked review_for_retirement when every subject that
+        contributed to it is flagged with negative trailing utility.
+        """
+        if self._ledgers is None:
+            return ()
+        from advisorai.learning.monitor import expiry_flags, load_scorecards, summarize
+
+        scorecards = load_scorecards(self._ledgers)
+        flagged_subjects = {
+            (flag.subject, flag.subject_version) for flag in expiry_flags(scorecards)
+        }
+        contributors: dict[tuple[str, str, str], set[tuple[str, str]]] = {}
+        for card in scorecards:
+            contributors.setdefault((card.asset, card.regime, card.horizon), set()).add(
+                (card.subject, card.subject_version)
+            )
+        views: list[PerformanceSliceView] = []
+        for entry in summarize(scorecards):
+            members = contributors.get((entry.asset, entry.regime, entry.horizon), set())
+            under_review = bool(members) and members <= flagged_subjects
+            views.append(
+                PerformanceSliceView(
+                    asset=entry.asset,
+                    regime=entry.regime,
+                    horizon=entry.horizon,
+                    samples=entry.samples,
+                    total_utility=str(entry.total_utility),
+                    mean_utility=str(entry.mean_utility),
+                    win_rate=str(entry.win_rate),
+                    max_drawdown=str(entry.max_drawdown),
+                    total_cost=str(entry.total_cost),
+                    expiry_action="review_for_retirement" if under_review else "none",
+                    tone=(
+                        SystemTone.WARNING
+                        if under_review
+                        else SystemTone.POSITIVE
+                        if entry.total_utility > 0
+                        else SystemTone.NEUTRAL
+                    ),
+                )
+            )
+        return tuple(views)
+
     def traceability(self) -> tuple[TraceLinkView, ...]:
         """Project source-to-decision-to-outcome chains joined by exact IDs.
 
@@ -1946,6 +2010,12 @@ def create_dashboard_app(
     @app.get("/api/v1/paper/fills", response_model=tuple[PaperFillView, ...])
     async def paper_fills(_: Principal = Depends(principal_for)) -> tuple[PaperFillView, ...]:  # noqa: B008
         return store.paper_fills()
+
+    @app.get("/api/v1/performance", response_model=tuple[PerformanceSliceView, ...])
+    async def performance(
+        _: Principal = Depends(principal_for),
+    ) -> tuple[PerformanceSliceView, ...]:  # noqa: B008
+        return store.performance()
 
     @app.get("/api/v1/traceability", response_model=tuple[TraceLinkView, ...])
     async def traceability(_: Principal = Depends(principal_for)) -> tuple[TraceLinkView, ...]:  # noqa: B008

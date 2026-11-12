@@ -189,6 +189,20 @@ export interface LedgerChainView {
   tone: Tone
 }
 
+export interface PerformanceSliceView {
+  asset: string
+  regime: string
+  horizon: string
+  samples: number
+  total_utility: string
+  mean_utility: string
+  win_rate: string
+  max_drawdown: string
+  total_cost: string
+  expiry_action: string
+  tone: Tone
+}
+
 export interface TraceLinkView {
   mission_id: string
   snapshot_id: string

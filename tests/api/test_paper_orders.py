@@ -87,3 +87,49 @@ def test_no_ledgers_returns_empty():
     store = DashboardProjection()
     assert store.paper_orders() == ()
     assert store.paper_fills() == ()
+
+
+def test_performance_projects_slices_and_expiry(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from advisorai.api.dashboard import DashboardProjection
+    from advisorai.learning import PaperDecisionRecord, PaperLearningLoop, PaperOutcome
+    from advisorai.ledger import SqliteLedgers
+
+    ledgers = SqliteLedgers(tmp_path / "perf.sqlite3")
+    loop = PaperLearningLoop(ledgers)
+    cutoff = datetime(2026, 8, 5, 15, tzinfo=UTC)
+    for utility in (Decimal("-4"), Decimal("-6")):
+        record = loop.record_decision(
+            PaperDecisionRecord(
+                decision_id=uuid4(),
+                mission_id=uuid4(),
+                snapshot_id=uuid4(),
+                subject="loser-v1",
+                subject_version="v1",
+                asset="BTC",
+                horizon="1h",
+                cutoff=cutoff,
+                horizon_end=cutoff + timedelta(hours=1),
+            )
+        )
+        loop.record_outcome(
+            PaperOutcome(
+                decision_id=record.decision_id,
+                as_of=record.horizon_end,
+                net_utility=utility,
+                cost_usd=Decimal("1"),
+                fill_quality=Decimal("1"),
+                data_reliability=Decimal("1"),
+                latency_ms=5,
+                failure_rate=Decimal("0"),
+            )
+        )
+    store = DashboardProjection(ledgers=ledgers)
+    slices = store.performance()
+    assert len(slices) == 1
+    assert slices[0].expiry_action == "review_for_retirement"
+    assert slices[0].tone.value == "warning"
+    assert DashboardProjection().performance() == ()
