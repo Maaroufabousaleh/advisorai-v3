@@ -17,6 +17,7 @@ from advisorai.capabilities.sandbox import (
     NetworkPolicy,
     ResourceLimits,
     SandboxBackendSelectionRecord,
+    SandboxExitReason,
     SandboxMission,
     SandboxMount,
     SandboxPolicy,
@@ -99,6 +100,10 @@ def _backends(*, kata: bool = False, docker: bool = True):
     )
 
 
+def _path_policy(root: Path, **overrides: object) -> SandboxPolicy:
+    return SandboxPolicy(allowed_host_roots=(root,), **overrides)
+
+
 def test_untrusted_native_fails_closed_when_kata_is_unavailable():
     kata, docker = _backends(kata=False)
     assert kata.availability().host_report.host_prerequisites_satisfied
@@ -175,6 +180,7 @@ def test_direct_docker_prepare_still_fails_closed_without_fallback_authorization
     authorized = SandboxPolicy(
         allow_docker_fallback=True,
         fallback_authorization_reference="security-review-direct-prepare",
+        allowed_host_roots=(tmp_path,),
     )
     spec = docker.prepare(research_mission, authorized)
     assert spec.fallback_authorization == "security-review-direct-prepare"
@@ -235,7 +241,7 @@ def test_kata_is_preferred_when_present_and_core_is_not_sandboxed():
 def test_kata_launch_spec_is_immutable_and_has_no_authority_or_host_mounts(tmp_path: Path):
     kata, _ = _backends(kata=True)
     mission = _mission(tmp_path)
-    spec = kata.prepare(mission, SandboxPolicy())
+    spec = kata.prepare(mission, _path_policy(tmp_path))
     command = list(spec.command)
 
     assert "--runtime" in command
@@ -265,10 +271,18 @@ def test_kata_launch_spec_is_immutable_and_has_no_authority_or_host_mounts(tmp_p
     assert not (mission.output_dir / "preflight-artifact").exists()
 
 
+def test_host_paths_require_an_explicit_allowed_root(tmp_path: Path):
+    kata, _ = _backends(kata=True)
+    mission = _mission(tmp_path)
+
+    with pytest.raises(SandboxPolicyError, match="explicit allowed_host_roots"):
+        kata.prepare(mission, SandboxPolicy())
+
+
 def test_host_and_repository_mounts_are_rejected(tmp_path: Path):
     kata, _ = _backends(kata=True)
     mission = _mission(tmp_path)
-    policy = SandboxPolicy(repository_root=tmp_path / "repository")
+    policy = _path_policy(tmp_path, repository_root=tmp_path / "repository")
     repository = tmp_path / "repository"
     repository.mkdir()
     bad_mount = SandboxMount(
@@ -289,7 +303,7 @@ def test_host_and_repository_mounts_are_rejected(tmp_path: Path):
         }
     )
     with pytest.raises(SandboxPolicyError):
-        kata.prepare(absolute_host_mount, SandboxPolicy())
+        kata.prepare(absolute_host_mount, _path_policy(tmp_path))
 
     system_file_mount = mission.model_copy(
         update={
@@ -301,10 +315,12 @@ def test_host_and_repository_mounts_are_rejected(tmp_path: Path):
         }
     )
     with pytest.raises(SandboxPolicyError):
-        kata.prepare(system_file_mount, SandboxPolicy())
+        kata.prepare(system_file_mount, _path_policy(tmp_path))
 
 
-def test_network_policy_is_default_deny_and_rejects_metadata_or_private_destinations():
+def test_network_policy_is_default_deny_and_rejects_metadata_or_private_destinations(
+    tmp_path: Path,
+):
     assert NetworkPolicy().mode is NetworkMode.NONE
     with pytest.raises(ValueError):
         NetworkPolicy(allowed_hosts=("169.254.169.254",))
@@ -332,8 +348,25 @@ def test_network_policy_is_default_deny_and_rejects_metadata_or_private_destinat
     )
     assert policy.identity.startswith("sha256:")
 
+    mission = _mission(tmp_path).model_copy(update={"network": policy})
+    kata, _ = _backends(kata=True)
+    with pytest.raises(SandboxPolicyError, match="live network rules"):
+        kata.prepare(mission, SandboxPolicy())
 
-def test_secret_values_are_not_a_backend_input_and_secret_env_files_are_rejected(tmp_path: Path):
+    class _VerifiedEgress:
+        def verify(self, requested: NetworkPolicy) -> bool:
+            return requested == policy
+
+    verified_kata = KataSandboxBackend(
+        runtime="kata-qemu",
+        host_report=_host(kata=True),
+        network_egress_verifier=_VerifiedEgress(),
+    )
+    spec = verified_kata.prepare(mission, _path_policy(tmp_path))
+    assert spec.command[spec.command.index("--network") + 1] == "advisorai-egress-research"
+
+
+def test_secret_values_cannot_be_mounted_into_sandbox_tasks(tmp_path: Path):
     with pytest.raises(ValueError, match="broker"):
         SecretReference(
             name="broker_api_key",
@@ -349,15 +382,8 @@ def test_secret_values_are_not_a_backend_input_and_secret_env_files_are_rejected
     )
     mission = _mission(tmp_path).model_copy(update={"secret_references": (reference,)})
     kata, _ = _backends(kata=True)
-    with pytest.raises(SandboxPolicyError, match="defaults to no secrets"):
+    with pytest.raises(SandboxPolicyError, match="secret mounts are disabled"):
         kata.prepare(mission, SandboxPolicy())
-
-    authorized = SandboxPolicy(
-        allow_secret_references=True,
-        secret_authorization_reference="secret-review-1",
-    )
-    with pytest.raises(SandboxPolicyError, match="materializer"):
-        kata.prepare(mission, authorized)
 
 
 def test_measurement_does_not_fabricate_kata_security_evidence():
@@ -380,16 +406,69 @@ class _Lease:
         self.released = True
 
 
+class _FakeDockerRunner(SandboxProcessRunner):
+    def __init__(self, *, output: bytes = b"sandbox output") -> None:
+        super().__init__(poll_seconds=0.001)
+        self.output = output
+        self.calls: list[tuple[str, ...]] = []
+
+    def _docker(self, spec, arguments, *, timeout=10):
+        del spec, timeout
+        call = tuple(arguments)
+        self.calls.append(call)
+        if call[0] == "run":
+            return 0, "a" * 64
+        if call[0] == "inspect" and "{{.State.Running}}" in call[1]:
+            return 0, "false\n"
+        if call[0] == "inspect" and "{{.State.ExitCode}}" in call[1]:
+            return 0, "0\n"
+        if call[0] == "cp":
+            Path(call[-1], "result.bin").write_bytes(self.output)
+            return 0, ""
+        if call[0] == "rm":
+            return 0, ""
+        raise AssertionError("unexpected Docker command")
+
+
+def test_runner_reverifies_allowlisted_network_before_container_creation(tmp_path: Path):
+    policy = NetworkPolicy(
+        mode=NetworkMode.ALLOWLIST,
+        allowed_hosts=("research.example",),
+        destination_classes=(DestinationClass.PUBLIC_RESEARCH,),
+        enforcer_network="advisorai-egress-research",
+    )
+    mission = _mission(tmp_path).model_copy(update={"network": policy})
+
+    class _Verifier:
+        def verify(self, requested: NetworkPolicy) -> bool:
+            return requested == policy
+
+    backend = KataSandboxBackend(
+        runtime="kata-qemu",
+        host_report=_host(kata=True),
+        network_egress_verifier=_Verifier(),
+    )
+    spec = backend.prepare(mission, _path_policy(tmp_path))
+
+    unverified_runner = _FakeDockerRunner()
+    refused = unverified_runner.execute(spec)
+    assert refused.exit_reason is SandboxExitReason.START_FAILURE
+    assert not any(call[0] == "run" for call in unverified_runner.calls)
+
+    verified_runner = _FakeDockerRunner()
+    verified_runner.network_egress_verifier = _Verifier()
+    result = verified_runner.execute(spec)
+    assert result.exit_reason is SandboxExitReason.COMPLETED
+
+
 def test_runner_cleans_up_and_hashes_only_sanitized_process_outputs(tmp_path: Path):
     kata, _ = _backends(kata=True)
     mission = _mission(tmp_path)
-    prepared = kata.prepare(mission, SandboxPolicy())
-    spec = prepared.model_copy(
-        update={"command": (sys.executable, "-c", "print('bounded sandbox smoke')")}
-    )
+    spec = kata.prepare(mission, _path_policy(tmp_path))
     lease = _Lease()
+    runner = _FakeDockerRunner()
 
-    result = SandboxProcessRunner(poll_seconds=0.01).execute(spec, gpu_lease=lease)
+    result = runner.execute(spec, gpu_lease=lease)
 
     assert result.exit_reason.value == "completed"
     assert result.exit_code == 0
@@ -397,30 +476,97 @@ def test_runner_cleans_up_and_hashes_only_sanitized_process_outputs(tmp_path: Pa
     assert result.stdout_sha256.startswith("sha256:")
     assert result.stderr_sha256.startswith("sha256:")
     assert lease.released
-    assert result.provenance.output_artifact_hashes == ()
+    assert result.output_bytes == len(runner.output)
+    assert result.provenance.output_artifact_hashes
     assert result.provenance.credentials_loaded is False
+    assert any(call[0] == "rm" for call in runner.calls)
 
 
-def test_runner_does_not_leave_a_preflight_process_or_write_outside_output(tmp_path: Path):
+def test_runner_rejects_copied_output_over_the_declared_quota(tmp_path: Path):
+    kata, _ = _backends(kata=True)
+    mission = _mission(tmp_path).model_copy(
+        update={
+            "resources": ResourceLimits(
+                cpu_cores=1,
+                memory_mib=256,
+                pid_limit=64,
+                output_mib=1,
+                wall_time_seconds=3,
+            )
+        }
+    )
+    spec = kata.prepare(mission, _path_policy(tmp_path))
+    runner = _FakeDockerRunner(output=b"x" * (1024 * 1024 + 1))
+
+    result = runner.execute(spec)
+
+    assert result.exit_reason is SandboxExitReason.OUTPUT_QUOTA
+    assert result.output_bytes > spec.output_quota_bytes
+    assert not any(mission.output_dir.iterdir())
+
+
+def test_launch_uses_detached_container_and_hard_bounded_output_storage(tmp_path: Path):
     kata, _ = _backends(kata=True)
     mission = _mission(tmp_path)
-    declared_output = mission.output_dir / "result"
-    spec = kata.prepare(mission, SandboxPolicy()).model_copy(
+    spec = kata.prepare(mission, _path_policy(tmp_path))
+    command = spec.command
+    assert "--detach" in command
+    assert "--log-driver=none" in command
+    assert "--rm" not in command
+    output_tmpfs = next(
+        command[index + 1]
+        for index, argument in enumerate(command[:-1])
+        if argument == "--tmpfs" and command[index + 1].startswith("/task/output:")
+    )
+    assert f"size={spec.output_quota_bytes}" in output_tmpfs
+    assert "nr_inodes=" in output_tmpfs
+    assert not any("dst=/task/output" in argument for argument in command)
+
+
+def test_runner_rejects_a_forged_host_process_command(tmp_path: Path):
+    kata, _ = _backends(kata=True)
+    mission = _mission(tmp_path)
+    prepared = kata.prepare(mission, _path_policy(tmp_path))
+    marker = tmp_path / "host-command-ran"
+    forged = prepared.model_copy(
         update={
             "command": (
                 sys.executable,
                 "-c",
-                f"open({str(declared_output)!r}, 'w', encoding='utf-8').write('ok')",
+                f"from pathlib import Path; Path({str(marker)!r}).touch()",
             )
         }
     )
+    runner = _FakeDockerRunner()
 
-    # The synthetic command writes only to the declared output directory; the
-    # generated spec still has no host repository or credential mount.
-    result = SandboxProcessRunner(poll_seconds=0.01).execute(spec)
-    assert result.process_alive_after_cleanup is False
-    assert not (tmp_path / "result").exists()
-    assert declared_output.read_text(encoding="utf-8") == "ok"
+    result = runner.execute(forged)
+
+    assert result.exit_reason is SandboxExitReason.START_FAILURE
+    assert not marker.exists()
+    assert runner.calls == []
+
+
+def test_runner_rejects_a_forged_host_mount_before_docker(tmp_path: Path):
+    kata, _ = _backends(kata=True)
+    mission = _mission(tmp_path)
+    prepared = kata.prepare(mission, _path_policy(tmp_path))
+    image_index = prepared.command.index(prepared.image)
+    forged = prepared.model_copy(
+        update={
+            "command": (
+                *prepared.command[:image_index],
+                "--mount",
+                "type=bind,src=/etc,dst=/task/host",  # noqa: S108
+                *prepared.command[image_index:],
+            )
+        }
+    )
+    runner = _FakeDockerRunner()
+
+    result = runner.execute(forged)
+
+    assert result.exit_reason is SandboxExitReason.START_FAILURE
+    assert runner.calls == []
 
 
 def test_gpu_is_denied_without_a_separate_reviewed_capability(tmp_path: Path):

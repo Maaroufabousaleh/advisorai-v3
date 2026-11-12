@@ -14,12 +14,13 @@ policy checks in this module.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import ipaddress
 import json
 import os
 import re
 import shutil
-import signal
+import stat
 import subprocess
 import tempfile
 import time
@@ -31,11 +32,13 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
+from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _SHA256_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _MISSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+_CONTAINER_NAME_RE = re.compile(r"^advisorai-[a-f0-9]{24}$")
 _SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _NETWORK_NAME_RE = re.compile(r"^advisorai-egress-[a-z0-9-]{1,64}$")
 _FORBIDDEN_SECRET_TOKENS = frozenset(
@@ -79,6 +82,7 @@ _SENSITIVE_MOUNT_PATHS = frozenset(
         "/var/run/docker.sock",
     }
 )
+_LAUNCH_SPEC_SIGNING_KEY = os.urandom(32)
 
 
 def _require_sha256(value: str, info: object) -> str:
@@ -100,6 +104,22 @@ def _normalize_unique(values: tuple[str, ...], *, field: str) -> tuple[str, ...]
 def _canonical_hash(value: object) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _launch_spec_signing_payload(payload: Mapping[str, object]) -> dict[str, object]:
+    unsigned = dict(payload)
+    unsigned.pop("integrity_signature", None)
+    return unsigned
+
+
+def _sign_launch_spec(payload: Mapping[str, object]) -> str:
+    encoded = json.dumps(
+        _launch_spec_signing_payload(payload),
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode()
+    return hmac.new(_LAUNCH_SPEC_SIGNING_KEY, encoded, hashlib.sha256).hexdigest()
 
 
 def _safe_resolve(path: Path) -> Path:
@@ -281,6 +301,17 @@ class NetworkPolicy(BaseModel):
     @property
     def identity(self) -> str:
         return _canonical_hash(self.model_dump(mode="json"))
+
+
+class NetworkEgressVerifier(Protocol):
+    """Verify that a host-managed network enforces the requested host policy.
+
+    A Docker network name is only a selector; it does not itself prove egress
+    filtering. Implementations must inspect the live network configuration and
+    attest that it enforces every host in ``policy.allowed_hosts``.
+    """
+
+    def verify(self, policy: NetworkPolicy) -> bool: ...
 
 
 class SecretReference(BaseModel):
@@ -506,6 +537,11 @@ class SandboxMission(BaseModel):
         if len(mount_targets) != len(set(mount_targets)):
             raise ValueError("mission mount targets must be unique")
         if any(
+            target == "/task/output" or target.startswith("/task/output/")
+            for target in mount_targets
+        ):
+            raise ValueError("mission inputs cannot overlap the bounded output area")
+        if any(
             mount.kind is MountKind.OUTPUT for mount in (*self.input_mounts, *self.dataset_mounts)
         ):
             raise ValueError("output mounts must be supplied only through output_dir")
@@ -526,16 +562,12 @@ class SandboxPolicy(BaseModel):
     repository_root: Path | None = None
     host_home: Path | None = None
     allowed_host_roots: tuple[Path, ...] = ()
-    allow_secret_references: bool = False
-    secret_authorization_reference: str | None = None
     allow_gpu: bool = False
 
     @model_validator(mode="after")
     def validate_policy(self) -> SandboxPolicy:
         if self.allow_docker_fallback and not (self.fallback_authorization_reference or "").strip():
             raise ValueError("Docker fallback requires a named policy authorization")
-        if self.allow_secret_references and not (self.secret_authorization_reference or "").strip():
-            raise ValueError("secret references require a named policy authorization")
         if self.allow_gpu:
             raise ValueError("GPU access is not enabled by the default sandbox policy")
         if any(not path.is_absolute() for path in self.allowed_host_roots):
@@ -695,14 +727,6 @@ def probe_host_capabilities(
     )
 
 
-class SecretMaterializer(Protocol):
-    """Materialize individual task-scoped secret files without exposing values."""
-
-    def materialize(
-        self, references: tuple[SecretReference, ...], staging_root: Path
-    ) -> tuple[SandboxMount, ...]: ...
-
-
 class GpuLease(Protocol):
     """Minimal release hook for a separately reviewed GPU lease."""
 
@@ -777,12 +801,18 @@ class SandboxLaunchSpec(BaseModel):
     trust_class: TrustClass
     fallback_authorization: str | None = None
     mission_id: str
+    docker_binary: str
+    container_name: str
+    image: str
+    runtime: str
+    network: NetworkPolicy
     command: tuple[str, ...]
     environment: tuple[tuple[str, str], ...]
     working_directory: Path
     output_directory: Path
     wall_time_seconds: int
     output_quota_bytes: int
+    integrity_signature: str | None = None
     network_policy_hash: str
     policy_hash: str
     provenance: SandboxProvenance
@@ -791,6 +821,112 @@ class SandboxLaunchSpec(BaseModel):
     def validate_launch_spec(self) -> SandboxLaunchSpec:
         if not self.command or any("\x00" in item for item in self.command):
             raise ValueError("launch command must be a non-empty argv vector")
+        if self.docker_binary != "docker":
+            raise SandboxPolicyError("launch spec must use the trusted Docker executable")
+        if len(self.command) < 3 or self.command[0] != self.docker_binary:
+            raise SandboxPolicyError("launch command must use the configured Docker client")
+        if self.command[1] != "run":
+            raise SandboxPolicyError("launch command must start a container with Docker run")
+        if not _CONTAINER_NAME_RE.fullmatch(self.container_name):
+            raise SandboxPolicyError("container name is not an AdvisorAI-generated identifier")
+        try:
+            image_index = self.command.index(self.image, 2)
+        except ValueError as exc:
+            raise SandboxPolicyError("launch command does not contain its pinned image") from exc
+        if not re.fullmatch(r".+@sha256:[0-9a-f]{64}", self.image):
+            raise SandboxPolicyError("launch image must be pinned by a digest")
+        if not self.runtime or any(character.isspace() for character in self.runtime):
+            raise SandboxPolicyError("launch runtime identity is invalid")
+        docker_options = self.command[2:image_index]
+        required_flags = (
+            "--detach",
+            "--log-driver=none",
+            "--pull=never",
+            "--read-only",
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--ipc=private",
+        )
+        if any(flag not in docker_options for flag in required_flags):
+            raise SandboxPolicyError("launch command is missing required isolation controls")
+        if any(
+            flag in docker_options
+            for flag in (
+                "--rm",
+                "--privileged",
+                "--cap-add",
+                "--device",
+                "--pid=host",
+                "--network=host",
+                "--security-opt=seccomp=unconfined",
+                "--volume",
+                "-v",
+            )
+        ):
+            raise SandboxPolicyError("launch command contains a prohibited Docker option")
+        if "--name" not in docker_options:
+            raise SandboxPolicyError("launch command must name its container for cleanup")
+        name_index = docker_options.index("--name")
+        if name_index + 1 >= len(docker_options) or docker_options[name_index + 1] != self.container_name:
+            raise SandboxPolicyError("launch command container name does not match its identity")
+        if "--network" not in docker_options:
+            raise SandboxPolicyError("launch command must set an explicit network policy")
+        network_index = docker_options.index("--network")
+        expected_network = (
+            self.network.enforcer_network
+            if self.network.mode is NetworkMode.ALLOWLIST
+            else "none"
+        )
+        if (
+            network_index + 1 >= len(docker_options)
+            or docker_options[network_index + 1] != expected_network
+        ):
+            raise SandboxPolicyError("launch command network does not match its policy")
+        required_pairs = {
+            "--runtime": self.runtime,
+            "--user": "65532:65532",
+            "--pids-limit": str(self.provenance.resource_limits.pid_limit),
+            "--memory": f"{self.provenance.resource_limits.memory_mib}m",
+            "--cpus": _format_cpu(self.provenance.resource_limits.cpu_cores),
+            "--workdir": "/task",
+        }
+        for option, expected in required_pairs.items():
+            if option not in docker_options:
+                raise SandboxPolicyError(f"launch command is missing {option}")
+            option_index = docker_options.index(option)
+            if (
+                option_index + 1 >= len(docker_options)
+                or docker_options[option_index + 1] != expected
+            ):
+                raise SandboxPolicyError(f"launch command has an invalid {option} value")
+        tmpfs_mounts = [
+            docker_options[index + 1]
+            for index, option in enumerate(docker_options[:-1])
+            if option == "--tmpfs"
+        ]
+        if not any(
+            value.startswith("/tmp:") and "size=64m" in value.split(":", 1)[1].split(",")
+            for value in tmpfs_mounts
+        ):
+            raise SandboxPolicyError("launch command is missing its bounded temporary directory")
+        tmpfs_index = next(
+            (
+                index + 1
+                for index, option in enumerate(docker_options[:-1])
+                if option == "--tmpfs" and docker_options[index + 1].startswith("/task/output:")
+            ),
+            None,
+        )
+        if tmpfs_index is None:
+            raise SandboxPolicyError("launch output must use quota-limited temporary storage")
+        output_tmpfs_options = docker_options[tmpfs_index].split(":", 1)[1].split(",")
+        if (
+            f"size={self.output_quota_bytes}" not in output_tmpfs_options
+            or "noexec" not in output_tmpfs_options
+            or "nosuid" not in output_tmpfs_options
+            or "nodev" not in output_tmpfs_options
+        ):
+            raise SandboxPolicyError("launch output storage does not match its quota")
         keys = [key for key, _ in self.environment]
         if len(keys) != len(set(keys)):
             raise ValueError("launch environment keys must be unique")
@@ -818,6 +954,12 @@ class SandboxLaunchSpec(BaseModel):
                 )
         if self.provenance.sandbox_backend is not self.backend:
             raise ValueError("launch and provenance backend identities must match")
+        if self.provenance.network_policy_hash != self.network.identity:
+            raise ValueError("launch and provenance network policies do not match")
+        if self.integrity_signature is not None and not re.fullmatch(
+            r"[0-9a-f]{64}", self.integrity_signature
+        ):
+            raise SandboxPolicyError("launch spec integrity signature is malformed")
         return self
 
 
@@ -916,10 +1058,9 @@ def _validate_host_path(path: Path, *, policy: SandboxPolicy, purpose: str) -> P
         denied_roots.append(_safe_resolve(policy.repository_root))
     if resolved == Path("/") or any(_path_is_within(resolved, root) for root in denied_roots):
         raise SandboxPolicyError(f"{purpose} is outside the allowed mission scope")
-    allowed_roots = tuple(
-        _safe_resolve(root)
-        for root in (policy.allowed_host_roots or (Path("/tmp"), Path("/var/tmp")))
-    )
+    if not policy.allowed_host_roots:
+        raise SandboxPolicyError(f"{purpose} requires an explicit allowed_host_roots scope")
+    allowed_roots = tuple(_safe_resolve(root) for root in policy.allowed_host_roots)
     if not any(_path_is_within(resolved, root) for root in allowed_roots):
         raise SandboxPolicyError(f"{purpose} is outside the allowed mission scope")
     if "," in str(resolved):
@@ -938,6 +1079,8 @@ def _validate_mission_paths(mission: SandboxMission, policy: SandboxPolicy) -> t
         raise SandboxPolicyError("task root must already be a directory")
     if not output_dir.is_dir():
         raise SandboxPolicyError("output directory must already be a directory")
+    if any(output_dir.iterdir()):
+        raise SandboxPolicyError("output directory must be empty before a sandbox mission starts")
     if output_dir != task_root and task_root not in output_dir.parents:
         raise SandboxPolicyError("output directory must remain inside the task root")
     for mount in (*mission.input_mounts, *mission.dataset_mounts):
@@ -1018,7 +1161,7 @@ class _DockerSandboxBackend(SandboxBackend):
         host_report: HostCapabilityReport | None = None,
         command_probe: CommandProbe | None = None,
         docker_binary: str = "docker",
-        secret_materializer: SecretMaterializer | None = None,
+        network_egress_verifier: NetworkEgressVerifier | None = None,
         runtime_identity: Mapping[str, str | None] | None = None,
     ) -> None:
         if (
@@ -1029,11 +1172,18 @@ class _DockerSandboxBackend(SandboxBackend):
             and self.kind is SandboxBackendKind.HARDENED_DOCKER
         ):
             raise ValueError("backend runtime name is invalid")
+        if (
+            not docker_binary.strip()
+            or "\x00" in docker_binary
+            or any(character.isspace() for character in docker_binary)
+            or docker_binary != "docker"
+        ):
+            raise ValueError("Docker client must use the trusted docker executable")
         self.runtime = runtime.strip()
         self._host_report = host_report
         self._command_probe = command_probe or _default_command_probe
         self.docker_binary = docker_binary
-        self.secret_materializer = secret_materializer
+        self.network_egress_verifier = network_egress_verifier
         self.runtime_identity = dict(runtime_identity or {})
 
     def _host(self) -> HostCapabilityReport:
@@ -1058,35 +1208,6 @@ class _DockerSandboxBackend(SandboxBackend):
                 "UNTRUSTED_RESEARCH Docker fallback requires explicit policy authorization"
             )
 
-    def _secret_mounts(
-        self,
-        mission: SandboxMission,
-        policy: SandboxPolicy,
-        task_root: Path,
-    ) -> tuple[SandboxMount, ...]:
-        if not mission.secret_references:
-            return ()
-        if not policy.allow_secret_references:
-            raise SandboxPolicyError("mission requests secrets but policy defaults to no secrets")
-        if self.secret_materializer is None:
-            raise SandboxPolicyError("no reviewed task-scoped secret materializer is configured")
-        staging_root = task_root / ".secret-staging"
-        mounts = self.secret_materializer.materialize(mission.secret_references, staging_root)
-        expected = {reference.name for reference in mission.secret_references}
-        if {Path(mount.target).name for mount in mounts} != expected:
-            raise SandboxPolicyError("secret materializer returned an unexpected reference set")
-        for mount in mounts:
-            if mount.kind is not MountKind.SECRET or not mount.read_only:
-                raise SandboxPolicyError("secret materializer must return read-only secret mounts")
-            source = _validate_host_path(mount.source, policy=policy, purpose="secret mount")
-            if not source.is_file():
-                raise SandboxPolicyError("secret materializer must provide one file per reference")
-            if staging_root not in source.parents:
-                raise SandboxPolicyError("secret mount must remain in the task-scoped staging root")
-            if source.name in {"secrets.env", ".env", "credentials.env"}:
-                raise SandboxPolicyError("secret environment files are never mounted")
-        return mounts
-
     def _prepare_common(
         self,
         mission: SandboxMission,
@@ -1095,19 +1216,38 @@ class _DockerSandboxBackend(SandboxBackend):
         runtime: str,
         backend: SandboxBackendKind,
     ) -> SandboxLaunchSpec:
-        task_root, output_dir = _validate_mission_paths(mission, policy)
         if mission.resources.gpu_access and not policy.allow_gpu:
             raise SandboxPolicyError("GPU access is disabled by the governing policy")
-        secret_mounts = self._secret_mounts(mission, policy, task_root)
-        mounts = (*mission.input_mounts, *mission.dataset_mounts, *secret_mounts)
+        if mission.secret_references:
+            raise SandboxPolicyError(
+                "secret mounts are disabled until a reviewed brokered delivery path exists"
+            )
+        if mission.network.mode is NetworkMode.ALLOWLIST:
+            verifier = self.network_egress_verifier
+            if verifier is None or not verifier.verify(mission.network):
+                raise SandboxPolicyError(
+                    "allowlisted egress requires a verifier for the live network rules"
+                )
+        task_root, output_dir = _validate_mission_paths(mission, policy)
+        mounts = (*mission.input_mounts, *mission.dataset_mounts)
         targets = [mount.target for mount in mounts]
         if len(targets) != len(set(targets)):
             raise SandboxPolicyError("mission mounts contain duplicate guest targets")
+        output_quota_bytes = mission.resources.output_mib * 1024 * 1024
+        output_inode_limit = max(256, min(65_536, output_quota_bytes // 4096))
+        container_name = (
+            "advisorai-"
+            + hashlib.sha256(mission.mission_id.encode()).hexdigest()[:12]
+            + uuid4().hex[:12]
+        )
         command: list[str] = [
             self.docker_binary,
             "run",
+            "--detach",
+            "--name",
+            container_name,
+            "--log-driver=none",
             "--pull=never",
-            "--rm",
             "--init",
             "--runtime",
             runtime,
@@ -1141,7 +1281,6 @@ class _DockerSandboxBackend(SandboxBackend):
                     f"type=bind,src={source},dst={mount.target}{read_only}",
                 )
             )
-        output_mount = _validate_host_path(output_dir, policy=policy, purpose="output directory")
         environment = (
             ("ADVISORAI_MISSION_ID", mission.mission_id),
             ("ADVISORAI_SANDBOX_BACKEND", backend.value),
@@ -1152,7 +1291,14 @@ class _DockerSandboxBackend(SandboxBackend):
         )
         for key, value in environment:
             command.extend(("--env", f"{key}={value}"))
-        command.extend(("--mount", f"type=bind,src={output_mount},dst=/task/output"))
+        command.extend(
+            (
+                "--tmpfs",
+                "/task/output:rw,noexec,nosuid,nodev,"
+                f"size={output_quota_bytes},nr_inodes={output_inode_limit},"
+                "uid=65532,gid=65532,mode=700",
+            )
+        )
         command.append(mission.image)
         command.extend(mission.task_command)
         provenance = _new_provenance(
@@ -1161,7 +1307,7 @@ class _DockerSandboxBackend(SandboxBackend):
             policy=policy,
             runtime_identity=self.runtime_identity,
         )
-        return SandboxLaunchSpec(
+        launch_spec = SandboxLaunchSpec(
             backend=backend,
             trust_class=mission.trust_class,
             fallback_authorization=(
@@ -1171,15 +1317,27 @@ class _DockerSandboxBackend(SandboxBackend):
                 else None
             ),
             mission_id=mission.mission_id,
+            docker_binary=self.docker_binary,
+            container_name=container_name,
+            image=mission.image,
+            runtime=runtime,
+            network=mission.network,
             command=tuple(command),
             environment=environment,
             working_directory=task_root,
             output_directory=output_dir,
             wall_time_seconds=mission.resources.wall_time_seconds,
-            output_quota_bytes=mission.resources.output_mib * 1024 * 1024,
+            output_quota_bytes=output_quota_bytes,
             network_policy_hash=mission.network.identity,
             policy_hash=policy.identity,
             provenance=provenance,
+        )
+        return launch_spec.model_copy(
+            update={
+                "integrity_signature": _sign_launch_spec(
+                    launch_spec.model_dump(mode="json")
+                )
+            }
         )
 
 
@@ -1195,7 +1353,7 @@ class KataSandboxBackend(_DockerSandboxBackend):
         host_report: HostCapabilityReport | None = None,
         command_probe: CommandProbe | None = None,
         docker_binary: str = "docker",
-        secret_materializer: SecretMaterializer | None = None,
+        network_egress_verifier: NetworkEgressVerifier | None = None,
         runtime_identity: Mapping[str, str | None] | None = None,
     ) -> None:
         probe = command_probe or _default_command_probe
@@ -1209,7 +1367,7 @@ class KataSandboxBackend(_DockerSandboxBackend):
             host_report=host_report,
             command_probe=probe,
             docker_binary=docker_binary,
-            secret_materializer=secret_materializer,
+            network_egress_verifier=network_egress_verifier,
             runtime_identity=runtime_identity,
         )
 
@@ -1261,7 +1419,7 @@ class HardenedDockerSandboxBackend(_DockerSandboxBackend):
         host_report: HostCapabilityReport | None = None,
         command_probe: CommandProbe | None = None,
         docker_binary: str = "docker",
-        secret_materializer: SecretMaterializer | None = None,
+        network_egress_verifier: NetworkEgressVerifier | None = None,
         runtime_identity: Mapping[str, str | None] | None = None,
     ) -> None:
         super().__init__(
@@ -1269,7 +1427,7 @@ class HardenedDockerSandboxBackend(_DockerSandboxBackend):
             host_report=host_report,
             command_probe=command_probe,
             docker_binary=docker_binary,
-            secret_materializer=secret_materializer,
+            network_egress_verifier=network_egress_verifier,
             runtime_identity=runtime_identity,
         )
 
@@ -1435,32 +1593,128 @@ def select_sandbox_backend(
 
 
 class SandboxProcessRunner:
-    """Execute a prepared spec with wall/output enforcement and cleanup."""
+    """Run a detached container with bounded output and explicit cleanup."""
 
-    def __init__(self, *, poll_seconds: float = 0.05) -> None:
+    def __init__(
+        self,
+        *,
+        poll_seconds: float = 0.05,
+        network_egress_verifier: NetworkEgressVerifier | None = None,
+    ) -> None:
         if poll_seconds <= 0:
             raise ValueError("poll_seconds must be positive")
         self.poll_seconds = poll_seconds
+        self.network_egress_verifier = network_egress_verifier
 
     @staticmethod
-    def _terminate(process: subprocess.Popen[bytes]) -> bool:
-        if process.poll() is not None:
+    def _docker(
+        spec: SandboxLaunchSpec, arguments: Sequence[str], *, timeout: float = 10
+    ) -> tuple[int, str]:
+        try:
+            result = subprocess.run(
+                [spec.docker_binary, *arguments],
+                cwd="/",
+                env={"PATH": os.defpath, "LANG": "C", "LC_ALL": "C"},
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return 127, ""
+        return result.returncode, result.stdout or ""
+
+    def _container_running(self, spec: SandboxLaunchSpec, container: str) -> bool | None:
+        code, output = self._docker(
+            spec,
+            ("inspect", "--format={{.State.Running}}", container),
+        )
+        if code != 0:
+            return None
+        value = output.strip().lower()
+        return value == "true" if value in {"true", "false"} else None
+
+    def _container_exit_code(self, spec: SandboxLaunchSpec, container: str) -> int | None:
+        code, output = self._docker(
+            spec,
+            ("inspect", "--format={{.State.ExitCode}}", container),
+        )
+        if code != 0:
+            return None
+        try:
+            return int(output.strip())
+        except ValueError:
+            return None
+
+    def _stage_output(self, spec: SandboxLaunchSpec, container: str) -> tuple[bool, int]:
+        output_bytes = 0
+        with tempfile.TemporaryDirectory(
+            prefix=".advisorai-sandbox-output-",
+            dir=spec.output_directory.parent,
+        ) as temporary:
+            staging = Path(temporary)
+            code, _ = self._docker(
+                spec,
+                ("cp", f"{container}:/task/output/.", str(staging)),
+                timeout=max(30.0, min(600.0, spec.output_quota_bytes / (10 * 1024 * 1024))),
+            )
+            if code != 0:
+                return False, 0
+
+            entries: list[tuple[Path, Path, bool, int]] = []
+            for root, directories, files in os.walk(staging, followlinks=False):
+                root_path = Path(root)
+                for name in directories:
+                    source = root_path / name
+                    mode = source.lstat().st_mode
+                    if not stat.S_ISDIR(mode):
+                        return False, 0
+                    entries.append((source, source.relative_to(staging), True, 0))
+                for name in files:
+                    source = root_path / name
+                    mode = source.lstat().st_mode
+                    if not stat.S_ISREG(mode):
+                        return False, 0
+                    size = source.stat().st_size
+                    output_bytes += size
+                    entries.append((source, source.relative_to(staging), False, size))
+                    if output_bytes > spec.output_quota_bytes:
+                        return False, output_bytes
+
+            if any(spec.output_directory.iterdir()):
+                return False, output_bytes
+            for source, relative, is_directory, _size in entries:
+                destination = spec.output_directory / relative
+                if is_directory:
+                    destination.mkdir(parents=True, exist_ok=True)
+                else:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    with source.open("rb") as input_file, destination.open("xb") as output_file:
+                        shutil.copyfileobj(input_file, output_file)
+        return True, output_bytes
+
+    def _cleanup_container(self, spec: SandboxLaunchSpec) -> bool:
+        code, _ = self._docker(
+            spec,
+            ("rm", "--force", spec.container_name),
+            timeout=15,
+        )
+        if code == 0:
             return True
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError, OSError):
-            with suppress(OSError):
-                process.terminate()
-        try:
-            process.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            with suppress(ProcessLookupError, PermissionError, OSError):
-                os.killpg(process.pid, signal.SIGKILL)
-            with suppress(OSError):
-                process.kill()
-            with suppress(subprocess.TimeoutExpired):
-                process.wait(timeout=2)
-        return process.poll() is not None
+        code, output = self._docker(
+            spec,
+            (
+                "ps",
+                "--all",
+                "--filter",
+                f"name={spec.container_name}",
+                "--format={{.ID}}",
+            ),
+            timeout=10,
+        )
+        return code == 0 and not output.strip()
 
     def execute(
         self,
@@ -1471,77 +1725,93 @@ class SandboxProcessRunner:
         started_at = datetime.now(UTC)
         stdout_hash = hashlib.sha256()
         stderr_hash = hashlib.sha256()
-        process: subprocess.Popen[bytes] | None = None
         exit_reason = SandboxExitReason.START_FAILURE
         exit_code: int | None = None
         output_bytes = 0
+        container_stopped = False
+        container_started = False
         cleanup_ok = False
-        with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
-            try:
-                process = subprocess.Popen(
-                    list(spec.command),
-                    cwd=spec.working_directory,
-                    env={key: value for key, value in spec.environment},
-                    stdin=subprocess.DEVNULL,
-                    stdout=stdout_file,
-                    stderr=stderr_file,
-                    start_new_session=True,
-                )
-                deadline = time.monotonic() + spec.wall_time_seconds
-                while process.poll() is None:
-                    if time.monotonic() >= deadline:
-                        exit_reason = SandboxExitReason.WALL_TIME_LIMIT
-                        self._terminate(process)
-                        break
-                    output_bytes = (
-                        sum(
-                            path.stat().st_size
-                            for path in spec.output_directory.rglob("*")
-                            if path.is_file() and not path.is_symlink()
-                        )
-                        if spec.output_directory.exists()
-                        else 0
+        validated_spec: SandboxLaunchSpec | None = None
+        try:
+            candidate = SandboxLaunchSpec.model_validate(spec.model_dump())
+            expected_signature = _sign_launch_spec(candidate.model_dump(mode="json"))
+            if candidate.integrity_signature is None or not hmac.compare_digest(
+                candidate.integrity_signature, expected_signature
+            ):
+                raise SandboxPolicyError("launch spec was not issued by a sandbox backend")
+            validated_spec = candidate
+            if validated_spec.network.mode is NetworkMode.ALLOWLIST:
+                verifier = self.network_egress_verifier
+                if verifier is None or not verifier.verify(validated_spec.network):
+                    raise SandboxPolicyError(
+                        "allowlisted egress requires a verifier at execution time"
                     )
-                    if output_bytes > spec.output_quota_bytes:
-                        exit_reason = SandboxExitReason.OUTPUT_QUOTA
-                        self._terminate(process)
+
+            deadline = time.monotonic() + validated_spec.wall_time_seconds
+            run_code, output = self._docker(validated_spec, validated_spec.command[1:], timeout=30)
+            container_started = run_code == 0 and bool(
+                re.fullmatch(r"[a-f0-9]{12,64}", output.strip())
+            )
+            if not container_started:
+                exit_reason = SandboxExitReason.START_FAILURE
+            else:
+                container_id = output.strip()
+                while True:
+                    running = self._container_running(validated_spec, container_id)
+                    if running is None:
+                        exit_reason = SandboxExitReason.BACKEND_FAILURE
+                        break
+                    if not running:
+                        container_stopped = True
+                        exit_code = self._container_exit_code(validated_spec, container_id)
+                        if exit_code is None:
+                            exit_reason = SandboxExitReason.BACKEND_FAILURE
+                        else:
+                            exit_reason = (
+                                SandboxExitReason.COMPLETED
+                                if exit_code == 0
+                                else SandboxExitReason.NONZERO_EXIT
+                            )
+                        break
+                    if time.monotonic() >= deadline:
+                        self._docker(
+                            validated_spec,
+                            ("stop", "--time", "2", container_id),
+                            timeout=10,
+                        )
+                        if self._container_running(validated_spec, container_id) is True:
+                            self._docker(validated_spec, ("kill", container_id), timeout=10)
+                        container_stopped = self._container_running(
+                            validated_spec, container_id
+                        ) is False
+                        exit_code = self._container_exit_code(validated_spec, container_id)
+                        exit_reason = SandboxExitReason.WALL_TIME_LIMIT
                         break
                     time.sleep(self.poll_seconds)
-                if process.poll() is not None and exit_reason is SandboxExitReason.START_FAILURE:
-                    exit_code = process.returncode
-                    exit_reason = (
-                        SandboxExitReason.COMPLETED
-                        if exit_code == 0
-                        else SandboxExitReason.NONZERO_EXIT
-                    )
-                output_bytes = (
-                    sum(
-                        path.stat().st_size
-                        for path in spec.output_directory.rglob("*")
-                        if path.is_file() and not path.is_symlink()
-                    )
-                    if spec.output_directory.exists()
-                    else 0
-                )
-                cleanup_ok = self._terminate(process)
-            except (OSError, ValueError):
-                if process is not None:
-                    cleanup_ok = self._terminate(process)
-                else:
-                    cleanup_ok = True
-                exit_reason = SandboxExitReason.START_FAILURE
-            finally:
-                if gpu_lease is not None:
-                    gpu_lease.release()
-            stdout_file.seek(0)
-            stderr_file.seek(0)
-            for chunk in iter(lambda: stdout_file.read(1024 * 1024), b""):
-                stdout_hash.update(chunk)
-            for chunk in iter(lambda: stderr_file.read(1024 * 1024), b""):
-                stderr_hash.update(chunk)
+
+                if container_stopped:
+                    copied, output_bytes = self._stage_output(validated_spec, container_id)
+                    if not copied:
+                        exit_reason = (
+                            SandboxExitReason.OUTPUT_QUOTA
+                            if output_bytes > validated_spec.output_quota_bytes
+                            else SandboxExitReason.BACKEND_FAILURE
+                        )
+        except (OSError, ValueError, SandboxPolicyError):
+            exit_reason = SandboxExitReason.START_FAILURE
         ended_at = datetime.now(UTC)
-        output_hashes = _artifact_hashes(spec.output_directory)
-        provenance = spec.provenance.model_copy(
+        if validated_spec is not None:
+            cleanup_ok = self._cleanup_container(validated_spec)
+        else:
+            cleanup_ok = True
+        if gpu_lease is not None:
+            gpu_lease.release()
+        output_hashes = (
+            _artifact_hashes(validated_spec.output_directory)
+            if validated_spec is not None and container_stopped and cleanup_ok
+            else ()
+        )
+        provenance = (validated_spec or spec).provenance.model_copy(
             update={
                 "started_at": started_at,
                 "ended_at": ended_at,
@@ -1551,8 +1821,8 @@ class SandboxProcessRunner:
             }
         )
         return SandboxRunResult(
-            mission_id=spec.mission_id,
-            backend=spec.backend,
+            mission_id=(validated_spec or spec).mission_id,
+            backend=(validated_spec or spec).backend,
             exit_code=exit_code,
             exit_reason=exit_reason if cleanup_ok else SandboxExitReason.CLEANUP_FAILURE,
             started_at=started_at,

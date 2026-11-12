@@ -68,16 +68,26 @@ capability lifecycle still ends automatic promotion at `active_read`.
 - explicit read-only input and dataset mounts;
 - CPU, memory, PID, output, wall-time, and GPU policy;
 - default-deny network policy;
-- name-only secret references, if a separately authorized materializer exists;
+- name-only secret references, which are currently rejected by both backends;
 - AdvisorAI commit, dependency lock, capability, dataset/model, and input
   artifact identities.
 
-The rendered container command uses `--pull=never`, read-only rootfs, dropped
-capabilities, `no-new-privileges`, a private IPC namespace, a non-root UID,
-PID/memory/CPU limits, a bounded tmpfs, and no host repository, home, `/mnt/c`,
-Docker socket, containerd socket, SSH agent, or root mount. Only input/data
-mounts and the task output bind are rendered. The host process environment is a
-small explicit allowlist; credentials are not inherited.
+Every host task, output, input, and dataset path must resolve inside an
+explicit `SandboxPolicy.allowed_host_roots` entry. An empty host-path scope
+fails closed; there is no implicit `/tmp` or `/var/tmp` allowance. Repository,
+home, and system paths remain denied.
+
+The rendered container command uses `--pull=never`, detached execution,
+disabled container logs, read-only rootfs, dropped capabilities,
+`no-new-privileges`, a private IPC namespace, a non-root UID, PID/memory/CPU
+limits, and no host repository, home, `/mnt/c`, Docker socket, containerd
+socket, SSH agent, or root mount. Input/data mounts are read-only. Task output
+uses a size- and inode-limited tmpfs inside the stopped container, then the host
+copies only regular files into the empty declared output directory and removes
+the container. The output path is never bind-mounted into an untrusted task.
+The Docker client uses a fixed, credential-free host environment. Prepared
+launch specs carry a process-scoped integrity seal; the runner rejects altered
+specs before invoking Docker.
 
 The output bind is the quarantine boundary. It is not automatically promoted
 into source, configuration, RiskPolicy, OMS state, the ledger, or deployment
@@ -87,17 +97,21 @@ reproducibility, independent evaluation, and human review.
 ## Network and secrets
 
 `NetworkPolicy()` is `NONE`. An allowlist requires explicit hostnames, a named
-egress enforcer, destination classes, and a policy hash. Wildcards, localhost,
-link-local metadata, private/reserved/multicast IPs, and `.local` destinations
-are rejected. Broker destinations require a separately declared read-only
-research class; no execution credentials are implied.
+egress enforcer, destination classes, and a policy hash. A host-provided
+`NetworkEgressVerifier` must confirm the live rules both when the launch spec is
+prepared and when it is executed; a network name alone does not enforce the
+host list. Without that verifier, allowlisted missions fail closed. Wildcards,
+localhost, link-local metadata, private/reserved/multicast IPs, and `.local`
+destinations are rejected. Broker destinations require a separately declared
+read-only research class; no execution credentials are implied.
 
-Secrets are absent by default. The backend accepts only name/purpose/
-destination/lifetime metadata and never a value. A task-scoped materializer,
-when separately reviewed and authorized, may provide individual read-only files
-under the mission's secret-staging directory. `secrets.env`, `.env`, credential
-bundles, broker/execution/order/trade/withdrawal/transfer/private-key references
-are rejected.
+Secrets cannot be mounted into sandbox tasks. The backend accepts only
+name/purpose/destination/lifetime metadata and rejects missions containing
+secret references. A future delivery mechanism needs brokered access that
+cannot expose reusable credential values to untrusted code; a host bind mount
+is not sufficient. `secrets.env`, `.env`, credential bundles,
+broker/execution/order/trade/withdrawal/transfer/private-key references remain
+forbidden.
 
 ## Lifecycle and fallback
 
@@ -121,9 +135,10 @@ and output hashes, resource limits, network-policy hash, secret-reference names,
 timestamps, exit reason, resource usage, and fixed false security authority
 flags. Secret values and raw process output are not persisted.
 
-`SandboxProcessRunner` terminates the process group on wall-time/output-budget
-violation, hashes sanitized stdout/stderr, releases an injected GPU lease in a
-`finally` path, and requires no process to remain after cleanup. The default
+`SandboxProcessRunner` revalidates launch specs, enforces wall time against the
+container, stages only bounded output after the container stops, removes the
+container, and releases an injected GPU lease. Container logs are disabled and
+raw stdout/stderr are not retained. Cleanup failures fail closed. The default
 GPU policy is false; enabling GPU requires a separate reviewed capability.
 
 The bounded hostile workload contract includes filesystem, socket, mount,
@@ -152,11 +167,12 @@ AdvisorAI Phase-4 release or enabling untrusted-native execution by default:
    file, Docker socket, containerd socket, host-path mount, privileged device,
    or cross-mission output access.
 5. Run the network probes under default `NONE`, then under a separately
-   reviewed egress allowlist: deny metadata/private/LAN/arbitrary broker
-   destinations and verify only the declared destination class is reachable.
-6. Run name-only secret injection tests, proving that only the named
-   task-scoped reference is visible and that no secret value enters provenance
-   or process metadata.
+   reviewed egress allowlist and a working `NetworkEgressVerifier`: deny
+   metadata/private/LAN/arbitrary broker destinations and verify only the
+   declared destination class is reachable.
+6. Keep secret injection disabled unless a brokered delivery design is
+   separately reviewed and proves that untrusted code cannot export reusable
+   credential values through files, network, process metadata, logs, or output.
 7. Run bounded native-code/C-extension and namespace/device adversarial probes
    in a disposable mission. Treat any unexpected result as a fail-closed
    qualification failure.
