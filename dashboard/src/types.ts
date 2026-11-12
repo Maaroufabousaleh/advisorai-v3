@@ -164,6 +164,24 @@ export interface DashboardOverview {
   research?: ResearchActivityView | null
 }
 
+export interface PaperOrderView {
+  order_id: string
+  instrument: string
+  side: string
+  quantity: string
+  state: string
+  idempotency_key: string
+  tone: Tone
+}
+
+export interface PaperFillView {
+  fill_id: string
+  order_id: string
+  quantity: string
+  price: string
+  tone: Tone
+}
+
 export interface ResearchRecordView {
   artifact_id: string
   record_type: string

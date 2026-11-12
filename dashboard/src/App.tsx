@@ -48,6 +48,8 @@ import type {
   CommandRequest,
   DashboardOverview,
   DashboardMetric,
+  PaperFillView,
+  PaperOrderView,
   ResearchRecordView,
   SourceHealthView,
   Tone,
@@ -453,7 +455,34 @@ function MissionWorkspace({ data, onNavigate }: { data: DashboardOverview; onNav
 }
 
 function PortfolioWorkspace({ data, onNavigate }: { data: DashboardOverview; onNavigate: (section: Section) => void }) {
-  return <div className="workspace-stack"><div className="portfolio-summary"><Metric metric={data.metrics[0]} /><Metric metric={data.metrics[1]} /><div className="portfolio-callout"><div className="section-kicker"><ShieldCheck size={14} /> EXECUTION BOUNDARY</div><strong>Paper / testnet only</strong><span>Target portfolios never become orders without RiskKernel approval.</span><button className="text-button" onClick={() => onNavigate('risk')}>VIEW POLICY <ArrowUpRight size={14} /></button></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> POSITION REGISTER</div><h2>All positions at authoritative mark</h2></div><span className="panel-heading-meta">{data.exposures.length} LINES · {formatTime(data.as_of)} UTC</span></div><div className="data-table"><div className="data-table-row table-head"><span>INSTRUMENT</span><span>SIDE</span><span>MARK</span><span>NOTIONAL</span><span>WEIGHT</span><span>P&L</span><span>STATE</span></div>{data.exposures.map((row) => <div className="data-table-row" key={row.instrument}><span><strong>{row.instrument}</strong><small>{row.asset_class}</small></span><span className="mono">{row.side}</span><span className="mono">{row.mark}</span><span className="mono">{row.notional}</span><span className="mono">{row.weight}</span><span className={toneClass(row.tone)}>{row.pnl}</span><span><StatusPill tone={row.tone} label="marked" /></span></div>)}</div></section></div>
+  return (
+    <div className="workspace-stack">
+      <div className="portfolio-summary"><Metric metric={data.metrics[0]} /><Metric metric={data.metrics[1]} /><div className="portfolio-callout"><div className="section-kicker"><ShieldCheck size={14} /> EXECUTION BOUNDARY</div><strong>Paper / testnet only</strong><span>Target portfolios never become orders without RiskKernel approval.</span><button className="text-button" onClick={() => onNavigate('risk')}>VIEW POLICY <ArrowUpRight size={14} /></button></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> POSITION REGISTER</div><h2>All positions at authoritative mark</h2></div><span className="panel-heading-meta">{data.exposures.length} LINES · {formatTime(data.as_of)} UTC</span></div><div className="data-table"><div className="data-table-row table-head"><span>INSTRUMENT</span><span>SIDE</span><span>MARK</span><span>NOTIONAL</span><span>WEIGHT</span><span>P&L</span><span>STATE</span></div>{data.exposures.map((row) => <div className="data-table-row" key={row.instrument}><span><strong>{row.instrument}</strong><small>{row.asset_class}</small></span><span className="mono">{row.side}</span><span className="mono">{row.mark}</span><span className="mono">{row.notional}</span><span className="mono">{row.weight}</span><span className={toneClass(row.tone)}>{row.pnl}</span><span><StatusPill tone={row.tone} label="marked" /></span></div>)}</div></section>
+      <PaperOrdersPanel />
+    </div>
+  );
+}
+
+
+function PaperOrdersPanel() {
+  const [orders, setOrders] = useState<PaperOrderView[] | null>(null)
+  const [fills, setFills] = useState<PaperFillView[]>([])
+  const [selected, setSelected] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.paperOrders()
+      .then((rows) => { if (!cancelled) setOrders(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  const showFills = (orderId: string) => {
+    setSelected(orderId)
+    dashboardApi.paperFills(orderId)
+      .then((rows) => setFills(rows.filter((fill) => fill.order_id === orderId)))
+      .catch((fetchError: Error) => setError(fetchError.message))
+  }
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><CircleDollarSign size={14} /> PAPER ORDERS</div><h2>Lifecycle states from the ledger</h2></div><span className="panel-heading-meta">{orders ? orders.length : '—'} ORDERS</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Paper orders unavailable: {error}</span></div> : !orders ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading paper orders…</span></div> : orders.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No paper orders are recorded yet.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>ORDER</span><span>INSTRUMENT</span><span>SIDE</span><span>QTY</span><span>STATE</span><span /></div>{orders.slice(-10).map((order) => <div className="data-table-row" key={order.order_id}><span>{order.order_id.slice(0, 8)}</span><span>{order.instrument}</span><span>{order.side}</span><span>{order.quantity}</span><span>{order.state}</span><span><button className="text-button" onClick={() => showFills(order.order_id)}>FILLS <ChevronRight size={13} /></button></span></div>)}</div>}{selected && <div className="source-health-note"><span>Fills for {selected.slice(0, 8)}: {fills.length === 0 ? 'none recorded' : fills.map((fill) => `${fill.quantity} @ ${fill.price}`).join(', ')}</span><button className="text-button" onClick={() => setSelected(null)}>CLOSE <X size={13} /></button></div>}</section>
 }
 
 function RiskWorkspace({ data, onCommand }: { data: DashboardOverview; onCommand: (command: CommandKind) => void }) {

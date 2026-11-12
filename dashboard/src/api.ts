@@ -4,6 +4,8 @@ import type {
   CommandRequest,
   DashboardOverview,
   ResearchRecordView,
+  PaperFillView,
+  PaperOrderView,
   SourceHealthView,
 } from './types'
 
@@ -34,6 +36,10 @@ export const dashboardApi = {
   status: () => request<AuthStatus>('/api/v1/auth/status'),
   overview: () => request<DashboardOverview>('/api/v1/dashboard/overview'),
   sourceHealth: () => request<SourceHealthView[]>('/api/v1/dashboard/source-health'),
+  paperOrders: () =>
+    request<PaperOrderView[]>('/api/v1/paper/orders'),
+  paperFills: (orderId?: string) =>
+    request<PaperFillView[]>(orderId ? `/api/v1/paper/fills?order_id=${orderId}` : '/api/v1/paper/fills'),
   researchRecords: () =>
     request<ResearchRecordView[]>('/api/v1/research/records'),
   researchLineage: (artifactId: string) =>

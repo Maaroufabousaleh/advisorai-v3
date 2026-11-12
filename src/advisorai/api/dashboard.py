@@ -103,6 +103,32 @@ class ExposureRow(BaseModel):
     mark: str = Field(min_length=1)
 
 
+class PaperOrderView(BaseModel):
+    """One paper order with its terminal lifecycle state from the ledger."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    order_id: str = Field(min_length=1)
+    instrument: str = Field(min_length=1)
+    side: str = Field(min_length=1)
+    quantity: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1)
+    tone: SystemTone
+
+
+class PaperFillView(BaseModel):
+    """One paper fill linked to its order by exact ID."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    fill_id: str = Field(min_length=1)
+    order_id: str = Field(min_length=1)
+    quantity: str = Field(min_length=1)
+    price: str = Field(min_length=1)
+    tone: SystemTone
+
+
 class RiskLimitView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -1312,6 +1338,65 @@ class DashboardProjection:
             )
         return tuple(views)
 
+    def paper_orders(self) -> tuple[PaperOrderView, ...]:
+        """Project paper orders with lifecycle states. Empty when no ledgers."""
+        if self._ledgers is None:
+            return ()
+        latest: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            artifact = event.payload.get("artifact")
+            if not isinstance(artifact, dict):
+                continue
+            if event.event_type.startswith("order_") or event.event_type in {
+                "order_created",
+                "order_ack_ambiguous",
+            }:
+                order_id = str(artifact.get("artifact_id", ""))
+                if order_id:
+                    latest[order_id] = artifact
+        views: list[PaperOrderView] = []
+        for order_id, artifact in latest.items():
+            instrument = artifact.get("instrument", {})
+            state = str(artifact.get("state", "unknown"))
+            views.append(
+                PaperOrderView(
+                    order_id=order_id,
+                    instrument=str(
+                        instrument.get("canonical_id", instrument)
+                        if isinstance(instrument, dict)
+                        else instrument
+                    ),
+                    side=str(artifact.get("side", "?")),
+                    quantity=str(artifact.get("quantity", "?")),
+                    state=state,
+                    idempotency_key=str(artifact.get("idempotency_key", "")),
+                    tone=SystemTone.POSITIVE if state == "reconciled" else SystemTone.INFO,
+                )
+            )
+        return tuple(views)
+
+    def paper_fills(self) -> tuple[PaperFillView, ...]:
+        """Project paper fills linked to orders by exact ID."""
+        if self._ledgers is None:
+            return ()
+        views: list[PaperFillView] = []
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            if event.event_type != "fill_recorded":
+                continue
+            artifact = event.payload.get("artifact")
+            if not isinstance(artifact, dict):
+                continue
+            views.append(
+                PaperFillView(
+                    fill_id=str(artifact.get("artifact_id", "")),
+                    order_id=str(artifact.get("order_id", "")),
+                    quantity=str(artifact.get("quantity", "?")),
+                    price=str(artifact.get("price", "?")),
+                    tone=SystemTone.INFO,
+                )
+            )
+        return tuple(views)
+
     def execute(self, command: DashboardCommandRequest, *, actor: str) -> CommandReceipt:
         prior = self._receipts.get(command.idempotency_key)
         if prior is not None:
@@ -1700,6 +1785,14 @@ def create_dashboard_app(
     @app.get("/api/v1/dashboard/paper-cycles", response_model=tuple[RuntimeCycle, ...])
     async def paper_cycles(_: Principal = Depends(principal_for)) -> tuple[RuntimeCycle, ...]:  # noqa: B008
         return store.paper_cycles()
+
+    @app.get("/api/v1/paper/orders", response_model=tuple[PaperOrderView, ...])
+    async def paper_orders(_: Principal = Depends(principal_for)) -> tuple[PaperOrderView, ...]:  # noqa: B008
+        return store.paper_orders()
+
+    @app.get("/api/v1/paper/fills", response_model=tuple[PaperFillView, ...])
+    async def paper_fills(_: Principal = Depends(principal_for)) -> tuple[PaperFillView, ...]:  # noqa: B008
+        return store.paper_fills()
 
     @app.get("/api/v1/dashboard/source-health", response_model=tuple[SourceHealthView, ...])
     async def source_health(_: Principal = Depends(principal_for)) -> tuple[SourceHealthView, ...]:  # noqa: B008
