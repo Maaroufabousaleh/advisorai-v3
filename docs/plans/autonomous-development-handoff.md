@@ -9,8 +9,8 @@ PR #211 remains unmerged.
 - Commit `5e56c30` contains the owner-process lifecycle, latest-state
   reconciliation, authoritative recovery checks, research job limits/restart
   behavior, subprocess acceptance, CI, and the atomic private owner-record
-  write. The separate adapter-composition follow-up has passed its focused
-  verification and is ready for its own commit.
+  write. Commit `96abad3` adds typed data/model/paper-venue/outcome composition
+  under the same owner supervisor. Provider-specific adapters remain partial.
 - Leave the pre-existing untracked user files `overnight-canary-monitor/` and
   `plan-refact.md` untouched.
 - The roadmap audit is in
