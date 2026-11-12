@@ -417,14 +417,29 @@ def _return_bps(price: Decimal, last_close: Decimal) -> Decimal:
 
 
 def context_for_cutoff(
-    bars: Sequence[V3CoreBar], *, instrument: str, cutoff: datetime, now: datetime
+    bars: Sequence[V3CoreBar],
+    *,
+    instrument: str,
+    cutoff: datetime,
+    now: datetime,
+    newest_context_lag_seconds: int = FORWARD_INTERVAL_SECONDS,
 ) -> tuple[V3CoreBar, ...] | None:
-    """Return exactly 48 healthy forward bars available by the cutoff."""
+    """Return exactly 48 healthy forward bars available by the cutoff.
+
+    The default preserves the original V3-Core candidate contract.  The
+    bounded canary passes an explicit ten-minute lag so the newest context bar
+    is not the bar that closes only five minutes before the hourly cutoff.
+    """
 
     cutoff = _aware(cutoff, "cutoff")
     now = _aware(now, "now")
     if now > cutoff:
         return None
+    if (
+        newest_context_lag_seconds < FORWARD_INTERVAL_SECONDS
+        or newest_context_lag_seconds % FORWARD_INTERVAL_SECONDS
+    ):
+        raise ValueError("newest context lag must be a positive whole V3-Core interval")
     normalized_instrument = instrument.strip().upper()
     if normalized_instrument not in V3_CORE_SYMBOLS:
         raise ValueError("Chronos predictions are restricted to BTCUSDT and ETHUSDT")
@@ -438,7 +453,9 @@ def context_for_cutoff(
         and bar.provenance.source_health_state == "HEALTHY"
     }
     context_times = tuple(
-        cutoff - timedelta(seconds=FORWARD_INTERVAL_SECONDS * (CHRONOS_CONTEXT_BARS - index))
+        cutoff
+        - timedelta(seconds=newest_context_lag_seconds)
+        - timedelta(seconds=FORWARD_INTERVAL_SECONDS * (CHRONOS_CONTEXT_BARS - 1 - index))
         for index in range(CHRONOS_CONTEXT_BARS)
     )
     context = tuple(by_end.get(item) for item in context_times)
