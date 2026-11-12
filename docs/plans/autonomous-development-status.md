@@ -7,6 +7,7 @@ Dashboard build: success. Phase 10: sealed.
 ## Completed this loop
 
 - Program G: cross-engine replay comparison (2 tests).
+- I-portfolio: ledger-backed orders/fills API + dashboard panel (3 tests).
 - E-retrieval: rebuildable FTS5 index + `librarian_search` wired into Librarian jobs (3 tests).
 
 - E-inspect: research registry inspection API + dashboard research browser (3 tests).
