@@ -16,3 +16,5 @@ Admission is tracked separately and never implied by implementation.
 | B-sources | New source adapters | collectors | per-source | qualification | EXTERNALLY BLOCKED | needs rights + review per source |
 | C-models | Challenger qualification | models/research | `challengers/` | prospective | EXTERNALLY BLOCKED | needs elapsed market time |
 | J-live | Phase 10 approval | governance | `docs/plans/phase-10*` | human gate | EXTERNALLY BLOCKED | owner decision, never autonomous |
+
+| I-portfolio order views | paper orders/fills API + dashboard panel | `src/advisorai/api/dashboard.py`, `dashboard/src/` | `tests/api/test_paper_orders.py` (3 passed) | IMPLEMENTED | VERIFIED; next: order→fill→outcome trace view |
