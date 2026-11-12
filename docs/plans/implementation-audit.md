@@ -22,6 +22,81 @@ current executable base. “Local” means the boundary, contract, or determinis
 fixture exists in this repository. It does not convert an external, timed, or
 human gate into a unit-test claim.
 
+## Current protected Phase-4 prediction-contract audit — 2026-08-18T23:31:16Z
+
+The protected forward generation is still running under collector PID `59671`,
+resource sidecar PID `61721`, and Chronos PID `80779`. The source root had
+6,380 raw responses, 672 normalized bars, and 46 completed cases (23 BTCUSDT /
+23 ETHUSDT) at the read-only checkpoint. The 64-per-symbol target remains
+open, so terminal integrity classification, materialization, utility scoring,
+and admission are not yet legal. Main is
+`c10203e79ddea88a6f1f5034af1625438b75b8bb`; the protected processes were not
+changed.
+
+The frozen baseline root contains 15 prospective records and 8 missed
+cutoffs. Exact reproduction of its resume conflict showed that scientific
+fields were equal and only `generated_at` and `runtime_latency_ms` changed;
+this is a resume-idempotency defect, not evidence of changed model output or
+input. Sanitized reproduction SHA-256:
+`e3ad285e5543919e03337e26137d038a85ad624ce0aa5eedeb25d3b3abde13dc`.
+Future-run validation/skip correction is isolated at `185c195`; the old root
+remains immutable.
+
+The protected Chronos worker recorded 48
+`INFERENCE_OUTPUT_CONTRACT_ERROR` rejections and 8 missed cutoffs, with zero
+predictions. Structural read-only mapping found valid, healthy 48-bar
+contexts for all 48 contract-error cutoffs. An offline fixture reproduced
+`ForwardPredictionRecord(extra="forbid")` rejecting 14 emitted provenance,
+native interval, device, and resource fields. Reproduction SHA-256:
+`fbef12797f6f23175c0d602ade117d66ce5c60079a568d924940035ce2e24a1f`.
+The correction is isolated at `9c33fc4`; no protected Chronos process or
+evidence root was patched.
+
+The nonterminal coverage report is preserved at
+`artifacts/phase4/v3core-forward-coverage/20260818T233116Z-live-structural-diagnostic/phase4-forward-coverage-report.json`
+with SHA-256
+`95700fb356cc37ceef77855f17bbd8b8732855d70cd05f97640152dd071536f7f`.
+The frozen preregistration and materializer require the mandatory baseline
+roster and sealed 64-per-symbol case minimum, but do not require baseline
+predictions to have been prospectively persisted; strict cutoff-causal
+baseline regeneration after sealing is permitted. Chronos must have valid
+predictions to be scored, while no separate candidate-per-symbol minimum is
+encoded. Phase 4 is therefore still pending, with no gate weakening.
+
+## Current Phase-4 admission-contract audit — 2026-08-19T00:52:05Z
+
+The latest read-only protected status is 6,674 raw responses, 704 normalized
+bars, and 48 completed cases (24 BTCUSDT / 24 ETHUSDT). Collector PID `59671`,
+resource sidecar PID `61721`, and original Chronos PID `80779` remain alive.
+The source root is still incomplete and running; no terminal integrity or
+utility operation has been performed.
+
+`scripts/review_phase4_utility.py` subtracts `MANDATORY_BASELINES` from the
+measured model set before constructing `model_decisions`, and
+`robust_candidate_admission` is satisfied only by `any_admitted` in that
+non-baseline set. `src/advisorai/phase4/paper_utility.py` separately requires
+all five mandatory baselines, but does not make a baseline itself a candidate.
+Thus a mandatory baseline may remain the strongest measured component, but it
+cannot close the current formal Phase-4 gate without a reviewed contract
+change. No particular neural/foundation model is hidden as mandatory.
+
+`evaluate_paper_utility()` rejects any included model whose prediction IDs do
+not equal the complete observation set. The sealed V3-Core target therefore
+requires 128 Chronos predictions if Chronos is scored (64 per symbol), with
+the formal review's 16-per-symbol holdout and 20-observation calibration
+history requirements. There is no internal partial-coverage intersection:
+omitted Chronos is unavailable for scoring; partial Chronos input is refused;
+and either leaves the non-baseline admission requirement unsatisfied.
+
+Forty cases per symbol remained at the checkpoint, while approximately 90
+complete hourly cutoffs were theoretically available before
+`2026-08-22T19:35:06.869338Z`. A corrected worker could be numerically
+complete only under ideal continuity. It was not launched because the
+protected Chronos process is a CUDA worker and the runtime/resource contract
+allows one GPU family at a time through `GpuModelLease` and the global GPU
+lease cap. The correction at `9c33fc4` remains isolated; PID `80779` and
+its rejection root were not modified.
+
 ## Current V3-Core forward PIT collector audit — 2026-08-12T21:18:35Z
 
 Draft PR #187 is on `agent/phase4-forward-pit-collector` at branch head

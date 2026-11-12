@@ -51,6 +51,67 @@
   audit, resource audit, integrity exclusion derivation, and only then
   preregistered Phase-4 materialization.
 
+## Protected Phase-4 prediction-contract audit — 2026-08-18T23:31:16Z
+
+- Main is `c10203e79ddea88a6f1f5034af1625438b75b8bb`. The protected source
+  generation remains running under collector PID `59671`, resource sidecar
+  PID `61721`, and Chronos PID `80779`; none was stopped, restarted, or
+  reconfigured. The source root had 6,380 raw responses, 672 normalized bars,
+  and 46 completed cases (23 per symbol) at this read-only checkpoint. The
+  frozen target remains 64 completed BTCUSDT and 64 completed ETHUSDT cases.
+- The baseline root is frozen at 15 records (10 BTCUSDT / 5 ETHUSDT) and 8
+  missed cutoffs. The reproduced conflict had identical scientific identity
+  and differed only in `generated_at` and `runtime_latency_ms`; sanitized
+  evidence SHA-256 is
+  `e3ad285e5543919e03337e26137d038a85ad624ce0aa5eedeb25d3b3abde13dc`.
+  Future-run idempotency correction is commit `185c195`; no live root was
+  resumed or edited.
+- Chronos has 0 predictions and 56 rejections (48 output-contract errors and
+  8 missed cutoffs). Every output-contract error had a valid 48-bar healthy
+  context. The exact defect was shared-record `extra="forbid"` rejecting 14
+  provenance/native-interval/device/resource fields. Reproduction evidence
+  SHA-256 is
+  `fbef12797f6f23175c0d602ade117d66ce5c60079a568d924940035ce2e24a1f`;
+  isolated correction is commit `9c33fc4`, with PID `80779` untouched.
+- The live structural coverage report is preserved at
+  `artifacts/phase4/v3core-forward-coverage/20260818T233116Z-live-structural-diagnostic/phase4-forward-coverage-report.json`
+  (SHA-256
+  `95700fb356cc37ceef77855f17bbd8b8732855d70cd05f97640152dd071536f7f`).
+  The current preregistration/materializer requires the mandatory baseline
+  identities and 64-per-symbol sealed case minimum, but allows strict causal
+  baseline regeneration after sealing; it does not encode a separate
+  candidate-per-symbol minimum for Chronos. No terminal audit or scoring is
+  authorized while the root is running.
+- Phase 4 remains `PENDING`; Phase 2/3 remain `PASSED`; Phase 5–7 remain
+  closed. No credentials, orders, or production calls were used.
+
+## Phase-4 admission-contract decision — 2026-08-19T00:52:05Z
+
+- The protected source root remains `RUNNING`: collector PID `59671`, sidecar
+  PID `61721`, and original Chronos PID `80779` are alive. Latest read-only
+  source status: 6,674 raw responses, 704 normalized bars, and 48 completed
+  cases (24 BTCUSDT / 24 ETHUSDT). Target end is
+  `2026-08-22T19:35:06.869338Z`; 40 further cases per symbol are required.
+- The formal reviewer computes candidates as measured models outside the five
+  mandatory baselines and passes only when one of those non-baseline candidates
+  is admitted. Baseline-only Phase 4 cannot pass under the current executable
+  contract. No specific TTM-R2, Chronos, neural, or foundation model is
+  mandatory.
+- If Chronos is scored, `evaluate_paper_utility()` requires complete identical
+  observation-ID coverage for every included model. With the frozen 64-per-
+  symbol target this means 128 Chronos predictions, including a 16-per-symbol
+  holdout and at least 20 prior observations for rolling calibration. Partial
+  candidate coverage is rejected rather than silently intersected.
+- About 90 complete hourly cutoffs remained ideally available from the next
+  eligible cutoff (`2026-08-19T01:00:00Z`) through the deadline, so coverage
+  was numerically possible. A corrected worker was not launched because the
+  protected PID `80779` is a CUDA worker and the resource contract allows only
+  one GPU family resident. The corrected code remains isolated at `9c33fc4`;
+  the old root remains unchanged and unbackfilled.
+- Decision: continue the protected collector; do not start a second Chronos
+  process in this generation. Phase 4 remains `PENDING`, with no terminal
+  audit or utility scoring.
+
 ## Current forward PIT collector checkpoint — 2026-08-12T21:18:35Z
 
 - Main remains `5514a4cac8771d23c9f7e113e922c9ba9df1ecee` after merged PR #186.
