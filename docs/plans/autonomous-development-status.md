@@ -1,8 +1,13 @@
 # Autonomous development status — AdvisorAI V3
 
-Last verified: 2026-11-12. HEAD: `cc6fd36` (`codex/roadmap-completion-20261112`).
-PR #211 OPEN, unmerged. Full suite: 1253 passed. Acceptance: 11/11 phases.
+Last verified: 2026-11-12. HEAD: `9da443a` (`codex/roadmap-completion-20261112`).
+PR #211 OPEN, unmerged. Full suite: 1256 passed. Acceptance: 11/11 phases (rerun pending for HEAD).
 Dashboard build: success. Phase 10: sealed.
+
+## Completed this loop
+
+- E-inspect: research registry inspection API + dashboard research browser (3 tests).
+- Autonomous control docs created (status/backlog/test-matrix/blockers/handoff).
 
 ## Active work package
 
@@ -19,7 +24,9 @@ inspectable by the operator.
 - Research registry, factor DSL, bounded jobs, paper→approval workflow.
 - 1253-test suite + 11/11 acceptance evidence; docs agreement.
 
-## Exact next action
+## Exact next action (after push)
+
+Next eligible package: E-retrieval (FTS retrieval over the registry) or Program G cross-engine comparison tests. Both are safe, quarantined, and independent.
 
 1. Write `docs/plans/autonomous-development-{backlog,test-matrix,blockers,handoff}.md`.
 2. Add research registry inspection endpoint + dashboard research browser.
