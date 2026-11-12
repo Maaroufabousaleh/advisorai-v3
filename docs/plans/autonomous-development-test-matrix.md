@@ -2,8 +2,8 @@
 
 | Layer | Command | Last result | Evidence |
 |---|---|---|---|
-| L1 unit/contract | `pytest -q -p no:cacheprovider` | 1280 passed, 48 warnings | 2026-11-12 full run, Phase 8 incl. kata classifier |
-| L2 phase acceptance | `python scripts/verify_acceptance.py` | 11/11 phases (Phase 5: 45, Phase 7: 45) | 2026-11-12 runner |
+| L1 unit/contract | `pytest -q -p no:cacheprovider` | 1284 passed, 48 warnings | 2026-11-12 full run, Phase 8 incl. kata classifier + credential audit |
+| L2 phase acceptance | `python scripts/verify_acceptance.py` | 11/11 phases (Phase 5: 45, Phase 7: 45, Phase 8: 31) | 2026-11-12 runner |
 | Static | `uv run ruff check .` | clean | per-change |
 | Format | `ruff format --check` (owned files) | clean | per-change |
 | Lock | `uv lock --check` | clean | per-change |
