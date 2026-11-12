@@ -28,7 +28,7 @@ by this work. Implementation readiness only.
 
 - Full post-change suite: **1229 passed** (1213 baseline + 16 new), 48 warnings
   (pre-existing pydantic `schema` shadowing + fork deprecation), ~4.3min.
-- Full acceptance runner: pending (bg_6); rerun confirmed before push.
+- Full acceptance runner: **11/11 phases passed** (Phase 7: 28 passed incl. new session/decision suites).
 - Dashboard build: success (~34s).
 
 ## 4. E2E scenarios proven (offline deterministic fixtures)
