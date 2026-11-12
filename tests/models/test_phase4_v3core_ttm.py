@@ -131,6 +131,9 @@ def test_prediction_contains_exact_candidate_identity_and_no_outcome() -> None:
         result=TTMR2InferenceResult(
             forecast=tuple(Decimal("100") for _ in range(96)),
             latency_ms=Decimal("12.5"),
+            resource_peak_rss_mib=Decimal("64"),
+            resource_peak_cpu_percent=Decimal("20"),
+            resource_sample_count=1,
         ),
     )
     assert prediction.model == TTM_R2_MODEL

@@ -331,8 +331,10 @@ from .v3core_ttm import (
     TTMR2RuntimeContractMismatch,
     TTMR2RuntimeIdentity,
     build_ttm_prediction,
-    context_for_cutoff as ttm_context_for_cutoff,
     infer_ttm_r2,
+)
+from .v3core_ttm import (
+    context_for_cutoff as ttm_context_for_cutoff,
 )
 
 __all__ = [

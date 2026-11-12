@@ -882,6 +882,42 @@ def run(
     if poll_seconds <= 0 or worker_timeout_seconds <= 0:
         raise ValueError("poll and worker timeout values must be positive")
     identity = TTMR2RuntimeIdentity.from_admission(admission_path)
+    if identity.runner_context_bars != TTM_R2_CONTEXT_BARS:
+        run_root.mkdir(parents=True, exist_ok=True)
+        unrelated = [
+            path.name
+            for path in run_root.iterdir()
+            if path.name not in {"failure.json", "status.json"}
+        ]
+        if unrelated:
+            raise ValueError("quarantined TTM run root already contains unrelated evidence")
+        ledger = ForwardPredictionLedger(run_root / "predictions.jsonl")
+        rejections = ForwardRejectionSpool(run_root / "rejections.jsonl")
+        failure = {
+            "schema": TTM_R2_FAILURE_SCHEMA,
+            "failure_class": "QUALIFIED_RUNNER_CONTEXT_CONTRACT_MISMATCH",
+            "required_runner_context_bars": identity.runner_context_bars,
+            "configured_v3core_context_bars": TTM_R2_CONTEXT_BARS,
+            "model_identity_hash": identity.model_identity_hash,
+            "runner_hash": identity.runner_hash,
+            "checkpoint_hash": identity.checkpoint_hash,
+            "network_calls": 0,
+            "credentials_loaded": False,
+            "order_writes_attempted": False,
+        }
+        _write_immutable(run_root / "failure.json", failure)
+        result = _status(
+            state="quarantined_context_contract_mismatch",
+            ledger=ledger,
+            rejections=rejections,
+            extra={
+                "required_runner_context_bars": identity.runner_context_bars,
+                "configured_v3core_context_bars": TTM_R2_CONTEXT_BARS,
+                "model_identity_hash": identity.model_identity_hash,
+            },
+        )
+        _write_atomic(run_root / "status.json", result)
+        return result
     source_manifest = _source_manifest(source_root)
     expected = expected_manifest(
         source_root=source_root,
@@ -912,32 +948,6 @@ def run(
         _write_atomic(manifest_path, manifest)
     ledger = ForwardPredictionLedger(run_root / "predictions.jsonl")
     rejections = ForwardRejectionSpool(run_root / "rejections.jsonl")
-    if identity.runner_context_bars != TTM_R2_CONTEXT_BARS:
-        failure = {
-            "schema": TTM_R2_FAILURE_SCHEMA,
-            "failure_class": "QUALIFIED_RUNNER_CONTEXT_CONTRACT_MISMATCH",
-            "required_runner_context_bars": identity.runner_context_bars,
-            "configured_v3core_context_bars": TTM_R2_CONTEXT_BARS,
-            "model_identity_hash": identity.model_identity_hash,
-            "runner_hash": identity.runner_hash,
-            "checkpoint_hash": identity.checkpoint_hash,
-            "network_calls": 0,
-            "credentials_loaded": False,
-            "order_writes_attempted": False,
-        }
-        _write_immutable(run_root / "failure.json", failure)
-        result = _status(
-            state="quarantined_context_contract_mismatch",
-            ledger=ledger,
-            rejections=rejections,
-            extra={
-                "required_runner_context_bars": identity.runner_context_bars,
-                "configured_v3core_context_bars": TTM_R2_CONTEXT_BARS,
-                "model_identity_hash": identity.model_identity_hash,
-            },
-        )
-        _write_atomic(run_root / "status.json", result)
-        return result
     stop = False
 
     def request_stop(_signum: int, _frame: object) -> None:

@@ -31,6 +31,7 @@ from advisorai.research.challengers.timesfm3 import (
     evaluate_timesfm3,
     load_timesfm3_governance,
 )
+from advisorai.research.challengers.timesfm3.adapter import TimesFM3ForecastArtifact
 
 UTC_CUTOFF = datetime(2026, 9, 18, 12, tzinfo=UTC)
 
@@ -230,6 +231,20 @@ def test_injected_runner_emits_forecast_compatible_research_artifact():
     assert artifact.production_eligible is False
     assert artifact.execution_eligible is False
     assert adapter.model_resident is False
+
+
+def test_artifact_rejects_mismatched_variate_counts():
+    adapter = TimesFM3ResearchAdapter(
+        runner=lambda _input: TimesFM3RawOutput(
+            point_forecasts=((Decimal("101"), Decimal("102")),)
+        )
+    )
+    artifact = adapter.forecast(_research_input())
+    payload = artifact.model_dump()
+    payload["full_point_forecasts"] = (*payload["full_point_forecasts"], (Decimal("1"),))
+    payload["target_variates"] = (*payload["target_variates"], "ETHUSDT")
+    with pytest.raises(ValueError, match="variate counts"):
+        TimesFM3ForecastArtifact.model_validate(payload)
 
 
 def test_gpu_family_boundary_is_enforced():

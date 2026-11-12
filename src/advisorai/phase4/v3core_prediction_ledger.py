@@ -33,6 +33,10 @@ _LEGACY_PREDICTION_FIELDS = frozenset(
         "generated_at",
         "runtime_latency_ms",
         "outcome_case_id",
+        "inference_started_at",
+        "inference_finished_at",
+        "ledger_persisted_at",
+        "generation_deadline_at",
     }
 )
 
