@@ -182,6 +182,13 @@ export interface PaperFillView {
   tone: Tone
 }
 
+export interface LedgerChainView {
+  total_events: number
+  chain_hash: string
+  chains: { namespace: string; events: string; head_hash: string }[]
+  tone: Tone
+}
+
 export interface TraceLinkView {
   mission_id: string
   snapshot_id: string

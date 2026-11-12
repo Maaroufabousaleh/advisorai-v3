@@ -277,6 +277,17 @@ class AuditEventView(BaseModel):
     tone: SystemTone
 
 
+class LedgerChainView(BaseModel):
+    """Hash-chained tamper-evidence attestation over the ledgers."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    total_events: int = Field(ge=0)
+    chain_hash: str = Field(min_length=64, max_length=64)
+    chains: tuple[dict[str, str], ...] = ()
+    tone: SystemTone
+
+
 class LiveReadinessView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -1415,6 +1426,32 @@ class DashboardProjection:
             )
         return tuple(views)
 
+    def ledger_chain(self) -> LedgerChainView:
+        """Attest the current ledger hash chain. Read-only, no mutation."""
+        from advisorai.ledger.audit import audit as audit_ledger
+
+        if self._ledgers is None:
+            return LedgerChainView(
+                total_events=0,
+                chain_hash="0" * 64,
+                chains=(),
+                tone=SystemTone.NEUTRAL,
+            )
+        report = audit_ledger(self._ledgers)
+        return LedgerChainView(
+            total_events=report.total_events,
+            chain_hash=report.chain_hash,
+            chains=tuple(
+                {
+                    "namespace": chain.namespace.value,
+                    "events": str(chain.events),
+                    "head_hash": chain.head_hash,
+                }
+                for chain in report.chains
+            ),
+            tone=SystemTone.POSITIVE if report.total_events else SystemTone.NEUTRAL,
+        )
+
     def traceability(self) -> tuple[TraceLinkView, ...]:
         """Project source-to-decision-to-outcome chains joined by exact IDs.
 
@@ -1913,6 +1950,10 @@ def create_dashboard_app(
     @app.get("/api/v1/traceability", response_model=tuple[TraceLinkView, ...])
     async def traceability(_: Principal = Depends(principal_for)) -> tuple[TraceLinkView, ...]:  # noqa: B008
         return store.traceability()
+
+    @app.get("/api/v1/audit/chain", response_model=LedgerChainView)
+    async def ledger_chain(_: Principal = Depends(principal_for)) -> LedgerChainView:  # noqa: B008
+        return store.ledger_chain()
 
     @app.get("/api/v1/dashboard/source-health", response_model=tuple[SourceHealthView, ...])
     async def source_health(_: Principal = Depends(principal_for)) -> tuple[SourceHealthView, ...]:  # noqa: B008

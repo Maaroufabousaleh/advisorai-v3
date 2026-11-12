@@ -75,3 +75,30 @@ def test_traceability_reports_absent_links(tmp_path):
     store = DashboardProjection(ledgers=ledgers)
     assert store.traceability() == ()
     assert DashboardProjection().traceability() == ()
+
+
+def test_ledger_chain_attests_and_detects_tamper(tmp_path):
+    import sqlite3
+
+    from advisorai.api.dashboard import DashboardProjection
+    from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
+
+    ledgers = SqliteLedgers(tmp_path / "chain.sqlite3")
+    ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.MISSION,
+            event_type="session_started",
+            idempotency_key="s1",
+            payload={"start": {"session_id": "x"}},
+        )
+    )
+    store = DashboardProjection(ledgers=ledgers)
+    first = store.ledger_chain()
+    assert first.total_events == 1
+    assert len(first.chain_hash) == 64
+    baseline = first.chain_hash
+    assert store.ledger_chain().chain_hash == baseline
+    with sqlite3.connect(ledgers.database_path) as connection:
+        connection.execute("DELETE FROM mission_events WHERE idempotency_key = 's1'")
+    assert store.ledger_chain().chain_hash != baseline
+    assert DashboardProjection().ledger_chain().total_events == 0
