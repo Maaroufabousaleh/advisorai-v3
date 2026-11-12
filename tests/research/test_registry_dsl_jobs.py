@@ -131,9 +131,7 @@ def test_factor_dsl_rejects_forbidden_ops():
 
 
 def test_factor_dsl_evaluates_past_only():
-    expression = dsl.parse(
-        '{"op": "ts_delta", "args": [{"field": "close"}, {"field": "open"}]}'
-    )
+    expression = dsl.parse('{"op": "ts_delta", "args": [{"field": "close"}, {"field": "open"}]}')
     result = dsl.evaluate(
         expression,
         {"close": (Decimal("10"), Decimal("12")), "open": (Decimal("9"), Decimal("11"))},
@@ -144,7 +142,9 @@ def test_factor_dsl_evaluates_past_only():
 
 def test_red_team_rejects_leaky_factor():
     """A factor using future information must fail validation, not silently pass."""
-    expression = dsl.parse('{"op": "add", "args": [{"field": "close"}, {"field": "future_return"}]}')
+    expression = dsl.parse(
+        '{"op": "add", "args": [{"field": "close"}, {"field": "future_return"}]}'
+    )
     with pytest.raises(dsl.FactorDslError, match="unknown factor field"):
         dsl.evaluate(expression, {"close": (Decimal("10"),)})
 

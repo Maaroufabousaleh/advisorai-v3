@@ -71,7 +71,11 @@ def _validate(node: Any, *, depth: int) -> int:
     if not isinstance(node, dict):
         raise FactorDslError("factor DSL nodes must be objects")
     if "field" in node:
-        if set(node) != {"field"} or not isinstance(node["field"], str) or not node["field"].strip():
+        if (
+            set(node) != {"field"}
+            or not isinstance(node["field"], str)
+            or not node["field"].strip()
+        ):
             raise FactorDslError("factor field leaves must carry a non-blank field name")
         if node["field"].startswith("_"):
             raise FactorDslError("factor fields cannot use private names")

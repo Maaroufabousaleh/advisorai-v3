@@ -37,9 +37,7 @@ def test_full_paper_to_approval_workflow(tmp_path):
 
     # Scout: ingest one paper.
     scout_job = coordinator.submit(ResearchRole.SCOUT, detail="arxiv scan")
-    scout_done = coordinator.run(
-        scout_job.job_id, lambda running, cancelled: "ingested 1 paper"
-    )
+    scout_done = coordinator.run(scout_job.job_id, lambda running, cancelled: "ingested 1 paper")
     assert scout_done.state is JobState.COMPLETED
     paper = registry.store(
         PaperCard(

@@ -147,18 +147,14 @@ class ResearchCoordinator:
 
         try:
             detail = worker(running, cancelled)
-            terminal = (
-                ResearchJob(
-                    job_id=running.job_id,
-                    role=running.role,
-                    budget_units=running.budget_units,
-                    state=(
-                        JobState.CANCELLED if cancelled() else JobState.COMPLETED
-                    ),
-                    owner=running.owner,
-                    created_at=running.created_at,
-                    detail=detail,
-                )
+            terminal = ResearchJob(
+                job_id=running.job_id,
+                role=running.role,
+                budget_units=running.budget_units,
+                state=(JobState.CANCELLED if cancelled() else JobState.COMPLETED),
+                owner=running.owner,
+                created_at=running.created_at,
+                detail=detail,
             )
         except Exception as exc:
             terminal = ResearchJob(

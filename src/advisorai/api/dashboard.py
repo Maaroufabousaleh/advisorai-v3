@@ -1013,11 +1013,7 @@ def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
             for lease_id in lease_acquired - lease_released
             if lease_session.get(lease_id) == session_id
         )
-        tone = (
-            SystemTone.WARNING
-            if mode in {"recovery", "abstain"}
-            else SystemTone.INFO
-        )
+        tone = SystemTone.WARNING if mode in {"recovery", "abstain"} else SystemTone.INFO
         views.append(
             SessionLifecycleView(
                 session_id=session_id,
