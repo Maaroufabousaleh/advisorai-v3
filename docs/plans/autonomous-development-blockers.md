@@ -13,4 +13,4 @@ External blockers are recorded and isolated; they never gate independent work.
 | Prospective market time | L4-L6 realism | elapsed authentic collection | not started; simulated time not equivalence |
 | Independent L7 review | security/science/readiness | external reviewers | not scheduled |
 
-No background experiments are running. No locks held. Next: E-inspect package.
+No background experiments are running. No locks held. Next eligible work is all externally gated (see rows above); no autonomous package pending.
