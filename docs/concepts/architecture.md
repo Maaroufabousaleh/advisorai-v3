@@ -143,4 +143,8 @@ focus.
 - [Session-oriented operating model decision](../decisions/0007-session-oriented-operating-model.md)
 - [Reference model fabric decision](../decisions/0008-reference-model-fabric-and-deferred-bakeoffs.md)
 - [Typed Decision Model decision](../decisions/0009-typed-decision-model-boundary.md)
+- [Research Brain truth boundary](../decisions/0010-research-brain-truth-boundary.md)
+- [Provider authority and PIT decision](../decisions/0011-provider-source-authority-and-pit.md)
+- [Agent permission and sandbox decision](../decisions/0012-agent-permission-and-sandbox-boundary.md)
+- [Technology and integration decision register](../reference/technology-decision-register.md)
 - [Architecture dossier](../../advisorai-federated-multi-agent-quant-architecture-v3.md)

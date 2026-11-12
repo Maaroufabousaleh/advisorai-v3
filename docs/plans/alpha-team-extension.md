@@ -146,7 +146,7 @@ may start early; each gate controls operational admission or promotion only.
 | E1 - Research Brain foundations | Typed artifacts, DuckDB/SQLite registries, evidence graph, source policy, session-bounded Scout, provenance and license checks | One source claim, one failed experiment, and one outcome trace/replay with no provenance gaps |
 | E2 - Controlled Alpha Lab | Inside Phase 9: DSL, feature catalog, baseline suite, fast screen, manifests, validation/red-team workflow, dashboard views | Deliberately leaky/overfit candidates are rejected and a known baseline reproduces |
 | E3 - First V3 strategy challenger | Small BTC/ETH research-only candidate set using `MarketStateArtifact` and independent Nautilus replay | Incremental net value over the V3 baseline across preregistered regimes; eligible only for paper shadow |
-| E4 - Optional capability adapters | One Hermes, QuantaAlpha, AlphaAgent, Qlib, DEAP, or Optuna adapter at a time, with CapabilityCards and sandbox checks | Removable adapter cannot escape its sandbox and emits a replayable artifact |
+| E4 - Optional capability adapters | Use the decision register: bounded Optuna search may be adopted in-plan; Qlib may be a quarantined comparison; QuantaAlpha and DEAP are deferred; AlphaAgent concepts are reference-only until an exact upstream/license is selected | Removable adapter cannot escape its sandbox, has a reviewed license and source boundary, and emits a replayable AdvisorAI-native artifact |
 | E5 - Equity and long-horizon extension | SEC/IR/corporate-action snapshots, equity factor families, research cards, and paper ledger | Clean point-in-time/corporate-action history; crypto assumptions are not reused blindly |
 | E6 - Controlled candidate expansion | Limited approved-paper candidates, decay monitoring, and allocation research | Accumulated evidence across independent sessions and relevant market states; no unresolved safety/reconciliation/data-quality incident. A provisional 20–30 meaningful sessions / 100–150 operating hours may inform review, not act as a calendar-time pass rule |
 | E7 - Optional bounded-live scope | No new architecture: use the existing Phase 10 credential enclave, caps, approvals, and emergency controls | Separate explicit go-live review, operational parity, and tested immediate paper rollback |
@@ -165,13 +165,21 @@ agentic label. Each candidate follows: pin commit, SCA/license review, isolated
 install, frozen-snapshot reproducibility test, security and tool-permission
 review, benchmark, `CapabilityCard`, then quarantine or read-only activation.
 
-QuantaAlpha is a Phase 9 research challenger; use only its trajectory/factor
-lineage concepts in an isolated Qlib environment. Inalpha is an architecture
-reference only until separate licensing review, because direct AGPL reuse would
-carry copyleft obligations. WorldQuant Miner is a reference or isolated
-external-platform experiment only: automatic submission, credential patterns,
-and platform scores as validation are prohibited. `awesome-quant` is discovery
-input, not an approved dependency list.
+Optuna is limited to preregistered search spaces and trial budgets, immutable
+trial records, fixed seeds and snapshot IDs, explicit pruning and cost limits,
+and no test-set optimization. Qlib remains an external comparison environment;
+finalists must replay through the canonical AdvisorAI/Nautilus path.
+
+QuantaAlpha is deferred because its autonomous factor-mining role overlaps the
+Alpha Team; an isolated comparison requires exact revision, license, remote
+model/provider, data-rights, and leakage review. DEAP is deferred unless a
+specific evolutionary-search workload is not covered by the current bounded
+search. AlphaAgent is a methods reference only until its exact upstream and
+license are established. WorldQuant BRAIN requires authoritative product/API
+terms and explicit account permission; scraping, automatic submission,
+credential sharing, and platform scores as independent validation are
+prohibited. `awesome-quant` is discovery input, not an approved dependency
+list. See the [technology decision register](../reference/technology-decision-register.md).
 
 ## Operations and first delivery slice
 

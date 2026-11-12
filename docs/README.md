@@ -38,6 +38,7 @@ The repository is intentionally documented in layers. The root [README](../READM
 - [CLI reference](reference/cli.md) — verified module entry points, scripts, flags, and opt-in network commands.
 - [API reference](reference/api.md) — the optional dashboard API routes and command contract.
 - [Components](reference/components.md) — source package map and service registry ownership.
+- [Technology and integration decision register](reference/technology-decision-register.md) — evaluated tools, source tiers, current PR snapshot, and explicit adopt/prototype/defer/reject decisions.
 
 ## Development
 
@@ -58,5 +59,9 @@ These documents are valuable evidence and operational detail, but they are not a
 - [Traceability matrix](plans/traceability.md)
 - [Architecture decisions](decisions)
 - [Operational runbooks](runbooks)
+
+The current status and evidence record describes implementation and admission.
+The technology decision register describes research and planning choices; it
+does not make a tool a dependency or an operating permission.
 
 The architecture dossier at [`advisorai-federated-multi-agent-quant-architecture-v3.md`](../advisorai-federated-multi-agent-quant-architecture-v3.md) is the design and phase authority. Where it describes target services or future integrations, this documentation labels those boundaries rather than presenting them as deployed processes.

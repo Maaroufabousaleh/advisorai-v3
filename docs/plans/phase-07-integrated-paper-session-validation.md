@@ -35,6 +35,10 @@ data → features → frozen forecast fabric → Evidence Council → Decision M
 8. Verify traceability from source/PIT snapshot through proposal, portfolio,
    RiskKernel, OMS, fills/reconciliation, TCA/attribution, outcome labels, and
    the following session.
+9. Verify release/configuration identity, secret scoping and redaction,
+   checkpoint integrity, backup/restore, and rollback during the same
+   owner-session recovery workflow. These checks validate the workstation
+   lifecycle; they do not imply production deployment or live authorization.
 
 ## Session evidence
 
@@ -53,8 +57,9 @@ The complete system recovers authoritative state; reconciles venue/account and
 orders before resuming; detects and handles data gaps without PIT leakage;
 does not duplicate actions after restart; treats failed workers/jobs truthfully;
 cleans up locks and leases; stays within reviewed resource bounds across
-repeated sessions; and never escalates authority after restart. Model/strategy
-admission and live-capital approval remain separate decisions.
+repeated sessions; verifies restore and rollback; and never escalates authority
+after restart. Model/strategy admission and live-capital approval remain
+separate decisions.
 
 ## Historical and optional endurance evidence
 

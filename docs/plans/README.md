@@ -40,6 +40,18 @@ near-term milestone is **AdvisorAI Integrated Alpha**: start, recover, run the
 paper/testnet chain through reconciliation and outcome memory, then stop and
 resume safely. It is not a profitability or live-capital claim.
 
+Cross-cutting technology and data-source decisions are recorded in the
+[technology and integration decision register](../reference/technology-decision-register.md).
+It is the single planning inventory for external candidates, source tiers,
+license/data-rights notes, and revisit gates. Durable boundaries live in ADRs
+[0010](../decisions/0010-research-brain-truth-boundary.md),
+[0011](../decisions/0011-provider-source-authority-and-pit.md), and
+[0012](../decisions/0012-agent-permission-and-sandbox-boundary.md).
+
+Human governance and approval implementation is still being reviewed in the
+open draft PRs recorded in [Project status](../concepts/status.md). Those
+drafts do not authorize live capital.
+
 ## Reference model policy
 
 The frozen integration fabric is Chronos-2-small (probabilistic forecasting),

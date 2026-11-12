@@ -68,6 +68,12 @@ tracked tree contains no approved model-weight extension (`.safetensors`,
 market/news dataset files identified by the scan. `artifacts/` is ignored apart
 from its placeholder; ignored evidence must not be assumed redistributable.
 
+This paragraph records the 2026-08-21 audited base and remains historical.
+The current tree now tracks a root [LICENSE](../../LICENSE) and
+[THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md); see
+[current project status](../concepts/status.md). This later state does not
+change the audit result for the pinned commit above.
+
 ## Component inventory summary
 
 ### Direct Python dependencies

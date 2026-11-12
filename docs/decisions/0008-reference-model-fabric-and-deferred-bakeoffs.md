@@ -35,3 +35,7 @@ Jev API connectivity is optional and never a product dependency. Kev or other
 small decision models may be challengers. The future AdvisorAI custom Decision
 Model is trained only after an eligible, leakage-safe decision/outcome dataset
 has accumulated; no training is authorized by this ADR.
+
+The [technology and integration decision register](../reference/technology-decision-register.md)
+records challenger rationale and revisit triggers. It does not reopen the
+frozen fabric or change any model's implementation or admission status.

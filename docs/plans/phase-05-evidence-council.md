@@ -28,6 +28,16 @@ authority boundary.
    model/provider/prompt/tool versions, evidence ancestry, scorecard inputs,
    and the final proposal artifact.
 
+Adapter qualification is provider-neutral. Pin the exact model, code,
+checkpoint, configuration, and license; validate typed input/output, timeout,
+retry and fallback policy, abstention and malformed-output handling,
+calibration, disagreement, privacy redaction, offline behavior, and remote
+cost. Measure local RAM/VRAM and latency on the target workstation. Laya and
+Kev remain local/shadow prototypes until their exact artifacts pass; Jev
+requires authoritative provider terms before an adapter is planned. See the
+[technology decision register](../reference/technology-decision-register.md)
+and [ADR 0009](../decisions/0009-typed-decision-model-boundary.md).
+
 ## Prohibited authority
 
 The Decision Model cannot alter `RiskPolicy`, submit or cancel orders, access
