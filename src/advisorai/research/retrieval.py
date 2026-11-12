@@ -51,7 +51,9 @@ def _extract_text(record_type: str, payload: dict) -> tuple[str, str]:
         )
     elif record_type == "factor":
         title = str(get("dsl_source", "factor") or "factor")
-        body = " ".join(str(value) for value in (get("universe", ""), " ".join(get("lineage", []) or [])))
+        body = " ".join(
+            str(value) for value in (get("universe", ""), " ".join(get("lineage", []) or []))
+        )
     elif record_type == "experiment":
         title = f"experiment trial_count={get('trial_count', '?')}"
         body = str(get("metrics", "") or "")
@@ -59,7 +61,11 @@ def _extract_text(record_type: str, payload: dict) -> tuple[str, str]:
         title = f"validation {'approved' if get('approved') else 'rejected'}"
         body = " ".join(
             str(value)
-            for value in (get("leakage_check", ""), get("temporal_validation", ""), get("rationale", ""))
+            for value in (
+                get("leakage_check", ""),
+                get("temporal_validation", ""),
+                get("rationale", ""),
+            )
         )
     elif record_type == "promotion":
         title = f"promotion scope={get('scope', '?')}"

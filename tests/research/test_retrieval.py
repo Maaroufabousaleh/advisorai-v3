@@ -79,7 +79,13 @@ def test_index_is_disposable_projection(tmp_path):
 
 
 def test_librarian_job_retrieves_relevant_records(tmp_path):
-    from advisorai.research import JobState, ResearchCoordinator, ResearchJob, ResearchRole, librarian_search
+    from advisorai.research import (
+        JobState,
+        ResearchCoordinator,
+        ResearchJob,
+        ResearchRole,
+        librarian_search,
+    )
 
     registry, paper, hypothesis, factor = _seed(tmp_path)
     coordinator = ResearchCoordinator(None, max_workers=2)
@@ -97,4 +103,3 @@ def test_librarian_job_retrieves_relevant_records(tmp_path):
     hits = hits_box["hits"]
     assert isinstance(hits, tuple) and len(hits) >= 2
     assert {hit.record_type for hit in hits} >= {"paper", "hypothesis"}
-
