@@ -9,6 +9,7 @@ Dashboard build: success. Phase 10: sealed.
 - Program G: cross-engine replay comparison (2 tests).
 - I-traceability chain API + mission workspace panel (2 tests).
 - J-tamper-evidence: hash-chained ledger audit + /api/v1/audit/chain + audit workspace panel (5 tests).
+- F-monitor: PaperMonitor slices/champion-challenger/expiry flags + /api/v1/performance + portfolio performance panel (5 tests).
 - I-portfolio: ledger-backed orders/fills API + dashboard panel (3 tests).
 - E-retrieval: rebuildable FTS5 index + `librarian_search` wired into Librarian jobs (3 tests).
 
