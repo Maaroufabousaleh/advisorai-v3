@@ -254,9 +254,11 @@ def test_long_proposal_drives_full_order_lifecycle(tmp_path):
     supervisor.checkpoint()
     end = supervisor.stop(
         stop_checks=SessionStopChecks(
-            current_order_account_verifier=lambda _ledgers: ReconciliationService()
-            .run(account=account, orders=orders, venue_snapshot=venue_snapshot)
-            .reconciled
+            current_order_account_verifier=lambda _ledgers: (
+                ReconciliationService()
+                .run(account=account, orders=orders, venue_snapshot=venue_snapshot)
+                .reconciled
+            )
         )
     )
     assert end.outcome.value == "clean"

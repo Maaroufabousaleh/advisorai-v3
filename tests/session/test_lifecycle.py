@@ -455,8 +455,6 @@ def test_crash_recovery_keeps_live_process_lease_and_abstains(tmp_path):
     assert "failed_check:stale_worker_leases" in recovery.decisions
     assert any(item.lease_id == lease.lease_id for item in restarted._open_leases())
     assert all(item.session_id == prior_start.session_id for item in restarted._open_leases())
-    ended = restarted.stop(
-        outcome=SessionOutcome.UNCLEAN, unfinished_work=("live_worker_lease",)
-    )
+    ended = restarted.stop(outcome=SessionOutcome.UNCLEAN, unfinished_work=("live_worker_lease",))
     assert not ended.leases_released
     assert any(item.lease_id == lease.lease_id for item in restarted._open_leases())

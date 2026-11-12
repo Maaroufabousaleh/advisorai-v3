@@ -222,19 +222,18 @@ def test_subprocess_start_paper_fill_outcome_stop_and_restart(tmp_path):
             crashed_output = _read_until(crashed, "SESSION READY")
             assert "classification=clean_start" in crashed_output
             crashed_session_id = _session_id(crashed_output)
+
             def crash_cycle_checkpointed() -> bool:
                 events = ledgers.events(LedgerNamespace.MISSION)
                 cycle_finished = any(
                     event.event_type == "paper_runtime_cycle"
-                    and event.payload.get("cycle", {}).get("owner_session_id")
-                    == crashed_session_id
+                    and event.payload.get("cycle", {}).get("owner_session_id") == crashed_session_id
                     and event.payload.get("cycle", {}).get("stage") != "started"
                     for event in events
                 )
                 source_checkpointed = any(
                     event.event_type == "session_checkpoint"
-                    and event.payload.get("checkpoint", {}).get("session_id")
-                    == crashed_session_id
+                    and event.payload.get("checkpoint", {}).get("session_id") == crashed_session_id
                     and "local-paper-fixture/BTC-USD-1h"
                     in event.payload.get("checkpoint", {}).get("watermarks", {})
                     for event in events
