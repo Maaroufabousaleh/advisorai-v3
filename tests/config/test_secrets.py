@@ -172,3 +172,30 @@ def test_credential_aliases_require_an_allowed_target_and_detect_conflicts():
                 CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_PROVIDER"),
             ),
         )
+
+
+def test_official_data_scope_excludes_fred_and_supports_infisical_subset():
+    values = {
+        "BLS_API_KEY": "bls-secret",
+        "BEA_API_KEY": "bea-secret",
+        "FRED_API_KEY": "fred-secret",
+    }
+    resolver = CredentialResolver.from_mapping(values)
+
+    assert resolver.resolve(CredentialScope.OFFICIAL_DATA) == {
+        "BLS_API_KEY": "bls-secret",
+        "BEA_API_KEY": "bea-secret",
+    }
+    assert "fred-secret" not in repr(resolver)
+
+    infisical = CredentialResolver.from_infisical_export(
+        {"BLS_API_KEY": "bls-secret"}, environment="paper-testnet"
+    )
+    assert infisical.resolve(CredentialScope.OFFICIAL_DATA) == {"BLS_API_KEY": "bls-secret"}
+
+    for environment in ("prod", "", "staging"):
+        with pytest.raises(CredentialScopeError, match="dev/paper-testnet|environment"):
+            CredentialResolver.from_infisical_export({"BLS_API_KEY": "x"}, environment=environment)
+
+    with pytest.raises(CredentialScopeError, match="unknown environment names"):
+        CredentialResolver.from_infisical_export({"NOT_A_REAL_NAME": "x"}, environment="dev")

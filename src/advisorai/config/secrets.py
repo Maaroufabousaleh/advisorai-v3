@@ -132,6 +132,8 @@ KNOWN_ENV_NAMES = frozenset(
         "SEC_USER_AGENT",
         "TOGETHER_API_KEY",
         "TREASURY_API_KEY",
+        "EIA_API_KEY",
+        "OPENALEX_MAILTO",
         "WANDB_API_KEY",
     }
 )
@@ -170,6 +172,7 @@ class CredentialScope(StrEnum):
     LITELLM = "litellm"
     OMNIROUTE = "omniroute"
     PUBLIC_DATA = "public_data"
+    OFFICIAL_DATA = "official_data"
     MODEL_REGISTRY = "model_registry"
     PAPER_VENUE = "paper_venue"
     PAPER_VENUE_CCXT = "paper_venue_ccxt"
@@ -249,16 +252,29 @@ CREDENTIAL_SCOPES: Mapping[CredentialScope, frozenset[str]] = MappingProxyType(
         CredentialScope.PUBLIC_DATA: frozenset(
             {
                 "SEC_USER_AGENT",
-                "FRED_API_KEY",
-                "ALFRED_API_KEY",
                 "BLS_API_KEY",
                 "BEA_API_KEY",
+                "EIA_API_KEY",
                 "TREASURY_API_KEY",
                 "CENTRAL_BANK_API_KEY",
                 "DATA_VENDOR_API_KEY",
                 "DATA_VENDOR_API_SECRET",
                 "LSE_API_KEY",
                 "LSE_API_SECRET",
+                "OPENALEX_MAILTO",
+            }
+        ),
+        # FRED/ALFRED keys remain recognized environment names so legacy
+        # inventories still parse, but no scope exposes them: FRED/ALFRED stay
+        # disabled pending written authorization of the terms restriction.
+        CredentialScope.OFFICIAL_DATA: frozenset(
+            {
+                "SEC_USER_AGENT",
+                "BLS_API_KEY",
+                "BEA_API_KEY",
+                "EIA_API_KEY",
+                "TREASURY_API_KEY",
+                "CENTRAL_BANK_API_KEY",
             }
         ),
         CredentialScope.MODEL_REGISTRY: frozenset(
@@ -437,6 +453,25 @@ class CredentialResolver:
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, str]) -> CredentialResolver:
+        return cls(values)
+
+    @classmethod
+    def from_infisical_export(
+        cls, values: Mapping[str, str], *, environment: str
+    ) -> CredentialResolver:
+        """Build a resolver from an Infisical-exported subset for one environment.
+
+        The caller (trusted launcher, never a coding agent) exports exactly the
+        secrets the target service needs from one Infisical environment
+        (``dev`` or ``paper-testnet``; ``prod`` stays empty) and passes that
+        subset here.  This constructor performs no network I/O, never sees a
+        machine identity, and enforces the same known-name allowlist as every
+        other constructor, so an over-broad export fails closed at build time.
+        """
+        if not isinstance(environment, str) or not environment.strip():
+            raise CredentialScopeError("an Infisical environment name is required")
+        if environment.strip().lower() not in {"dev", "paper-testnet"}:
+            raise CredentialScopeError("refusing Infisical export from outside dev/paper-testnet")
         return cls(values)
 
     @staticmethod
