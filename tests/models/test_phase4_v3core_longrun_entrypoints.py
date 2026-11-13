@@ -178,6 +178,14 @@ def test_launch_entrypoint_emits_structured_exact_refusal(monkeypatch, capsys) -
     assert refusal["reason"] == "checkpoint identity mismatch"
 
 
+@pytest.mark.skipif(
+    subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "phase4-v3core-longrun-r1^{}"],
+        capture_output=True,
+    ).returncode
+    != 0,
+    reason="release tag phase4-v3core-longrun-r1 is not published to this clone",
+)
 def test_launch_entrypoint_resolves_annotated_release_tag_to_commit() -> None:
     module = _load_script(
         "phase4_longrun_release_tag_test",

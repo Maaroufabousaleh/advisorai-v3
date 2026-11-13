@@ -27,8 +27,13 @@ MANIFEST = Path(
     "artifacts/phase0/model-runtime-qualification/benchmark-data/"
     "public-daily-0f84a34fb0537ecb/forecast-snapshot-manifest.json"
 )
+REQUIRES_FROZEN_SNAPSHOT = pytest.mark.skipif(
+    not SNAPSHOT.is_file() or not MANIFEST.is_file(),
+    reason="frozen forecast snapshot lives outside the repo and is not committed",
+)
 
 
+@REQUIRES_FROZEN_SNAPSHOT
 def test_real_input_uses_frozen_binance_btc_eth_point_in_time_observations():
     snapshot = _load_snapshot(SNAPSHOT, MANIFEST)
     cases = tuple(
@@ -46,6 +51,7 @@ def test_real_input_uses_frozen_binance_btc_eth_point_in_time_observations():
     assert {item.source_snapshot_hash for item in observations} == {snapshot.content_hash}
 
 
+@REQUIRES_FROZEN_SNAPSHOT
 def test_real_input_rejects_manifest_hash_mismatch(tmp_path: Path):
     snapshot = _load_snapshot(SNAPSHOT, MANIFEST)
     payload = json.loads(MANIFEST.read_text())
@@ -73,6 +79,7 @@ def test_real_input_candidate_admission_root_parser_is_explicit():
         _parse_candidate_admission_roots(["ttm-r3=/tmp/a", "ttm-r3=/tmp/b"])
 
 
+@REQUIRES_FROZEN_SNAPSHOT
 def test_real_input_preserves_runtime_latency_and_native_intervals():
     snapshot = _load_snapshot(SNAPSHOT, MANIFEST)
     cases = tuple(

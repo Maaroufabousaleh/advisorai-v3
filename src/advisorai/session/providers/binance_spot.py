@@ -137,7 +137,9 @@ class BinanceSpotTestnetOwnerAdapter:
         if isinstance(response, Mapping):
             if response.get("client_order_id") not in {None, order.idempotency_key}:
                 raise NativeVenueProjectionError("Binance order query changed client identity")
-            provider_id = response.get("venue_order_id", response.get("orderId", response.get("id")))
+            provider_id = response.get(
+                "venue_order_id", response.get("orderId", response.get("id"))
+            )
             if provider_id is not None and str(provider_id).strip():
                 self._remember_order_identity(order, str(provider_id).strip())
         return response
@@ -234,10 +236,10 @@ class BinanceSpotTestnetOwnerAdapter:
         prior_local = self._provider_order_ids.get(normalized_id)
         prior_provider = self._local_provider_order_ids.get(order.artifact_id)
         prior_client_id = self._local_client_order_ids.get(order.artifact_id)
-        if (prior_local is not None and prior_local != order.artifact_id) or (
-            prior_provider is not None and prior_provider != normalized_id
-        ) or (
-            prior_client_id is not None and prior_client_id != order.idempotency_key
+        if (
+            (prior_local is not None and prior_local != order.artifact_id)
+            or (prior_provider is not None and prior_provider != normalized_id)
+            or (prior_client_id is not None and prior_client_id != order.idempotency_key)
         ):
             raise NativeVenueProjectionError("Binance order identity conflicts with durable state")
         if prior_provider is not None:
