@@ -34,14 +34,50 @@ class ArtifactStatus(StrEnum):
     RETIRED = "retired"
 
 
+class ResearchSourceFamily(StrEnum):
+    ARXIV = "arxiv"
+    OPENALEX = "openalex"
+    CROSSREF = "crossref_doi"
+    GITHUB_RELEASE = "github_release"
+    SEC_EDGAR = "sec_edgar"
+    FRED = "fred"
+
+
+class ResearchSourceUse(StrEnum):
+    CITATION_ONLY = "citation_only"
+    CONTENT_USE = "content_use"
+
+
 class PaperCard(ArtifactModel):
     source_url: str = Field(min_length=1)
     authors: tuple[str, ...] = ()
     publication_date: str = Field(default="unknown", min_length=1)
     license: str = Field(default="unknown", min_length=1)
+    requested_use: ResearchSourceUse = ResearchSourceUse.CITATION_ONLY
+    source_family: ResearchSourceFamily | None = None
+    permitted_use: ResearchSourceUse | None = None
+    source_policy_version: str | None = None
     claimed_result: str = Field(min_length=1)
     limitations: tuple[str, ...] = ()
     relevance: str = Field(default="", min_length=0)
+
+    @model_validator(mode="after")
+    def require_complete_source_assessment(self) -> PaperCard:
+        assessed = (
+            self.source_family is not None,
+            self.permitted_use is not None,
+            self.source_policy_version is not None,
+        )
+        if any(assessed) and not all(assessed):
+            raise ValueError(
+                "source family, permitted use, and policy version must be recorded together"
+            )
+        if (
+            self.permitted_use is ResearchSourceUse.CONTENT_USE
+            and self.requested_use is not ResearchSourceUse.CONTENT_USE
+        ):
+            raise ValueError("content use must be explicitly requested")
+        return self
 
 
 class HypothesisCard(ArtifactModel):
@@ -128,5 +164,7 @@ __all__ = [
     "HypothesisCard",
     "PaperCard",
     "PromotionDecision",
+    "ResearchSourceFamily",
+    "ResearchSourceUse",
     "ValidationReport",
 ]

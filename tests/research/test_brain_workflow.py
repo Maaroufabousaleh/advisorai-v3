@@ -173,7 +173,7 @@ def test_leaky_candidate_is_rejected_and_retained(tmp_path):
     registry = ResearchRegistry(tmp_path / "brain-leak.sqlite3")
     registry.store(
         PaperCard(
-            source_url="https://example.com/leak",
+            source_url="https://arxiv.org/abs/2401.00002",
             authors=("X",),
             claimed_result="perfect foresight",
             limitations=("uses future returns",),

@@ -23,6 +23,7 @@ from advisorai.research.cards import (
     PromotionDecision,
     ValidationReport,
 )
+from advisorai.research.source_policy import ResearchSourcePolicy
 
 _RECORD_TYPES = {
     "paper": PaperCard,
@@ -43,6 +44,7 @@ class ResearchRegistry:
 
     def __init__(self, database_path: Path) -> None:
         self.database_path = database_path
+        self._source_policy = ResearchSourcePolicy()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self._initialize()
 
@@ -86,6 +88,8 @@ class ResearchRegistry:
         model = _RECORD_TYPES[record_type]
         if not isinstance(record, model):
             raise TypeError(f"record must be {model.__name__} for type {record_type!r}")
+        if record_type == "paper":
+            record = self._source_policy.assess_card(record)
         payload = _json(record.model_dump(mode="json", round_trip=True))
         import hashlib
 
