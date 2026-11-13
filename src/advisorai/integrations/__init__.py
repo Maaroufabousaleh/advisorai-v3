@@ -39,6 +39,8 @@ from .http import (
     SourceHttpTransport,
 )
 from .llm import GatewayTransportError, OpenAICompatibleGatewayAdapter
+from .public_data import BeaDataClient, BlsV2Client, EiaApiClient, ProviderRequestError, SmokeTestOutcome
+from .research_metadata import CitationSearchResult, CrossrefWorksClient, OpenAlexWorksClient
 from .sources import RawHttpSpool, SourceEndpoint, V3CoreCollectors, build_v3_core_collectors
 from .venue import HmacVenueSigner, PaperTestnetVenueTransport, VenueTransportError
 from .websocket import RawMessageSpool, RawWebSocketFeed, WebSocketTransportError
@@ -46,6 +48,9 @@ from .websocket import RawMessageSpool, RawWebSocketFeed, WebSocketTransportErro
 __all__ = [
     "GatewayTransportError",
     "BINANCE_SPOT_TESTNET_ADAPTER_VERSION",
+    "BeaDataClient",
+    "BlsV2Client",
+    "CitationSearchResult",
     "BINANCE_SPOT_TESTNET_BASE_URL",
     "BINANCE_SPOT_TESTNET_HOST",
     "BINANCE_SPOT_TESTNET_STREAM_HOST",
@@ -67,18 +72,23 @@ __all__ = [
     "CoinbaseExchangeSandboxTransport",
     "CoinbaseExchangeSigner",
     "CoinbaseProductSpec",
+    "CrossrefWorksClient",
+    "EiaApiClient",
     "HmacVenueSigner",
     "HttpClientConfig",
     "HttpRequestMetrics",
     "HttpTransportError",
     "OpenAICompatibleGatewayAdapter",
     "PaperTestnetVenueTransport",
+    "OpenAlexWorksClient",
+    "ProviderRequestError",
     "RawMessageSpool",
     "RawHttpSpool",
     "RawWebSocketFeed",
     "SafeHttpClient",
     "SourceEndpoint",
     "SourceHttpTransport",
+    "SmokeTestOutcome",
     "VenueTransportError",
     "V3CoreCollectors",
     "WebSocketTransportError",

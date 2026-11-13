@@ -56,6 +56,10 @@ REVIEWED_CONSUMERS = {
     "integrations/http.py": ({"redact", "redacted_headers"}, set()),
     "integrations/sources.py": ({"SecretSettings"}, set()),
     "integrations/venue.py": ({"SecretSettings"}, set()),
+    "integrations/eia_trusted_runtime.py": (
+        {"CredentialScope", "InfisicalCredentialResolver"},
+        set(),
+    ),
     # Profile composition is the supervised boundary that binds provider
     # credentials to exact sandbox connector builders.
     "session/provider_profiles.py": (set(), {"CredentialResolver", "CredentialScope"}),

@@ -15,6 +15,7 @@ llm_env = resolver.resolve_for_process(CredentialScope.DIRECT_LLM)
 ```
 
 The available scopes are `DIRECT_LLM`, `LITELLM`, `OMNIROUTE`, `PUBLIC_DATA`,
+`EIA_PUBLIC_DATA`, `BLS_PUBLIC_DATA`, and `BEA_PUBLIC_DATA`,
 `MODEL_REGISTRY`, the connector-specific `PAPER_VENUE*` scopes,
 `DERIBIT_PUBLIC`, the connector-specific `ARCHIVE_*` scopes, `EVENT_BUS`,
 and `INTERNAL_APP`. Each scope has a reviewed allowlist in
@@ -43,3 +44,10 @@ Aliases never modify the source mapping, `os.environ`, or `secrets.env`.
 Conflicting target/source values, unknown names, and targets outside the
 requested scope fail closed. Diagnostics may use `available_names()`; values
 must not be logged.
+
+`PUBLIC_DATA` contains only the non-secret `SEC_USER_AGENT`. Provider keys are
+separated by provider. The Infisical resolver accepts one named secret only
+for a matching provider scope; the trusted EIA smoke runtime is the only new
+consumer. No machine identity is provisioned. Any previously exposed BEA key
+is compromised and must not be reused; only an owner-issued replacement may be
+used after secure transfer.
