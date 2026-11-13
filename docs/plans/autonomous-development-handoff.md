@@ -10,9 +10,15 @@ PR #211 remains unmerged.
   reconciliation, authoritative recovery checks, research job limits/restart
   behavior, subprocess acceptance, CI, and the atomic private owner-record
   write. Commit `96abad3` adds typed data/model/paper-venue/outcome composition
-  under the same owner supervisor. Provider-specific adapters remain partial.
+  under the same owner supervisor. This checkpoint adds a single-symbol
+  Binance Spot Testnet owner adapter and runtime ingestion of current fills;
+  provider profiles, Coinbase mapping, and provider-specific scoring remain
+  partial.
 - Leave the pre-existing untracked user files `overnight-canary-monitor/` and
   `plan-refact.md` untouched.
+- The untracked `src/advisorai/integrations/provider_venue.py` and
+  `src/advisorai/session/provider_profiles.py` appeared during this work and
+  were left untouched and unstaged; they are not part of this checkpoint.
 - The roadmap audit is in
   [roadmap-execution-matrix.md](roadmap-execution-matrix.md). It separates
   software implementation from operational admission.
@@ -29,6 +35,10 @@ PR #211 remains unmerged.
   fabricated numeric forecast: adapter, black-box app, lifecycle, strong-order,
   and paper-learning tests: **26 passed** in 74.97 seconds; Ruff and whitespace
   checks passed.
+- After implementing the Binance owner bridge and current-fill ingestion:
+  session, runtime, and Binance integration lifecycle suites: **63 passed**;
+  provider bridge and Binance integration suites after quote-asset validation:
+  **18 passed**. Targeted Ruff and `git diff --check` passed.
 - Ruff, `uv lock --check`, `uv pip check`, license policy, and locked all-extras
   sync dry-run passed. Dashboard `npm audit --audit-level=high` found zero
   vulnerabilities and `npm run build` succeeded.
@@ -38,10 +48,12 @@ PR #211 remains unmerged.
 ## Next software work after this checkpoint
 
 The local profile, typed adapter-composition seam, and required outcome
-adapter boundary are implemented. The next software item is provider-specific
-paper adapters; their implementation status remains partial. Pending
-credentials, model qualification, venue evidence, and human approval are
-separate gates and are not reasons to classify that software work as
-externally blocked.
+adapter boundary are implemented. A single-symbol Binance Spot Testnet bridge
+now maps durable local orders, current fills, and account positions under the
+paper alias. The next software items are explicit provider profile composition
+with a verified account baseline, Coinbase sandbox mapping, and quote-aware
+outcome/scoring semantics. Pending credentials, model qualification, venue
+evidence, and human approval are separate gates and are not reasons to classify
+that software work as externally blocked.
 
 Keep Phase 10 sealed. Do not merge PR #211 or modify the unrelated user files.

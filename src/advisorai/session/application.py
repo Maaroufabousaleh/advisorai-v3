@@ -70,8 +70,10 @@ _BTC = InstrumentIdentity(
 class OwnerDataAdapter(Protocol):
     """Data boundary required by the supervised paper owner.
 
-    The adapter must expose current-state verification methods as well as
-    snapshot builders. Durable records alone never verify recovery.
+    Repeated ``snapshot_at`` calls for a closed cutoff must return the same
+    artifact identity. The adapter must expose current-state verification
+    methods as well as snapshot builders. Durable records alone never verify
+    recovery.
     """
 
     source: str
@@ -150,6 +152,7 @@ class OwnerApplicationAdapters:
     paper_venue: OwnerPaperVenueAdapter
     outcome_adapter: OwnerOutcomeAdapter
     initial_account: AccountState
+    instrument: InstrumentIdentity = _BTC
 
     def __post_init__(self) -> None:
         if not self.data.source.strip() or not self.data.dataset.strip():
@@ -181,6 +184,10 @@ class OwnerApplicationAdapters:
             raise ValueError("paper venue adapter must expose authoritative fills") from None
         if not isinstance(self.initial_account, AccountState):
             raise ValueError("owner profile requires an AccountState baseline")
+        if self.instrument.venue != "paper":
+            raise ValueError("owner instrument must use the supervised paper venue alias")
+        if self.instrument.canonical_id not in self.initial_account.marks:
+            raise ValueError("owner account baseline must mark the configured instrument")
 
 
 class LocalPaperOutcomeAdapter:
@@ -398,7 +405,7 @@ class PaperOwnerApplication:
         self.runtime = PaperRuntime(
             config=PaperRuntimeConfig(
                 environment="paper",
-                instruments=("BTC",),
+                instruments=(self.adapters.instrument.canonical_id,),
                 observation_interval_seconds=300,
                 decision_interval_seconds=3600,
                 run_id="advisorai-owner-paper",
@@ -720,7 +727,7 @@ class PaperOwnerApplication:
             snapshot=snapshot,
             account=account,
             market=market,
-            targets={_BTC: Decimal("0")},
+            targets={self.adapters.instrument: Decimal("0")},
             risk_policy_version="owner-paper-v1",
         )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -179,6 +180,33 @@ def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
     assert len(calls) == 5
     assert "X-MBX-APIKEY" not in calls[0][2]
     assert all("X-MBX-APIKEY" in calls[index][2] for index in (2, 3, 4))
+
+
+def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
+    account = _account()
+    account["balances"].append({"asset": "BNB", "free": "0.25", "locked": "0"})
+    responses = [
+        (200, json.dumps({"serverTime": 1700000000000}).encode(), ()),
+        (200, json.dumps(account).encode(), ()),
+    ]
+    transport, _calls = _transport(responses)
+    transport.server_time()
+    transport.verify_symbol_mappings(_symbols())
+
+    snapshot = transport.fetch_account_snapshot()
+
+    assert snapshot.positions["asset:BNB"] == Decimal("0.25")
+
+
+def test_binance_account_snapshot_rejects_duplicate_asset_rows():
+    account = _account()
+    account["balances"].append({"asset": "BTC", "free": "0.2", "locked": "0"})
+    transport, _calls = _transport([(200, json.dumps(account).encode(), ())])
+    transport._last_server_time = datetime(2026, 11, 12, tzinfo=UTC)
+    transport.verify_symbol_mappings(_symbols())
+
+    with pytest.raises(VenueTransportError, match="missing or duplicate asset"):
+        transport.fetch_account_snapshot()
 
 
 def test_binance_account_read_fails_closed_when_trading_permission_is_missing():

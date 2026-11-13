@@ -6,7 +6,9 @@ from advisorai.agents.fusion import DecisionBundle, EvidenceGateResult
 from advisorai.api.service import DecisionPipelineResult
 from advisorai.contracts import (
     AssetClass,
+    Fill,
     InstrumentIdentity,
+    OrderState,
     RiskLimit,
     RiskPolicy,
     Snapshot,
@@ -14,6 +16,7 @@ from advisorai.contracts import (
     TargetPosition,
 )
 from advisorai.execution import (
+    AccountLedger,
     AccountState,
     OrderManager,
     PaperVenueAdapter,
@@ -171,6 +174,51 @@ def test_runtime_routes_only_after_risk_and_records_cycle(tmp_path):
         event.event_type == "paper_runtime_cycle"
         for event in ledgers.events(LedgerNamespace.MISSION)
     )
+
+
+def test_runtime_ingests_current_fills_from_non_simulated_paper_adapter(tmp_path):
+    class CurrentFillAdapter(PaperVenueAdapter):
+        def __init__(self):
+            super().__init__(venue="paper")
+            self._fills = []
+
+        def submit(self, order):
+            acknowledgement = super().submit(order)
+            self._fills.append(
+                Fill(
+                    order_id=order.artifact_id,
+                    venue_fill_id=f"provider-fill-{order.artifact_id}",
+                    quantity=order.quantity,
+                    price=Decimal("100"),
+                    fee=Decimal("0.01"),
+                    occurred_at=datetime(2026, 8, 5, 15, 0, tzinfo=UTC),
+                )
+            )
+            return acknowledgement
+
+        @property
+        def fills(self):
+            return tuple(self._fills)
+
+    adapter = CurrentFillAdapter()
+    runtime, cutoff, _ledgers, _learning = _runtime(
+        tmp_path,
+        admitted=True,
+        adapter=adapter,
+        database_name="runtime-provider-fills.sqlite3",
+    )
+    runtime.account_ledger = AccountLedger(runtime.ledgers, runtime.account)
+
+    result = runtime.run_once(cutoff)
+
+    assert result.stage is RuntimeStage.ORDERS_ROUTED
+    assert len(runtime.orders.fills) == 1
+    assert runtime.orders.orders[result.order_ids[0]].state is OrderState.RECONCILED
+    assert adapter.fills[0].venue_fill_id in runtime.account_ledger.applied_fill_ids
+    before = runtime.account.snapshot()
+    runtime._settle_paper_venue_fills(current_order_ids=frozenset(result.order_ids))
+    assert runtime.account.snapshot() == before
+    assert len(runtime.orders.fills) == 1
 
 
 def test_interrupted_cycle_is_not_replayed_and_following_cutoff_can_run(tmp_path):

@@ -377,6 +377,10 @@ class BinanceSpotTestnetTransport(NativeTransport):
         except KeyError as exc:
             raise VenueTransportError("Binance symbol is not admitted from provider truth") from exc
 
+    def verified_symbol_spec(self, symbol: str) -> BinanceSpotSymbolSpec:
+        """Return the exchange-verified mapping for one admitted symbol."""
+        return self._verified_symbol(symbol)
+
     def account_state(self) -> Mapping[str, object]:
         payload = self._request("GET", "/api/v3/account", authenticated=True)
         if not isinstance(payload, Mapping):
@@ -397,7 +401,12 @@ class BinanceSpotTestnetTransport(NativeTransport):
     def list_positions(self) -> tuple[Mapping[str, object], ...]:
         payload = self.account_state()
         balances = self._balances(payload)
-        by_asset = {str(item.get("asset", "")).strip().upper(): item for item in balances}
+        by_asset: dict[str, Mapping[str, object]] = {}
+        for item in balances:
+            asset = str(item.get("asset", "")).strip().upper()
+            if not asset or asset in by_asset:
+                raise VenueTransportError("Binance account contains a missing or duplicate asset")
+            by_asset[asset] = item
         positions: list[Mapping[str, object]] = []
         for spec in self._verified_symbols.values():
             record = by_asset.get(spec.base_asset)
@@ -419,7 +428,12 @@ class BinanceSpotTestnetTransport(NativeTransport):
     def fetch_account_snapshot(self) -> VenueAccountSnapshot:
         payload = self.account_state()
         balances = self._balances(payload)
-        by_asset = {str(item.get("asset", "")).strip().upper(): item for item in balances}
+        by_asset: dict[str, Mapping[str, object]] = {}
+        for item in balances:
+            asset = str(item.get("asset", "")).strip().upper()
+            if not asset or asset in by_asset:
+                raise VenueTransportError("Binance account contains a missing or duplicate asset")
+            by_asset[asset] = item
         verified = tuple(self._verified_symbols.values())
         if not verified:
             raise VenueTransportError("Binance account snapshot requires verified symbols")
@@ -439,6 +453,15 @@ class BinanceSpotTestnetTransport(NativeTransport):
             quantity = _total_balance(record, spec.base_asset)
             if quantity:
                 positions[self.canonical_instrument_id(spec.symbol)] = quantity
+        accounted_assets = quote_assets | {spec.base_asset for spec in verified}
+        for asset, record in by_asset.items():
+            if asset in accounted_assets:
+                continue
+            quantity = _total_balance(record, asset)
+            if quantity:
+                # Preserve nonzero out-of-profile balances so an owner adapter
+                # can reject them instead of silently understating account state.
+                positions[f"asset:{asset}"] = quantity
         as_of = self._last_server_time
         if as_of is None:
             self.server_time()

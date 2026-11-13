@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from advisorai.api.service import DecisionPipelineResult
 from advisorai.contracts import (
     ExecutionPlan,
+    Fill,
     Order,
     OrderState,
     RiskOutcome,
@@ -341,7 +342,7 @@ class PaperRuntime:
                         order_ids=pending,
                     )
                 routed.append(created.artifact_id)
-            fills = self._settle_simulated_paper_fills()
+            fills = self._settle_paper_venue_fills(current_order_ids=frozenset(routed))
             for order_id, order in tuple(self.orders.orders.items()):
                 if order.state in {
                     OrderState.FILLED,
@@ -408,20 +409,48 @@ class PaperRuntime:
             self.risk_kernel.kill_switch.trip("paper_reconciliation_mismatch")
         return result
 
-    def _settle_simulated_paper_fills(self):
-        execute_pending = getattr(self.orders.adapter, "execute_pending", None)
-        if not callable(execute_pending):
-            return ()
-        if self.account_ledger is None:
-            raise RuntimeError("simulated paper fills require a durable AccountLedger")
-        fills = execute_pending(at=datetime.now(UTC))
-        for fill in fills:
+    def _settle_paper_venue_fills(self, *, current_order_ids: frozenset[UUID] = frozenset()):
+        """Apply current adapter fills, including fills already present at the venue.
+
+        Simulated venues may create fills synchronously through ``execute_pending``.
+        Testnet adapters instead expose the provider's current fill projection.
+        Both paths converge on the same idempotent OMS and account ledgers.
+        """
+        adapter = self.orders.adapter
+        execute_pending = getattr(adapter, "execute_pending", None)
+        created = execute_pending(at=datetime.now(UTC)) if callable(execute_pending) else ()
+        current = getattr(adapter, "fills", ())
+        if callable(current):
+            current = current()
+        observed = {}
+        for fill in (*tuple(created or ()), *tuple(current or ())):
+            if not isinstance(fill, Fill):
+                raise RuntimeError("paper venue fill projection contains a non-Fill record")
+            prior = observed.get(fill.venue_fill_id)
+            if prior is not None and prior.model_dump(
+                mode="json", exclude={"artifact_id", "created_at"}
+            ) != fill.model_dump(mode="json", exclude={"artifact_id", "created_at"}):
+                raise RuntimeError("paper venue reused a fill identity with changed contents")
+            observed[fill.venue_fill_id] = fill
+        if observed and self.account_ledger is None:
+            raise RuntimeError("paper venue fills require a durable AccountLedger")
+        current_order_fills = []
+        for fill in observed.values():
             order = self.orders.orders.get(fill.order_id)
             if order is None:
-                raise RuntimeError("simulated venue fill references an unknown local order")
-            self.orders.record_fill(fill, order.side)
+                raise RuntimeError("paper venue fill references an unknown local order")
+            prior_fill = self.orders.fills.get(fill.venue_fill_id)
+            if prior_fill is None:
+                self.orders.record_fill(fill, order.side)
+            elif prior_fill.model_dump(
+                mode="json", exclude={"artifact_id", "created_at"}
+            ) != fill.model_dump(mode="json", exclude={"artifact_id", "created_at"}):
+                raise RuntimeError("paper venue fill differs from the durable OMS fill")
+            assert self.account_ledger is not None
             self.account_ledger.apply_fill(fill, order.side, order.instrument.canonical_id)
-        return fills
+            if order.artifact_id in current_order_ids:
+                current_order_fills.append(prior_fill or self.orders.fills[fill.venue_fill_id])
+        return tuple(current_order_fills)
 
     def run_forever(
         self,
