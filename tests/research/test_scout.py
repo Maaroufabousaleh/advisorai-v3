@@ -1394,6 +1394,107 @@ def test_scout_rejects_oversized_metadata_response(tmp_path):
     assert scout.registry.count("paper") == 0
 
 
+def _github_release_metadata(tag="v2.2.0", release_id=118934220) -> bytes:
+    return json.dumps(
+        {
+            "id": release_id,
+            "tag_name": tag,
+            "name": "Pandas 2.2.0",
+            "draft": False,
+            "prerelease": False,
+            "author": {"login": "pandas-dev"},
+            "published_at": "2024-04-19T12:00:00Z",
+            "html_url": f"https://github.com/pandas-dev/pandas/releases/tag/{tag}",
+            "zipball_url": f"https://api.github.com/repos/pandas-dev/pandas/zipball/{tag}",
+        }
+    ).encode()
+
+
+_BSD3_LICENSE_TEXT = """BSD 3-Clause License
+
+Copyright (c) 2024, Test Project. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice,
+   this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT DAMAGES.
+"""
+
+
+def _github_source_archive() -> bytes:
+    import io as _io
+    import zipfile as _zipfile
+
+    buffer = _io.BytesIO()
+    with _zipfile.ZipFile(buffer, "w", _zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("pandas-v2.2.0/LICENSE", _BSD3_LICENSE_TEXT)
+        archive.writestr("pandas-v2.2.0/README.md", "pandas\n")
+    return buffer.getvalue()
+
+
+def test_github_content_use_verifies_exact_tag_archive_and_root_license(tmp_path):
+    archive_body = _github_source_archive()
+    scout, _coordinator, _calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.GITHUB_RELEASE_API,
+        host="api.github.com",
+        response_body=_github_release_metadata(),
+        github_release_archive_body=archive_body,
+    )
+
+    result = scout.execute(
+        _paper(
+            "https://github.com/pandas-dev/pandas/releases/tag/v2.2.0",
+            use=ResearchSourceUse.CONTENT_USE,
+        )
+    )
+
+    assert result.job.state is JobState.COMPLETED
+    assert result.paper is not None
+    assert result.paper.source_version_reference == (
+        "https://github.com/pandas-dev/pandas/releases/tag/v2.2.0"
+    )
+    assert result.paper.source_document_reference == (
+        "https://codeload.github.com/pandas-dev/pandas/zip/refs/tags/v2.2.0"
+    )
+    assert result.paper.source_document_sha256 == hashlib.sha256(archive_body).hexdigest()
+    assert result.paper.source_license_evidence_reference == (
+        "https://github.com/pandas-dev/pandas/blob/v2.2.0/LICENSE"
+    )
+
+
+def test_github_content_use_refuses_mismatched_release_tag(tmp_path):
+    scout, _coordinator, _calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.GITHUB_RELEASE_API,
+        host="api.github.com",
+        response_body=_github_release_metadata(tag="v2.2.1"),
+        github_release_archive_body=_github_source_archive(),
+    )
+
+    result = scout.execute(
+        _paper(
+            "https://github.com/pandas-dev/pandas/releases/tag/v2.2.0",
+            use=ResearchSourceUse.CONTENT_USE,
+        )
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert scout.registry.count("paper") == 0
+
+
 def test_scout_defers_provider_wait_that_exceeds_job_budget(tmp_path):
     body = json.dumps(
         {"name": "Pandas 2.2.0", "tag_name": "v2.2.0", "author": {"login": "pandas-dev"}}
