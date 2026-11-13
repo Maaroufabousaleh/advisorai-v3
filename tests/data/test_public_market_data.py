@@ -19,6 +19,7 @@ def test_reviewed_public_cards_are_credential_free_and_read_only():
     assert [source.source_id for source in sources] == [
         "binance_spot_public_market_data",
         "coinbase_exchange_public_market_data",
+        "kraken_spot_public_market_data",
         "deribit_public_context",
     ]
     assert all(source.credentials_required is False for source in sources)

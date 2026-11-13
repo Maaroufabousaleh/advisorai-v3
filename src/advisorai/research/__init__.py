@@ -7,6 +7,8 @@ from .cards import (
     HypothesisCard,
     PaperCard,
     PromotionDecision,
+    ResearchLicenseEvidenceSource,
+    ResearchMetadataProvider,
     ResearchSourceFamily,
     ResearchSourceUse,
     ValidationReport,
@@ -34,6 +36,7 @@ from .factors import (
 from .jobs import JobState, ResearchCoordinator, ResearchJob, ResearchRole
 from .registry import ResearchRegistry
 from .retrieval import ResearchRetrieval, RetrievalHit, librarian_search
+from .scout import ResearchMetadataScout, ResearchScoutRun
 from .source_policy import ResearchSourceAssessment, ResearchSourcePolicy
 from .strategy import StrategyValidation, validate_strategy
 from .validity import (
@@ -69,9 +72,13 @@ __all__ = [
     "ResearchJob",
     "ResearchRegistry",
     "ResearchSourceAssessment",
+    "ResearchLicenseEvidenceSource",
+    "ResearchMetadataProvider",
+    "ResearchMetadataScout",
     "ResearchSourceFamily",
     "ResearchSourcePolicy",
     "ResearchSourceUse",
+    "ResearchScoutRun",
     "ResearchRetrieval",
     "RetrievalHit",
     "librarian_search",

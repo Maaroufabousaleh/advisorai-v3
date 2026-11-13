@@ -420,6 +420,41 @@ class DeribitCollector(NativeVenueCollector):
         )
 
 
+class KrakenSpotCollector(NativeVenueCollector):
+    """Kraken public spot context normalized to the PIT source contract.
+
+    Kraken nests ticker data under ``{"error": [...], "result": {PAIR: {...}}}``.
+    Error entries fail closed; each pair becomes one record carrying its pair
+    name so downstream identity mapping stays explicit.
+    """
+
+    def parse(
+        self,
+        body: bytes,
+        *,
+        instrument: InstrumentIdentity,
+        available_at: datetime,
+    ) -> tuple[PointInTimeObservation, ...]:
+        payload = json.loads(body)
+        if not isinstance(payload, Mapping):
+            raise ValueError("kraken spot payload must be an object")
+        errors = payload.get("error", [])
+        if errors:
+            raise RuntimeError(f"kraken spot returned errors: {errors!r}"[:200])
+        result = payload.get("result")
+        if not isinstance(result, Mapping) or not result:
+            raise ValueError("kraken spot payload must contain a non-empty result object")
+        records = [
+            {"kraken_pair": pair, **(record if isinstance(record, Mapping) else {})}
+            for pair, record in result.items()
+        ]
+        return super().parse(
+            json.dumps(records, sort_keys=True, separators=(",", ":")).encode(),
+            instrument=instrument,
+            available_at=available_at,
+        )
+
+
 class CcxtCollector(NativeVenueCollector):
     """CCXT backfill/cross-venue normalizer; native venue remains execution truth."""
 

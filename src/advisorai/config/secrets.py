@@ -11,7 +11,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -133,6 +133,8 @@ KNOWN_ENV_NAMES = frozenset(
         "TOGETHER_API_KEY",
         "TREASURY_API_KEY",
         "WANDB_API_KEY",
+        "EIA_API_KEY",
+        "OPENALEX_MAILTO",
     }
 )
 
@@ -170,6 +172,9 @@ class CredentialScope(StrEnum):
     LITELLM = "litellm"
     OMNIROUTE = "omniroute"
     PUBLIC_DATA = "public_data"
+    EIA_PUBLIC_DATA = "eia_public_data"
+    BLS_PUBLIC_DATA = "bls_public_data"
+    BEA_PUBLIC_DATA = "bea_public_data"
     MODEL_REGISTRY = "model_registry"
     PAPER_VENUE = "paper_venue"
     PAPER_VENUE_CCXT = "paper_venue_ccxt"
@@ -249,18 +254,16 @@ CREDENTIAL_SCOPES: Mapping[CredentialScope, frozenset[str]] = MappingProxyType(
         CredentialScope.PUBLIC_DATA: frozenset(
             {
                 "SEC_USER_AGENT",
-                "FRED_API_KEY",
-                "ALFRED_API_KEY",
-                "BLS_API_KEY",
-                "BEA_API_KEY",
-                "TREASURY_API_KEY",
-                "CENTRAL_BANK_API_KEY",
-                "DATA_VENDOR_API_KEY",
-                "DATA_VENDOR_API_SECRET",
-                "LSE_API_KEY",
-                "LSE_API_SECRET",
+                "OPENALEX_MAILTO",
             }
         ),
+        # One provider key per scope: a runtime resolving EIA_PUBLIC_DATA
+        # cannot read BLS/BEA keys and vice versa. FRED/ALFRED remain known
+        # environment names but resolve in no scope (disabled pending
+        # written authorization).
+        CredentialScope.EIA_PUBLIC_DATA: frozenset({"EIA_API_KEY"}),
+        CredentialScope.BLS_PUBLIC_DATA: frozenset({"BLS_API_KEY"}),
+        CredentialScope.BEA_PUBLIC_DATA: frozenset({"BEA_API_KEY"}),
         CredentialScope.MODEL_REGISTRY: frozenset(
             {
                 "HF_TOKEN",
@@ -531,6 +534,81 @@ class CredentialResolver:
             if self.available_names(scope)
         }
         return f"CredentialResolver(populated_names={scopes!r})"
+
+
+class InfisicalCredentialResolver:
+    """Fetch only explicitly requested, allowlisted secrets from Infisical.
+
+    ``secret_reader`` must be supplied by a separately isolated trusted runtime.
+    The resolver never authenticates, caches, enumerates, or exposes the secret
+    store. The reader signature is ``(name, project_id, environment, path)``.
+    """
+
+    __slots__ = ("_reader", "_project_id", "_environment", "_path")
+
+    _PROVIDER_NAMES: Mapping[CredentialScope, str] = MappingProxyType(
+        {
+            CredentialScope.EIA_PUBLIC_DATA: "EIA_API_KEY",
+            CredentialScope.BLS_PUBLIC_DATA: "BLS_API_KEY",
+            CredentialScope.BEA_PUBLIC_DATA: "BEA_API_KEY",
+        }
+    )
+
+    def __init__(
+        self,
+        secret_reader: Callable[[str, str, str, str], str | None],
+        *,
+        project_id: str,
+        environment: str,
+        secret_path: str = "/",
+    ) -> None:
+        if (
+            not callable(secret_reader)
+            or not project_id
+            or environment not in {"dev", "paper-testnet"}
+        ):
+            raise CredentialScopeError("Infisical configuration is invalid or unavailable")
+        if not secret_path.startswith("/") or ".." in secret_path.split("/"):
+            raise CredentialScopeError("Infisical secret path is invalid")
+        self._reader = secret_reader
+        self._project_id = project_id
+        self._environment = environment
+        self._path = secret_path
+
+    def available_names(self, scope: CredentialScope | str | None) -> tuple[str, ...]:
+        """Return the single mapped name without fetching its value."""
+
+        selected_scope = CredentialResolver._scope(scope)
+        name = self._PROVIDER_NAMES.get(selected_scope)
+        if name is None:
+            raise CredentialScopeError("scope has no Infisical provider mapping")
+        return (name,)
+
+    def get(self, scope: CredentialScope | str | None, name: str) -> str | None:
+        selected_scope = CredentialResolver._scope(scope)
+        expected = self._PROVIDER_NAMES.get(selected_scope)
+        if expected is None or name != expected:
+            raise CredentialScopeError("secret is outside the requested provider scope")
+        try:
+            value = self._reader(name, self._project_id, self._environment, self._path)
+        except Exception:
+            raise CredentialScopeError("Infisical secret retrieval failed") from None
+        if value is None or not isinstance(value, str) or not value.strip():
+            return None
+        return value
+
+    def resolve(self, scope: CredentialScope | str | None) -> dict[str, str]:
+        selected_scope = CredentialResolver._scope(scope)
+        name = self._PROVIDER_NAMES.get(selected_scope)
+        if name is None:
+            raise CredentialScopeError("scope has no Infisical provider mapping")
+        value = self.get(selected_scope, name)
+        return {name: value} if value else {}
+
+    def __repr__(self) -> str:
+        return (
+            f"InfisicalCredentialResolver(environment={self._environment!r}, path={self._path!r})"
+        )
 
 
 def _unquote(value: str, *, line_number: int) -> str:
