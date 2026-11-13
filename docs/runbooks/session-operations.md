@@ -65,6 +65,49 @@ ADVISORAI_STATE_DIR=var/advisorai uv run python -m advisorai.app stop --outcome 
 Ctrl-C or SIGTERM to the owner process also requests graceful shutdown. The
 dashboard launcher is separate; stopping it does not stop the owner process.
 
+## 3b. Back up, restore, and roll back owner state
+
+After the owner has stopped, create a consistent copy of the ledger and
+scorecard databases. The command takes the same durable owner lock and refuses
+to run while a session is active:
+
+```bash
+ADVISORAI_STATE_DIR=var/advisorai uv run python -m advisorai.app backup
+```
+
+The backup directory contains only the two SQLite databases and a manifest
+with their SHA-256 digests, typed row counts, backup time, and session
+code/configuration identity. Files are private to the current OS user. Keep the
+backup directory intact; restore and rollback commands never overwrite it.
+
+Restore a verified backup into a new state directory, then start AdvisorAI
+against that directory. The restore command validates hashes, SQLite
+integrity, ledger events, outcomes, and scorecards before publishing the
+directory. The first start still performs normal current-state recovery,
+including permitted venue/account/order and current PIT checks:
+
+```bash
+uv run python -m advisorai.app restore \
+  --source var/advisorai/backups/<backup-id> \
+  --destination var/advisorai-restored
+ADVISORAI_STATE_DIR=var/advisorai-restored uv run python -m advisorai.app start
+```
+
+If `ADVISORAI_LEDGER_PATH` points outside the state directory, set it to the
+restored `ledgers.sqlite3` path as well. Roll back by restoring a selected prior
+backup into another new state directory; the current and source roots remain
+available for comparison or a later rollback:
+
+```bash
+uv run python -m advisorai.app rollback \
+  --source var/advisorai/backups/<backup-id> \
+  --destination var/advisorai-rollback
+```
+
+Restore requires a destination that does not already exist. It never replaces
+an existing state tree, and it does not relax the normal recovery or admission
+checks.
+
 ## 4. Recover / restart
 
 On start the supervisor:

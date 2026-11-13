@@ -5,6 +5,9 @@ Usage::
     python -m advisorai.app start --reason "owner session"
     python -m advisorai.app status
     python -m advisorai.app stop --outcome clean
+    python -m advisorai.app backup
+    python -m advisorai.app restore --source <backup> --destination <new-state-dir>
+    python -m advisorai.app rollback --source <prior-backup> --destination <new-state-dir>
 
 The start command holds the durable single-owner lock while a bounded paper
 scheduler runs. ``stop`` requests graceful shutdown through a private local
@@ -27,6 +30,7 @@ from uuid import UUID
 import psutil
 
 from advisorai.ledger import LedgerNamespace, SqliteLedgers
+from advisorai.session.backups import OwnerStateBackupStore
 from advisorai.session.records import SessionOutcome
 from advisorai.session.supervisor import SessionSupervisor
 
@@ -276,6 +280,64 @@ def cmd_status(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_backup(_args: argparse.Namespace) -> int:
+    """Create a verified owner database backup while holding the app lock."""
+    state_dir = _state_dir()
+    ledger_path = _ledger_path(state_dir)
+    scorecards_path = ledger_path.with_name("scorecards.sqlite3")
+    if not ledger_path.is_file() or not scorecards_path.is_file():
+        print("BACKUP REFUSED: both owner databases must already exist", flush=True)
+        return 2
+    ledgers = SqliteLedgers(ledger_path)
+    code_hash, config_hash = _repo_identity()
+    supervisor = SessionSupervisor(
+        ledgers,
+        state_dir=state_dir,
+        lock_identity="owner-state-backup",
+        code_hash=code_hash,
+        config_hash=config_hash,
+    )
+    try:
+        supervisor._acquire_lock()
+    except RuntimeError as exc:
+        print(f"BACKUP REFUSED: {exc}", flush=True)
+        return 2
+    try:
+        history = supervisor._session_history()
+        latest_end = history["latest_end"]
+        session_id = latest_end.session_id if latest_end is not None else None
+        session_start = history["starts"].get(session_id) if session_id is not None else None
+        backup = OwnerStateBackupStore(state_dir / "backups").create(
+            ledgers_path=ledger_path,
+            scorecards_path=scorecards_path,
+            code_hash=session_start.code_hash if session_start is not None else code_hash,
+            config_hash=session_start.config_hash if session_start is not None else config_hash,
+            session_id=session_id,
+        )
+        print(f"backup_id={backup.manifest.backup_id}", flush=True)
+        print(f"backup_path={backup.path}", flush=True)
+        print("backup_verified=true", flush=True)
+        return 0
+    except Exception as exc:
+        print(f"BACKUP FAILED: {type(exc).__name__}", flush=True)
+        return 2
+    finally:
+        supervisor._release_lock()
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    """Restore verified databases into a new isolated state directory."""
+    try:
+        receipt = OwnerStateBackupStore.restore(Path(args.source), Path(args.destination))
+    except Exception as exc:
+        print(f"RESTORE REFUSED: {type(exc).__name__}", flush=True)
+        return 2
+    print(f"backup_id={receipt.backup_id}", flush=True)
+    print(f"state_dir={Path(args.destination).expanduser().resolve()}", flush=True)
+    print("restore_verified=true", flush=True)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="advisorai.app", description=__doc__)
     parser.add_argument("--lock-identity", default="owner-workstation")
@@ -302,6 +364,20 @@ def main(argv: list[str] | None = None) -> int:
     p_stop.set_defaults(func=cmd_stop)
     p_status = sub.add_parser("status", help="show durable session and owner-process state")
     p_status.set_defaults(func=cmd_status)
+    p_backup = sub.add_parser("backup", help="verify and back up stopped owner databases")
+    p_backup.set_defaults(func=cmd_backup)
+    p_restore = sub.add_parser(
+        "restore", help="restore a verified backup into a new isolated state directory"
+    )
+    p_restore.add_argument("--source", required=True, help="backup directory created by backup")
+    p_restore.add_argument("--destination", required=True, help="new state directory to create")
+    p_restore.set_defaults(func=cmd_restore)
+    p_rollback = sub.add_parser(
+        "rollback", help="restore a prior backup to a new state root, preserving current state"
+    )
+    p_rollback.add_argument("--source", required=True, help="prior verified backup directory")
+    p_rollback.add_argument("--destination", required=True, help="new rollback state directory")
+    p_rollback.set_defaults(func=cmd_restore)
     args = parser.parse_args(argv)
     if args.command == "stop" and not 0.1 <= args.timeout_seconds <= 600:
         parser.error("--timeout-seconds must be between 0.1 and 600")

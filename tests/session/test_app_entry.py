@@ -162,6 +162,18 @@ def test_subprocess_start_paper_fill_outcome_stop_and_restart(tmp_path):
         assert "SESSION START REFUSED" in second.stdout
         assert first.poll() is None
 
+        concurrent_backup = subprocess.run(
+            [sys.executable, "-m", "advisorai.app", "--lock-identity", "black-box-owner", "backup"],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        assert concurrent_backup.returncode == 2
+        assert "BACKUP REFUSED" in concurrent_backup.stdout
+
         def complete_paper_chain() -> bool:
             orders = ledgers.events(LedgerNamespace.ORDER)
             venue = ledgers.events(LedgerNamespace.VENUE)
@@ -200,19 +212,103 @@ def test_subprocess_start_paper_fill_outcome_stop_and_restart(tmp_path):
         ]
         assert first_end
 
-        restarted = _start(environment)
+        backup_result = subprocess.run(
+            [sys.executable, "-m", "advisorai.app", "--lock-identity", "black-box-owner", "backup"],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert backup_result.returncode == 0, backup_result.stdout + backup_result.stderr
+        assert "backup_verified=true" in backup_result.stdout
+        backup_path = next(
+            Path(line.split("=", 1)[1])
+            for line in backup_result.stdout.splitlines()
+            if line.startswith("backup_path=")
+        )
+
+        restored_state = tmp_path / "restored-application-state"
+        restore_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "black-box-owner",
+                "restore",
+                "--source",
+                str(backup_path),
+                "--destination",
+                str(restored_state),
+            ],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert restore_result.returncode == 0, restore_result.stdout + restore_result.stderr
+        assert "restore_verified=true" in restore_result.stdout
+        restored_environment = environment.copy()
+        restored_environment["ADVISORAI_STATE_DIR"] = str(restored_state)
+        restored_environment["ADVISORAI_LEDGER_PATH"] = str(restored_state / "ledgers.sqlite3")
+        restored_ledgers = SqliteLedgers(Path(restored_environment["ADVISORAI_LEDGER_PATH"]))
+        assert any(
+            event.event_type == "paper_fill_recorded"
+            for event in restored_ledgers.events(LedgerNamespace.VENUE)
+        )
+
+        restarted = _start(restored_environment)
         try:
             restart_output = _read_until(restarted, "SESSION READY")
             assert "classification=clean_start" in restart_output
             assert "recovery_mode=normal" in restart_output
             assert restarted.poll() is None
-            stop_again = _stop(environment)
+            stop_again = _stop(restored_environment)
             assert stop_again.returncode == 0, stop_again.stdout + stop_again.stderr
             assert restarted.wait(timeout=10) == 0
         finally:
             if restarted.poll() is None:
                 restarted.terminate()
                 restarted.wait(timeout=5)
+
+        rollback_state = tmp_path / "rollback-application-state"
+        rollback_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "black-box-owner",
+                "rollback",
+                "--source",
+                str(backup_path),
+                "--destination",
+                str(rollback_state),
+            ],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert rollback_result.returncode == 0, rollback_result.stdout + rollback_result.stderr
+        assert (rollback_state / "restore-receipt.json").is_file()
+        assert (
+            len(
+                [
+                    event
+                    for event in restored_ledgers.events(LedgerNamespace.MISSION)
+                    if event.event_type == "session_started"
+                ]
+            )
+            >= 2
+        )
+        assert backup_path.is_dir()
 
         # A process crash after completed paper activity must be classified as
         # crash recovery, reconcile the durable venue/account state, and allow
