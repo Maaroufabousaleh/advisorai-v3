@@ -43,7 +43,7 @@ it does not qualify a model, source, venue, sandbox, or trading scope.
 | Data gaps | An unresolved or uncovered gap fails recovery; a resolved gap passes only when exact source/instrument coverage is confirmed by a current permitted-source verifier | `tests/session/test_lifecycle.py` |
 | Research jobs | Parallel workers stay within the one/two-worker cap; cancellation, deadline accounting, restart state, and repeated checkpoint identity are durable and tested | `tests/research/test_registry_dsl_jobs.py` |
 | Owner-state backup and restore | A stopped session can create a consistent, hash-verified backup of both owner databases; restore occurs into an empty isolated destination and is typed/SQLite-verified before normal recovery; older backup rollback leaves current and source roots untouched | `tests/session/test_app_entry.py` and `tests/session/test_state_backup.py` |
-| Research source intake | Paper and literature intake accepts only HTTPS URLs on reviewed, exact source/path rules; caller-only license claims cannot authorize content use; arXiv/OpenAlex content use requires a first-party exact-version license page and hash of the exact document; citation-only metadata remains distinct | `ResearchSourcePolicy` stamps the derived source/use decision; `ResearchMetadataScout` records evidence for arXiv/OpenAlex/Crossref/GitHub/SEC/FRED and refuses unsupported content-use families; OpenAlex content use requires a configured host allowlist and exact DOI, best OA location, landing-page PDF, and version match | `tests/research/test_source_policy.py` and `tests/research/test_scout.py` cover source allowlists, exact arXiv/OpenAlex version matching, SEC accession/document checks, FRED series identity, first-party license refusal, document hashing, and no body persistence |
+| Research source intake | Paper and literature intake accepts only HTTPS URLs on reviewed, exact source/path rules; caller-only license claims cannot authorize content use; arXiv/OpenAlex/Crossref content use requires a first-party exact-version license page and hash of the exact document; citation-only metadata remains distinct | `ResearchSourcePolicy` stamps the derived source/use decision; `ResearchMetadataScout` records evidence for arXiv/OpenAlex/Crossref/GitHub/SEC/FRED and refuses unsupported content-use families; OpenAlex requires a matching best OA location, while Crossref requires one unambiguous `vor` or `am` DOI license/PDF record, an allowlisted publisher page, and a matching PDF | `tests/research/test_source_policy.py` and `tests/research/test_scout.py` cover source allowlists, exact version matching for arXiv/OpenAlex/Crossref, SEC accession/document checks, FRED series identity, first-party license refusal, document hashing, and no body persistence |
 | Phase restrictions | Default app path is paper-only and local; no live endpoint, broker credential, or live-capital action is added. Phase 10 remains closed | `tests/session/test_app_entry.py`, `tests/live`, and capability authority tests |
 
 ## Next implementation work
@@ -64,12 +64,15 @@ arXiv content-use job checks the exact-version page and transiently reads the
 PDF to hash it, then discards the bytes. An OpenAlex content-use job requires a
 reviewed exact-host allowlist, the exact work's best OA location, a matching
 DOI, a source-page license claim and selected PDF link, then hashes and discards
-that PDF. Cards record provider version references, labels, identity hashes,
-upstream license-claim classes, and, for arXiv/OpenAlex content use, first-party
-page and document hashes. The identity hashes do not cover document bytes, and
-upstream OpenAlex/Crossref claims are not authoritative rights determinations.
-First-party verifiers and document hashes for Crossref/GitHub remain software
-work. SEC/FRED adapters are
+that PDF. A Crossref content-use job requires exactly one compatible `vor` or
+`am` license/PDF pair in its DOI deposit, then checks an allowlisted publisher
+page for the same DOI, PDF URL, and license before hashing and discarding that
+PDF. Cards record provider version references, labels, identity hashes,
+upstream license-claim classes, and, for arXiv/OpenAlex/Crossref content use,
+first-party page and document hashes. The identity hashes do not cover document
+bytes, and upstream OpenAlex/Crossref claims are not authoritative rights
+determinations. GitHub first-party verification and document hashes remain
+software work. SEC/FRED adapters are
 citation-only: SEC checks the accession and primary document against its
 submissions API; FRED records a single series metadata response using an
 explicitly provided API key that stays out of durable state. Model

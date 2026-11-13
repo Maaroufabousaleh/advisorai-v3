@@ -63,6 +63,7 @@ class ResearchLicenseEvidenceSource(StrEnum):
     OPENALEX_AGGREGATED_METADATA = "openalex_aggregated_metadata"
     OPENALEX_FIRST_PARTY_VERSION_PAGE = "openalex_first_party_version_page"
     CROSSREF_DEPOSIT_METADATA = "crossref_deposit_metadata"
+    CROSSREF_FIRST_PARTY_VERSION_PAGE = "crossref_first_party_version_page"
 
 
 class PaperCard(ArtifactModel):

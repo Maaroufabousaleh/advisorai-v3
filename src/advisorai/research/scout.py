@@ -36,6 +36,7 @@ _ATOM_NAMESPACE = "http://www.w3.org/2005/Atom"
 _ARXIV_NAMESPACE = "http://arxiv.org/schemas/atom"
 _ARXIV_VERSION_SUFFIX = re.compile(r"v[1-9]\d*$")
 _OPENALEX_VERSIONS = frozenset({"publishedVersion", "acceptedVersion", "submittedVersion"})
+_CROSSREF_CONTENT_VERSIONS = frozenset({"vor", "am"})
 _DOI_PATH = re.compile(r"^/10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+$")
 _SEC_SOURCE_PATH = re.compile(
     r"^/Archives/edgar/data/(?P<cik>\d{1,10})/(?P<accession>\d{18})/"
@@ -97,6 +98,18 @@ class _VerifiedOpenAlexSource:
     document_observed_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class _VerifiedCrossrefSource:
+    license_claim: str
+    license_evidence_sha256: str
+    license_evidence_reference: str
+    license_evidence_observed_at: datetime
+    document_reference: str
+    document_sha256: str
+    document_size_bytes: int
+    document_observed_at: datetime
+
+
 class ResearchMetadataScout:
     """Fetch one citation record inside the coordinator's bounded job model.
 
@@ -127,6 +140,7 @@ class ResearchMetadataScout:
         sec_user_agent: str | None = None,
         fred_api_key: str | None = None,
         openalex_source_hosts: tuple[str, ...] = (),
+        crossref_source_hosts: tuple[str, ...] = (),
     ) -> None:
         self.registry = registry
         self.coordinator = coordinator
@@ -145,8 +159,10 @@ class ResearchMetadataScout:
                 "FRED_API_KEY", fred_api_key
             )
         self.openalex_source_hosts = _normalize_openalex_source_hosts(openalex_source_hosts)
+        self.crossref_source_hosts = _normalize_crossref_source_hosts(crossref_source_hosts)
         self.source_clients = self._build_source_clients(
-            openalex_source_hosts=self.openalex_source_hosts
+            openalex_source_hosts=self.openalex_source_hosts,
+            crossref_source_hosts=self.crossref_source_hosts,
         )
         if source_clients:
             self.source_clients.update(source_clients)
@@ -173,7 +189,11 @@ class ResearchMetadataScout:
         if (
             paper.requested_use is ResearchSourceUse.CONTENT_USE
             and source_assessment.family
-            not in {ResearchSourceFamily.ARXIV, ResearchSourceFamily.OPENALEX}
+            not in {
+                ResearchSourceFamily.ARXIV,
+                ResearchSourceFamily.OPENALEX,
+                ResearchSourceFamily.CROSSREF,
+            }
         ):
             raise ValueError(
                 "content use is not enabled without a first-party source-version verifier"
@@ -184,6 +204,12 @@ class ResearchMetadataScout:
             and not self.openalex_source_hosts
         ):
             raise ValueError("OpenAlex content use requires a reviewed source-host allowlist")
+        if (
+            paper.requested_use is ResearchSourceUse.CONTENT_USE
+            and source_assessment.family is ResearchSourceFamily.CROSSREF
+            and not self.crossref_source_hosts
+        ):
+            raise ValueError("Crossref content use requires a reviewed source-host allowlist")
         if (
             paper.requested_use is ResearchSourceUse.CONTENT_USE
             and source_assessment.family is ResearchSourceFamily.ARXIV
@@ -245,7 +271,7 @@ class ResearchMetadataScout:
             )
             if cancelled():
                 return "cancelled_before_registry_write"
-            verified_source: _VerifiedArxivSource | _VerifiedOpenAlexSource | None = None
+            verified_source = None
             if paper.requested_use is ResearchSourceUse.CONTENT_USE:
                 try:
                     if metadata.provider is ResearchMetadataProvider.ARXIV_API:
@@ -257,6 +283,13 @@ class ResearchMetadataScout:
                         )
                     elif metadata.provider is ResearchMetadataProvider.OPENALEX_API:
                         verified_source = self._verify_openalex_source(
+                            paper,
+                            metadata,
+                            cancelled=cancelled,
+                            deadline=deadline,
+                        )
+                    elif metadata.provider is ResearchMetadataProvider.CROSSREF_API:
+                        verified_source = self._verify_crossref_source(
                             paper,
                             metadata,
                             cancelled=cancelled,
@@ -333,7 +366,11 @@ class ResearchMetadataScout:
         if _has_xml_declaration(response.body):
             raise ValueError("metadata Scout refuses XML document/entity declarations")
         try:
-            parsed = self._parse_response(provider, response.body)
+            parsed = self._parse_response(
+                provider,
+                response.body,
+                content_use=paper.requested_use is ResearchSourceUse.CONTENT_USE,
+            )
         except (ET.ParseError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
             raise ValueError("metadata Scout response failed typed parsing") from None
         if provider is ResearchMetadataProvider.FRED_API:
@@ -344,24 +381,35 @@ class ResearchMetadataScout:
         source_document_reference = None
         work_reference = None
         openalex_best_location = False
-        if provider is ResearchMetadataProvider.OPENALEX_API:
+        if provider in {
+            ResearchMetadataProvider.OPENALEX_API,
+            ResearchMetadataProvider.CROSSREF_API,
+        }:
             doi = _canonical_doi(parsed.get("doi"))
             raw_document_reference = _optional_text(
                 parsed.get("source_document_reference"), maximum=2048
             )
             if raw_document_reference is not None:
                 source_document_reference = _safe_https_reference(raw_document_reference)
-            raw_work_reference = _optional_text(parsed.get("work_reference"), maximum=2048)
-            if raw_work_reference is not None:
-                work_reference = _safe_https_reference(raw_work_reference)
-            openalex_best_location = parsed.get("best_oa_location") is True
+            if provider is ResearchMetadataProvider.OPENALEX_API:
+                raw_work_reference = _optional_text(parsed.get("work_reference"), maximum=2048)
+                if raw_work_reference is not None:
+                    work_reference = _safe_https_reference(raw_work_reference)
+                openalex_best_location = parsed.get("best_oa_location") is True
         title = _required_text(parsed.get("title"), "title", maximum=2048)
         authors = _authors(parsed.get("authors"))
         publication_date = _optional_text(parsed.get("publication_date"), maximum=128)
         license_claim = _optional_text(parsed.get("license"), maximum=512) or "unknown"
         version_reference = _optional_text(parsed.get("version_reference"), maximum=2048)
         version_label = _optional_text(parsed.get("version_label"), maximum=128)
-        if provider is ResearchMetadataProvider.OPENALEX_API and version_reference is not None:
+        if (
+            provider
+            in {
+                ResearchMetadataProvider.OPENALEX_API,
+                ResearchMetadataProvider.CROSSREF_API,
+            }
+            and version_reference is not None
+        ):
             version_reference = _safe_https_reference(version_reference)
         if (
             provider is ResearchMetadataProvider.OPENALEX_API
@@ -378,6 +426,22 @@ class ResearchMetadataScout:
             ):
                 raise ValueError(
                     "OpenAlex did not identify the cited work and one versioned OA location"
+                )
+        if (
+            provider is ResearchMetadataProvider.CROSSREF_API
+            and paper.requested_use is ResearchSourceUse.CONTENT_USE
+        ):
+            expected_doi = _canonical_doi(paper.source_url)
+            if (
+                doi is None
+                or doi != expected_doi
+                or source_document_reference is None
+                or version_reference is None
+                or version_label not in _CROSSREF_CONTENT_VERSIONS
+                or license_claim not in {"CC0-1.0", "CC-BY-4.0"}
+            ):
+                raise ValueError(
+                    "Crossref did not identify one licensed full-text version of the cited DOI"
                 )
         if version_reference is None and version_label is not None:
             version_reference = paper.source_url
@@ -508,11 +572,11 @@ class ResearchMetadataScout:
             or not metadata.openalex_best_location
         ):
             raise ValueError("OpenAlex content use requires one identified best OA location")
-        page_host = _openalex_reference_host(
+        page_host = _reviewed_source_reference_host(
             metadata.version_reference,
             allowed_hosts=self.openalex_source_hosts,
         )
-        document_host = _openalex_reference_host(
+        document_host = _reviewed_source_reference_host(
             metadata.source_document_reference,
             allowed_hosts=self.openalex_source_hosts,
         )
@@ -536,7 +600,7 @@ class ResearchMetadataScout:
             "text/html"
         ):
             raise ValueError("OpenAlex source version page returned an unexpected response")
-        license_claim = _openalex_license_claim(
+        license_claim = _first_party_license_claim(
             page.body,
             metadata.version_reference,
             expected_doi=metadata.doi,
@@ -568,6 +632,94 @@ class ResearchMetadataScout:
         ):
             raise ValueError("OpenAlex exact-version document returned an unexpected response")
         return _VerifiedOpenAlexSource(
+            license_claim=license_claim,
+            license_evidence_sha256=hashlib.sha256(page.body).hexdigest(),
+            license_evidence_reference=metadata.version_reference,
+            license_evidence_observed_at=page.fetched_at,
+            document_reference=metadata.source_document_reference,
+            document_sha256=hashlib.sha256(document.body).hexdigest(),
+            document_size_bytes=len(document.body),
+            document_observed_at=document.fetched_at,
+        )
+
+    def _verify_crossref_source(
+        self,
+        paper: PaperCard,
+        metadata: _SourceMetadata,
+        *,
+        cancelled,
+        deadline: float,
+    ) -> _VerifiedCrossrefSource:
+        if (
+            metadata.version_reference is None
+            or metadata.version_label not in _CROSSREF_CONTENT_VERSIONS
+            or metadata.doi is None
+            or metadata.source_document_reference is None
+            or metadata.doi != _canonical_doi(paper.source_url)
+            or metadata.license_claim not in {"CC0-1.0", "CC-BY-4.0"}
+        ):
+            raise ValueError("Crossref content use requires one licensed exact-version PDF")
+        page_host = _reviewed_source_reference_host(
+            metadata.version_reference,
+            allowed_hosts=self.crossref_source_hosts,
+        )
+        document_host = _reviewed_source_reference_host(
+            metadata.source_document_reference,
+            allowed_hosts=self.crossref_source_hosts,
+        )
+        if page_host == "doi.org" or page_host.endswith(".doi.org"):
+            raise ValueError("Crossref landing page must be on a reviewed publisher host")
+        if page_host == "crossref.org" or page_host.endswith(".crossref.org"):
+            raise ValueError("Crossref landing page must be on a reviewed publisher host")
+        page_client = self.source_clients.get(f"crossref_version_page:{page_host}")
+        document_client = self.source_clients.get(f"crossref_document:{document_host}")
+        if page_client is None or document_client is None:
+            raise ValueError("Crossref source host has no reviewed page/document client")
+        if cancelled() or not self._claim_request_slot(
+            ResearchMetadataProvider.CROSSREF_API,
+            cancelled=cancelled,
+            deadline=deadline,
+        ):
+            raise _RateBudgetExpired("Crossref page exceeds the remaining Scout budget")
+        page = page_client.get(
+            metadata.version_reference,
+            headers={"Accept": "text/html"},
+            max_retries=0,
+            timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+        )
+        if page.status_code != 200 or not _header_value(page.headers, "content-type").startswith(
+            "text/html"
+        ):
+            raise ValueError("Crossref source version page returned an unexpected response")
+        license_claim = _first_party_license_claim(
+            page.body,
+            metadata.version_reference,
+            expected_doi=metadata.doi,
+            expected_document_reference=metadata.source_document_reference,
+            allowed_hosts=self.crossref_source_hosts,
+        )
+        if license_claim != metadata.license_claim:
+            raise ValueError("Crossref source page license does not match its selected version")
+        if cancelled() or not self._claim_request_slot(
+            ResearchMetadataProvider.CROSSREF_API,
+            cancelled=cancelled,
+            deadline=deadline,
+        ):
+            raise _RateBudgetExpired("Crossref document hash exceeds the remaining Scout budget")
+        document = document_client.get(
+            metadata.source_document_reference,
+            headers={"Accept": "application/pdf"},
+            max_retries=0,
+            timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+        )
+        if (
+            document.status_code != 200
+            or not _header_value(document.headers, "content-type").startswith("application/pdf")
+            or not document.body.startswith(b"%PDF-")
+            or len(document.body) > _MAX_SOURCE_DOCUMENT_BYTES
+        ):
+            raise ValueError("Crossref exact-version document returned an unexpected response")
+        return _VerifiedCrossrefSource(
             license_claim=license_claim,
             license_evidence_sha256=hashlib.sha256(page.body).hexdigest(),
             license_evidence_reference=metadata.version_reference,
@@ -777,6 +929,8 @@ class ResearchMetadataScout:
     def _parse_response(
         provider: ResearchMetadataProvider,
         body: bytes,
+        *,
+        content_use: bool = False,
     ) -> dict[str, object]:
         if provider is ResearchMetadataProvider.ARXIV_API:
             root = ET.fromstring(body)
@@ -879,13 +1033,17 @@ class ResearchMetadataScout:
                 version_label = (
                     next(iter(resource_versions)) if len(resource_versions) == 1 else None
                 )
-            return {
+            parsed = {
                 "title": _first_string(message.get("title")),
                 "authors": authors,
                 "publication_date": _crossref_publication_date(message),
                 "license": license_value,
                 "version_label": version_label,
+                "doi": message.get("DOI"),
             }
+            if content_use:
+                parsed.update(_crossref_content_location(message))
+            return parsed
         if provider is ResearchMetadataProvider.GITHUB_RELEASE_API:
             author = data.get("author")
             authors = [author["login"]] if isinstance(author, dict) and author.get("login") else []
@@ -922,7 +1080,9 @@ class ResearchMetadataScout:
         paper: PaperCard,
         metadata: _SourceMetadata,
         *,
-        verified_source: _VerifiedArxivSource | _VerifiedOpenAlexSource | None = None,
+        verified_source: (
+            _VerifiedArxivSource | _VerifiedOpenAlexSource | _VerifiedCrossrefSource | None
+        ) = None,
     ) -> PaperCard:
         payload = paper.model_dump(mode="python")
         version_hash = None
@@ -938,7 +1098,11 @@ class ResearchMetadataScout:
                         "document_reference": (
                             metadata.source_document_reference
                             if (
-                                metadata.provider is ResearchMetadataProvider.OPENALEX_API
+                                metadata.provider
+                                in {
+                                    ResearchMetadataProvider.OPENALEX_API,
+                                    ResearchMetadataProvider.CROSSREF_API,
+                                }
                                 and paper.requested_use is ResearchSourceUse.CONTENT_USE
                             )
                             else None
@@ -954,6 +1118,10 @@ class ResearchMetadataScout:
         elif isinstance(verified_source, _VerifiedOpenAlexSource):
             verified_license_source = (
                 ResearchLicenseEvidenceSource.OPENALEX_FIRST_PARTY_VERSION_PAGE
+            )
+        elif isinstance(verified_source, _VerifiedCrossrefSource):
+            verified_license_source = (
+                ResearchLicenseEvidenceSource.CROSSREF_FIRST_PARTY_VERSION_PAGE
             )
         payload.update(
             artifact_id=uuid4(),
@@ -1068,6 +1236,7 @@ class ResearchMetadataScout:
     def _build_source_clients(
         *,
         openalex_source_hosts: tuple[str, ...],
+        crossref_source_hosts: tuple[str, ...],
     ) -> dict[str, SafeHttpClient]:
         clients = {
             "arxiv_version_page": SafeHttpClient(
@@ -1112,6 +1281,27 @@ class ResearchMetadataScout:
                     user_agent="advisorai-v3/research-metadata-scout",
                 )
             )
+        for host in crossref_source_hosts:
+            clients[f"crossref_version_page:{host}"] = SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=(host,),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_METADATA_RESPONSE_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                )
+            )
+            clients[f"crossref_document:{host}"] = SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=(host,),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_SOURCE_DOCUMENT_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                )
+            )
         return clients
 
 
@@ -1143,7 +1333,7 @@ class _ArxivLicensePageParser(HTMLParser):
             self._active_text = []
 
 
-class _OpenAlexVersionPageParser(HTMLParser):
+class _DoiVersionPageParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.doi_claims: list[str] = []
@@ -1218,7 +1408,7 @@ def _arxiv_license_claim(body: bytes, version_reference: str) -> str:
     return claims[0]
 
 
-def _openalex_license_claim(
+def _first_party_license_claim(
     body: bytes,
     version_reference: str,
     *,
@@ -1227,20 +1417,22 @@ def _openalex_license_claim(
     allowed_hosts: tuple[str, ...],
 ) -> str:
     try:
-        parser = _OpenAlexVersionPageParser()
+        parser = _DoiVersionPageParser()
         parser.feed(body.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
-        raise ValueError("OpenAlex version page failed typed parsing") from None
+        raise ValueError("first-party source version page failed typed parsing") from None
     observed_dois = {_canonical_doi(value) for value in parser.doi_claims}
     canonical_expected_doi = _canonical_doi(expected_doi)
     if canonical_expected_doi is None or observed_dois != {canonical_expected_doi}:
-        raise ValueError("OpenAlex version page does not identify the metadata DOI")
+        raise ValueError("first-party source version page does not identify the metadata DOI")
     claims = [
         _recognized_cc_license(urljoin(version_reference, href)) for href in parser.license_links
     ]
     if not claims or any(claim is None for claim in claims) or len(set(claims)) != 1:
-        raise ValueError("OpenAlex version page does not establish one allowlisted license")
-    canonical_expected_document = _canonical_openalex_reference(
+        raise ValueError(
+            "first-party source version page does not establish one allowlisted license"
+        )
+    canonical_expected_document = _canonical_reviewed_source_reference(
         expected_document_reference,
         allowed_hosts=allowed_hosts,
     )
@@ -1249,7 +1441,7 @@ def _openalex_license_claim(
     for reference in parser.document_links:
         absolute = urljoin(version_reference, reference)
         try:
-            canonical_document = _canonical_openalex_reference(
+            canonical_document = _canonical_reviewed_source_reference(
                 absolute,
                 allowed_hosts=allowed_hosts,
             )
@@ -1258,7 +1450,7 @@ def _openalex_license_claim(
         if urlsplit(canonical_document).hostname == expected_document_host:
             observed_documents.add(canonical_document)
     if canonical_expected_document not in observed_documents:
-        raise ValueError("OpenAlex version page does not identify its selected PDF")
+        raise ValueError("first-party source version page does not identify its selected PDF")
     return claims[0]
 
 
@@ -1324,6 +1516,14 @@ def _valid_sec_user_agent(value: str) -> bool:
 
 
 def _normalize_openalex_source_hosts(hosts: tuple[str, ...]) -> tuple[str, ...]:
+    return _normalize_reviewed_source_hosts(hosts, provider="OpenAlex")
+
+
+def _normalize_crossref_source_hosts(hosts: tuple[str, ...]) -> tuple[str, ...]:
+    return _normalize_reviewed_source_hosts(hosts, provider="Crossref")
+
+
+def _normalize_reviewed_source_hosts(hosts: tuple[str, ...], *, provider: str) -> tuple[str, ...]:
     normalized = []
     host_pattern = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
     for raw_host in hosts:
@@ -1334,17 +1534,17 @@ def _normalize_openalex_source_hosts(hosts: tuple[str, ...]) -> tuple[str, ...]:
             or not host_pattern.fullmatch(host)
             or host.endswith((".localhost", ".local", ".internal", ".test"))
         ):
-            raise ValueError("OpenAlex source hosts must be exact public DNS hostnames")
+            raise ValueError(f"{provider} source hosts must be exact public DNS hostnames")
         normalized.append(host)
     return tuple(dict.fromkeys(normalized))
 
 
-def _openalex_reference_host(value: str, *, allowed_hosts: tuple[str, ...]) -> str:
+def _reviewed_source_reference_host(value: str, *, allowed_hosts: tuple[str, ...]) -> str:
     try:
         parsed = urlsplit(value)
         port = parsed.port
     except ValueError:
-        raise ValueError("OpenAlex source URL is malformed") from None
+        raise ValueError("reviewed source URL is malformed") from None
     host = parsed.hostname.lower() if parsed.hostname else ""
     if (
         parsed.scheme != "https"
@@ -1363,14 +1563,14 @@ def _openalex_reference_host(value: str, *, allowed_hosts: tuple[str, ...]) -> s
         or parsed.fragment
         or any(ord(character) < 0x20 or character.isspace() for character in value)
     ):
-        raise ValueError("OpenAlex source URL is not a canonical HTTPS reference")
+        raise ValueError("reviewed source URL is not a canonical HTTPS reference")
     if host not in allowed_hosts:
-        raise ValueError("OpenAlex source URL host is not in the operator-reviewed allowlist")
+        raise ValueError("reviewed source URL host is not in the operator-reviewed allowlist")
     return host
 
 
-def _canonical_openalex_reference(value: str, *, allowed_hosts: tuple[str, ...]) -> str:
-    host = _openalex_reference_host(value, allowed_hosts=allowed_hosts)
+def _canonical_reviewed_source_reference(value: str, *, allowed_hosts: tuple[str, ...]) -> str:
+    host = _reviewed_source_reference_host(value, allowed_hosts=allowed_hosts)
     parsed = urlsplit(value)
     return f"https://{host}{parsed.path}"
 
@@ -1587,6 +1787,91 @@ def _crossref_publication_date(message: dict[str, object]) -> str | None:
             f"{part:02d}" if index else f"{part:04d}" for index, part in enumerate(parts)
         )
     return None
+
+
+def _crossref_content_location(message: dict[str, object]) -> dict[str, object]:
+    raw_links = message.get("link")
+    links = raw_links if isinstance(raw_links, list) else []
+    documents_by_version: dict[str, set[str]] = {}
+    for item in links:
+        if not isinstance(item, dict):
+            continue
+        version = item.get("content-version")
+        content_type = item.get("content-type")
+        application = item.get("intended-application")
+        reference = item.get("URL")
+        if (
+            not isinstance(version, str)
+            or version.casefold() not in _CROSSREF_CONTENT_VERSIONS
+            or not isinstance(content_type, str)
+            or content_type.split(";", 1)[0].strip().casefold() != "application/pdf"
+            or application not in {None, "unspecified"}
+            or not isinstance(reference, str)
+        ):
+            continue
+        documents_by_version.setdefault(version.casefold(), set()).add(reference)
+
+    raw_licenses = message.get("license")
+    licenses = raw_licenses if isinstance(raw_licenses, list) else []
+    licenses_by_version: dict[str, set[str | None]] = {}
+    for item in licenses:
+        if not isinstance(item, dict):
+            continue
+        version = item.get("content-version")
+        reference = item.get("URL")
+        if not isinstance(version, str):
+            continue
+        version = version.casefold()
+        if version not in _CROSSREF_CONTENT_VERSIONS:
+            continue
+        license_claim = (
+            _crossref_license_identifier(reference) if isinstance(reference, str) else None
+        )
+        licenses_by_version.setdefault(version, set()).add(license_claim)
+
+    candidates = []
+    for version, references in documents_by_version.items():
+        license_claims = licenses_by_version.get(version, set())
+        if len(references) == 1 and len(license_claims) == 1 and None not in license_claims:
+            candidates.append((version, next(iter(references)), next(iter(license_claims))))
+    if len(candidates) != 1:
+        return {
+            "version_reference": None,
+            "version_label": None,
+            "source_document_reference": None,
+            "license": "unknown",
+        }
+
+    version, document_reference, license_claim = candidates[0]
+    return {
+        "version_reference": message.get("URL"),
+        "version_label": version,
+        "source_document_reference": document_reference,
+        "license": license_claim,
+    }
+
+
+def _crossref_license_identifier(value: str) -> str | None:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme not in {"https", "http"}
+        or parsed.hostname != "creativecommons.org"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.netloc.lower() != "creativecommons.org"
+        or parsed.netloc.endswith(".")
+        or "\\" in value
+    ):
+        return None
+    secure_reference = f"https://creativecommons.org{parsed.path}"
+    return _recognized_cc_license(secure_reference)
 
 
 __all__ = ["ResearchMetadataScout", "ResearchScoutRun"]

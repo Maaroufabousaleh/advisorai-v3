@@ -32,6 +32,7 @@ _SEC_EDGAR_PATH = re.compile(
 )
 _FRED_PATH = re.compile(r"^/series/[A-Za-z0-9_-]+$")
 _ARXIV_VERSION_SUFFIX = re.compile(r"v[1-9]\d*$")
+_CROSSREF_CONTENT_VERSIONS = frozenset({"vor", "am"})
 
 _CONTENT_LICENSES: dict[ResearchSourceFamily, frozenset[str]] = {
     ResearchSourceFamily.ARXIV: frozenset({"CC0-1.0", "CC-BY-4.0"}),
@@ -118,7 +119,8 @@ class ResearchSourcePolicy:
                     "doi": card.source_doi,
                     "document_reference": card.source_document_reference
                     if (
-                        assessment.family is ResearchSourceFamily.OPENALEX
+                        assessment.family
+                        in {ResearchSourceFamily.OPENALEX, ResearchSourceFamily.CROSSREF}
                         and card.requested_use is ResearchSourceUse.CONTENT_USE
                     )
                     else None,
@@ -141,6 +143,9 @@ class ResearchSourcePolicy:
                 ResearchSourceFamily.OPENALEX
             ),
             ResearchLicenseEvidenceSource.CROSSREF_DEPOSIT_METADATA: (
+                ResearchSourceFamily.CROSSREF
+            ),
+            ResearchLicenseEvidenceSource.CROSSREF_FIRST_PARTY_VERSION_PAGE: (
                 ResearchSourceFamily.CROSSREF
             ),
         }.get(card.source_license_evidence_source)
@@ -186,6 +191,21 @@ class ResearchSourcePolicy:
                 ):
                     raise ValueError(
                         "OpenAlex content use requires first-party DOI, page, and document evidence"
+                    )
+            elif assessment.family is ResearchSourceFamily.CROSSREF:
+                canonical_source_doi = self._canonical_doi_reference(card.source_url)
+                if (
+                    card.source_metadata_provider is not ResearchMetadataProvider.CROSSREF_API
+                    or card.source_license_evidence_source
+                    is not ResearchLicenseEvidenceSource.CROSSREF_FIRST_PARTY_VERSION_PAGE
+                    or not self._canonical_doi(card.source_doi)
+                    or card.source_doi != canonical_source_doi
+                    or card.source_version_label not in _CROSSREF_CONTENT_VERSIONS
+                    or not self._canonical_https_reference(card.source_version_reference)
+                    or not self._canonical_https_reference(card.source_document_reference)
+                ):
+                    raise ValueError(
+                        "Crossref content use requires first-party DOI, version, page, and document evidence"
                     )
             else:
                 raise ValueError("content use requires first-party exact-version license evidence")
@@ -259,17 +279,19 @@ class ResearchSourcePolicy:
 
     @classmethod
     def _canonical_doi(cls, value: str | None) -> bool:
+        return cls._canonical_doi_reference(value) is not None
+
+    @classmethod
+    def _canonical_doi_reference(cls, value: str | None) -> str | None:
         if not cls._canonical_https_reference(value):
-            return False
+            return None
         try:
             parsed = urlsplit(value)
         except ValueError:
-            return False
-        return (
-            parsed.hostname == "doi.org"
-            and _CROSSREF_PATH.fullmatch(parsed.path) is not None
-            and value == f"https://doi.org{parsed.path.casefold()}"
-        )
+            return None
+        if parsed.hostname != "doi.org" or _CROSSREF_PATH.fullmatch(parsed.path) is None:
+            return None
+        return f"https://doi.org{parsed.path.casefold()}"
 
     @staticmethod
     def _source_family(source_url: str) -> ResearchSourceFamily:

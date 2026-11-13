@@ -62,6 +62,9 @@ def _scout(
     openalex_source_hosts: tuple[str, ...] = (),
     openalex_version_page_body: bytes | None = None,
     openalex_document_body: bytes | None = None,
+    crossref_source_hosts: tuple[str, ...] = (),
+    crossref_version_page_body: bytes | None = None,
+    crossref_document_body: bytes | None = None,
 ):
     calls: list[str] = []
     responses = list(response_sequence or [])
@@ -105,6 +108,18 @@ def _scout(
                 200 if arxiv_document_body is not None else 404,
                 arxiv_document_body or b"",
                 (("Content-Type", "application/pdf"),),
+            )
+        if parsed_url.hostname in crossref_source_hosts:
+            if parsed_url.path.endswith(".pdf"):
+                return (
+                    200 if crossref_document_body is not None else 404,
+                    crossref_document_body or b"",
+                    (("Content-Type", "application/pdf"),),
+                )
+            return (
+                200 if crossref_version_page_body is not None else 404,
+                crossref_version_page_body or b"",
+                (("Content-Type", "text/html; charset=utf-8"),),
             )
         if parsed_url.path.endswith(".pdf"):
             return (
@@ -161,6 +176,27 @@ def _scout(
             requester=source_requester,
             sleeper=lambda _delay: None,
         )
+    for source_host in crossref_source_hosts:
+        source_clients[f"crossref_version_page:{source_host}"] = SafeHttpClient(
+            HttpClientConfig(
+                allowed_hosts=(source_host,),
+                max_retries=0,
+                max_response_bytes=512 * 1024,
+                requests_per_second=100,
+            ),
+            requester=source_requester,
+            sleeper=lambda _delay: None,
+        )
+        source_clients[f"crossref_document:{source_host}"] = SafeHttpClient(
+            HttpClientConfig(
+                allowed_hosts=(source_host,),
+                max_retries=0,
+                max_response_bytes=64 * 1024 * 1024,
+                requests_per_second=100,
+            ),
+            requester=source_requester,
+            sleeper=lambda _delay: None,
+        )
     coordinator = ResearchCoordinator(ledgers, max_workers=2)
     scout = ResearchMetadataScout(
         registry=ResearchRegistry(tmp_path / "research.sqlite3"),
@@ -169,6 +205,7 @@ def _scout(
         source_clients=source_clients,
         fred_api_key=_FRED_API_KEY if provider is ResearchMetadataProvider.FRED_API else None,
         openalex_source_hosts=openalex_source_hosts,
+        crossref_source_hosts=crossref_source_hosts,
     )
     return scout, coordinator, calls
 
@@ -596,6 +633,249 @@ def test_crossref_ambiguous_versioned_license_is_not_collapsed(tmp_path):
     assert result.paper.license == "unknown"
     assert result.paper.source_license_evidence_source is None
     assert result.paper.source_version_label is None
+
+
+def _crossref_content_metadata(
+    *,
+    doi: str = "10.1234/example.doi",
+    page_url: str = "https://publisher.example.org/article/123",
+    pdf_url: str = "https://publisher.example.org/article/123.pdf",
+    license_version: str = "vor",
+    document_version: str = "vor",
+) -> bytes:
+    return json.dumps(
+        {
+            "message": {
+                "DOI": doi,
+                "URL": page_url,
+                "title": ["Crossref versioned title"],
+                "author": [{"given": "Crossref", "family": "Author"}],
+                "published-online": {"date-parts": [[2025, 2, 3]]},
+                "license": [
+                    {
+                        "URL": "https://creativecommons.org/licenses/by/4.0/",
+                        "content-version": license_version,
+                    }
+                ],
+                "link": [
+                    {
+                        "URL": pdf_url,
+                        "content-type": "application/pdf",
+                        "content-version": document_version,
+                        "intended-application": "unspecified",
+                    }
+                ],
+            }
+        }
+    ).encode()
+
+
+def _crossref_version_page(doi: str = "10.1234/example.doi", pdf_url=None) -> bytes:
+    pdf_url = pdf_url or "https://publisher.example.org/article/123.pdf"
+    return (
+        f'<meta name="citation_doi" content="{doi}">'
+        '<link rel="license" href="https://creativecommons.org/licenses/by/4.0/">'
+        f'<link rel="alternate" type="application/pdf" href="{pdf_url}">'
+    ).encode()
+
+
+def test_crossref_content_use_requires_a_reviewed_first_party_host_allowlist(tmp_path):
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.CROSSREF_API,
+        host="api.crossref.org",
+        response_body=_crossref_content_metadata(),
+    )
+
+    with pytest.raises(ValueError, match="Crossref content use requires a reviewed source-host"):
+        scout.submit(
+            _paper(
+                "https://doi.org/10.1234/example.doi",
+                use=ResearchSourceUse.CONTENT_USE,
+            )
+        )
+
+    assert calls == []
+    assert scout.registry.count("paper") == 0
+
+
+def test_crossref_content_use_verifies_exact_version_page_and_pdf(tmp_path):
+    page_url = "https://publisher.example.org/article/123"
+    pdf_url = "https://publisher.example.org/article/123.pdf"
+    doi = "https://doi.org/10.1234/example.doi"
+    page_body = _crossref_version_page()
+    document_body = b"%PDF-1.7\nverified Crossref publisher document\n"
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.CROSSREF_API,
+        host="api.crossref.org",
+        response_body=_crossref_content_metadata(),
+        crossref_source_hosts=("publisher.example.org",),
+        crossref_version_page_body=page_body,
+        crossref_document_body=document_body,
+    )
+
+    result = scout.execute(
+        _paper("https://doi.org/10.1234/example.doi", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.COMPLETED
+    assert result.paper is not None
+    assert result.paper.license == "CC-BY-4.0"
+    assert result.paper.source_doi == doi
+    assert result.paper.source_version_reference == page_url
+    assert result.paper.source_version_label == "vor"
+    assert result.paper.source_license_evidence_source is (
+        ResearchLicenseEvidenceSource.CROSSREF_FIRST_PARTY_VERSION_PAGE
+    )
+    assert result.paper.source_license_evidence_reference == page_url
+    assert result.paper.source_license_evidence_sha256 == hashlib.sha256(page_body).hexdigest()
+    assert result.paper.source_document_reference == pdf_url
+    assert result.paper.source_document_sha256 == hashlib.sha256(document_body).hexdigest()
+    assert result.paper.source_document_size_bytes == len(document_body)
+    assert calls == [
+        "https://api.crossref.org/works/10.1234%2Fexample.doi",
+        page_url,
+        pdf_url,
+    ]
+    serialized = result.paper.model_dump_json()
+    assert "verified Crossref publisher document" not in serialized
+    assert "citation_doi" not in serialized
+    with sqlite3.connect(scout.registry.database_path) as connection:
+        payload = connection.execute(
+            "SELECT payload_json FROM research_records WHERE artifact_id = ?",
+            (str(result.paper.artifact_id),),
+        ).fetchone()[0]
+    assert "verified Crossref publisher document" not in payload
+    assert "citation_doi" not in payload
+    detached_document = result.paper.model_copy(
+        update={"source_document_reference": "https://publisher.example.org/other.pdf"}
+    )
+    with pytest.raises(ValueError, match="identity hash does not match"):
+        scout.registry.store(detached_document, record_type="paper")
+
+
+@pytest.mark.parametrize(
+    "metadata_body",
+    [
+        _crossref_content_metadata(license_version="vor", document_version="am"),
+        json.dumps(
+            {
+                "message": {
+                    "DOI": "10.1234/example.doi",
+                    "URL": "https://publisher.example.org/article/123",
+                    "title": ["Ambiguous versions"],
+                    "license": [
+                        {
+                            "URL": "https://creativecommons.org/licenses/by/4.0/",
+                            "content-version": "vor",
+                        },
+                        {
+                            "URL": "https://creativecommons.org/publicdomain/zero/1.0/",
+                            "content-version": "am",
+                        },
+                    ],
+                    "link": [
+                        {
+                            "URL": "https://publisher.example.org/article/123.pdf",
+                            "content-type": "application/pdf",
+                            "content-version": "vor",
+                        },
+                        {
+                            "URL": "https://publisher.example.org/article/123-am.pdf",
+                            "content-type": "application/pdf",
+                            "content-version": "am",
+                        },
+                    ],
+                }
+            }
+        ).encode(),
+        json.dumps(
+            {
+                "message": {
+                    "DOI": "10.1234/example.doi",
+                    "URL": "https://publisher.example.org/article/123",
+                    "title": ["Conflicting version licenses"],
+                    "license": [
+                        {
+                            "URL": "https://creativecommons.org/licenses/by/4.0/",
+                            "content-version": "vor",
+                        },
+                        {
+                            "URL": "https://creativecommons.org/licenses/by-nc/4.0/",
+                            "content-version": "vor",
+                        },
+                    ],
+                    "link": [
+                        {
+                            "URL": "https://publisher.example.org/article/123.pdf",
+                            "content-type": "application/pdf",
+                            "content-version": "vor",
+                        }
+                    ],
+                }
+            }
+        ).encode(),
+    ],
+    ids=[
+        "license-document-version-mismatch",
+        "multiple-licensed-versions",
+        "conflicting-version-licenses",
+    ],
+)
+def test_crossref_content_use_rejects_unambiguous_version_selection(tmp_path, metadata_body):
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.CROSSREF_API,
+        host="api.crossref.org",
+        response_body=metadata_body,
+        crossref_source_hosts=("publisher.example.org",),
+        crossref_version_page_body=_crossref_version_page(),
+        crossref_document_body=b"%PDF-1.7\nnot reached\n",
+    )
+
+    result = scout.execute(
+        _paper("https://doi.org/10.1234/example.doi", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert calls == ["https://api.crossref.org/works/10.1234%2Fexample.doi"]
+    assert scout.registry.count("paper") == 0
+
+
+@pytest.mark.parametrize(
+    ("page_doi", "page_pdf"),
+    [
+        ("10.9999/wrong.doi", "https://publisher.example.org/article/123.pdf"),
+        ("10.1234/example.doi", "https://publisher.example.org/other.pdf"),
+    ],
+)
+def test_crossref_content_use_rejects_first_party_page_identity_mismatches(
+    tmp_path, page_doi, page_pdf
+):
+    page_url = "https://publisher.example.org/article/123"
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.CROSSREF_API,
+        host="api.crossref.org",
+        response_body=_crossref_content_metadata(),
+        crossref_source_hosts=("publisher.example.org",),
+        crossref_version_page_body=_crossref_version_page(page_doi, page_pdf),
+        crossref_document_body=b"%PDF-1.7\nnot reached\n",
+    )
+
+    result = scout.execute(
+        _paper("https://doi.org/10.1234/example.doi", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert calls == [
+        "https://api.crossref.org/works/10.1234%2Fexample.doi",
+        page_url,
+    ]
+    assert scout.registry.count("paper") == 0
 
 
 def test_openalex_content_use_requires_a_reviewed_first_party_host_allowlist(tmp_path):

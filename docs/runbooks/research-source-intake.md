@@ -38,20 +38,28 @@ allowlist and source-specific, exact-version evidence:
 | SEC EDGAR, FRED | None in this policy version |
 
 The license table is necessary but not sufficient. The first-party version and
-document verifier supports explicitly versioned arXiv papers and OpenAlex works
-with a reviewed source-host allowlist. For OpenAlex, the Scout requires the
-exact work ID, a DOI and version label on the selected `best_oa_location`, then
-fetches that location's landing page and PDF from operator-allowlisted hosts.
-The page must identify the same DOI, link the exact selected PDF, and link one
-allowlisted Creative Commons license. The Scout hashes the page and PDF under
-the 512 KiB and 64 MiB response caps and stores neither body. OpenAlex's
-aggregated license field is not accepted as first-party rights evidence.
+document verifier supports explicitly versioned arXiv papers and OpenAlex and
+Crossref records with a reviewed source-host allowlist. For OpenAlex, the Scout
+requires the exact work ID, a DOI and version label on the selected
+`best_oa_location`, then fetches that location's landing page and PDF from
+operator-allowlisted hosts. For Crossref, it requires the exact DOI and exactly
+one matching `vor` or `am` license/PDF version, then fetches the deposited
+publisher URL and PDF from operator-allowlisted hosts. In either case, the page
+must identify the same DOI, link the exact selected PDF, and link one allowlisted
+Creative Commons license. The Scout hashes the page and PDF under the 512 KiB
+and 64 MiB response caps and stores neither body. Aggregated OpenAlex and
+Crossref license fields are locators/claims, not first-party rights evidence.
 OpenAlex describes each location as a particular hosted copy and assigns its
 version and license fields per location; the selected `best_oa_location` is
 therefore only the locator for the copy checked by the Scout ([OpenAlex
 locations documentation](https://help.openalex.org/data/locations/)).
-Crossref and GitHub content use still fail closed until equivalent
-source-specific verification.
+Crossref's per-version license and full-text link metadata is also used only to
+select an unambiguous copy; ambiguous or mismatched versions fail closed. The
+publisher page and document are checked directly. See Crossref's [license
+metadata guidance](https://www.crossref.org/documentation/principles-practices/best-practices/license/)
+and [full-text link guidance](https://www.crossref.org/documentation/retrieve-metadata/rest-api/text-and-data-mining-for-researchers/).
+GitHub content use still fails closed until equivalent source-specific
+verification.
 
 The `PaperCard.license` value is a submitted or provider-reported claim. The
 local policy does not make a legal determination or grant redistribution
@@ -61,7 +69,10 @@ version-bound evidence that the selected license link was present at observation
 time. For OpenAlex, the configured host list is an operator review boundary;
 OpenAlex's location/version choice is only a locator for the copy, and the
 publisher or repository page supplies the observed license and document links.
-This evidence is not a legal determination. Do not store source text in
+For Crossref, the configured host list is also an operator review boundary; a
+Crossref member deposit selects a versioned link but cannot replace the
+publisher-page and PDF checks. This evidence is not a legal determination. Do
+not store source text in
 `claimed_result`, `limitations`, or other metadata fields.
 
 ## Metadata Scout
@@ -73,7 +84,8 @@ jobs use one metadata request; an SEC filing outside the current submission
 index may use up to three additional, index-listed historical submission
 files. An explicit arXiv `content_use` request adds exact-version page and PDF
 requests. An OpenAlex `content_use` request adds the `best_oa_location` page and
-PDF requests and requires an exact host allowlist in Scout configuration. SEC
+PDF requests; a Crossref `content_use` request adds the selected publisher page
+and PDF. Both require an exact host allowlist in Scout configuration. SEC
 filing documents and FRED observations are not fetched or stored.
 
 The Scout uses exact API hosts, HTTPS, no retries, a 15-second request timeout,
@@ -91,19 +103,24 @@ registry. Each stored PaperCard includes the API provider, response SHA-256,
 response size, and observation time. When an upstream record exposes a version,
 the card also records its reference, label, and an identity SHA-256 bound to
 that provider response. License evidence records identify whether the claim
-came from arXiv metadata, OpenAlex aggregation, or a Crossref member deposit.
+came from arXiv metadata, OpenAlex aggregation, a Crossref member deposit, or
+the checked first-party version page.
 Replayed identical metadata observations are idempotent even when a prior
 process stopped before the job completion record.
 
 The metadata SHA-256 identifies the API response; the version identity SHA-256
 binds a provider, version reference and label, and that metadata hash. For
-OpenAlex, it also binds the selected location DOI and PDF reference. Neither
+OpenAlex and Crossref content use, it also binds the selected DOI and PDF
+reference. Neither
 is a hash of the cited document bytes. Upstream license provenance remains a
 claim, not an authoritative rights determination. The arXiv content-use path
 checks the first-party version page and hashes the exact PDF without retaining
 it. The OpenAlex path checks the exact best-OA location page and hashes its
-PDF without retaining it; the aggregated license remains untrusted. First-party
-license verification for Crossref and GitHub remains software work. SEC
+PDF without retaining it; the aggregated license remains untrusted. The
+Crossref path checks one exact version selected by the Crossref deposit, then
+requires the publisher page to confirm the DOI, PDF link, and license before
+hashing and discarding the PDF. Crossref deposit claims alone are not accepted.
+First-party license verification for GitHub remains software work. SEC
 citations are resolved against the SEC submissions API
 using the CIK and accession in the cited archive path. The Scout requires the
 filing's primary document name to match the citation before recording issuer,
