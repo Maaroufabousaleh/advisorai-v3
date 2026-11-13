@@ -58,8 +58,10 @@ select an unambiguous copy; ambiguous or mismatched versions fail closed. The
 publisher page and document are checked directly. See Crossref's [license
 metadata guidance](https://www.crossref.org/documentation/principles-practices/best-practices/license/)
 and [full-text link guidance](https://www.crossref.org/documentation/retrieve-metadata/rest-api/text-and-data-mining-for-researchers/).
-GitHub content use still fails closed until equivalent source-specific
-verification.
+GitHub content use requires the exact release tag: the release record must
+match owner/repo/tag (no drafts), the license claim comes from a bounded
+in-archive root LICENSE/COPYING file with SPDX evidence, and the document
+hash covers the codeload source archive (release-attached binaries refused).
 
 The `PaperCard.license` value is a submitted or provider-reported claim. The
 local policy does not make a legal determination or grant redistribution
@@ -120,7 +122,7 @@ PDF without retaining it; the aggregated license remains untrusted. The
 Crossref path checks one exact version selected by the Crossref deposit, then
 requires the publisher page to confirm the DOI, PDF link, and license before
 hashing and discarding the PDF. Crossref deposit claims alone are not accepted.
-First-party license verification for GitHub remains software work. SEC
+GitHub first-party verification is implemented as described above. SEC
 citations are resolved against the SEC submissions API
 using the CIK and accession in the cited archive path. The Scout requires the
 filing's primary document name to match the citation before recording issuer,
