@@ -34,6 +34,7 @@ QUARANTINED = (
 
 FORBIDDEN_IMPORT_NAMES = {
     "CredentialResolver",
+    "InfisicalCredentialResolver",
     "CredentialScope",
     "SecretSettings",
 }
