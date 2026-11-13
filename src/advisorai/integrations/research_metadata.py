@@ -35,7 +35,7 @@ def _public_json(url: str, timeout: float = 15.0) -> Mapping[str, object]:
     try:
         with opener.open(request, timeout=timeout) as response:
             body = response.read()
-    except (HTTPError, OSError, TimeoutError) as exc:
+    except (HTTPError, OSError, TimeoutError):
         raise RuntimeError("public citation provider request failed") from None
     try:
         data = json.loads(body)

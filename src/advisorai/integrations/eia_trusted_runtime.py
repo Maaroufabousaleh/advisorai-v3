@@ -8,8 +8,8 @@ are created by this module. Disable HTTP auto-instrumentation in the runtime.
 from __future__ import annotations
 
 import os
-from datetime import UTC
 from collections.abc import Mapping
+from datetime import UTC
 
 from advisorai.config.secrets import CredentialScope, InfisicalCredentialResolver
 from advisorai.integrations.public_data import EiaApiClient, SmokeTestOutcome
@@ -18,7 +18,7 @@ from advisorai.integrations.public_data import EiaApiClient, SmokeTestOutcome
 def infisical_reader_from_owner_environment():
     """Build a single-name Infisical reader from owner-injected runtime config.
 
-    Requires ``infisical-python`` and Universal Auth credentials injected only
+    Requires ``infisicalsdk`` and Universal Auth credentials injected only
     into the reviewed trusted runtime. This coding environment must not receive
     or execute with those values.
     """

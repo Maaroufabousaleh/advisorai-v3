@@ -27,7 +27,7 @@ and retrieval timestamp. It discards EIA's echoed request metadata.
 
 ## Owner-run command
 
-After the trust boundary, read-only identity, `infisical-python` dependency, and
+After the trust boundary, read-only identity, official `infisicalsdk` package, and
 runtime environment are independently reviewed, launch:
 
 ```sh
