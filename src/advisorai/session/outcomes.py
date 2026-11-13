@@ -51,6 +51,9 @@ class PaperOutcomeQuality:
     source: str
     snapshot_id: UUID
     as_of: datetime
+    sample_count: int | None = None
+    failed_count: int | None = None
+    measurement_hash: str | None = None
 
     def __post_init__(self) -> None:
         if any(
@@ -66,6 +69,27 @@ class PaperOutcomeQuality:
             raise ValueError("paper outcome latency cannot be negative")
         if not self.source.strip():
             raise ValueError("paper outcome quality requires an evidence source")
+        details = (self.sample_count, self.failed_count, self.measurement_hash)
+        if any(value is not None for value in details):
+            if any(value is None for value in details):
+                raise ValueError("paper quality measurement details must be complete")
+            assert self.sample_count is not None and self.failed_count is not None
+            if (
+                not isinstance(self.sample_count, int)
+                or isinstance(self.sample_count, bool)
+                or self.sample_count < 1
+                or not isinstance(self.failed_count, int)
+                or isinstance(self.failed_count, bool)
+                or not 0 <= self.failed_count <= self.sample_count
+            ):
+                raise ValueError("paper quality sample counts are invalid")
+            if self.failure_rate != Decimal(self.failed_count) / Decimal(self.sample_count):
+                raise ValueError("paper quality failure rate differs from its measured counts")
+            if not isinstance(self.measurement_hash, str) or (
+                len(self.measurement_hash) != 64
+                or any(character not in "0123456789abcdef" for character in self.measurement_hash)
+            ):
+                raise ValueError("paper quality measurement hash must be a SHA-256 digest")
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
             raise ValueError("paper outcome quality timestamp must include a timezone")
         object.__setattr__(self, "source", self.source.strip())
@@ -217,6 +241,9 @@ class QuoteAwarePaperOutcomeAdapter:
             quality_source=quality.source,
             quality_snapshot_id=quality.snapshot_id,
             quality_as_of=quality.as_of,
+            quality_sample_count=quality.sample_count,
+            quality_failed_count=quality.failed_count,
+            quality_measurement_hash=quality.measurement_hash,
         )
 
 

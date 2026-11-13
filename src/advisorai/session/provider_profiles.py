@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
+from uuid import NAMESPACE_URL, uuid5
 
 from advisorai.agents import EvidenceCouncil
 from advisorai.config import CredentialResolver, CredentialScope
@@ -32,9 +34,9 @@ from advisorai.ledger import SqliteLedgers
 from advisorai.session.application import (
     OwnerApplicationAdapters,
     OwnerDataAdapter,
-    OwnerOutcomeAdapter,
 )
-from advisorai.session.outcomes import QuoteAwarePaperOutcomeAdapter
+from advisorai.session.outcomes import FxRateProvider, QuoteAwarePaperOutcomeAdapter, QuoteToUsdRate
+from advisorai.session.provider_quality import ProviderOutcomeQualityProvider
 from advisorai.session.providers import (
     BinanceSpotTestnetOwnerAdapter,
     CoinbaseExchangeSandboxOwnerAdapter,
@@ -74,7 +76,7 @@ class ProviderProfileContext:
     ledgers: SqliteLedgers
     instrument: InstrumentIdentity
     account_quote_currency: str
-    outcome_adapter: OwnerOutcomeAdapter
+    fx_rate_provider: FxRateProvider | None = None
 
     def __post_init__(self) -> None:
         quote = self.account_quote_currency.strip().upper()
@@ -88,8 +90,8 @@ class ProviderProfileContext:
             raise ValueError("provider data and initial account quote currencies differ")
         if not callable(self.decision_model_factory):
             raise ValueError("provider profile requires a decision model factory")
-        if not callable(getattr(self.outcome_adapter, "build_outcome", None)):
-            raise ValueError("provider profile requires an explicit outcome adapter")
+        if self.fx_rate_provider is not None and not callable(self.fx_rate_provider):
+            raise ValueError("provider FX rate provider must be callable")
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,14 +120,8 @@ def _validate_context(components: ProviderProfileComponents, provider: str) -> N
     data_quote = str(getattr(context.data, "quote_currency", "")).strip().upper()
     if data_quote != request.quote_currency:
         raise ValueError("provider quote differs from the data adapter currency")
-    if request.quote_currency != "USD":
-        if not isinstance(context.outcome_adapter, QuoteAwarePaperOutcomeAdapter):
-            raise ValueError("non-USD provider profiles require quote-aware outcome semantics")
-        if context.outcome_adapter.quote_currency != request.quote_currency:
-            raise ValueError("provider outcome adapter quote currency does not match the profile")
-    elif isinstance(context.outcome_adapter, QuoteAwarePaperOutcomeAdapter):
-        if context.outcome_adapter.quote_currency != "USD":
-            raise ValueError("provider outcome adapter quote currency does not match the profile")
+    if request.quote_currency != "USD" and context.fx_rate_provider is None:
+        raise ValueError("non-USD provider profiles require a snapshot-bound FX rate provider")
 
 
 def _validate_credentials(resolver: CredentialResolver, provider: str) -> None:
@@ -238,14 +234,34 @@ def _compose(
             product_id=request.provider_instrument_id,
             quote_currency=request.quote_currency,
         )
+    fx_rate_provider = context.fx_rate_provider or _identity_usd_rate
+    outcome_adapter = QuoteAwarePaperOutcomeAdapter(
+        quote_currency=request.quote_currency,
+        fx_rate_provider=fx_rate_provider,
+        quality_provider=ProviderOutcomeQualityProvider(
+            provider_identity=request.provider,
+            client=transport.client,
+        ),
+    )
     return OwnerApplicationAdapters(
         data=context.data,
         evidence_council=context.evidence_council,
         decision_model_factory=context.decision_model_factory,
         paper_venue=venue,
-        outcome_adapter=context.outcome_adapter,
+        outcome_adapter=outcome_adapter,
         initial_account=context.initial_account,
         instrument=instrument,
+    )
+
+
+def _identity_usd_rate(snapshot: Snapshot) -> QuoteToUsdRate:
+    return QuoteToUsdRate(
+        quote_currency="USD",
+        usd_per_quote=Decimal("1"),
+        as_of=snapshot.as_of,
+        snapshot_id=snapshot.artifact_id,
+        evidence_id=uuid5(NAMESPACE_URL, f"advisorai-v3/usd-identity-fx/{snapshot.artifact_id}"),
+        source="currency-identity/USD",
     )
 
 

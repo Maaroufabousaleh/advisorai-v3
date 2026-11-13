@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
@@ -19,10 +20,11 @@ from advisorai.integrations import (
     COINBASE_EXCHANGE_SANDBOX_BASE_URL,
     COINBASE_EXCHANGE_SANDBOX_HOST,
 )
+from advisorai.integrations.http import HttpClientConfig, SafeHttpClient
 from advisorai.session.application import (
-    LocalPaperOutcomeAdapter,
     OwnerApplicationAdapters,
 )
+from advisorai.session.outcomes import QuoteAwarePaperOutcomeAdapter, QuoteToUsdRate
 from advisorai.session.provider_profiles import (
     ProviderProfileComponents,
     ProviderProfileContext,
@@ -31,6 +33,7 @@ from advisorai.session.provider_profiles import (
     build_coinbase_exchange_sandbox_profile,
     build_provider_profile,
 )
+from advisorai.session.provider_quality import ProviderOutcomeQualityProvider
 
 
 class ProfileTransport:
@@ -46,9 +49,11 @@ class ProfileTransport:
         else:
             self.base_url = COINBASE_EXCHANGE_SANDBOX_BASE_URL
             self.host = COINBASE_EXCHANGE_SANDBOX_HOST
-        self.client = SimpleNamespace(
+        self.client = SafeHttpClient(
+            HttpClientConfig(allowed_hosts=(self.host,), requests_per_second=100),
             base_url=self.base_url,
-            config=SimpleNamespace(allowed_hosts=(self.host,)),
+            requester=lambda *_args: (200, b"{}", ()),
+            sleeper=lambda _seconds: None,
         )
         self.verified_symbol_ids: tuple[str, ...] = ()
         self.verified_product_ids: tuple[str, ...] = ()
@@ -143,9 +148,20 @@ def _context(tmp_path) -> tuple[ProviderProfileContext, object]:  # noqa: ANN001
             quote_asset="USD",
         ),
         account_quote_currency="USD",
-        outcome_adapter=LocalPaperOutcomeAdapter(),
+        fx_rate_provider=_identity_usd_rate,
     )
     return context, app
+
+
+def _identity_usd_rate(snapshot):  # noqa: ANN001
+    return QuoteToUsdRate(
+        quote_currency="USD",
+        usd_per_quote=Decimal("1"),
+        as_of=snapshot.as_of,
+        snapshot_id=snapshot.artifact_id,
+        evidence_id=uuid5(NAMESPACE_URL, f"profile-usd-fx/{snapshot.artifact_id}"),
+        source="currency-identity/USD",
+    )
 
 
 def _components(context, provider: str, instrument: str, quote: str) -> ProviderProfileComponents:  # noqa: ANN001
@@ -201,6 +217,8 @@ def test_provider_profile_verifies_and_composes_exactly_one_sandbox_instrument(
     assert profile.paper_venue.venue == "paper"
     assert profile.instrument.venue_symbol == instrument
     assert profile.instrument.quote_asset == "USD"
+    assert isinstance(profile.outcome_adapter, QuoteAwarePaperOutcomeAdapter)
+    assert isinstance(profile.outcome_adapter.quality_provider, ProviderOutcomeQualityProvider)
     assert transport.verification_calls == [(instrument,)]
 
 
@@ -261,3 +279,54 @@ def test_profile_refuses_mismatched_quote_or_live_host(tmp_path):
             transport=live_endpoint,
         )
     assert live_endpoint.product_reads == 0
+
+
+def test_non_usd_profile_requires_explicit_snapshot_bound_fx(tmp_path):
+    context, _app = _context(tmp_path)
+    context.data.quote_currency = "USDT"
+    instrument = context.instrument.model_copy(update={"quote_asset": "USDT"})
+    request = _components(context, "binance_spot_testnet", "BTCUSDT", "USDT").request
+    transport = ProfileTransport("binance_spot_testnet", "BTCUSDT", "USDT")
+    missing_fx_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=instrument,
+        account_quote_currency="USDT",
+    )
+    with pytest.raises(ValueError, match="snapshot-bound FX"):
+        build_binance_spot_testnet_profile(
+            ProviderProfileComponents(context=missing_fx_context, request=request),
+            _resolver("binance_spot_testnet"),
+            transport=transport,
+        )
+
+    def explicit_fx(snapshot):  # noqa: ANN001
+        return QuoteToUsdRate(
+            quote_currency="USDT",
+            usd_per_quote=Decimal("0.999"),
+            as_of=snapshot.as_of,
+            snapshot_id=snapshot.artifact_id,
+            evidence_id=uuid5(NAMESPACE_URL, f"test-fx/{snapshot.artifact_id}"),
+            source="verified-usdt-fx-fixture",
+        )
+
+    fx_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=instrument,
+        account_quote_currency="USDT",
+        fx_rate_provider=explicit_fx,
+    )
+    profile = build_binance_spot_testnet_profile(
+        ProviderProfileComponents(context=fx_context, request=request),
+        _resolver("binance_spot_testnet"),
+        transport=transport,
+    )
+    assert isinstance(profile.outcome_adapter, QuoteAwarePaperOutcomeAdapter)
+    assert profile.outcome_adapter.quote_currency == "USDT"

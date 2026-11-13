@@ -11,7 +11,7 @@ import pytest
 from advisorai.contracts import Fill, InstrumentIdentity, Order, Snapshot
 from advisorai.execution import RiskMarketState
 from advisorai.learning import PaperDecisionRecord, PaperLearningLoop, PaperOutcome
-from advisorai.ledger import SqliteLedgers
+from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.session.outcomes import (
     PaperOutcomeQuality,
     QuoteAwarePaperOutcomeAdapter,
@@ -88,6 +88,9 @@ def _adapter(
         source="owner-quality-measurement",
         snapshot_id=quality_snapshot_id or snapshot.artifact_id,
         as_of=quality_as_of,
+        sample_count=100,
+        failed_count=1,
+        measurement_hash="a" * 64,
     )
     return QuoteAwarePaperOutcomeAdapter(
         quote_currency="USDT",
@@ -118,6 +121,9 @@ def test_quote_aware_outcome_converts_utility_and_persists_fx_provenance(tmp_pat
     assert outcome.fx_snapshot_id == snapshot.artifact_id
     assert outcome.fx_evidence_id is not None
     assert outcome.quality_evidence_id is not None
+    assert outcome.quality_sample_count == 100
+    assert outcome.quality_failed_count == 1
+    assert outcome.quality_measurement_hash == "a" * 64
     assert outcome.latency_ms == 72
     assert outcome.failure_rate == Decimal("0.01")
 
@@ -127,6 +133,15 @@ def test_quote_aware_outcome_converts_utility_and_persists_fx_provenance(tmp_pat
     scorecard = first.record_outcome(outcome)
     restarted = PaperLearningLoop(ledgers)
     assert restarted.record_outcome(outcome).scorecard_id == scorecard.scorecard_id
+    recorded = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MODEL)
+        if event.event_type == "paper_scorecard_recorded"
+    )
+    restored = PaperOutcome.model_validate(recorded.payload["outcome"])
+    assert restored.quality_sample_count == 100
+    assert restored.quality_failed_count == 1
+    assert restored.quality_measurement_hash == "a" * 64
 
 
 def test_quote_aware_outcome_includes_fills_arriving_after_the_decision_record():

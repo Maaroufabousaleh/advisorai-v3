@@ -161,6 +161,9 @@ class PaperOutcome(BaseModel):
     quality_source: str | None = None
     quality_snapshot_id: UUID | None = None
     quality_as_of: datetime | None = None
+    quality_sample_count: int | None = Field(default=None, ge=1)
+    quality_failed_count: int | None = Field(default=None, ge=0)
+    quality_measurement_hash: str | None = None
 
     @field_validator("as_of", "fx_rate_as_of", "quality_as_of")
     @classmethod
@@ -206,6 +209,15 @@ class PaperOutcome(BaseModel):
             raise ValueError("outcome evidence source cannot be blank")
         return normalized
 
+    @field_validator("quality_measurement_hash")
+    @classmethod
+    def validate_quality_measurement_hash(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+            raise ValueError("outcome quality measurement hash must be a SHA-256 digest")
+        return value
+
     @model_validator(mode="after")
     def validate_optional_provenance(self) -> PaperOutcome:
         fx_values = (
@@ -230,6 +242,26 @@ class PaperOutcome(BaseModel):
             value is None for value in quality_values
         ):
             raise ValueError("outcome quality evidence must be complete or entirely absent")
+        measurement_values = (
+            self.quality_sample_count,
+            self.quality_failed_count,
+            self.quality_measurement_hash,
+        )
+        if any(value is not None for value in measurement_values) and any(
+            value is None for value in measurement_values
+        ):
+            raise ValueError("outcome quality measurement details must be complete")
+        if any(value is not None for value in measurement_values):
+            if self.quality_evidence_id is None:
+                raise ValueError("outcome quality measurement requires evidence provenance")
+            assert self.quality_sample_count is not None and self.quality_failed_count is not None
+            if self.quality_failed_count > self.quality_sample_count:
+                raise ValueError("outcome quality failure count exceeds its sample count")
+            measured_failure_rate = Decimal(self.quality_failed_count) / Decimal(
+                self.quality_sample_count
+            )
+            if self.failure_rate != measured_failure_rate:
+                raise ValueError("outcome failure rate differs from its measured counts")
         return self
 
 

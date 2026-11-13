@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import math
 import ssl
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.message import Message
+from threading import Lock
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
@@ -37,6 +40,24 @@ class HttpTransportError(RuntimeError):
         self.response_body = response_body
         self.response_headers = tuple((str(key), str(value)) for key, value in response_headers)
         self.error_type = error_type
+
+
+@dataclass(frozen=True, slots=True)
+class HttpRequestMetrics:
+    """Cumulative transport attempts exposed without request contents."""
+
+    attempt_count: int
+    failed_count: int
+    latency_ms_total: int
+
+    def __post_init__(self) -> None:
+        if (
+            self.attempt_count < 0
+            or self.failed_count < 0
+            or self.failed_count > self.attempt_count
+            or self.latency_ms_total < 0
+        ):
+            raise ValueError("HTTP request metrics must be non-negative and internally consistent")
 
 
 class HttpClientConfig(BaseModel):
@@ -139,6 +160,28 @@ class SafeHttpClient:
         self._failure_count = 0
         self._circuit_opened_at: float | None = None
         self.request_count = 0
+        self._metrics_lock = Lock()
+        self._metric_attempt_count = 0
+        self._metric_failed_count = 0
+        self._metric_latency_ms_total = 0
+
+    @property
+    def request_metrics(self) -> HttpRequestMetrics:
+        """Return a thread-safe aggregate with no URLs, headers, or payloads."""
+
+        with self._metrics_lock:
+            return HttpRequestMetrics(
+                attempt_count=self._metric_attempt_count,
+                failed_count=self._metric_failed_count,
+                latency_ms_total=self._metric_latency_ms_total,
+            )
+
+    def _record_request_metric(self, *, started_at: float, failed: bool) -> None:
+        elapsed_ms = max(0, math.ceil((self._clock() - started_at) * 1000))
+        with self._metrics_lock:
+            self._metric_attempt_count += 1
+            self._metric_failed_count += int(failed)
+            self._metric_latency_ms_total += elapsed_ms
 
     def _validate_url(self, url: str) -> None:
         parsed = urlsplit(url)
@@ -198,12 +241,14 @@ class SafeHttpClient:
         last_error: Exception | None = None
         for attempt in range(retries + 1):
             self._before_request()
+            started_at = self._clock()
             try:
                 self.request_count += 1
                 status, response_body, response_headers = self._requester(
                     method.upper(), url, request_headers, body, timeout
                 )
             except (OSError, URLError, TimeoutError) as exc:
+                self._record_request_metric(started_at=started_at, failed=True)
                 self._failure()
                 last_error = exc
                 if attempt >= retries:
@@ -214,6 +259,13 @@ class SafeHttpClient:
                     ) from exc
                 self._sleeper(self.config.retry_backoff_seconds * (2**attempt))
                 continue
+            except Exception:
+                self._record_request_metric(started_at=started_at, failed=True)
+                raise
+            self._record_request_metric(
+                started_at=started_at,
+                failed=status not in acceptable_statuses,
+            )
             response = HttpResponse(
                 status_code=status,
                 body=response_body,

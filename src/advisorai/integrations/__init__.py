@@ -31,7 +31,13 @@ from .coinbase_exchange import (
 )
 from .config import ConnectorCard, ConnectorRegistry, ConnectorState
 from .factories import build_direct_gateway, build_paper_venue_transport, build_policy_gateway
-from .http import HttpClientConfig, HttpTransportError, SafeHttpClient, SourceHttpTransport
+from .http import (
+    HttpClientConfig,
+    HttpRequestMetrics,
+    HttpTransportError,
+    SafeHttpClient,
+    SourceHttpTransport,
+)
 from .llm import GatewayTransportError, OpenAICompatibleGatewayAdapter
 from .sources import RawHttpSpool, SourceEndpoint, V3CoreCollectors, build_v3_core_collectors
 from .venue import HmacVenueSigner, PaperTestnetVenueTransport, VenueTransportError
@@ -63,6 +69,7 @@ __all__ = [
     "CoinbaseProductSpec",
     "HmacVenueSigner",
     "HttpClientConfig",
+    "HttpRequestMetrics",
     "HttpTransportError",
     "OpenAICompatibleGatewayAdapter",
     "PaperTestnetVenueTransport",
