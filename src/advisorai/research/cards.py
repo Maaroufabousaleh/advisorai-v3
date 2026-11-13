@@ -61,6 +61,7 @@ class ResearchLicenseEvidenceSource(StrEnum):
     ARXIV_METADATA = "arxiv_metadata"
     ARXIV_FIRST_PARTY_VERSION_PAGE = "arxiv_first_party_version_page"
     OPENALEX_AGGREGATED_METADATA = "openalex_aggregated_metadata"
+    OPENALEX_FIRST_PARTY_VERSION_PAGE = "openalex_first_party_version_page"
     CROSSREF_DEPOSIT_METADATA = "crossref_deposit_metadata"
 
 
@@ -81,6 +82,7 @@ class PaperCard(ArtifactModel):
     source_version_reference: str | None = Field(default=None, max_length=2048)
     source_version_label: str | None = Field(default=None, max_length=128)
     source_version_identity_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_doi: str | None = Field(default=None, max_length=2048)
     source_license_evidence_source: ResearchLicenseEvidenceSource | None = None
     source_license_evidence_reference: str | None = Field(default=None, max_length=2048)
     source_license_evidence_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
@@ -88,6 +90,7 @@ class PaperCard(ArtifactModel):
     source_document_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     source_document_size_bytes: int | None = Field(default=None, ge=1, le=64 * 1024 * 1024)
     source_document_observed_at: datetime | None = None
+    source_document_reference: str | None = Field(default=None, max_length=2048)
     claimed_result: str = Field(min_length=1)
     limitations: tuple[str, ...] = ()
     relevance: str = Field(default="", min_length=0)
@@ -145,6 +148,7 @@ class PaperCard(ArtifactModel):
             self.source_document_sha256 is not None,
             self.source_document_size_bytes is not None,
             self.source_document_observed_at is not None,
+            self.source_document_reference is not None,
         )
         if any(document_provenance) and not all(document_provenance):
             raise ValueError(

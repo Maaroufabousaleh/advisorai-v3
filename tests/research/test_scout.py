@@ -59,6 +59,9 @@ def _scout(
     on_source_request=None,
     arxiv_version_page_body: bytes | None = None,
     arxiv_document_body: bytes | None = None,
+    openalex_source_hosts: tuple[str, ...] = (),
+    openalex_version_page_body: bytes | None = None,
+    openalex_document_body: bytes | None = None,
 ):
     calls: list[str] = []
     responses = list(response_sequence or [])
@@ -90,16 +93,29 @@ def _scout(
         calls.append(url)
         if on_source_request is not None:
             on_source_request()
-        if urlsplit(url).path.startswith("/abs/"):
+        parsed_url = urlsplit(url)
+        if parsed_url.hostname == "arxiv.org" and parsed_url.path.startswith("/abs/"):
             return (
                 200 if arxiv_version_page_body is not None else 404,
                 arxiv_version_page_body or b"",
                 (("Content-Type", "text/html; charset=utf-8"),),
             )
+        if parsed_url.hostname == "arxiv.org":
+            return (
+                200 if arxiv_document_body is not None else 404,
+                arxiv_document_body or b"",
+                (("Content-Type", "application/pdf"),),
+            )
+        if parsed_url.path.endswith(".pdf"):
+            return (
+                200 if openalex_document_body is not None else 404,
+                openalex_document_body or b"",
+                (("Content-Type", "application/pdf"),),
+            )
         return (
-            200 if arxiv_document_body is not None else 404,
-            arxiv_document_body or b"",
-            (("Content-Type", "application/pdf"),),
+            200 if openalex_version_page_body is not None else 404,
+            openalex_version_page_body or b"",
+            (("Content-Type", "text/html; charset=utf-8"),),
         )
 
     source_clients = {
@@ -124,6 +140,27 @@ def _scout(
             sleeper=lambda _delay: None,
         ),
     }
+    for source_host in openalex_source_hosts:
+        source_clients[f"openalex_version_page:{source_host}"] = SafeHttpClient(
+            HttpClientConfig(
+                allowed_hosts=(source_host,),
+                max_retries=0,
+                max_response_bytes=512 * 1024,
+                requests_per_second=100,
+            ),
+            requester=source_requester,
+            sleeper=lambda _delay: None,
+        )
+        source_clients[f"openalex_document:{source_host}"] = SafeHttpClient(
+            HttpClientConfig(
+                allowed_hosts=(source_host,),
+                max_retries=0,
+                max_response_bytes=64 * 1024 * 1024,
+                requests_per_second=100,
+            ),
+            requester=source_requester,
+            sleeper=lambda _delay: None,
+        )
     coordinator = ResearchCoordinator(ledgers, max_workers=2)
     scout = ResearchMetadataScout(
         registry=ResearchRegistry(tmp_path / "research.sqlite3"),
@@ -131,6 +168,7 @@ def _scout(
         clients={provider: client},
         source_clients=source_clients,
         fred_api_key=_FRED_API_KEY if provider is ResearchMetadataProvider.FRED_API else None,
+        openalex_source_hosts=openalex_source_hosts,
     )
     return scout, coordinator, calls
 
@@ -560,7 +598,7 @@ def test_crossref_ambiguous_versioned_license_is_not_collapsed(tmp_path):
     assert result.paper.source_version_label is None
 
 
-def test_content_use_requires_a_first_party_verifier_for_the_source_family(tmp_path):
+def test_openalex_content_use_requires_a_reviewed_first_party_host_allowlist(tmp_path):
     body = json.dumps({"title": "unlicensed", "authorships": []}).encode()
     scout, _coordinator, calls = _scout(
         tmp_path,
@@ -568,9 +606,243 @@ def test_content_use_requires_a_first_party_verifier_for_the_source_family(tmp_p
         host="api.openalex.org",
         response_body=body,
     )
-    with pytest.raises(ValueError, match="first-party source-version verifier"):
+    with pytest.raises(ValueError, match="reviewed source-host allowlist"):
         scout.submit(_paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE))
     assert calls == []
+    assert scout.registry.count("paper") == 0
+
+
+def test_openalex_content_use_verifies_the_best_oa_location_page_and_pdf(tmp_path):
+    page_url = "https://publisher.example.org/article/123"
+    pdf_url = "https://publisher.example.org/article/123.pdf"
+    doi = "https://doi.org/10.1234/example.doi"
+    metadata_body = json.dumps(
+        {
+            "id": "https://openalex.org/W2741809807",
+            "doi": "https://doi.org/10.1234/example.doi",
+            "title": "OpenAlex title",
+            "authorships": [],
+            "best_oa_location": {
+                "doi": doi,
+                "is_oa": True,
+                "landing_page_url": page_url,
+                "pdf_url": pdf_url,
+                "version": "publishedVersion",
+                "license": "cc-by",
+            },
+        }
+    ).encode()
+    page_body = (
+        b'<html><head><meta name="citation_doi" content="10.1234/example.doi">'
+        b'<link rel="license" href="https://creativecommons.org/licenses/by/4.0/">'
+        b'<link rel="alternate" type="application/pdf" '
+        b'href="https://publisher.example.org/article/123.pdf"></head></html>'
+    )
+    document_body = b"%PDF-1.7\nverified publisher document\n"
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.OPENALEX_API,
+        host="api.openalex.org",
+        response_body=metadata_body,
+        openalex_source_hosts=("publisher.example.org",),
+        openalex_version_page_body=page_body,
+        openalex_document_body=document_body,
+    )
+
+    result = scout.execute(
+        _paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.COMPLETED
+    assert result.paper is not None
+    assert result.paper.license == "CC-BY-4.0"
+    assert result.paper.source_doi == doi
+    assert result.paper.source_version_reference == page_url
+    assert result.paper.source_version_label == "publishedVersion"
+    assert result.paper.source_license_evidence_source is (
+        ResearchLicenseEvidenceSource.OPENALEX_FIRST_PARTY_VERSION_PAGE
+    )
+    assert result.paper.source_license_evidence_reference == page_url
+    assert result.paper.source_license_evidence_sha256 == hashlib.sha256(page_body).hexdigest()
+    assert result.paper.source_document_reference == pdf_url
+    assert result.paper.source_document_sha256 == hashlib.sha256(document_body).hexdigest()
+    assert result.paper.source_document_size_bytes == len(document_body)
+    assert calls == [
+        "https://api.openalex.org/works/W2741809807",
+        page_url,
+        pdf_url,
+    ]
+    serialized = result.paper.model_dump_json()
+    assert "verified publisher document" not in serialized
+    assert "citation_doi" not in serialized
+    with sqlite3.connect(scout.registry.database_path) as connection:
+        payload = connection.execute(
+            "SELECT payload_json FROM research_records WHERE artifact_id = ?",
+            (str(result.paper.artifact_id),),
+        ).fetchone()[0]
+    assert "verified publisher document" not in payload
+    assert "citation_doi" not in payload
+    detached_document = result.paper.model_copy(
+        update={"source_document_reference": "https://publisher.example.org/other.pdf"}
+    )
+    with pytest.raises(ValueError, match="identity hash does not match"):
+        scout.registry.store(detached_document, record_type="paper")
+
+
+@pytest.mark.parametrize(
+    ("page_doi", "page_pdf"),
+    [
+        ("10.9999/wrong.doi", "https://publisher.example.org/article/123.pdf"),
+        ("10.1234/example.doi", "https://publisher.example.org/article/other.pdf"),
+    ],
+)
+def test_openalex_content_use_rejects_first_party_page_identity_mismatches(
+    tmp_path, page_doi, page_pdf
+):
+    page_url = "https://publisher.example.org/article/123"
+    pdf_url = "https://publisher.example.org/article/123.pdf"
+    doi = "https://doi.org/10.1234/example.doi"
+    metadata_body = json.dumps(
+        {
+            "id": "https://openalex.org/W2741809807",
+            "title": "OpenAlex title",
+            "authorships": [],
+            "best_oa_location": {
+                "doi": doi,
+                "is_oa": True,
+                "landing_page_url": page_url,
+                "pdf_url": pdf_url,
+                "version": "publishedVersion",
+            },
+        }
+    ).encode()
+    page_body = (
+        f'<meta name="citation_doi" content="{page_doi}">'
+        '<a rel="license" href="https://creativecommons.org/licenses/by/4.0/">License</a>'
+        f'<a type="application/pdf" href="{page_pdf}">PDF</a>'
+    ).encode()
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.OPENALEX_API,
+        host="api.openalex.org",
+        response_body=metadata_body,
+        openalex_source_hosts=("publisher.example.org",),
+        openalex_version_page_body=page_body,
+        openalex_document_body=b"%PDF-1.7\nfake\n",
+    )
+
+    result = scout.execute(
+        _paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert calls == ["https://api.openalex.org/works/W2741809807", page_url]
+    assert scout.registry.count("paper") == 0
+
+
+def test_openalex_content_use_does_not_promote_a_non_best_location(tmp_path):
+    page_url = "https://publisher.example.org/article/123"
+    pdf_url = "https://publisher.example.org/article/123.pdf"
+    body = json.dumps(
+        {
+            "id": "https://openalex.org/W2741809807",
+            "title": "OpenAlex title",
+            "authorships": [],
+            "locations": [
+                {
+                    "doi": "https://doi.org/10.1234/example.doi",
+                    "is_oa": True,
+                    "landing_page_url": page_url,
+                    "pdf_url": pdf_url,
+                    "version": "publishedVersion",
+                }
+            ],
+        }
+    ).encode()
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.OPENALEX_API,
+        host="api.openalex.org",
+        response_body=body,
+        openalex_source_hosts=("publisher.example.org",),
+        openalex_version_page_body=b"<html></html>",
+        openalex_document_body=b"%PDF-1.7\nfake\n",
+    )
+
+    result = scout.execute(
+        _paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert calls == ["https://api.openalex.org/works/W2741809807"]
+    assert scout.registry.count("paper") == 0
+
+
+def test_openalex_content_use_rejects_a_metadata_selected_host_outside_allowlist(tmp_path):
+    body = json.dumps(
+        {
+            "id": "https://openalex.org/W2741809807",
+            "title": "OpenAlex title",
+            "authorships": [],
+            "best_oa_location": {
+                "doi": "https://doi.org/10.1234/example.doi",
+                "is_oa": True,
+                "landing_page_url": "https://unreviewed.example.net/article/123",
+                "pdf_url": "https://unreviewed.example.net/article/123.pdf",
+                "version": "publishedVersion",
+            },
+        }
+    ).encode()
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.OPENALEX_API,
+        host="api.openalex.org",
+        response_body=body,
+        openalex_source_hosts=("publisher.example.org",),
+    )
+
+    result = scout.execute(
+        _paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert calls == ["https://api.openalex.org/works/W2741809807"]
+    assert scout.registry.count("paper") == 0
+
+
+def test_openalex_content_use_requires_a_copy_doi_not_only_the_work_doi(tmp_path):
+    body = json.dumps(
+        {
+            "id": "https://openalex.org/W2741809807",
+            "doi": "https://doi.org/10.1234/example.doi",
+            "title": "OpenAlex title",
+            "authorships": [],
+            "best_oa_location": {
+                "is_oa": True,
+                "landing_page_url": "https://publisher.example.org/article/123",
+                "pdf_url": "https://publisher.example.org/article/123.pdf",
+                "version": "publishedVersion",
+            },
+        }
+    ).encode()
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.OPENALEX_API,
+        host="api.openalex.org",
+        response_body=body,
+        openalex_source_hosts=("publisher.example.org",),
+    )
+
+    result = scout.execute(
+        _paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert calls == ["https://api.openalex.org/works/W2741809807"]
     assert scout.registry.count("paper") == 0
 
 

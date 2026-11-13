@@ -35,6 +35,8 @@ _METADATA_TIMEOUT_SECONDS = 15.0
 _ATOM_NAMESPACE = "http://www.w3.org/2005/Atom"
 _ARXIV_NAMESPACE = "http://arxiv.org/schemas/atom"
 _ARXIV_VERSION_SUFFIX = re.compile(r"v[1-9]\d*$")
+_OPENALEX_VERSIONS = frozenset({"publishedVersion", "acceptedVersion", "submittedVersion"})
+_DOI_PATH = re.compile(r"^/10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+$")
 _SEC_SOURCE_PATH = re.compile(
     r"^/Archives/edgar/data/(?P<cik>\d{1,10})/(?P<accession>\d{18})/"
     r"(?P<document>[A-Za-z0-9._-]+\.(?:htm|html|txt|pdf))$",
@@ -65,6 +67,10 @@ class _SourceMetadata:
     version_label: str | None
     license_evidence_source: ResearchLicenseEvidenceSource | None
     license_evidence_reference: str | None
+    doi: str | None = None
+    source_document_reference: str | None = None
+    work_reference: str | None = None
+    openalex_best_location: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +79,19 @@ class _VerifiedArxivSource:
     license_evidence_sha256: str
     license_evidence_reference: str
     license_evidence_observed_at: datetime
+    document_reference: str
+    document_sha256: str
+    document_size_bytes: int
+    document_observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class _VerifiedOpenAlexSource:
+    license_claim: str
+    license_evidence_sha256: str
+    license_evidence_reference: str
+    license_evidence_observed_at: datetime
+    document_reference: str
     document_sha256: str
     document_size_bytes: int
     document_observed_at: datetime
@@ -107,6 +126,7 @@ class ResearchMetadataScout:
         source_clients: dict[str, SafeHttpClient] | None = None,
         sec_user_agent: str | None = None,
         fred_api_key: str | None = None,
+        openalex_source_hosts: tuple[str, ...] = (),
     ) -> None:
         self.registry = registry
         self.coordinator = coordinator
@@ -124,7 +144,12 @@ class ResearchMetadataScout:
             self.clients[ResearchMetadataProvider.FRED_API].register_secret_value(
                 "FRED_API_KEY", fred_api_key
             )
-        self.source_clients = source_clients or self._build_source_clients()
+        self.openalex_source_hosts = _normalize_openalex_source_hosts(openalex_source_hosts)
+        self.source_clients = self._build_source_clients(
+            openalex_source_hosts=self.openalex_source_hosts
+        )
+        if source_clients:
+            self.source_clients.update(source_clients)
         self._rate_lock = threading.Lock()
         self._next_request_at: dict[ResearchMetadataProvider, float] = {}
 
@@ -147,13 +172,21 @@ class ResearchMetadataScout:
                 raise ValueError("SEC Scout requires a declared User-Agent with a contact email")
         if (
             paper.requested_use is ResearchSourceUse.CONTENT_USE
-            and source_assessment.family is not ResearchSourceFamily.ARXIV
+            and source_assessment.family
+            not in {ResearchSourceFamily.ARXIV, ResearchSourceFamily.OPENALEX}
         ):
             raise ValueError(
                 "content use is not enabled without a first-party source-version verifier"
             )
         if (
             paper.requested_use is ResearchSourceUse.CONTENT_USE
+            and source_assessment.family is ResearchSourceFamily.OPENALEX
+            and not self.openalex_source_hosts
+        ):
+            raise ValueError("OpenAlex content use requires a reviewed source-host allowlist")
+        if (
+            paper.requested_use is ResearchSourceUse.CONTENT_USE
+            and source_assessment.family is ResearchSourceFamily.ARXIV
             and _ARXIV_VERSION_SUFFIX.search(urlsplit(paper.source_url).path) is None
         ):
             raise ValueError("arXiv content use requires an explicitly versioned citation URL")
@@ -212,15 +245,25 @@ class ResearchMetadataScout:
             )
             if cancelled():
                 return "cancelled_before_registry_write"
-            verified_source = None
+            verified_source: _VerifiedArxivSource | _VerifiedOpenAlexSource | None = None
             if paper.requested_use is ResearchSourceUse.CONTENT_USE:
                 try:
-                    verified_source = self._verify_arxiv_source(
-                        paper,
-                        metadata,
-                        cancelled=cancelled,
-                        deadline=deadline,
-                    )
+                    if metadata.provider is ResearchMetadataProvider.ARXIV_API:
+                        verified_source = self._verify_arxiv_source(
+                            paper,
+                            metadata,
+                            cancelled=cancelled,
+                            deadline=deadline,
+                        )
+                    elif metadata.provider is ResearchMetadataProvider.OPENALEX_API:
+                        verified_source = self._verify_openalex_source(
+                            paper,
+                            metadata,
+                            cancelled=cancelled,
+                            deadline=deadline,
+                        )
+                    else:
+                        raise ValueError("content-use verifier is unavailable for this provider")
                 except _RateBudgetExpired:
                     if cancelled():
                         return "cancelled_before_source_verification"
@@ -297,6 +340,21 @@ class ResearchMetadataScout:
             expected_reference = f"https://fred.stlouisfed.org{urlsplit(paper.source_url).path}"
             if parsed.get("version_reference") != expected_reference:
                 raise ValueError("FRED response does not identify the cited series")
+        doi = None
+        source_document_reference = None
+        work_reference = None
+        openalex_best_location = False
+        if provider is ResearchMetadataProvider.OPENALEX_API:
+            doi = _canonical_doi(parsed.get("doi"))
+            raw_document_reference = _optional_text(
+                parsed.get("source_document_reference"), maximum=2048
+            )
+            if raw_document_reference is not None:
+                source_document_reference = _safe_https_reference(raw_document_reference)
+            raw_work_reference = _optional_text(parsed.get("work_reference"), maximum=2048)
+            if raw_work_reference is not None:
+                work_reference = _safe_https_reference(raw_work_reference)
+            openalex_best_location = parsed.get("best_oa_location") is True
         title = _required_text(parsed.get("title"), "title", maximum=2048)
         authors = _authors(parsed.get("authors"))
         publication_date = _optional_text(parsed.get("publication_date"), maximum=128)
@@ -305,6 +363,22 @@ class ResearchMetadataScout:
         version_label = _optional_text(parsed.get("version_label"), maximum=128)
         if provider is ResearchMetadataProvider.OPENALEX_API and version_reference is not None:
             version_reference = _safe_https_reference(version_reference)
+        if (
+            provider is ResearchMetadataProvider.OPENALEX_API
+            and paper.requested_use is ResearchSourceUse.CONTENT_USE
+        ):
+            expected_work = f"https://openalex.org{urlsplit(paper.source_url).path}"
+            if (
+                work_reference != expected_work
+                or doi is None
+                or not openalex_best_location
+                or source_document_reference is None
+                or version_reference is None
+                or version_label not in _OPENALEX_VERSIONS
+            ):
+                raise ValueError(
+                    "OpenAlex did not identify the cited work and one versioned OA location"
+                )
         if version_reference is None and version_label is not None:
             version_reference = paper.source_url
         if provider is ResearchMetadataProvider.ARXIV_API and version_reference is not None:
@@ -345,6 +419,10 @@ class ResearchMetadataScout:
             version_label=version_label,
             license_evidence_source=evidence_source,
             license_evidence_reference=evidence_reference if evidence_source is not None else None,
+            doi=doi,
+            source_document_reference=source_document_reference,
+            work_reference=work_reference,
+            openalex_best_location=openalex_best_location,
         )
 
     def _verify_arxiv_source(
@@ -400,6 +478,7 @@ class ResearchMetadataScout:
             document.status_code != 200
             or not _header_value(document.headers, "content-type").startswith("application/pdf")
             or not document.body.startswith(b"%PDF-")
+            or len(document.body) > _MAX_SOURCE_DOCUMENT_BYTES
         ):
             raise ValueError("arXiv exact-version document returned an unexpected response")
         return _VerifiedArxivSource(
@@ -407,6 +486,93 @@ class ResearchMetadataScout:
             license_evidence_sha256=hashlib.sha256(page.body).hexdigest(),
             license_evidence_reference=metadata.version_reference,
             license_evidence_observed_at=page.fetched_at,
+            document_reference=document_url,
+            document_sha256=hashlib.sha256(document.body).hexdigest(),
+            document_size_bytes=len(document.body),
+            document_observed_at=document.fetched_at,
+        )
+
+    def _verify_openalex_source(
+        self,
+        paper: PaperCard,
+        metadata: _SourceMetadata,
+        *,
+        cancelled,
+        deadline: float,
+    ) -> _VerifiedOpenAlexSource:
+        if (
+            metadata.version_reference is None
+            or metadata.version_label is None
+            or metadata.doi is None
+            or metadata.source_document_reference is None
+            or not metadata.openalex_best_location
+        ):
+            raise ValueError("OpenAlex content use requires one identified best OA location")
+        page_host = _openalex_reference_host(
+            metadata.version_reference,
+            allowed_hosts=self.openalex_source_hosts,
+        )
+        document_host = _openalex_reference_host(
+            metadata.source_document_reference,
+            allowed_hosts=self.openalex_source_hosts,
+        )
+        page_client = self.source_clients.get(f"openalex_version_page:{page_host}")
+        document_client = self.source_clients.get(f"openalex_document:{document_host}")
+        if page_client is None or document_client is None:
+            raise ValueError("OpenAlex source host has no reviewed page/document client")
+        if cancelled() or not self._claim_request_slot(
+            ResearchMetadataProvider.OPENALEX_API,
+            cancelled=cancelled,
+            deadline=deadline,
+        ):
+            raise _RateBudgetExpired("OpenAlex page exceeds the remaining Scout budget")
+        page = page_client.get(
+            metadata.version_reference,
+            headers={"Accept": "text/html"},
+            max_retries=0,
+            timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+        )
+        if page.status_code != 200 or not _header_value(page.headers, "content-type").startswith(
+            "text/html"
+        ):
+            raise ValueError("OpenAlex source version page returned an unexpected response")
+        license_claim = _openalex_license_claim(
+            page.body,
+            metadata.version_reference,
+            expected_doi=metadata.doi,
+            expected_document_reference=metadata.source_document_reference,
+            allowed_hosts=self.openalex_source_hosts,
+        )
+        self.source_policy.assess(
+            source_url=paper.source_url,
+            license_claim=license_claim,
+            requested_use=ResearchSourceUse.CONTENT_USE,
+        )
+        if cancelled() or not self._claim_request_slot(
+            ResearchMetadataProvider.OPENALEX_API,
+            cancelled=cancelled,
+            deadline=deadline,
+        ):
+            raise _RateBudgetExpired("OpenAlex document hash exceeds the remaining Scout budget")
+        document = document_client.get(
+            metadata.source_document_reference,
+            headers={"Accept": "application/pdf"},
+            max_retries=0,
+            timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+        )
+        if (
+            document.status_code != 200
+            or not _header_value(document.headers, "content-type").startswith("application/pdf")
+            or not document.body.startswith(b"%PDF-")
+            or len(document.body) > _MAX_SOURCE_DOCUMENT_BYTES
+        ):
+            raise ValueError("OpenAlex exact-version document returned an unexpected response")
+        return _VerifiedOpenAlexSource(
+            license_claim=license_claim,
+            license_evidence_sha256=hashlib.sha256(page.body).hexdigest(),
+            license_evidence_reference=metadata.version_reference,
+            license_evidence_observed_at=page.fetched_at,
+            document_reference=metadata.source_document_reference,
             document_sha256=hashlib.sha256(document.body).hexdigest(),
             document_size_bytes=len(document.body),
             document_observed_at=document.fetched_at,
@@ -644,13 +810,18 @@ class ResearchMetadataScout:
                     name = author.get("display_name") if isinstance(author, dict) else None
                     if isinstance(name, str):
                         authors.append(name)
-            location = data.get("best_oa_location")
+            best_location = data.get("best_oa_location")
+            location = best_location
             if not isinstance(location, dict):
                 locations = data.get("locations")
                 location = locations[0] if isinstance(locations, list) and locations else None
             license_value = location.get("license") if isinstance(location, dict) else None
             version_label = location.get("version") if isinstance(location, dict) else None
             return {
+                "work_reference": data.get("id"),
+                # The location DOI identifies this copy. The work DOI can refer
+                # to another location/version, so it cannot substitute here.
+                "doi": location.get("doi") if isinstance(location, dict) else None,
                 "title": data.get("title"),
                 "authors": authors,
                 "publication_date": data.get("publication_date"),
@@ -658,6 +829,12 @@ class ResearchMetadataScout:
                 "version_label": version_label,
                 "version_reference": (
                     location.get("landing_page_url") if isinstance(location, dict) else None
+                ),
+                "source_document_reference": (
+                    location.get("pdf_url") if isinstance(location, dict) else None
+                ),
+                "best_oa_location": (
+                    isinstance(best_location, dict) and best_location.get("is_oa") is True
                 ),
             }
         if provider is ResearchMetadataProvider.CROSSREF_API:
@@ -745,7 +922,7 @@ class ResearchMetadataScout:
         paper: PaperCard,
         metadata: _SourceMetadata,
         *,
-        verified_source: _VerifiedArxivSource | None = None,
+        verified_source: _VerifiedArxivSource | _VerifiedOpenAlexSource | None = None,
     ) -> PaperCard:
         payload = paper.model_dump(mode="python")
         version_hash = None
@@ -757,11 +934,27 @@ class ResearchMetadataScout:
                         "reference": metadata.version_reference,
                         "label": metadata.version_label,
                         "metadata_sha256": metadata.response_sha256,
+                        "doi": metadata.doi,
+                        "document_reference": (
+                            metadata.source_document_reference
+                            if (
+                                metadata.provider is ResearchMetadataProvider.OPENALEX_API
+                                and paper.requested_use is ResearchSourceUse.CONTENT_USE
+                            )
+                            else None
+                        ),
                     },
                     sort_keys=True,
                     separators=(",", ":"),
                 ).encode("utf-8")
             ).hexdigest()
+        verified_license_source = None
+        if isinstance(verified_source, _VerifiedArxivSource):
+            verified_license_source = ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE
+        elif isinstance(verified_source, _VerifiedOpenAlexSource):
+            verified_license_source = (
+                ResearchLicenseEvidenceSource.OPENALEX_FIRST_PARTY_VERSION_PAGE
+            )
         payload.update(
             artifact_id=uuid4(),
             created_at=metadata.observed_at,
@@ -779,11 +972,9 @@ class ResearchMetadataScout:
             source_version_reference=metadata.version_reference,
             source_version_label=metadata.version_label,
             source_version_identity_sha256=version_hash,
-            source_license_evidence_source=(
-                ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE
-                if verified_source
-                else metadata.license_evidence_source
-            ),
+            source_doi=metadata.doi,
+            source_license_evidence_source=verified_license_source
+            or metadata.license_evidence_source,
             source_license_evidence_reference=(
                 verified_source.license_evidence_reference
                 if verified_source
@@ -811,6 +1002,9 @@ class ResearchMetadataScout:
             ),
             source_document_observed_at=(
                 verified_source.document_observed_at if verified_source else None
+            ),
+            source_document_reference=(
+                verified_source.document_reference if verified_source else None
             ),
         )
         return PaperCard.model_validate(payload)
@@ -871,8 +1065,11 @@ class ResearchMetadataScout:
         return clients
 
     @staticmethod
-    def _build_source_clients() -> dict[str, SafeHttpClient]:
-        return {
+    def _build_source_clients(
+        *,
+        openalex_source_hosts: tuple[str, ...],
+    ) -> dict[str, SafeHttpClient]:
+        clients = {
             "arxiv_version_page": SafeHttpClient(
                 HttpClientConfig(
                     allowed_hosts=("arxiv.org",),
@@ -894,6 +1091,28 @@ class ResearchMetadataScout:
                 )
             ),
         }
+        for host in openalex_source_hosts:
+            clients[f"openalex_version_page:{host}"] = SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=(host,),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_METADATA_RESPONSE_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                )
+            )
+            clients[f"openalex_document:{host}"] = SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=(host,),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_SOURCE_DOCUMENT_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                )
+            )
+        return clients
 
 
 class _RateBudgetExpired(RuntimeError):
@@ -924,6 +1143,62 @@ class _ArxivLicensePageParser(HTMLParser):
             self._active_text = []
 
 
+class _OpenAlexVersionPageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.doi_claims: list[str] = []
+        self.license_links: list[str] = []
+        self.document_links: list[str] = []
+        self._active_href: str | None = None
+        self._active_license = False
+        self._active_document = False
+        self._active_text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        attributes = {key.lower(): value for key, value in attrs}
+        lowered_tag = tag.lower()
+        if lowered_tag == "meta":
+            name = (attributes.get("name") or "").strip().casefold()
+            content = attributes.get("content")
+            if content and name in {"citation_doi", "dc.identifier", "doi"}:
+                self.doi_claims.append(content)
+            if content and name == "citation_pdf_url":
+                self.document_links.append(content)
+        if lowered_tag == "link":
+            href = attributes.get("href")
+            rel = set((attributes.get("rel") or "").casefold().split())
+            media_type = (attributes.get("type") or "").casefold()
+            if href and "license" in rel:
+                self.license_links.append(href)
+            if href and media_type == "application/pdf":
+                self.document_links.append(href)
+        if lowered_tag == "a":
+            self._active_href = attributes.get("href")
+            rel = set((attributes.get("rel") or "").casefold().split())
+            media_type = (attributes.get("type") or "").casefold()
+            self._active_license = "license" in rel
+            path = urlsplit(self._active_href or "").path.casefold()
+            self._active_document = media_type == "application/pdf" or path.endswith(".pdf")
+            self._active_text = []
+
+    def handle_data(self, data: str) -> None:
+        if self._active_href is not None:
+            self._active_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() != "a" or self._active_href is None:
+            return
+        label = " ".join(self._active_text).casefold()
+        if self._active_license or "license" in label or "licence" in label:
+            self.license_links.append(self._active_href)
+        if self._active_document:
+            self.document_links.append(self._active_href)
+        self._active_href = None
+        self._active_license = False
+        self._active_document = False
+        self._active_text = []
+
+
 def _has_xml_declaration(body: bytes) -> bool:
     upper = body.upper()
     return b"<!DOCTYPE" in upper or b"<!ENTITY" in upper
@@ -936,14 +1211,58 @@ def _arxiv_license_claim(body: bytes, version_reference: str) -> str:
     except (UnicodeDecodeError, ValueError):
         raise ValueError("arXiv version page failed license parsing") from None
     claims = [
-        _recognized_arxiv_license(urljoin(version_reference, href)) for href in parser.license_links
+        _recognized_cc_license(urljoin(version_reference, href)) for href in parser.license_links
     ]
     if not claims or any(claim is None for claim in claims) or len(set(claims)) != 1:
         raise ValueError("arXiv version page does not establish one allowlisted license")
     return claims[0]
 
 
-def _recognized_arxiv_license(value: str) -> str | None:
+def _openalex_license_claim(
+    body: bytes,
+    version_reference: str,
+    *,
+    expected_doi: str,
+    expected_document_reference: str,
+    allowed_hosts: tuple[str, ...],
+) -> str:
+    try:
+        parser = _OpenAlexVersionPageParser()
+        parser.feed(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise ValueError("OpenAlex version page failed typed parsing") from None
+    observed_dois = {_canonical_doi(value) for value in parser.doi_claims}
+    canonical_expected_doi = _canonical_doi(expected_doi)
+    if canonical_expected_doi is None or observed_dois != {canonical_expected_doi}:
+        raise ValueError("OpenAlex version page does not identify the metadata DOI")
+    claims = [
+        _recognized_cc_license(urljoin(version_reference, href)) for href in parser.license_links
+    ]
+    if not claims or any(claim is None for claim in claims) or len(set(claims)) != 1:
+        raise ValueError("OpenAlex version page does not establish one allowlisted license")
+    canonical_expected_document = _canonical_openalex_reference(
+        expected_document_reference,
+        allowed_hosts=allowed_hosts,
+    )
+    expected_document_host = urlsplit(canonical_expected_document).hostname
+    observed_documents = set()
+    for reference in parser.document_links:
+        absolute = urljoin(version_reference, reference)
+        try:
+            canonical_document = _canonical_openalex_reference(
+                absolute,
+                allowed_hosts=allowed_hosts,
+            )
+        except ValueError:
+            continue
+        if urlsplit(canonical_document).hostname == expected_document_host:
+            observed_documents.add(canonical_document)
+    if canonical_expected_document not in observed_documents:
+        raise ValueError("OpenAlex version page does not identify its selected PDF")
+    return claims[0]
+
+
+def _recognized_cc_license(value: str) -> str | None:
     try:
         parsed = urlsplit(value)
         port = parsed.port
@@ -1002,6 +1321,87 @@ def _valid_sec_user_agent(value: str) -> bool:
         and _EMAIL.search(value) is not None
         and all(0x20 <= ord(character) <= 0x7E for character in value)
     )
+
+
+def _normalize_openalex_source_hosts(hosts: tuple[str, ...]) -> tuple[str, ...]:
+    normalized = []
+    host_pattern = re.compile(r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+    for raw_host in hosts:
+        host = raw_host.strip().lower()
+        if (
+            not host
+            or host != raw_host
+            or not host_pattern.fullmatch(host)
+            or host.endswith((".localhost", ".local", ".internal", ".test"))
+        ):
+            raise ValueError("OpenAlex source hosts must be exact public DNS hostnames")
+        normalized.append(host)
+    return tuple(dict.fromkeys(normalized))
+
+
+def _openalex_reference_host(value: str, *, allowed_hosts: tuple[str, ...]) -> str:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        raise ValueError("OpenAlex source URL is malformed") from None
+    host = parsed.hostname.lower() if parsed.hostname else ""
+    if (
+        parsed.scheme != "https"
+        or not host
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.netloc.lower() != host
+        or parsed.netloc.endswith(".")
+        or "\\" in value
+        or not parsed.path.startswith("/")
+        or "//" in parsed.path
+        or "%" in parsed.path
+        or any(segment in {".", ".."} for segment in parsed.path.split("/"))
+        or parsed.query
+        or parsed.fragment
+        or any(ord(character) < 0x20 or character.isspace() for character in value)
+    ):
+        raise ValueError("OpenAlex source URL is not a canonical HTTPS reference")
+    if host not in allowed_hosts:
+        raise ValueError("OpenAlex source URL host is not in the operator-reviewed allowlist")
+    return host
+
+
+def _canonical_openalex_reference(value: str, *, allowed_hosts: tuple[str, ...]) -> str:
+    host = _openalex_reference_host(value, allowed_hosts=allowed_hosts)
+    parsed = urlsplit(value)
+    return f"https://{host}{parsed.path}"
+
+
+def _canonical_doi(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if value[:4].casefold() == "doi:":
+        value = value[4:]
+    if not value.casefold().startswith("https://doi.org/"):
+        value = f"https://doi.org/{value}"
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "doi.org"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.netloc.lower() != "doi.org"
+        or parsed.query
+        or parsed.fragment
+        or _DOI_PATH.fullmatch(parsed.path) is None
+        or any(character.isspace() or ord(character) < 0x20 for character in value)
+    ):
+        return None
+    return f"https://doi.org{parsed.path.casefold()}"
 
 
 def _sec_filing_record(

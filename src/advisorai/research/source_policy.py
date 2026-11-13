@@ -16,7 +16,7 @@ from .cards import (
     ResearchSourceUse,
 )
 
-SOURCE_POLICY_VERSION = "research-source-policy-v2"
+SOURCE_POLICY_VERSION = "research-source-policy-v3"
 
 _ARXIV_PATH = re.compile(
     r"^/(?:abs|pdf|html)/(?:\d{4}\.\d{4,5}|[A-Za-z][A-Za-z0-9.-]*/\d{7})(?:v\d+)?$"
@@ -115,6 +115,13 @@ class ResearchSourcePolicy:
                     "reference": card.source_version_reference,
                     "label": card.source_version_label,
                     "metadata_sha256": card.source_metadata_sha256,
+                    "doi": card.source_doi,
+                    "document_reference": card.source_document_reference
+                    if (
+                        assessment.family is ResearchSourceFamily.OPENALEX
+                        and card.requested_use is ResearchSourceUse.CONTENT_USE
+                    )
+                    else None,
                 },
                 sort_keys=True,
                 separators=(",", ":"),
@@ -130,6 +137,9 @@ class ResearchSourcePolicy:
             ResearchLicenseEvidenceSource.OPENALEX_AGGREGATED_METADATA: (
                 ResearchSourceFamily.OPENALEX
             ),
+            ResearchLicenseEvidenceSource.OPENALEX_FIRST_PARTY_VERSION_PAGE: (
+                ResearchSourceFamily.OPENALEX
+            ),
             ResearchLicenseEvidenceSource.CROSSREF_DEPOSIT_METADATA: (
                 ResearchSourceFamily.CROSSREF
             ),
@@ -138,23 +148,47 @@ class ResearchSourcePolicy:
             raise ValueError("license evidence source does not match the cited source family")
         if assessment.permitted_use is ResearchSourceUse.CONTENT_USE:
             if (
-                card.source_license_evidence_source
-                is not ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE
-                or assessment.family is not ResearchSourceFamily.ARXIV
-            ):
-                raise ValueError("content use requires first-party exact-version license evidence")
-            if (
                 card.source_version_reference is None
                 or card.source_document_sha256 is None
                 or card.source_document_observed_at is None
+                or card.source_document_reference is None
                 or card.source_license_evidence_reference != card.source_version_reference
             ):
-                raise ValueError("content use requires a hash of the verified source version")
-            if not self._same_explicit_arxiv_version(
-                card.source_url,
-                card.source_version_reference,
-            ):
-                raise ValueError("content use requires the explicitly cited arXiv version")
+                raise ValueError(
+                    "content use requires first-party exact-version license evidence "
+                    "and a hash of the verified source document"
+                )
+            if assessment.family is ResearchSourceFamily.ARXIV:
+                if (
+                    card.source_license_evidence_source
+                    is not ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE
+                ):
+                    raise ValueError(
+                        "arXiv content use requires first-party exact-version license evidence"
+                    )
+                if not self._same_explicit_arxiv_version(
+                    card.source_url,
+                    card.source_version_reference,
+                ):
+                    raise ValueError("content use requires the explicitly cited arXiv version")
+                if card.source_document_reference != self._arxiv_pdf_reference(
+                    card.source_version_reference
+                ):
+                    raise ValueError("arXiv source document reference does not match its version")
+            elif assessment.family is ResearchSourceFamily.OPENALEX:
+                if (
+                    card.source_metadata_provider is not ResearchMetadataProvider.OPENALEX_API
+                    or card.source_license_evidence_source
+                    is not ResearchLicenseEvidenceSource.OPENALEX_FIRST_PARTY_VERSION_PAGE
+                    or not self._canonical_doi(card.source_doi)
+                    or not self._canonical_https_reference(card.source_version_reference)
+                    or not self._canonical_https_reference(card.source_document_reference)
+                ):
+                    raise ValueError(
+                        "OpenAlex content use requires first-party DOI, page, and document evidence"
+                    )
+            else:
+                raise ValueError("content use requires first-party exact-version license evidence")
         payload = card.model_dump(mode="python")
         payload.update(
             source_family=assessment.family,
@@ -181,6 +215,60 @@ class ResearchSourcePolicy:
         return (
             _ARXIV_VERSION_SUFFIX.sub("", source_id) == _ARXIV_VERSION_SUFFIX.sub("", version_id)
             and source_version.group() == version.group()
+        )
+
+    @staticmethod
+    def _arxiv_pdf_reference(version_reference: str) -> str | None:
+        try:
+            if (
+                ResearchSourcePolicy._source_family(version_reference)
+                is not ResearchSourceFamily.ARXIV
+            ):
+                return None
+            path = urlsplit(version_reference).path
+        except ValueError:
+            return None
+        if not path.startswith("/abs/"):
+            return None
+        return f"https://arxiv.org/pdf/{path.removeprefix('/abs/')}"
+
+    @staticmethod
+    def _canonical_https_reference(value: str | None) -> bool:
+        if value is None:
+            return False
+        try:
+            parsed = urlsplit(value)
+            port = parsed.port
+        except ValueError:
+            return False
+        return bool(
+            parsed.scheme == "https"
+            and parsed.hostname
+            and parsed.username is None
+            and parsed.password is None
+            and port is None
+            and parsed.netloc.lower() == parsed.hostname.lower()
+            and not parsed.netloc.endswith(".")
+            and not parsed.query
+            and not parsed.fragment
+            and "\\" not in value
+            and "//" not in parsed.path
+            and not any(segment in {".", ".."} for segment in parsed.path.split("/"))
+            and not any(ord(character) < 0x20 or character.isspace() for character in value)
+        )
+
+    @classmethod
+    def _canonical_doi(cls, value: str | None) -> bool:
+        if not cls._canonical_https_reference(value):
+            return False
+        try:
+            parsed = urlsplit(value)
+        except ValueError:
+            return False
+        return (
+            parsed.hostname == "doi.org"
+            and _CROSSREF_PATH.fullmatch(parsed.path) is not None
+            and value == f"https://doi.org{parsed.path.casefold()}"
         )
 
     @staticmethod

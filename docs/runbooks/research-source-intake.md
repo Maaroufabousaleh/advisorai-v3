@@ -6,7 +6,7 @@ it does not fetch source pages or store source bodies.
 
 ## Accepted citation URLs
 
-The current policy version is `research-source-policy-v2`. URLs must use
+The current policy version is `research-source-policy-v3`. URLs must use
 canonical HTTPS without credentials, a port, query, fragment, whitespace,
 backslashes, or percent-encoded paths. Both the hostname and path must match
 one of these reviewed families exactly:
@@ -37,21 +37,32 @@ allowlist and source-specific, exact-version evidence:
 | GitHub release | `MIT`, `Apache-2.0`, `BSD-2-Clause`, `BSD-3-Clause` |
 | SEC EDGAR, FRED | None in this policy version |
 
-The license table is necessary but not sufficient. The current first-party
-version and document verifier supports arXiv only. It requires the explicitly
-versioned arXiv URL page to link to CC0-1.0 or CC-BY-4.0, then hashes the
-matching PDF under the 64 MiB response cap. It stores the page hash, document
-hash, size, and observation times, but never stores the PDF bytes. Content use
-for other families fails closed until they have equivalent source-specific
-verification.
+The license table is necessary but not sufficient. The first-party version and
+document verifier supports explicitly versioned arXiv papers and OpenAlex works
+with a reviewed source-host allowlist. For OpenAlex, the Scout requires the
+exact work ID, a DOI and version label on the selected `best_oa_location`, then
+fetches that location's landing page and PDF from operator-allowlisted hosts.
+The page must identify the same DOI, link the exact selected PDF, and link one
+allowlisted Creative Commons license. The Scout hashes the page and PDF under
+the 512 KiB and 64 MiB response caps and stores neither body. OpenAlex's
+aggregated license field is not accepted as first-party rights evidence.
+OpenAlex describes each location as a particular hosted copy and assigns its
+version and license fields per location; the selected `best_oa_location` is
+therefore only the locator for the copy checked by the Scout ([OpenAlex
+locations documentation](https://help.openalex.org/data/locations/)).
+Crossref and GitHub content use still fail closed until equivalent
+source-specific verification.
 
 The `PaperCard.license` value is a submitted or provider-reported claim. The
 local policy does not make a legal determination or grant redistribution
 rights. For citation-only use, the license remains a claim from the caller or
 metadata provider. For arXiv content use, the first-party version page provides
 version-bound evidence that the selected license link was present at observation
-time. Do not store source text in `claimed_result`, `limitations`, or other
-metadata fields.
+time. For OpenAlex, the configured host list is an operator review boundary;
+OpenAlex's location/version choice is only a locator for the copy, and the
+publisher or repository page supplies the observed license and document links.
+This evidence is not a legal determination. Do not store source text in
+`claimed_result`, `limitations`, or other metadata fields.
 
 ## Metadata Scout
 
@@ -61,10 +72,12 @@ GitHub release, SEC EDGAR filing, and FRED series citations. Most citation-only
 jobs use one metadata request; an SEC filing outside the current submission
 index may use up to three additional, index-listed historical submission
 files. An explicit arXiv `content_use` request adds exact-version page and PDF
-requests. SEC filing documents and FRED observations are not fetched or stored.
+requests. An OpenAlex `content_use` request adds the `best_oa_location` page and
+PDF requests and requires an exact host allowlist in Scout configuration. SEC
+filing documents and FRED observations are not fetched or stored.
 
 The Scout uses exact API hosts, HTTPS, no retries, a 15-second request timeout,
-and cancellation-aware provider pacing. Generic metadata and arXiv page
+and cancellation-aware provider pacing. Generic metadata and source-page
 responses are capped at 512 KiB. SEC submission metadata is capped at 4 MiB
 across the current index and any historical files used to verify an accession.
 Exact-version PDF hashing uses a 64 MiB response cap. Provider pacing must fit
@@ -83,12 +96,15 @@ Replayed identical metadata observations are idempotent even when a prior
 process stopped before the job completion record.
 
 The metadata SHA-256 identifies the API response; the version identity SHA-256
-binds a provider, version reference and label, and that metadata hash. Neither
+binds a provider, version reference and label, and that metadata hash. For
+OpenAlex, it also binds the selected location DOI and PDF reference. Neither
 is a hash of the cited document bytes. Upstream license provenance remains a
 claim, not an authoritative rights determination. The arXiv content-use path
 checks the first-party version page and hashes the exact PDF without retaining
-it. First-party license verification for OpenAlex, Crossref, and GitHub remains
-software work. SEC citations are resolved against the SEC submissions API
+it. The OpenAlex path checks the exact best-OA location page and hashes its
+PDF without retaining it; the aggregated license remains untrusted. First-party
+license verification for Crossref and GitHub remains software work. SEC
+citations are resolved against the SEC submissions API
 using the CIK and accession in the cited archive path. The Scout requires the
 filing's primary document name to match the citation before recording issuer,
 form, filing date, and accession metadata. FRED citations resolve one series by
