@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -16,6 +17,7 @@ from advisorai.integrations.http import HttpClientConfig, SafeHttpClient
 
 from .cards import (
     PaperCard,
+    ResearchLicenseEvidenceSource,
     ResearchMetadataProvider,
     ResearchSourceFamily,
     ResearchSourceUse,
@@ -29,6 +31,7 @@ _MAX_SCOUT_JOB_CARD_BYTES = 64 * 1024
 _METADATA_TIMEOUT_SECONDS = 15.0
 _ATOM_NAMESPACE = "http://www.w3.org/2005/Atom"
 _ARXIV_NAMESPACE = "http://arxiv.org/schemas/atom"
+_ARXIV_VERSION_SUFFIX = re.compile(r"v[1-9]\d*$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +50,10 @@ class _SourceMetadata:
     response_sha256: str
     response_size_bytes: int
     observed_at: datetime
+    version_reference: str | None
+    version_label: str | None
+    license_evidence_source: ResearchLicenseEvidenceSource | None
+    license_evidence_reference: str | None
 
 
 class ResearchMetadataScout:
@@ -199,15 +206,50 @@ class ResearchMetadataScout:
         authors = _authors(parsed.get("authors"))
         publication_date = _optional_text(parsed.get("publication_date"), maximum=128)
         license_claim = _optional_text(parsed.get("license"), maximum=512) or "unknown"
+        version_reference = _optional_text(parsed.get("version_reference"), maximum=2048)
+        version_label = _optional_text(parsed.get("version_label"), maximum=128)
+        if provider is ResearchMetadataProvider.OPENALEX_API and version_reference is not None:
+            version_reference = _safe_https_reference(version_reference)
+        if version_reference is None and version_label is not None:
+            version_reference = paper.source_url
+        if provider is ResearchMetadataProvider.ARXIV_API and version_reference is not None:
+            version_reference, version_label = _validate_arxiv_version(
+                paper.source_url,
+                version_reference,
+            )
+        evidence_source_value = parsed.get("license_evidence_source")
+        evidence_reference = _optional_text(parsed.get("license_evidence_reference"), maximum=2048)
+        if evidence_source_value is None and license_claim != "unknown":
+            evidence_source_value = {
+                ResearchMetadataProvider.ARXIV_API: ResearchLicenseEvidenceSource.ARXIV_METADATA,
+                ResearchMetadataProvider.OPENALEX_API: (
+                    ResearchLicenseEvidenceSource.OPENALEX_AGGREGATED_METADATA
+                ),
+                ResearchMetadataProvider.CROSSREF_API: (
+                    ResearchLicenseEvidenceSource.CROSSREF_DEPOSIT_METADATA
+                ),
+            }.get(provider)
+        if evidence_source_value is not None and evidence_reference is None:
+            evidence_reference = endpoint
+        evidence_source = (
+            ResearchLicenseEvidenceSource(evidence_source_value)
+            if evidence_source_value is not None and evidence_reference is not None
+            else None
+        )
+        response_sha256 = hashlib.sha256(response.body).hexdigest()
         return _SourceMetadata(
             provider=provider,
             title=title,
             authors=authors,
             publication_date=publication_date or "unknown",
             license_claim=license_claim,
-            response_sha256=hashlib.sha256(response.body).hexdigest(),
+            response_sha256=response_sha256,
             response_size_bytes=len(response.body),
             observed_at=response.fetched_at,
+            version_reference=version_reference,
+            version_label=version_label,
+            license_evidence_source=evidence_source,
+            license_evidence_reference=evidence_reference if evidence_source is not None else None,
         )
 
     def _claim_request_slot(self, provider, *, cancelled, deadline: float) -> bool:
@@ -288,6 +330,8 @@ class ResearchMetadataScout:
                 "authors": authors,
                 "publication_date": entry.findtext(f"{{{_ATOM_NAMESPACE}}}published"),
                 "license": license_value,
+                "version_reference": entry.findtext(f"{{{_ATOM_NAMESPACE}}}id"),
+                "license_evidence_reference": license_value,
             }
 
         data = json.loads(body.decode("utf-8"))
@@ -302,13 +346,21 @@ class ResearchMetadataScout:
                     name = author.get("display_name") if isinstance(author, dict) else None
                     if isinstance(name, str):
                         authors.append(name)
-            open_access = data.get("open_access")
-            license_value = open_access.get("license") if isinstance(open_access, dict) else None
+            location = data.get("best_oa_location")
+            if not isinstance(location, dict):
+                locations = data.get("locations")
+                location = locations[0] if isinstance(locations, list) and locations else None
+            license_value = location.get("license") if isinstance(location, dict) else None
+            version_label = location.get("version") if isinstance(location, dict) else None
             return {
                 "title": data.get("title"),
                 "authors": authors,
                 "publication_date": data.get("publication_date"),
                 "license": license_value,
+                "version_label": version_label,
+                "version_reference": (
+                    location.get("landing_page_url") if isinstance(location, dict) else None
+                ),
             }
         if provider is ResearchMetadataProvider.CROSSREF_API:
             message = data.get("message")
@@ -327,15 +379,37 @@ class ResearchMetadataScout:
                         authors.append(name)
             licenses = message.get("license")
             license_value = None
-            if isinstance(licenses, list) and licenses:
-                first_license = licenses[0]
-                if isinstance(first_license, dict):
-                    license_value = first_license.get("URL")
+            version_label = None
+            license_entries = (
+                [item for item in licenses if isinstance(item, dict)]
+                if isinstance(licenses, list)
+                else []
+            )
+            license_claims = {
+                (item.get("URL"), item.get("content-version")) for item in license_entries
+            }
+            if len(license_claims) == 1:
+                license_value, version_label = next(iter(license_claims))
+            if not isinstance(version_label, str):
+                resources = message.get("link")
+                resource_versions = (
+                    {
+                        item.get("content-version")
+                        for item in resources
+                        if isinstance(item, dict) and isinstance(item.get("content-version"), str)
+                    }
+                    if isinstance(resources, list)
+                    else set()
+                )
+                version_label = (
+                    next(iter(resource_versions)) if len(resource_versions) == 1 else None
+                )
             return {
                 "title": _first_string(message.get("title")),
                 "authors": authors,
                 "publication_date": _crossref_publication_date(message),
                 "license": license_value,
+                "version_label": version_label,
             }
         if provider is ResearchMetadataProvider.GITHUB_RELEASE_API:
             author = data.get("author")
@@ -345,12 +419,29 @@ class ResearchMetadataScout:
                 "authors": authors,
                 "publication_date": data.get("published_at"),
                 "license": None,
+                "version_label": str(data.get("id") or data.get("tag_name"))
+                if data.get("id") or data.get("tag_name")
+                else None,
             }
         raise ValueError("metadata Scout provider parser is unavailable")
 
     @staticmethod
     def _enrich(paper: PaperCard, metadata: _SourceMetadata) -> PaperCard:
         payload = paper.model_dump(mode="python")
+        version_hash = None
+        if metadata.version_reference and metadata.version_label:
+            version_hash = hashlib.sha256(
+                json.dumps(
+                    {
+                        "provider": metadata.provider.value,
+                        "reference": metadata.version_reference,
+                        "label": metadata.version_label,
+                        "metadata_sha256": metadata.response_sha256,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
         payload.update(
             artifact_id=uuid4(),
             created_at=metadata.observed_at,
@@ -365,6 +456,17 @@ class ResearchMetadataScout:
             source_metadata_sha256=metadata.response_sha256,
             source_metadata_size_bytes=metadata.response_size_bytes,
             source_metadata_observed_at=metadata.observed_at,
+            source_version_reference=metadata.version_reference,
+            source_version_label=metadata.version_label,
+            source_version_identity_sha256=version_hash,
+            source_license_evidence_source=metadata.license_evidence_source,
+            source_license_evidence_reference=metadata.license_evidence_reference,
+            source_license_evidence_sha256=(
+                metadata.response_sha256 if metadata.license_evidence_source is not None else None
+            ),
+            source_license_evidence_observed_at=(
+                metadata.observed_at if metadata.license_evidence_source is not None else None
+            ),
         )
         return PaperCard.model_validate(payload)
 
@@ -428,6 +530,67 @@ def _paper_from_job_detail(detail: str) -> PaperCard:
         if not isinstance(checkpoint, dict) or not isinstance(checkpoint.get("paper"), dict):
             raise ValueError("Scout checkpoint does not contain a PaperCard") from None
         return PaperCard.model_validate(checkpoint["paper"])
+
+
+def _validate_arxiv_version(
+    source_url: str,
+    returned_reference: str,
+) -> tuple[str | None, str | None]:
+    requested = urlsplit(source_url)
+    returned = urlsplit(returned_reference)
+    if (
+        returned.scheme not in {"http", "https"}
+        or returned.hostname != "arxiv.org"
+        or returned.username is not None
+        or returned.password is not None
+        or returned.port is not None
+        or returned.query
+        or returned.fragment
+        or not returned.path.startswith("/abs/")
+    ):
+        raise ValueError("arXiv returned an invalid version reference")
+    requested_id = requested.path.removeprefix("/abs/")
+    returned_id = returned.path.removeprefix("/abs/")
+    requested_base = _ARXIV_VERSION_SUFFIX.sub("", requested_id)
+    returned_base = _ARXIV_VERSION_SUFFIX.sub("", returned_id)
+    if not requested_base or requested_base != returned_base:
+        raise ValueError("arXiv response identifies a different source record")
+    requested_version = _ARXIV_VERSION_SUFFIX.search(requested_id)
+    returned_version = _ARXIV_VERSION_SUFFIX.search(returned_id)
+    if (
+        requested_version
+        and returned_version
+        and requested_version.group() != returned_version.group()
+    ):
+        raise ValueError("arXiv response version does not match the requested version")
+    exact_id = returned_id
+    if requested_version and not returned_version:
+        exact_id = requested_id
+        returned_version = requested_version
+    if returned_version is None:
+        return None, None
+    return f"https://arxiv.org/abs/{exact_id}", returned_version.group()
+
+
+def _safe_https_reference(value: str) -> str | None:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.netloc.lower() != parsed.hostname.lower()
+        or parsed.netloc.endswith(".")
+    ):
+        return None
+    return value
 
 
 def _required_text(value: object, field: str, *, maximum: int) -> str:

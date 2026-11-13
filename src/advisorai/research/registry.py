@@ -109,7 +109,12 @@ class ResearchRegistry:
         if record_type == "paper" and record.source_metadata_sha256 is not None:
             stable_identity = record.model_dump(
                 mode="json",
-                exclude={"artifact_id", "created_at", "source_metadata_observed_at"},
+                exclude={
+                    "artifact_id",
+                    "created_at",
+                    "source_metadata_observed_at",
+                    "source_license_evidence_observed_at",
+                },
             )
             observation_key = hashlib.sha256(_json(stable_identity).encode()).hexdigest()
         with self._connect() as connection:

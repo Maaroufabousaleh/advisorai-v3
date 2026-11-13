@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 from .cards import (
     PaperCard,
+    ResearchLicenseEvidenceSource,
     ResearchMetadataProvider,
     ResearchSourceFamily,
     ResearchSourceUse,
@@ -101,6 +104,33 @@ class ResearchSourcePolicy:
         }.get(card.source_metadata_provider)
         if metadata_family is not None and metadata_family is not assessment.family:
             raise ValueError("metadata provider does not match the cited source family")
+        if card.source_version_identity_sha256 is not None:
+            version_identity = json.dumps(
+                {
+                    "provider": card.source_metadata_provider.value,
+                    "reference": card.source_version_reference,
+                    "label": card.source_version_label,
+                    "metadata_sha256": card.source_metadata_sha256,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            expected_version_hash = hashlib.sha256(version_identity.encode("utf-8")).hexdigest()
+            if card.source_version_identity_sha256 != expected_version_hash:
+                raise ValueError(
+                    "source version identity hash does not match its metadata evidence"
+                )
+        evidence_family = {
+            ResearchLicenseEvidenceSource.ARXIV_METADATA: ResearchSourceFamily.ARXIV,
+            ResearchLicenseEvidenceSource.OPENALEX_AGGREGATED_METADATA: (
+                ResearchSourceFamily.OPENALEX
+            ),
+            ResearchLicenseEvidenceSource.CROSSREF_DEPOSIT_METADATA: (
+                ResearchSourceFamily.CROSSREF
+            ),
+        }.get(card.source_license_evidence_source)
+        if evidence_family is not None and evidence_family is not assessment.family:
+            raise ValueError("license evidence source does not match the cited source family")
         payload = card.model_dump(mode="python")
         payload.update(
             source_family=assessment.family,

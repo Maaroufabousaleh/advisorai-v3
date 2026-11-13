@@ -55,6 +55,12 @@ class ResearchMetadataProvider(StrEnum):
     GITHUB_RELEASE_API = "github_release_api"
 
 
+class ResearchLicenseEvidenceSource(StrEnum):
+    ARXIV_METADATA = "arxiv_metadata"
+    OPENALEX_AGGREGATED_METADATA = "openalex_aggregated_metadata"
+    CROSSREF_DEPOSIT_METADATA = "crossref_deposit_metadata"
+
+
 class PaperCard(ArtifactModel):
     source_url: str = Field(min_length=1)
     title: str = Field(default="untitled", min_length=1, max_length=2048)
@@ -69,6 +75,13 @@ class PaperCard(ArtifactModel):
     source_metadata_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     source_metadata_size_bytes: int | None = Field(default=None, ge=1, le=512 * 1024)
     source_metadata_observed_at: datetime | None = None
+    source_version_reference: str | None = Field(default=None, max_length=2048)
+    source_version_label: str | None = Field(default=None, max_length=128)
+    source_version_identity_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_license_evidence_source: ResearchLicenseEvidenceSource | None = None
+    source_license_evidence_reference: str | None = Field(default=None, max_length=2048)
+    source_license_evidence_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_license_evidence_observed_at: datetime | None = None
     claimed_result: str = Field(min_length=1)
     limitations: tuple[str, ...] = ()
     relevance: str = Field(default="", min_length=0)
@@ -99,11 +112,49 @@ class PaperCard(ArtifactModel):
             raise ValueError(
                 "source metadata provider, hash, size, and time must be recorded together"
             )
+        version_provenance = (
+            self.source_version_reference is not None,
+            self.source_version_label is not None,
+            self.source_version_identity_sha256 is not None,
+        )
+        if any(version_provenance) and not all(version_provenance):
+            raise ValueError(
+                "source version reference, label, and identity hash must be recorded together"
+            )
+        if any(version_provenance) and not all(provenance):
+            raise ValueError("source version identity requires complete metadata provenance")
+        license_provenance = (
+            self.source_license_evidence_source is not None,
+            self.source_license_evidence_reference is not None,
+            self.source_license_evidence_sha256 is not None,
+            self.source_license_evidence_observed_at is not None,
+        )
+        if any(license_provenance) and not all(license_provenance):
+            raise ValueError(
+                "source license evidence source, reference, hash, and time must be recorded together"
+            )
+        if any(license_provenance) and not all(provenance):
+            raise ValueError("source license evidence requires complete metadata provenance")
+        if (
+            self.source_license_evidence_sha256 is not None
+            and self.source_license_evidence_sha256 != self.source_metadata_sha256
+        ):
+            raise ValueError("license evidence hash must identify its metadata response")
+        if (
+            self.source_license_evidence_observed_at is not None
+            and self.source_license_evidence_observed_at != self.source_metadata_observed_at
+        ):
+            raise ValueError("license evidence time must match its metadata observation")
         return self
 
     @field_validator("source_metadata_observed_at")
     @classmethod
     def metadata_time_aware(cls, value: datetime | None) -> datetime | None:
+        return _aware(value) if value is not None else None
+
+    @field_validator("source_license_evidence_observed_at")
+    @classmethod
+    def license_evidence_time_aware(cls, value: datetime | None) -> datetime | None:
         return _aware(value) if value is not None else None
 
 
@@ -193,6 +244,7 @@ __all__ = [
     "PromotionDecision",
     "ResearchSourceFamily",
     "ResearchMetadataProvider",
+    "ResearchLicenseEvidenceSource",
     "ResearchSourceUse",
     "ValidationReport",
 ]

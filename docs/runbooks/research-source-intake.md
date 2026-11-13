@@ -58,14 +58,19 @@ cancellation-aware and must fit inside the job's remaining execution budget.
 The response is parsed for title, authors, publication date, and license
 metadata; raw bodies, abstracts, and release notes are not written to the
 registry. Each stored PaperCard includes the API provider, response SHA-256,
-response size, and observation time. Replayed identical metadata observations
-are idempotent even when a prior process stopped before the job completion
-record.
+response size, and observation time. When an upstream record exposes a version,
+the card also records its reference, label, and an identity SHA-256 bound to
+that provider response. License evidence records identify whether the claim
+came from arXiv metadata, OpenAlex aggregation, or a Crossref member deposit.
+Replayed identical metadata observations are idempotent even when a prior
+process stopped before the job completion record.
 
-This hash identifies the metadata API response, not the cited source document.
-An API's license field remains a source claim and requires exact-version review
-before content use or redistribution. The Scout does not download full papers,
-source archives, SEC filings, or FRED data.
+The metadata SHA-256 identifies the API response; the version identity SHA-256
+binds a provider, version reference and label, and that metadata hash. Neither
+is a hash of the cited document bytes. License provenance remains an upstream
+claim and is not an authoritative rights determination. Source-document hashes
+and first-party, exact-version license verification remain software work. The
+Scout does not download full papers, source archives, SEC filings, or FRED data.
 
 Stored PaperCards include their derived source family, requested and permitted
 use, and policy version. Caller-supplied assessment fields are overwritten at

@@ -24,6 +24,7 @@ from advisorai.research import (
 _ARXIV_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
   <entry>
+    <id>http://arxiv.org/abs/cs.LG/0301001v2</id>
     <title>Metadata only title</title>
     <published>2024-01-02T00:00:00Z</published>
     <author><name>A. Researcher</name></author>
@@ -99,6 +100,11 @@ def _scout(
                     "publication_date": "2024-02-03",
                     "authorships": [{"author": {"display_name": "OpenAlex author"}}],
                     "open_access": {"license": "cc-by"},
+                    "best_oa_location": {
+                        "landing_page_url": "https://example.org/work",
+                        "version": "publishedVersion",
+                        "license": "CC-BY-4.0",
+                    },
                     "abstract_inverted_index": {"secret abstract": [0]},
                 }
             ).encode(),
@@ -114,7 +120,12 @@ def _scout(
                         "title": ["Crossref title"],
                         "author": [{"given": "Crossref", "family": "Author"}],
                         "published-online": {"date-parts": [[2023, 4, 5]]},
-                        "license": [{"URL": "unknown"}],
+                        "license": [
+                            {
+                                "URL": "https://creativecommons.org/licenses/by/4.0/",
+                                "content-version": "vor",
+                            }
+                        ],
                     }
                 }
             ).encode(),
@@ -127,6 +138,7 @@ def _scout(
             json.dumps(
                 {
                     "name": "Pandas 2.2.0",
+                    "id": 123456,
                     "tag_name": "v2.2.0",
                     "published_at": "2024-01-29T12:00:00Z",
                     "author": {"login": "release-author"},
@@ -168,6 +180,9 @@ def test_metadata_scout_uses_pinned_endpoints_and_persists_only_hashes(
     assert result.paper.source_metadata_sha256 is not None
     assert result.paper.source_metadata_size_bytes == len(body)
     assert result.paper.source_metadata_observed_at is not None
+    assert result.paper.source_version_reference is not None
+    assert result.paper.source_version_label is not None
+    assert result.paper.source_version_identity_sha256 is not None
     assert (
         result.paper.source_family
         is {
@@ -187,6 +202,19 @@ def test_metadata_scout_uses_pinned_endpoints_and_persists_only_hashes(
     if provider is ResearchMetadataProvider.ARXIV_API:
         query = parse_qs(urlsplit(calls[0]).query)
         assert query == {"id_list": ["cs.LG/0301001"], "max_results": ["1"]}
+        assert result.paper.source_version_reference == ("https://arxiv.org/abs/cs.LG/0301001v2")
+        assert result.paper.source_version_label == "v2"
+        assert result.paper.source_license_evidence_sha256 is None
+    elif provider is ResearchMetadataProvider.OPENALEX_API:
+        assert result.paper.source_version_reference == "https://example.org/work"
+        assert result.paper.source_version_label == "publishedVersion"
+        assert result.paper.source_license_evidence_source.value == "openalex_aggregated_metadata"
+    elif provider is ResearchMetadataProvider.CROSSREF_API:
+        assert result.paper.source_version_label == "vor"
+        assert result.paper.source_license_evidence_source.value == "crossref_deposit_metadata"
+    elif provider is ResearchMetadataProvider.GITHUB_RELEASE_API:
+        assert result.paper.source_version_label == "123456"
+        assert result.paper.source_license_evidence_sha256 is None
 
     with sqlite3.connect(scout.registry.database_path) as connection:
         stored_payload = connection.execute(
@@ -203,6 +231,7 @@ def test_repeated_scout_observation_is_idempotent_across_job_restart(tmp_path):
             "publication_date": "2025-01-02",
             "authorships": [],
             "open_access": {"license": None},
+            "best_oa_location": {"version": "publishedVersion", "license": None},
         }
     ).encode()
     scout, coordinator, calls = _scout(
@@ -221,6 +250,78 @@ def test_repeated_scout_observation_is_idempotent_across_job_restart(tmp_path):
     assert scout.registry.count("paper") == 1
     assert len(calls) == 2
     assert len(coordinator.jobs()) == 2
+
+
+def test_source_version_identity_hash_cannot_be_detached_from_its_metadata(tmp_path):
+    body = json.dumps(
+        {
+            "title": "versioned work",
+            "authorships": [],
+            "best_oa_location": {"version": "publishedVersion"},
+        }
+    ).encode()
+    scout, _coordinator, _calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.OPENALEX_API,
+        host="api.openalex.org",
+        response_body=body,
+    )
+    result = scout.execute(_paper("https://openalex.org/W2741809807"))
+    assert result.paper is not None
+
+    detached = result.paper.model_copy(update={"source_version_label": "submittedVersion"})
+    with pytest.raises(ValueError, match="identity hash does not match"):
+        scout.registry.store(detached, record_type="paper")
+
+
+def test_arxiv_versioned_request_rejects_a_different_returned_version(tmp_path):
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.ARXIV_API,
+        host="export.arxiv.org",
+        response_body=_ARXIV_XML,
+    )
+
+    result = scout.execute(_paper("https://arxiv.org/abs/cs.LG/0301001v1"))
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert parse_qs(urlsplit(calls[0]).query)["id_list"] == ["cs.LG/0301001v1"]
+    assert scout.registry.count("paper") == 0
+
+
+def test_crossref_ambiguous_versioned_license_is_not_collapsed(tmp_path):
+    body = json.dumps(
+        {
+            "message": {
+                "title": ["Ambiguous license"],
+                "license": [
+                    {
+                        "URL": "https://creativecommons.org/licenses/by/4.0/",
+                        "content-version": "vor",
+                    },
+                    {
+                        "URL": "https://creativecommons.org/publicdomain/zero/1.0/",
+                        "content-version": "am",
+                    },
+                ],
+            }
+        }
+    ).encode()
+    scout, _coordinator, _calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.CROSSREF_API,
+        host="api.crossref.org",
+        response_body=body,
+    )
+
+    result = scout.execute(_paper("https://doi.org/10.1234/example.doi"))
+
+    assert result.job.state is JobState.COMPLETED
+    assert result.paper is not None
+    assert result.paper.license == "unknown"
+    assert result.paper.source_license_evidence_source is None
+    assert result.paper.source_version_label is None
 
 
 def test_unknown_license_content_use_fails_closed_after_metadata_fetch(tmp_path):

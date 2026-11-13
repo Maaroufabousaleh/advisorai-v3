@@ -59,9 +59,12 @@ citation-only/content-use decision. A bounded Scout now reads one record at a
 time from the arXiv, OpenAlex, Crossref, or GitHub release metadata APIs under
 ResearchCoordinator cancellation and budget controls, with fixed-host HTTPS,
 response-size limits, rate pacing, and durable response hashes. It does not
-save response bodies or fetch full papers. The next software item is tying
-exact source-version hashes and authoritative license provenance to these
-metadata observations, then adding SEC/FRED metadata adapters. Model
+save response bodies or fetch full papers. Cards now record provider version
+references, labels, identity hashes, and the upstream source of license claims.
+Those identity hashes do not cover document bytes, and upstream license claims
+are not authoritative rights determinations. Source-document byte hashes and
+first-party, exact-version license verification remain software work, followed
+by SEC/FRED metadata adapters. Model
 qualification, provider credentials, venue evidence, and human admission do
 not block this quarantined implementation.
 
