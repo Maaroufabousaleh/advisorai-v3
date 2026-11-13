@@ -87,6 +87,7 @@ PRIMARY_IDS = (
 SOURCE_ASSETS = {
     "binance_spot_public_market_data": {"BTCUSDT": "BTC", "ETHUSDT": "ETH"},
     "coinbase_exchange_public_market_data": {"BTC-USD": "BTC", "ETH-USD": "ETH"},
+    "kraken_spot_public_market_data": {"XBTUSD": "BTC", "ETHUSD": "ETH"},
     "deribit_public_context": {"BTC-PERPETUAL": "BTC", "ETH-PERPETUAL": "ETH"},
 }
 

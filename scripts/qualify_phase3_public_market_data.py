@@ -471,6 +471,14 @@ def _message_metadata(raw: bytes, source_id: str) -> tuple[str, set[str], dateti
     except (UnicodeDecodeError, json.JSONDecodeError):
         return "non_json", set(), None
     if not isinstance(payload, Mapping):
+        if source_id == "kraken_spot_public_market_data" and isinstance(payload, list):
+            symbols = set()
+            for item in payload:
+                if isinstance(item, str):
+                    for symbol in ("XBTUSD", "XXBTZUSD", "ETHUSD", "XETHZUSD"):
+                        if symbol in item.upper():
+                            symbols.add(symbol)
+            return "kraken_array_update", symbols, None
         return "json_non_object", set(), None
     symbols: set[str] = set()
     if source_id == "binance_spot_public_market_data":
@@ -483,6 +491,15 @@ def _message_metadata(raw: bytes, source_id: str) -> tuple[str, set[str], dateti
         if isinstance(value, str):
             symbols.add(value.upper())
         kind = str(payload.get("type", "object"))
+    elif source_id == "kraken_spot_public_market_data":
+        kind = str(payload.get("event", payload.get("channel", "object")))
+        pair = payload.get("pair")
+        if isinstance(pair, str):
+            symbols.add(pair.upper())
+        text = json.dumps(payload, sort_keys=True)
+        for symbol in ("XBTUSD", "XXBTZUSD", "ETHUSD", "XETHZUSD"):
+            if symbol in text:
+                symbols.add(symbol)
     else:
         if payload.get("id") is not None and "result" in payload:
             kind = "subscription_ack"

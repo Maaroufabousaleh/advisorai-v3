@@ -95,7 +95,7 @@ def test_resumed_run_rejects_changed_max_cycles_and_hydrates_without_duplicates(
     first = run_qualification(root, **kwargs)
     samples_before = (root / "samples.jsonl").read_bytes()
     health_before = (root / "health-transitions.jsonl").read_bytes()
-    assert first["sample_count"] == 6
+    assert first["sample_count"] == 8
 
     with pytest.raises(RuntimeError, match="max_cycles"):
         run_qualification(root, **{**kwargs, "max_cycles": 2})
