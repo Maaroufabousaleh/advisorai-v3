@@ -6,7 +6,12 @@ import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
-from .cards import PaperCard, ResearchSourceFamily, ResearchSourceUse
+from .cards import (
+    PaperCard,
+    ResearchMetadataProvider,
+    ResearchSourceFamily,
+    ResearchSourceUse,
+)
 
 SOURCE_POLICY_VERSION = "research-source-policy-v1"
 
@@ -88,6 +93,14 @@ class ResearchSourcePolicy:
             license_claim=card.license,
             requested_use=card.requested_use,
         )
+        metadata_family = {
+            ResearchMetadataProvider.ARXIV_API: ResearchSourceFamily.ARXIV,
+            ResearchMetadataProvider.OPENALEX_API: ResearchSourceFamily.OPENALEX,
+            ResearchMetadataProvider.CROSSREF_API: ResearchSourceFamily.CROSSREF,
+            ResearchMetadataProvider.GITHUB_RELEASE_API: ResearchSourceFamily.GITHUB_RELEASE,
+        }.get(card.source_metadata_provider)
+        if metadata_family is not None and metadata_family is not assessment.family:
+            raise ValueError("metadata provider does not match the cited source family")
         payload = card.model_dump(mode="python")
         payload.update(
             source_family=assessment.family,

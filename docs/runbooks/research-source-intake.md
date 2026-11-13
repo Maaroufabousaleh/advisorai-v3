@@ -43,8 +43,29 @@ claim applies to the cited version. A recorded `content_use` result is
 therefore a policy classification, not source qualification or a grant of
 redistribution rights. Do not store source text in `claimed_result`,
 `limitations`, or other metadata fields. Source acquisition, response hashes,
-and authoritative license provenance are tracked as remaining Research Brain
-software work.
+and authoritative license provenance are tracked separately below.
+
+## Metadata Scout
+
+`ResearchMetadataScout` runs one lookup as a durable `ResearchRole.SCOUT` job
+through `ResearchCoordinator`. It supports arXiv, OpenAlex, Crossref DOI, and
+GitHub release citations. SEC and FRED citation records pass the URL policy,
+but do not yet have Scout adapters.
+
+The Scout uses exact API hosts, HTTPS, one request per job, no retries, a
+15-second request timeout, and a 512 KiB response cap. Provider pacing is
+cancellation-aware and must fit inside the job's remaining execution budget.
+The response is parsed for title, authors, publication date, and license
+metadata; raw bodies, abstracts, and release notes are not written to the
+registry. Each stored PaperCard includes the API provider, response SHA-256,
+response size, and observation time. Replayed identical metadata observations
+are idempotent even when a prior process stopped before the job completion
+record.
+
+This hash identifies the metadata API response, not the cited source document.
+An API's license field remains a source claim and requires exact-version review
+before content use or redistribution. The Scout does not download full papers,
+source archives, SEC filings, or FRED data.
 
 Stored PaperCards include their derived source family, requested and permitted
 use, and policy version. Caller-supplied assessment fields are overwritten at

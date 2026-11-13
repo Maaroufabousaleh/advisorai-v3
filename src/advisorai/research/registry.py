@@ -9,6 +9,7 @@ systems remain optional retrieval, never the store of record.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -82,6 +83,18 @@ class ResearchRegistry:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS research_source_observations (
+                    source_url TEXT NOT NULL,
+                    response_sha256 TEXT NOT NULL,
+                    intake_sha256 TEXT NOT NULL,
+                    artifact_id TEXT NOT NULL UNIQUE,
+                    PRIMARY KEY (source_url, response_sha256, intake_sha256),
+                    FOREIGN KEY (artifact_id) REFERENCES research_records(artifact_id)
+                )
+                """
+            )
 
     def store(self, record: Any, *, record_type: str) -> Any:
         """Store an immutable record; identical content returns the prior row."""
@@ -91,15 +104,43 @@ class ResearchRegistry:
         if record_type == "paper":
             record = self._source_policy.assess_card(record)
         payload = _json(record.model_dump(mode="json", round_trip=True))
-        import hashlib
-
         content_hash = hashlib.sha256(payload.encode()).hexdigest()
+        observation_key: str | None = None
+        if record_type == "paper" and record.source_metadata_sha256 is not None:
+            stable_identity = record.model_dump(
+                mode="json",
+                exclude={"artifact_id", "created_at", "source_metadata_observed_at"},
+            )
+            observation_key = hashlib.sha256(_json(stable_identity).encode()).hexdigest()
         with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if observation_key is not None:
+                prior_observation = connection.execute(
+                    "SELECT record.payload_json FROM research_source_observations observation "
+                    "JOIN research_records record USING (artifact_id) "
+                    "WHERE observation.source_url = ? AND observation.response_sha256 = ? "
+                    "AND observation.intake_sha256 = ?",
+                    (record.source_url, record.source_metadata_sha256, observation_key),
+                ).fetchone()
+                if prior_observation is not None:
+                    return model.model_validate(json.loads(prior_observation["payload_json"]))
             existing = connection.execute(
                 "SELECT artifact_id, payload_json FROM research_records WHERE content_hash = ?",
                 (content_hash,),
             ).fetchone()
             if existing is not None:
+                if observation_key is not None:
+                    connection.execute(
+                        "INSERT OR IGNORE INTO research_source_observations "
+                        "(source_url, response_sha256, intake_sha256, artifact_id) "
+                        "VALUES (?, ?, ?, ?)",
+                        (
+                            record.source_url,
+                            record.source_metadata_sha256,
+                            observation_key,
+                            existing["artifact_id"],
+                        ),
+                    )
                 return model.model_validate(json.loads(existing["payload_json"]))
             try:
                 connection.execute(
@@ -116,6 +157,18 @@ class ResearchRegistry:
                     raise ValueError(
                         f"research artifact ID {record.artifact_id} is immutable"
                     ) from exc
+            if observation_key is not None:
+                connection.execute(
+                    "INSERT INTO research_source_observations "
+                    "(source_url, response_sha256, intake_sha256, artifact_id) "
+                    "VALUES (?, ?, ?, ?)",
+                    (
+                        record.source_url,
+                        record.source_metadata_sha256,
+                        observation_key,
+                        str(record.artifact_id),
+                    ),
+                )
         return record
 
     def link(self, from_id: UUID, to_id: UUID, relation: str) -> None:

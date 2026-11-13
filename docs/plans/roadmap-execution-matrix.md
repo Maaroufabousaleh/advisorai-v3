@@ -55,11 +55,15 @@ provider quality from measured sandbox HTTP request windows, and verified
 owner-state backup/restore/rollback. These are software implementations only;
 they grant no provider admission or live authority. Research registry intake
 now enforces exact reviewed HTTPS source paths and records a versioned
-citation-only/content-use decision. The next software item is a bounded,
-read-only metadata Scout that stores response hashes and provenance while
-honoring the same source policy and ResearchCoordinator budgets. Model
+citation-only/content-use decision. A bounded Scout now reads one record at a
+time from the arXiv, OpenAlex, Crossref, or GitHub release metadata APIs under
+ResearchCoordinator cancellation and budget controls, with fixed-host HTTPS,
+response-size limits, rate pacing, and durable response hashes. It does not
+save response bodies or fetch full papers. The next software item is tying
+exact source-version hashes and authoritative license provenance to these
+metadata observations, then adding SEC/FRED metadata adapters. Model
 qualification, provider credentials, venue evidence, and human admission do
-not block that quarantined implementation.
+not block this quarantined implementation.
 
 Never infer implementation completion from a green test suite, and never infer
 operational admission from implementation completion. Keep model/source/venue

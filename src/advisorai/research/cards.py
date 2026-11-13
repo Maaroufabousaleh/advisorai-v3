@@ -48,15 +48,27 @@ class ResearchSourceUse(StrEnum):
     CONTENT_USE = "content_use"
 
 
+class ResearchMetadataProvider(StrEnum):
+    ARXIV_API = "arxiv_api"
+    OPENALEX_API = "openalex_api"
+    CROSSREF_API = "crossref_api"
+    GITHUB_RELEASE_API = "github_release_api"
+
+
 class PaperCard(ArtifactModel):
     source_url: str = Field(min_length=1)
+    title: str = Field(default="untitled", min_length=1, max_length=2048)
     authors: tuple[str, ...] = ()
     publication_date: str = Field(default="unknown", min_length=1)
-    license: str = Field(default="unknown", min_length=1)
+    license: str = Field(default="unknown", min_length=1, max_length=512)
     requested_use: ResearchSourceUse = ResearchSourceUse.CITATION_ONLY
     source_family: ResearchSourceFamily | None = None
     permitted_use: ResearchSourceUse | None = None
     source_policy_version: str | None = None
+    source_metadata_provider: ResearchMetadataProvider | None = None
+    source_metadata_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_metadata_size_bytes: int | None = Field(default=None, ge=1, le=512 * 1024)
+    source_metadata_observed_at: datetime | None = None
     claimed_result: str = Field(min_length=1)
     limitations: tuple[str, ...] = ()
     relevance: str = Field(default="", min_length=0)
@@ -77,7 +89,22 @@ class PaperCard(ArtifactModel):
             and self.requested_use is not ResearchSourceUse.CONTENT_USE
         ):
             raise ValueError("content use must be explicitly requested")
+        provenance = (
+            self.source_metadata_provider is not None,
+            self.source_metadata_sha256 is not None,
+            self.source_metadata_size_bytes is not None,
+            self.source_metadata_observed_at is not None,
+        )
+        if any(provenance) and not all(provenance):
+            raise ValueError(
+                "source metadata provider, hash, size, and time must be recorded together"
+            )
         return self
+
+    @field_validator("source_metadata_observed_at")
+    @classmethod
+    def metadata_time_aware(cls, value: datetime | None) -> datetime | None:
+        return _aware(value) if value is not None else None
 
 
 class HypothesisCard(ArtifactModel):
@@ -165,6 +192,7 @@ __all__ = [
     "PaperCard",
     "PromotionDecision",
     "ResearchSourceFamily",
+    "ResearchMetadataProvider",
     "ResearchSourceUse",
     "ValidationReport",
 ]

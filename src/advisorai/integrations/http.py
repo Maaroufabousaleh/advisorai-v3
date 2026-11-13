@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.message import Message
+from functools import partial
 from threading import Lock
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -70,6 +71,7 @@ class HttpClientConfig(BaseModel):
     requests_per_second: float = Field(default=5.0, gt=0, le=100)
     circuit_failure_threshold: int = Field(default=5, ge=1, le=100)
     circuit_reset_seconds: float = Field(default=60.0, gt=0, le=86_400)
+    max_response_bytes: int = Field(default=16 * 1024 * 1024, ge=1, le=128 * 1024 * 1024)
     user_agent: str = Field(default="advisorai-v3/transition", min_length=1, max_length=200)
 
     @field_validator("allowed_hosts")
@@ -114,15 +116,31 @@ def _urllib_request(
     headers: Mapping[str, str],
     body: bytes | None,
     timeout: float,
+    *,
+    max_response_bytes: int = 16 * 1024 * 1024,
 ) -> tuple[int, bytes, Sequence[tuple[str, str]]]:
     request = Request(url=url, data=body, method=method.upper(), headers=dict(headers))
     try:
         with _NO_REDIRECT_OPENER.open(request, timeout=timeout) as response:
-            return int(response.status), response.read(), tuple(response.headers.items())
+            response_body = response.read(max_response_bytes + 1)
+            if len(response_body) > max_response_bytes:
+                raise HttpTransportError(
+                    "external connector response exceeds configured size limit",
+                    status_code=int(response.status),
+                    error_type="response_too_large",
+                )
+            return int(response.status), response_body, tuple(response.headers.items())
     except HTTPError as exc:
         # HTTPError is also a response; retain the body for provider diagnostics
         # while never including it verbatim in the exception text.
-        return int(exc.code), exc.read(), tuple(exc.headers.items()) if exc.headers else ()
+        response_body = exc.read(max_response_bytes + 1)
+        if len(response_body) > max_response_bytes:
+            raise HttpTransportError(
+                "external connector error response exceeds configured size limit",
+                status_code=int(exc.code),
+                error_type="response_too_large",
+            ) from None
+        return int(exc.code), response_body, tuple(exc.headers.items()) if exc.headers else ()
 
 
 def _headers_tuple(headers: Sequence[tuple[str, str]] | Message) -> tuple[tuple[str, str], ...]:
@@ -151,7 +169,11 @@ class SafeHttpClient:
                 raise ValueError("base_url must be an absolute HTTPS URL")
             if parsed_base.hostname.lower().rstrip(".") not in config.allowed_hosts:
                 raise ValueError("base_url host must be listed in allowed_hosts")
-        self._requester = requester or _urllib_request
+        self._requester = (
+            requester
+            if requester is not None
+            else partial(_urllib_request, max_response_bytes=config.max_response_bytes)
+        )
         self._secret_values = dict(secret_values or {})
         self._failed_response_sink = failed_response_sink
         self._clock = clock
@@ -247,6 +269,12 @@ class SafeHttpClient:
                 status, response_body, response_headers = self._requester(
                     method.upper(), url, request_headers, body, timeout
                 )
+                if len(response_body) > self.config.max_response_bytes:
+                    raise HttpTransportError(
+                        "external connector response exceeds configured size limit",
+                        status_code=status,
+                        error_type="response_too_large",
+                    )
             except (OSError, URLError, TimeoutError) as exc:
                 self._record_request_metric(started_at=started_at, failed=True)
                 self._failure()
@@ -259,6 +287,10 @@ class SafeHttpClient:
                     ) from exc
                 self._sleeper(self.config.retry_backoff_seconds * (2**attempt))
                 continue
+            except HttpTransportError as exc:
+                self._record_request_metric(started_at=started_at, failed=True)
+                self._failure()
+                raise exc
             except Exception:
                 self._record_request_metric(started_at=started_at, failed=True)
                 raise

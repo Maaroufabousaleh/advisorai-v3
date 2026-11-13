@@ -99,6 +99,39 @@ def test_builtin_urllib_requester_does_not_follow_redirects():
     assert RedirectHandler.redirected_requests == 0
 
 
+def test_builtin_urllib_requester_reads_only_the_configured_response_limit():
+    class LargeResponseHandler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - stdlib handler protocol
+            body = b"x" * 65536
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), LargeResponseHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(HttpTransportError, match="size limit") as error:
+            _urllib_request(
+                "GET",
+                f"http://127.0.0.1:{server.server_port}/large",
+                {},
+                None,
+                2.0,
+                max_response_bytes=16,
+            )
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+    assert error.value.error_type == "response_too_large"
+
+
 def test_http_client_enforces_https_host_and_retries_5xx():
     response = (200, b'{"ok":true}', (("Content-Type", "application/json"),))
     client, calls = client_for([(500, b"temporary", ()), response], retries=1)
@@ -120,6 +153,24 @@ def test_http_client_opens_circuit_after_repeated_failures():
         client.get("https://sandbox.example.test/status")
     with pytest.raises(HttpTransportError, match="circuit"):
         client.get("https://sandbox.example.test/status")
+
+
+def test_http_client_rejects_responses_over_the_configured_size_limit():
+    client = SafeHttpClient(
+        HttpClientConfig(
+            allowed_hosts=("sandbox.example.test",),
+            max_retries=0,
+            max_response_bytes=4,
+            requests_per_second=100,
+        ),
+        requester=lambda *_args: (200, b"12345", ()),
+        sleeper=lambda _: None,
+    )
+    with pytest.raises(HttpTransportError, match="size limit") as error:
+        client.get("https://sandbox.example.test/metadata")
+    assert error.value.error_type == "response_too_large"
+    assert client.request_metrics.attempt_count == 1
+    assert client.request_metrics.failed_count == 1
 
 
 def test_http_client_spools_failed_response_before_raising(tmp_path):
