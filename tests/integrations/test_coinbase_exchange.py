@@ -227,6 +227,38 @@ def test_coinbase_fills_use_product_filter_and_signature_path_excludes_query():
     assert calls[0][2]["CB-ACCESS-SIGN"] == base64.b64encode(expected).decode("ascii")
 
 
+def test_coinbase_fill_contract_carries_verified_quote_fee_currency():
+    transport, _calls = _transport([])
+    transport.verify_product_mappings(_products(), required=("BTC-USD",))
+    values = transport.fill_contract_values(
+        {
+            "trade_id": 7,
+            "order_id": "venue-order-1",
+            "product_id": "BTC-USD",
+            "side": "buy",
+            "size": "0.01",
+            "price": "50000",
+            "fee": "0.05",
+            "created_at": "2026-11-12T16:00:00Z",
+        }
+    )
+    assert transport.verified_product_spec("BTC-USD").quote_currency == "USD"
+    assert values["fee_currency"] == "USD"
+    with pytest.raises(VenueTransportError, match="not admitted"):
+        transport.fill_contract_values(
+            {
+                "trade_id": 8,
+                "order_id": "venue-order-1",
+                "product_id": "ETH-USD",
+                "side": "buy",
+                "size": "0.01",
+                "price": "1000",
+                "fee": "0.01",
+                "created_at": "2026-11-12T16:00:00Z",
+            }
+        )
+
+
 def test_coinbase_order_submission_maps_native_payload_and_cancel_is_idempotency_bound():
     responses = [
         (

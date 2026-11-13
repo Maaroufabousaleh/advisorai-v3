@@ -258,6 +258,8 @@ class SessionLifecycleView(BaseModel):
     session_id: str = Field(min_length=1)
     recovery_classification: str = Field(min_length=1)
     recovery_mode: str = Field(min_length=1)
+    venue_profile: str = Field(default="unknown", min_length=1)
+    scenario: str = Field(default="unknown", min_length=1)
     open_leases: int = Field(ge=0)
     checkpoints: int = Field(ge=0)
     data_gaps: int = Field(ge=0)
@@ -1100,6 +1102,7 @@ def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
     """
     starts: dict[str, dict] = {}
     recoveries: dict[str, dict] = {}
+    profiles: dict[str, dict] = {}
     per_session_checkpoints: dict[str, int] = {}
     per_session_gaps: dict[str, int] = {}
     per_session_backfilled: dict[str, int] = {}
@@ -1117,6 +1120,9 @@ def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
         elif event.event_type == "recovery_recorded" and isinstance(payload.get("recovery"), dict):
             recovery = payload["recovery"]
             recoveries[str(recovery.get("session_id", ""))] = recovery
+        elif event.event_type == "session_profile" and isinstance(payload.get("profile"), dict):
+            profile = payload["profile"]
+            profiles[str(profile.get("session_id", ""))] = profile
         elif event.event_type == "session_checkpoint":
             checkpoint = payload.get("checkpoint")
             owner = (
@@ -1156,6 +1162,8 @@ def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
                 session_id=session_id,
                 recovery_classification=str(start.get("recovery_classification", "unknown")),
                 recovery_mode=mode,
+                venue_profile=str(profiles.get(session_id, {}).get("venue_profile", "unknown")),
+                scenario=str(profiles.get(session_id, {}).get("scenario", "unknown")),
                 open_leases=open_leases,
                 checkpoints=per_session_checkpoints.get(session_id, 0),
                 data_gaps=per_session_gaps.get(session_id, 0),

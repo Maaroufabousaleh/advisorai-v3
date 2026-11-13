@@ -49,7 +49,7 @@ from advisorai.execution import (
     VenueAcknowledgement,
 )
 from advisorai.learning import PaperDecisionRecord, PaperLearningLoop, PaperOutcome
-from advisorai.ledger import LedgerNamespace, SqliteLedgers
+from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
 from advisorai.runtime import PaperRuntime, PaperRuntimeConfig
 
 from .records import (
@@ -236,6 +236,7 @@ class LocalPaperDataAdapter:
 
     source = "local-paper-fixture"
     dataset = "BTC-USD-1h"
+    quote_currency = "USD"
 
     def __init__(self, owner: PaperOwnerApplication) -> None:
         self.owner = owner
@@ -346,7 +347,15 @@ class PaperOwnerApplication:
         supervisor: SessionSupervisor | None = None,
         stop_requested: threading.Event | None = None,
         adapters: OwnerApplicationAdapters | None = None,
+        venue_profile: str = "local-simulator",
     ) -> None:
+        if venue_profile not in {
+            "local-simulator",
+            "binance_spot_testnet",
+            "coinbase_exchange_sandbox",
+        }:
+            raise ValueError(f"unknown owner venue profile {venue_profile!r}")
+        self.venue_profile = venue_profile
         self.ledgers = ledgers
         self.state_dir = state_dir
         self.lock_identity = lock_identity
@@ -481,7 +490,21 @@ class PaperOwnerApplication:
             )
             self._worker_registry.register_worker("thread:paper-scheduler", self._scheduler_thread)
             self._write_owner_record(start.session_id)
-            self.supervisor.checkpoint(pending_work=("paper_scheduler_active",))
+            self.ledgers.append(
+                LedgerEvent(
+                    namespace=LedgerNamespace.MISSION,
+                    event_type="session_profile",
+                    idempotency_key=f"session-profile:{start.session_id}",
+                    payload={
+                        "profile": {
+                            "session_id": str(start.session_id),
+                            "venue_profile": self.venue_profile,
+                            "scenario": self.config.scenario,
+                            "venue": self.venue.venue,
+                        }
+                    },
+                )
+            )
             self._scheduler_thread.start()
             print("SESSION READY. Stop with: python -m advisorai.app stop", flush=True)
             return self._wait_and_stop(start.session_id)
@@ -880,6 +903,8 @@ class PaperOwnerApplication:
             "pid": os.getpid(),
             "session_id": str(session_id),
             "lock_identity": self.lock_identity,
+            "venue_profile": self.venue_profile,
+            "scenario": self.config.scenario,
             "process_create_time": psutil.Process().create_time(),
             "lock_path": str(self.supervisor.lock_path),
             "created_at": datetime.now(UTC).isoformat(),

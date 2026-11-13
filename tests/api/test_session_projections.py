@@ -56,3 +56,39 @@ def test_session_projections_are_per_session(tmp_path):
     assert second_view.checkpoints == 2
     assert second_view.data_gaps == 0
     assert second_view.open_leases == 0
+
+
+def test_session_projection_reports_venue_profile(tmp_path):
+    from advisorai.ledger import LedgerEvent, LedgerNamespace
+
+    ledgers = SqliteLedgers(tmp_path / "profile.sqlite3")
+    supervisor = SessionSupervisor(
+        ledgers,
+        state_dir=tmp_path / "state",
+        lock_identity="owner-workstation",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+    )
+    start, _ = supervisor.start(reason="profiled")
+    ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.MISSION,
+            event_type="session_profile",
+            idempotency_key=f"session-profile:{start.session_id}",
+            payload={
+                "profile": {
+                    "session_id": str(start.session_id),
+                    "venue_profile": "binance_spot_testnet",
+                    "scenario": "qualification",
+                    "venue": "paper",
+                }
+            },
+        )
+    )
+    supervisor.stop()
+
+    overview = build_ledger_overview(SqliteLedgers(tmp_path / "profile.sqlite3"))
+    assert len(overview.sessions) == 1
+    view = overview.sessions[0]
+    assert view.venue_profile == "binance_spot_testnet"
+    assert view.scenario == "qualification"
