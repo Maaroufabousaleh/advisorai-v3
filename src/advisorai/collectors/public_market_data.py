@@ -116,6 +116,16 @@ def reviewed_public_market_data_sources() -> tuple[PublicMarketDataSource, ...]:
             adapter_version="coinbase-public-market-data-v1",
         ),
         PublicMarketDataSource(
+            source_id="kraken_spot_public_market_data",
+            role="primary_candidate",
+            rest_base_url="https://api.kraken.com",
+            rest_host="api.kraken.com",
+            ws_url="wss://ws.kraken.com",
+            ws_host="ws.kraken.com",
+            symbols=("XBTUSD", "ETHUSD"),
+            adapter_version="kraken-public-market-data-v1",
+        ),
+        PublicMarketDataSource(
             source_id="deribit_public_context",
             role="context_only",
             rest_base_url="https://www.deribit.com",

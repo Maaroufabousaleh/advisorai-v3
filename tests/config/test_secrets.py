@@ -10,6 +10,7 @@ from advisorai.config import (
     CredentialResolver,
     CredentialScope,
     CredentialScopeError,
+    InfisicalCredentialResolver,
     SecretSettings,
     parse_env_text,
     redact,
@@ -172,3 +173,42 @@ def test_credential_aliases_require_an_allowed_target_and_detect_conflicts():
                 CredentialAlias(target="OPENROUTER_API_KEY", source="ADVISORAI_LLM_PROVIDER"),
             ),
         )
+
+
+def test_provider_scopes_isolate_single_keys_and_exclude_fred():
+    values = {
+        "BLS_API_KEY": "bls-secret",
+        "BEA_API_KEY": "bea-secret",
+        "EIA_API_KEY": "eia-secret",
+        "FRED_API_KEY": "fred-secret",
+    }
+    resolver = CredentialResolver.from_mapping(values)
+
+    assert resolver.resolve(CredentialScope.BLS_PUBLIC_DATA) == {"BLS_API_KEY": "bls-secret"}
+    assert resolver.resolve(CredentialScope.BEA_PUBLIC_DATA) == {"BEA_API_KEY": "bea-secret"}
+    assert resolver.resolve(CredentialScope.EIA_PUBLIC_DATA) == {"EIA_API_KEY": "eia-secret"}
+    assert "fred-secret" not in repr(resolver)
+    assert "bls-secret" not in repr(CredentialResolver.from_mapping({"BLS_API_KEY": "x"})).replace(
+        "BLS_API_KEY", ""
+    )
+
+
+def test_infisical_resolver_is_single_provider_and_dev_or_paper_testnet_only():
+    reader_calls: list[tuple[str, str, str, str]] = []
+
+    def reader(name, project_id, environment, path):
+        reader_calls.append((name, project_id, environment, path))
+        return {"EIA_API_KEY": "eia-secret"}.get(name)
+
+    infisical = InfisicalCredentialResolver(reader, project_id="advisorai-v3", environment="dev")
+    assert infisical.resolve(CredentialScope.EIA_PUBLIC_DATA) == {"EIA_API_KEY": "eia-secret"}
+    assert infisical.available_names(CredentialScope.EIA_PUBLIC_DATA) == ("EIA_API_KEY",)
+    assert "eia-secret" not in repr(infisical)
+    with pytest.raises(CredentialScopeError, match="outside the requested provider scope"):
+        infisical.get(CredentialScope.EIA_PUBLIC_DATA, "BLS_API_KEY")
+
+    for environment in ("prod", "", "staging"):
+        with pytest.raises(CredentialScopeError, match="invalid|unavailable"):
+            InfisicalCredentialResolver(reader, project_id="advisorai-v3", environment=environment)
+    with pytest.raises(CredentialScopeError, match="no Infisical provider mapping"):
+        infisical.resolve(CredentialScope.PUBLIC_DATA)

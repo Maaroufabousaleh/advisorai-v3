@@ -2,7 +2,14 @@
 
 from .acquisition import AcquisitionDecision, AcquisitionPolicy, AcquisitionStep
 from .market_recovery import SequenceRecoveryResult, recover_binance_depth, replay_equivalent
-from .official import AlfredCollector, SecEdgarCollector, VintagedReleaseCollector
+from .official import (
+    AlfredCollector,
+    BeaCollector,
+    BlsCollector,
+    EiaCollector,
+    SecEdgarCollector,
+    VintagedReleaseCollector,
+)
 from .public_market_data import PublicMarketDataSource, reviewed_public_market_data_sources
 from .quality import DataQualityMonitor, DataQualityReport, QualityDashboard, QualityFinding
 from .source_disagreement import (
@@ -37,6 +44,7 @@ from .sources import (
     DeribitCollector,
     GDELTCollector,
     HttpResponse,
+    KrakenSpotCollector,
     LseCorroborationCollector,
     NativeVenueCollector,
     PredictionMarketCollector,
@@ -57,9 +65,13 @@ __all__ = [
     "VintagedReleaseCollector",
     "SecEdgarCollector",
     "AlfredCollector",
+    "BeaCollector",
+    "BlsCollector",
+    "EiaCollector",
     "GDELTCollector",
     "DeribitCollector",
     "HttpResponse",
+    "KrakenSpotCollector",
     "LseCorroborationCollector",
     "NativeVenueCollector",
     "PredictionMarketCollector",
