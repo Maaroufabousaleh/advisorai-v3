@@ -65,6 +65,7 @@ def _scout(
     crossref_source_hosts: tuple[str, ...] = (),
     crossref_version_page_body: bytes | None = None,
     crossref_document_body: bytes | None = None,
+    github_release_archive_body: bytes | None = None,
 ):
     calls: list[str] = []
     responses = list(response_sequence or [])
@@ -109,6 +110,12 @@ def _scout(
                 arxiv_document_body or b"",
                 (("Content-Type", "application/pdf"),),
             )
+        if parsed_url.hostname == "codeload.github.com":
+            return (
+                200 if github_release_archive_body is not None else 404,
+                github_release_archive_body or b"",
+                (("Content-Type", "application/zip"),),
+            )
         if parsed_url.hostname in crossref_source_hosts:
             if parsed_url.path.endswith(".pdf"):
                 return (
@@ -147,6 +154,16 @@ def _scout(
         "arxiv_document": SafeHttpClient(
             HttpClientConfig(
                 allowed_hosts=("arxiv.org",),
+                max_retries=0,
+                max_response_bytes=64 * 1024 * 1024,
+                requests_per_second=100,
+            ),
+            requester=source_requester,
+            sleeper=lambda _delay: None,
+        ),
+        "github_release_archive": SafeHttpClient(
+            HttpClientConfig(
+                allowed_hosts=("codeload.github.com",),
                 max_retries=0,
                 max_response_bytes=64 * 1024 * 1024,
                 requests_per_second=100,

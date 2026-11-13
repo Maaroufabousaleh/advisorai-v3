@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
+import stat
 import threading
 import time
 import xml.etree.ElementTree as ET
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime
 from html.parser import HTMLParser
-from urllib.parse import quote, urlencode, urljoin, urlsplit
+from urllib.parse import quote, unquote, urlencode, urljoin, urlsplit
 from uuid import UUID, uuid4
 
 from advisorai.integrations.http import HttpClientConfig, SafeHttpClient
@@ -37,6 +40,10 @@ _ARXIV_NAMESPACE = "http://arxiv.org/schemas/atom"
 _ARXIV_VERSION_SUFFIX = re.compile(r"v[1-9]\d*$")
 _OPENALEX_VERSIONS = frozenset({"publishedVersion", "acceptedVersion", "submittedVersion"})
 _CROSSREF_CONTENT_VERSIONS = frozenset({"vor", "am"})
+_GITHUB_RELEASE_TAG = re.compile(r"^[A-Za-z0-9._+-]{1,128}$")
+_GITHUB_LICENSE_FILES = frozenset({"license", "license.txt", "license.md", "copying"})
+_MAX_GITHUB_ARCHIVE_ENTRIES = 20_000
+_MAX_GITHUB_LICENSE_BYTES = 512 * 1024
 _DOI_PATH = re.compile(r"^/10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+$")
 _SEC_SOURCE_PATH = re.compile(
     r"^/Archives/edgar/data/(?P<cik>\d{1,10})/(?P<accession>\d{18})/"
@@ -100,6 +107,18 @@ class _VerifiedOpenAlexSource:
 
 @dataclass(frozen=True, slots=True)
 class _VerifiedCrossrefSource:
+    license_claim: str
+    license_evidence_sha256: str
+    license_evidence_reference: str
+    license_evidence_observed_at: datetime
+    document_reference: str
+    document_sha256: str
+    document_size_bytes: int
+    document_observed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class _VerifiedGitHubRelease:
     license_claim: str
     license_evidence_sha256: str
     license_evidence_reference: str
@@ -193,6 +212,7 @@ class ResearchMetadataScout:
                 ResearchSourceFamily.ARXIV,
                 ResearchSourceFamily.OPENALEX,
                 ResearchSourceFamily.CROSSREF,
+                ResearchSourceFamily.GITHUB_RELEASE,
             }
         ):
             raise ValueError(
@@ -295,6 +315,13 @@ class ResearchMetadataScout:
                             cancelled=cancelled,
                             deadline=deadline,
                         )
+                    elif metadata.provider is ResearchMetadataProvider.GITHUB_RELEASE_API:
+                        verified_source = self._verify_github_release(
+                            paper,
+                            metadata,
+                            cancelled=cancelled,
+                            deadline=deadline,
+                        )
                     else:
                         raise ValueError("content-use verifier is unavailable for this provider")
                 except _RateBudgetExpired:
@@ -370,6 +397,7 @@ class ResearchMetadataScout:
                 provider,
                 response.body,
                 content_use=paper.requested_use is ResearchSourceUse.CONTENT_USE,
+                source_url=paper.source_url,
             )
         except (ET.ParseError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
             raise ValueError("metadata Scout response failed typed parsing") from None
@@ -384,8 +412,13 @@ class ResearchMetadataScout:
         if provider in {
             ResearchMetadataProvider.OPENALEX_API,
             ResearchMetadataProvider.CROSSREF_API,
+            ResearchMetadataProvider.GITHUB_RELEASE_API,
         }:
-            doi = _canonical_doi(parsed.get("doi"))
+            if provider in {
+                ResearchMetadataProvider.OPENALEX_API,
+                ResearchMetadataProvider.CROSSREF_API,
+            }:
+                doi = _canonical_doi(parsed.get("doi"))
             raw_document_reference = _optional_text(
                 parsed.get("source_document_reference"), maximum=2048
             )
@@ -407,6 +440,7 @@ class ResearchMetadataScout:
             in {
                 ResearchMetadataProvider.OPENALEX_API,
                 ResearchMetadataProvider.CROSSREF_API,
+                ResearchMetadataProvider.GITHUB_RELEASE_API,
             }
             and version_reference is not None
         ):
@@ -443,6 +477,16 @@ class ResearchMetadataScout:
                 raise ValueError(
                     "Crossref did not identify one licensed full-text version of the cited DOI"
                 )
+        if (
+            provider is ResearchMetadataProvider.GITHUB_RELEASE_API
+            and paper.requested_use is ResearchSourceUse.CONTENT_USE
+            and (
+                version_reference is None
+                or source_document_reference is None
+                or version_label is None
+            )
+        ):
+            raise ValueError("GitHub did not identify one exact release and source archive")
         if version_reference is None and version_label is not None:
             version_reference = paper.source_url
         if provider is ResearchMetadataProvider.ARXIV_API and version_reference is not None:
@@ -730,6 +774,65 @@ class ResearchMetadataScout:
             document_observed_at=document.fetched_at,
         )
 
+    def _verify_github_release(
+        self,
+        paper: PaperCard,
+        metadata: _SourceMetadata,
+        *,
+        cancelled,
+        deadline: float,
+    ) -> _VerifiedGitHubRelease:
+        if (
+            metadata.provider is not ResearchMetadataProvider.GITHUB_RELEASE_API
+            or metadata.version_reference is None
+            or metadata.version_label is None
+            or metadata.source_document_reference is None
+            or metadata.source_document_reference
+            != _github_archive_reference(metadata.version_reference)
+        ):
+            raise ValueError("GitHub content use requires one exact release archive")
+        client = self.source_clients.get("github_release_archive")
+        if client is None:
+            raise ValueError("GitHub source archive client is unavailable")
+        if cancelled() or time.monotonic() >= deadline:
+            raise _RateBudgetExpired("GitHub source archive exceeds the remaining Scout budget")
+        archive = client.get(
+            metadata.source_document_reference,
+            headers={"Accept": "application/zip"},
+            max_retries=0,
+            timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+        )
+        if (
+            archive.status_code != 200
+            or _header_value(archive.headers, "content-type").split(";", 1)[0]
+            not in {"application/zip", "application/octet-stream"}
+            or not archive.body.startswith(b"PK\x03\x04")
+            or len(archive.body) > _MAX_SOURCE_DOCUMENT_BYTES
+        ):
+            raise ValueError("GitHub exact-release source archive returned an unexpected response")
+        if cancelled() or time.monotonic() >= deadline:
+            raise _RateBudgetExpired("GitHub source archive inspection exceeds the Scout budget")
+        license_claim, license_file, license_sha256 = _github_archive_license(archive.body)
+        self.source_policy.assess(
+            source_url=paper.source_url,
+            license_claim=license_claim,
+            requested_use=ResearchSourceUse.CONTENT_USE,
+        )
+        license_reference = _github_license_reference(
+            metadata.version_reference,
+            license_file,
+        )
+        return _VerifiedGitHubRelease(
+            license_claim=license_claim,
+            license_evidence_sha256=license_sha256,
+            license_evidence_reference=license_reference,
+            license_evidence_observed_at=archive.fetched_at,
+            document_reference=metadata.source_document_reference,
+            document_sha256=hashlib.sha256(archive.body).hexdigest(),
+            document_size_bytes=len(archive.body),
+            document_observed_at=archive.fetched_at,
+        )
+
     def _claim_request_slot(self, provider, *, cancelled, deadline: float) -> bool:
         interval = self._MIN_REQUEST_INTERVAL_SECONDS[provider]
         while True:
@@ -931,6 +1034,7 @@ class ResearchMetadataScout:
         body: bytes,
         *,
         content_use: bool = False,
+        source_url: str | None = None,
     ) -> dict[str, object]:
         if provider is ResearchMetadataProvider.ARXIV_API:
             root = ET.fromstring(body)
@@ -1047,7 +1151,7 @@ class ResearchMetadataScout:
         if provider is ResearchMetadataProvider.GITHUB_RELEASE_API:
             author = data.get("author")
             authors = [author["login"]] if isinstance(author, dict) and author.get("login") else []
-            return {
+            parsed = {
                 "title": data.get("name") or data.get("tag_name"),
                 "authors": authors,
                 "publication_date": data.get("published_at"),
@@ -1056,6 +1160,18 @@ class ResearchMetadataScout:
                 if data.get("id") or data.get("tag_name")
                 else None,
             }
+            if content_use:
+                if source_url is None:
+                    raise ValueError("GitHub content verification requires its cited release URL")
+                version_reference, version_label, document_reference = _github_release_references(
+                    source_url, data
+                )
+                parsed.update(
+                    version_reference=version_reference,
+                    version_label=version_label,
+                    source_document_reference=document_reference,
+                )
+            return parsed
         if provider is ResearchMetadataProvider.FRED_API:
             series = data.get("seriess")
             if not isinstance(series, list) or len(series) != 1 or not isinstance(series[0], dict):
@@ -1081,7 +1197,11 @@ class ResearchMetadataScout:
         metadata: _SourceMetadata,
         *,
         verified_source: (
-            _VerifiedArxivSource | _VerifiedOpenAlexSource | _VerifiedCrossrefSource | None
+            _VerifiedArxivSource
+            | _VerifiedOpenAlexSource
+            | _VerifiedCrossrefSource
+            | _VerifiedGitHubRelease
+            | None
         ) = None,
     ) -> PaperCard:
         payload = paper.model_dump(mode="python")
@@ -1102,6 +1222,7 @@ class ResearchMetadataScout:
                                 in {
                                     ResearchMetadataProvider.OPENALEX_API,
                                     ResearchMetadataProvider.CROSSREF_API,
+                                    ResearchMetadataProvider.GITHUB_RELEASE_API,
                                 }
                                 and paper.requested_use is ResearchSourceUse.CONTENT_USE
                             )
@@ -1122,6 +1243,10 @@ class ResearchMetadataScout:
         elif isinstance(verified_source, _VerifiedCrossrefSource):
             verified_license_source = (
                 ResearchLicenseEvidenceSource.CROSSREF_FIRST_PARTY_VERSION_PAGE
+            )
+        elif isinstance(verified_source, _VerifiedGitHubRelease):
+            verified_license_source = (
+                ResearchLicenseEvidenceSource.GITHUB_FIRST_PARTY_RELEASE_ARCHIVE
             )
         payload.update(
             artifact_id=uuid4(),
@@ -1255,6 +1380,16 @@ class ResearchMetadataScout:
                     timeout_seconds=_METADATA_TIMEOUT_SECONDS,
                     max_retries=0,
                     requests_per_second=100,
+                    max_response_bytes=_MAX_SOURCE_DOCUMENT_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                )
+            ),
+            "github_release_archive": SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=("codeload.github.com",),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=1,
                     max_response_bytes=_MAX_SOURCE_DOCUMENT_BYTES,
                     user_agent="advisorai-v3/research-metadata-scout",
                 )
@@ -1504,6 +1639,115 @@ def _json_object(body: bytes) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError("metadata response must be a JSON object")
     return value
+
+
+def _github_release_source_parts(source_url: str) -> tuple[str, str, str | None]:
+    parsed = urlsplit(source_url)
+    parts = parsed.path.split("/")
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "github.com"
+        or len(parts) not in {5, 6}
+        or parts[3] != "releases"
+        or parts[4] not in {"latest", "tag"}
+    ):
+        raise ValueError("GitHub citation is not an exact release path")
+    owner, repository = parts[1], parts[2]
+    if parts[4] == "latest":
+        if len(parts) != 5:
+            raise ValueError("GitHub latest-release citation has an unexpected path")
+        return owner, repository, None
+    if len(parts) != 6 or _GITHUB_RELEASE_TAG.fullmatch(parts[5]) is None:
+        raise ValueError("GitHub release citation has an invalid tag")
+    return owner, repository, parts[5]
+
+
+def _github_release_references(
+    source_url: str,
+    release: dict[str, object],
+) -> tuple[str, str, str]:
+    owner, repository, requested_tag = _github_release_source_parts(source_url)
+    tag = release.get("tag_name")
+    if (
+        not isinstance(tag, str)
+        or _GITHUB_RELEASE_TAG.fullmatch(tag) is None
+        or (requested_tag is not None and tag != requested_tag)
+        or type(release.get("id")) is not int
+        or release["id"] <= 0
+        or release.get("draft") is True
+    ):
+        raise ValueError("GitHub metadata does not identify the cited release tag")
+    encoded_tag = quote(tag, safe="._-~")
+    expected_page = f"https://github.com/{owner}/{repository}/releases/tag/{encoded_tag}"
+    expected_zipball = f"https://api.github.com/repos/{owner}/{repository}/zipball/{encoded_tag}"
+    if not _github_exact_reference(release.get("html_url"), expected_page, "github.com"):
+        raise ValueError("GitHub release record page does not match its repository and tag")
+    if not _github_exact_reference(release.get("zipball_url"), expected_zipball, "api.github.com"):
+        raise ValueError("GitHub release archive locator does not match its repository and tag")
+    archive_reference = (
+        f"https://codeload.github.com/{owner}/{repository}/zip/refs/tags/{encoded_tag}"
+    )
+    return expected_page, tag, archive_reference
+
+
+def _github_exact_reference(value: object, expected: str, expected_host: str) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return False
+    return bool(
+        parsed.scheme == "https"
+        and parsed.hostname == expected_host
+        and parsed.username is None
+        and parsed.password is None
+        and port is None
+        and parsed.netloc.lower() == expected_host
+        and not parsed.query
+        and not parsed.fragment
+        and "\\" not in value
+        and parsed.path.startswith("/")
+        and "//" not in parsed.path
+        and not any(segment in {".", ".."} for segment in parsed.path.split("/"))
+        and not any(character.isspace() or ord(character) < 0x20 for character in value)
+        and value == expected
+    )
+
+
+def _github_release_reference_parts(version_reference: str) -> tuple[str, str, str]:
+    parsed = urlsplit(version_reference)
+    parts = parsed.path.split("/")
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "github.com"
+        or parsed.netloc.lower() != "github.com"
+        or parsed.query
+        or parsed.fragment
+        or len(parts) != 6
+        or parts[3:5] != ["releases", "tag"]
+    ):
+        raise ValueError("GitHub release page reference is not canonical")
+    owner, repository, raw_tag = parts[1], parts[2], parts[5]
+    tag = unquote(raw_tag)
+    if _GITHUB_RELEASE_TAG.fullmatch(tag) is None or raw_tag != quote(tag, safe="._-~"):
+        raise ValueError("GitHub release page reference has an invalid tag")
+    return owner, repository, tag
+
+
+def _github_archive_reference(version_reference: str) -> str:
+    owner, repository, tag = _github_release_reference_parts(version_reference)
+    encoded_tag = quote(tag, safe="._-~")
+    return f"https://codeload.github.com/{owner}/{repository}/zip/refs/tags/{encoded_tag}"
+
+
+def _github_license_reference(version_reference: str, license_file: str) -> str:
+    if license_file.casefold() not in _GITHUB_LICENSE_FILES:
+        raise ValueError("GitHub release archive has an unsupported root license filename")
+    owner, repository, tag = _github_release_reference_parts(version_reference)
+    encoded_tag = quote(tag, safe="._-~")
+    return f"https://github.com/{owner}/{repository}/blob/{encoded_tag}/{license_file}"
 
 
 def _valid_sec_user_agent(value: str) -> bool:
@@ -1872,6 +2116,125 @@ def _crossref_license_identifier(value: str) -> str | None:
         return None
     secure_reference = f"https://creativecommons.org{parsed.path}"
     return _recognized_cc_license(secure_reference)
+
+
+def _github_archive_license(body: bytes) -> tuple[str, str, str]:
+    try:
+        with zipfile.ZipFile(io.BytesIO(body)) as archive:
+            entries = archive.infolist()
+            if not entries or len(entries) > _MAX_GITHUB_ARCHIVE_ENTRIES:
+                raise ValueError("GitHub source archive has an unsupported entry count")
+            roots = set()
+            license_entries = []
+            for entry in entries:
+                name = entry.filename
+                if (
+                    not name
+                    or name.startswith("/")
+                    or "\\" in name
+                    or any(part in {".", ".."} for part in name.rstrip("/").split("/"))
+                ):
+                    raise ValueError("GitHub source archive contains an unsafe path")
+                parts = name.rstrip("/").split("/")
+                if not parts or not parts[0]:
+                    raise ValueError("GitHub source archive has no root directory")
+                roots.add(parts[0])
+                if (
+                    not entry.is_dir()
+                    and len(parts) == 2
+                    and parts[1].casefold() in _GITHUB_LICENSE_FILES
+                ):
+                    license_entries.append((entry, parts[1]))
+            if len(roots) != 1 or len(license_entries) != 1:
+                raise ValueError("GitHub release must contain one unambiguous root license file")
+            entry, license_file = license_entries[0]
+            file_type = stat.S_IFMT(entry.external_attr >> 16)
+            if (
+                entry.flag_bits & 0x1
+                or entry.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}
+                or file_type not in {0, stat.S_IFREG}
+                or entry.file_size < 1
+                or entry.file_size > _MAX_GITHUB_LICENSE_BYTES
+                or entry.file_size / max(1, entry.compress_size) > 200
+            ):
+                raise ValueError("GitHub root license file exceeds its parsing bounds")
+            with archive.open(entry) as stream:
+                license_body = stream.read(_MAX_GITHUB_LICENSE_BYTES + 1)
+    except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile, RuntimeError, NotImplementedError):
+        raise ValueError("GitHub release source archive is not a supported ZIP file") from None
+    if len(license_body) != entry.file_size or len(license_body) > _MAX_GITHUB_LICENSE_BYTES:
+        raise ValueError("GitHub root license file failed bounded ZIP integrity checks")
+    try:
+        license_text = license_body.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise ValueError("GitHub root license file is not UTF-8 text") from None
+    license_claim = _github_license_identifier(license_text)
+    return license_claim, license_file, hashlib.sha256(license_body).hexdigest()
+
+
+def _github_license_identifier(license_text: str) -> str:
+    normalized = " ".join(license_text.casefold().split())
+    spdx_lines = re.findall(
+        r"(?im)^\s*(?:\*\s*|#\s*|//\s*|<!--\s*)?SPDX-License-Identifier:\s*([^\r\n]+)",
+        license_text,
+    )
+    spdx_identifiers = {
+        value.strip().removesuffix("*/").removesuffix("-->").strip() for value in spdx_lines
+    }
+    if len(spdx_identifiers) > 1:
+        raise ValueError("GitHub release has conflicting SPDX license identifiers")
+    if spdx_identifiers:
+        license_claim = next(iter(spdx_identifiers))
+    elif (
+        "mit license" in normalized and "permission is hereby granted, free of charge" in normalized
+    ):
+        license_claim = "MIT"
+    elif (
+        "apache license" in normalized
+        and "version 2.0" in normalized
+        and "appendix: how to apply the apache license" in normalized
+    ):
+        license_claim = "Apache-2.0"
+    elif "bsd 2-clause" in normalized or "simplified bsd license" in normalized:
+        license_claim = "BSD-2-Clause"
+    elif "bsd 3-clause" in normalized or "new or revised bsd license" in normalized:
+        license_claim = "BSD-3-Clause"
+    else:
+        raise ValueError("GitHub root license file does not identify one supported SPDX license")
+
+    if license_claim == "MIT":
+        required = (
+            "mit license",
+            "permission is hereby granted, free of charge",
+            "the above copyright notice and this permission notice shall be included",
+            'the software is provided "as is"',
+            "without warranty of any kind",
+        )
+    elif license_claim == "Apache-2.0":
+        required = (
+            "apache license",
+            "version 2.0",
+            "appendix: how to apply the apache license",
+            "end of terms and conditions",
+        )
+    elif license_claim in {"BSD-2-Clause", "BSD-3-Clause"}:
+        required = (
+            "redistribution and use in source and binary forms",
+            "redistributions of source code must retain the above copyright notice",
+            "redistributions in binary form must reproduce the above copyright notice",
+            'this software is provided by the copyright holders and contributors "as is"',
+            "in no event shall the copyright holder or contributors be liable",
+        )
+        has_third_clause = (
+            "neither the name of" in normalized and "endorse or promote" in normalized
+        )
+        if (license_claim == "BSD-3-Clause") != has_third_clause:
+            raise ValueError("GitHub BSD license text does not match its declared variant")
+    else:
+        raise ValueError("GitHub root license file uses an unsupported SPDX license")
+    if any(phrase not in normalized for phrase in required):
+        raise ValueError("GitHub root license text does not match its declared SPDX license")
+    return license_claim
 
 
 __all__ = ["ResearchMetadataScout", "ResearchScoutRun"]

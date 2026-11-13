@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from .cards import (
     PaperCard,
@@ -16,7 +16,7 @@ from .cards import (
     ResearchSourceUse,
 )
 
-SOURCE_POLICY_VERSION = "research-source-policy-v3"
+SOURCE_POLICY_VERSION = "research-source-policy-v4"
 
 _ARXIV_PATH = re.compile(
     r"^/(?:abs|pdf|html)/(?:\d{4}\.\d{4,5}|[A-Za-z][A-Za-z0-9.-]*/\d{7})(?:v\d+)?$"
@@ -26,6 +26,8 @@ _CROSSREF_PATH = re.compile(r"^/10\.\d{4,9}/[A-Za-z0-9._;()/:+-]+$")
 _GITHUB_RELEASE_PATH = re.compile(
     r"^/[A-Za-z0-9][A-Za-z0-9.-]{0,38}/[A-Za-z0-9._-]+/releases/(?:latest|tag/[A-Za-z0-9._+-]+)$"
 )
+_GITHUB_RELEASE_TAG = re.compile(r"^[A-Za-z0-9._+-]{1,128}$")
+_GITHUB_LICENSE_FILES = frozenset({"LICENSE", "LICENSE.txt", "LICENSE.md", "COPYING"})
 _SEC_EDGAR_PATH = re.compile(
     r"^/Archives/edgar/data/\d{1,10}/\d{18}/[A-Za-z0-9._-]+\.(?:htm|html|txt|pdf)$",
     re.IGNORECASE,
@@ -120,7 +122,11 @@ class ResearchSourcePolicy:
                     "document_reference": card.source_document_reference
                     if (
                         assessment.family
-                        in {ResearchSourceFamily.OPENALEX, ResearchSourceFamily.CROSSREF}
+                        in {
+                            ResearchSourceFamily.OPENALEX,
+                            ResearchSourceFamily.CROSSREF,
+                            ResearchSourceFamily.GITHUB_RELEASE,
+                        }
                         and card.requested_use is ResearchSourceUse.CONTENT_USE
                     )
                     else None,
@@ -148,6 +154,9 @@ class ResearchSourcePolicy:
             ResearchLicenseEvidenceSource.CROSSREF_FIRST_PARTY_VERSION_PAGE: (
                 ResearchSourceFamily.CROSSREF
             ),
+            ResearchLicenseEvidenceSource.GITHUB_FIRST_PARTY_RELEASE_ARCHIVE: (
+                ResearchSourceFamily.GITHUB_RELEASE
+            ),
         }.get(card.source_license_evidence_source)
         if evidence_family is not None and evidence_family is not assessment.family:
             raise ValueError("license evidence source does not match the cited source family")
@@ -157,7 +166,10 @@ class ResearchSourcePolicy:
                 or card.source_document_sha256 is None
                 or card.source_document_observed_at is None
                 or card.source_document_reference is None
-                or card.source_license_evidence_reference != card.source_version_reference
+                or (
+                    assessment.family is not ResearchSourceFamily.GITHUB_RELEASE
+                    and card.source_license_evidence_reference != card.source_version_reference
+                )
             ):
                 raise ValueError(
                     "content use requires first-party exact-version license evidence "
@@ -207,6 +219,21 @@ class ResearchSourcePolicy:
                     raise ValueError(
                         "Crossref content use requires first-party DOI, version, page, and document evidence"
                     )
+            elif assessment.family is ResearchSourceFamily.GITHUB_RELEASE:
+                expected_references = self._github_content_references(card)
+                if (
+                    card.source_metadata_provider is not ResearchMetadataProvider.GITHUB_RELEASE_API
+                    or card.source_license_evidence_source
+                    is not ResearchLicenseEvidenceSource.GITHUB_FIRST_PARTY_RELEASE_ARCHIVE
+                    or card.source_version_identity_sha256 is None
+                    or card.source_version_label != expected_references["tag"]
+                    or card.source_version_reference != expected_references["version"]
+                    or card.source_license_evidence_reference != expected_references["license"]
+                    or card.source_document_reference != expected_references["document"]
+                ):
+                    raise ValueError(
+                        "GitHub content use requires an exact release, root license, and archive"
+                    )
             else:
                 raise ValueError("content use requires first-party exact-version license evidence")
         payload = card.model_dump(mode="python")
@@ -216,6 +243,72 @@ class ResearchSourcePolicy:
             source_policy_version=assessment.policy_version,
         )
         return PaperCard.model_validate(payload)
+
+    @classmethod
+    def _github_content_references(cls, card: PaperCard) -> dict[str, str]:
+        if (
+            not cls._canonical_https_reference(card.source_version_reference)
+            or not cls._canonical_https_reference(card.source_license_evidence_reference)
+            or not cls._canonical_https_reference(card.source_document_reference)
+        ):
+            return {}
+        try:
+            source_parts = urlsplit(card.source_url).path.split("/")
+            version = urlsplit(card.source_version_reference)
+            license_page = urlsplit(card.source_license_evidence_reference)
+            document = urlsplit(card.source_document_reference)
+            owner, repository = source_parts[1], source_parts[2]
+            if source_parts[4] == "tag":
+                requested_tag = source_parts[5]
+            elif source_parts[4] == "latest":
+                requested_tag = None
+            else:
+                return {}
+            version_parts = version.path.split("/")
+            if (
+                version.hostname != "github.com"
+                or len(version_parts) != 6
+                or version_parts[1:5] != [owner, repository, "releases", "tag"]
+            ):
+                return {}
+            tag = unquote(version_parts[5])
+            if _GITHUB_RELEASE_TAG.fullmatch(tag) is None or (
+                requested_tag is not None and tag != requested_tag
+            ):
+                return {}
+            encoded_tag = quote(tag, safe="._-~")
+            expected_version = f"https://github.com/{owner}/{repository}/releases/tag/{encoded_tag}"
+            license_parts = license_page.path.split("/")
+            if (
+                license_page.hostname != "github.com"
+                or len(license_parts) != 6
+                or license_parts[1:5] != [owner, repository, "blob", encoded_tag]
+            ):
+                return {}
+            license_file = unquote(license_parts[5])
+            if license_file.casefold() not in {name.casefold() for name in _GITHUB_LICENSE_FILES}:
+                return {}
+            expected_license = (
+                f"https://github.com/{owner}/{repository}/blob/{encoded_tag}/{license_file}"
+            )
+            expected_document = (
+                f"https://codeload.github.com/{owner}/{repository}/zip/refs/tags/{encoded_tag}"
+            )
+            if (
+                card.source_version_reference != expected_version
+                or card.source_license_evidence_reference != expected_license
+                or card.source_document_reference != expected_document
+                or document.hostname != "codeload.github.com"
+            ):
+                return {}
+        except (IndexError, ValueError):
+            return {}
+        return {
+            "tag": tag,
+            "version": expected_version,
+            "license": expected_license,
+            "document": expected_document,
+        }
 
     @classmethod
     def _same_explicit_arxiv_version(cls, source_url: str, version_reference: str) -> bool:

@@ -39,7 +39,7 @@ def test_reviewed_exact_source_paths_are_classified(source_url, family):
     )
     assert result.family is family
     assert result.permitted_use is ResearchSourceUse.CITATION_ONLY
-    assert result.policy_version == "research-source-policy-v3"
+    assert result.policy_version == "research-source-policy-v4"
 
 
 def test_source_policy_rejects_unrecognized_requested_use():
@@ -90,7 +90,7 @@ def test_registry_stamps_derived_assessment_and_idempotently_returns_it(tmp_path
     assert stored.source_family is ResearchSourceFamily.ARXIV
     assert stored.requested_use is ResearchSourceUse.CITATION_ONLY
     assert stored.permitted_use is ResearchSourceUse.CITATION_ONLY
-    assert stored.source_policy_version == "research-source-policy-v3"
+    assert stored.source_policy_version == "research-source-policy-v4"
     assert registry.store(paper, record_type="paper") == stored
     assert registry.get(stored.artifact_id) == stored
     assert registry.count("paper") == 1

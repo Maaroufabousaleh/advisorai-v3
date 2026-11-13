@@ -64,6 +64,7 @@ class ResearchLicenseEvidenceSource(StrEnum):
     OPENALEX_FIRST_PARTY_VERSION_PAGE = "openalex_first_party_version_page"
     CROSSREF_DEPOSIT_METADATA = "crossref_deposit_metadata"
     CROSSREF_FIRST_PARTY_VERSION_PAGE = "crossref_first_party_version_page"
+    GITHUB_FIRST_PARTY_RELEASE_ARCHIVE = "github_first_party_release_archive"
 
 
 class PaperCard(ArtifactModel):
