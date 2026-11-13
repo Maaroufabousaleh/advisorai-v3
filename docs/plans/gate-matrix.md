@@ -1,5 +1,24 @@
 # AdvisorAI V3 gate matrix
 
+## Current implementation audit — 2026-11-12
+
+This audit supersedes older implementation-status conclusions below, including
+the Alpha rows that say “plan-only” or “BLOCKED”. Those rows remain as dated
+historical records; their prerequisite language does not prevent safe,
+quarantined software work. This table reports current software state only and
+does not change immutable external evidence or grant admission.
+
+| Alpha stage | Software implementation | Remaining software work | Operational admission |
+|---|---|---|---|
+| E0 — authority/artifact contract | IMPLEMENTED: typed artifacts, scoped ports, and no-authority boundaries are present | Maintain contract coverage | Quarantined results cannot acquire trading authority |
+| E1 — Research Brain | PARTIAL: typed cards, SQLite registry, lineage, retrieval, and versioned source/path and license-use intake policy are implemented | Bounded read-only metadata Scout, response/source hashes, and authoritative license provenance | Each source and content-use scope still needs its own review |
+| E2 — Controlled Alpha Lab | IMPLEMENTED for the local DSL, validation, experiment records, red-team rejection, and inspection workflow | Maintain reproducible manifests and feature-availability checks | Research remains quarantined; passing local tests do not promote a candidate |
+| E3 — first strategy challenger | PARTIAL: strategy validation and one-at-a-time challenger lifecycle exist | Complete a versioned BTC/ETH candidate-to-independent-replay workflow and durable decay monitoring | Positive incremental utility across preregistered regimes is required before paper shadow |
+| E4 — optional capability adapters | IMPLEMENTED for the local capability lifecycle and tested sandbox boundaries | Optional third-party comparisons remain separate scope work | Per-capability license, source, and isolation evidence remains required |
+| E5 — equity and long-horizon extension | PARTIAL: point-in-time corporate-action contracts and an evidence council exist | Implement scoped SEC/issuer acquisition, immutable source snapshots, and corporate-action-adjusted replay inputs | Source rights and clean PIT history must be reviewed per scope |
+| E6 — controlled candidate expansion | PARTIAL: durable one-at-a-time challenger state is implemented | Add decay monitoring and cross-session expansion evidence projection | Accumulated independent-session and relevant-market-state evidence is required |
+| E7 — bounded-live scope | CLOSED by Phase 10 policy; refusal guards are implemented | No live-capital implementation is authorized by this roadmap | Separate human go-live review remains mandatory; keep Phase 10 sealed |
+
 ## Current planning interpretation — 2026-09-30
 
 This dated addendum changes planning policy, not measured evidence. The

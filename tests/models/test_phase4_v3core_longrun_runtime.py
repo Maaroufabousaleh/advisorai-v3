@@ -279,6 +279,12 @@ def test_readiness_check_passed_is_strictly_boolean() -> None:
         LongRunReadinessCheck(name="security", passed=1, reason="forged")
 
 
+@pytest.mark.skipif(
+    not Path(
+        "/home/maaro/.local/share/advisorai-v3/runtime-admissions/chronos-2-small/requirements.lock"
+    ).is_file(),
+    reason="chronos-2-small launch identity lives on the owner workstation only",
+)
 def test_actual_identity_attestation_hash_round_trips_with_identity_schema(monkeypatch) -> None:
     import advisorai.phase4.v3core_longrun_runtime as runtime_module
 
@@ -321,6 +327,12 @@ def test_actual_identity_attestation_hash_round_trips_with_identity_schema(monke
     assert attestation.attestation_hash
 
 
+@pytest.mark.skipif(
+    not Path(
+        "/home/maaro/.local/share/advisorai-v3/runtime-admissions/chronos-2-small/requirements.lock"
+    ).is_file(),
+    reason="chronos-2-small launch identity lives on the owner workstation only",
+)
 def test_release_candidate_preflight_materializes_all_readiness_checks(monkeypatch) -> None:
     import advisorai.phase4.v3core_longrun_runtime as runtime_module
 

@@ -151,10 +151,25 @@ class PaperOutcome(BaseModel):
     data_reliability: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
     latency_ms: int = Field(ge=0)
     failure_rate: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
+    fx_quote_currency: str | None = None
+    fx_usd_per_quote: Decimal | None = Field(default=None, gt=Decimal("0"))
+    fx_snapshot_id: UUID | None = None
+    fx_evidence_id: UUID | None = None
+    fx_rate_source: str | None = None
+    fx_rate_as_of: datetime | None = None
+    quality_evidence_id: UUID | None = None
+    quality_source: str | None = None
+    quality_snapshot_id: UUID | None = None
+    quality_as_of: datetime | None = None
+    quality_sample_count: int | None = Field(default=None, ge=1)
+    quality_failed_count: int | None = Field(default=None, ge=0)
+    quality_measurement_hash: str | None = None
 
-    @field_validator("as_of")
+    @field_validator("as_of", "fx_rate_as_of", "quality_as_of")
     @classmethod
-    def as_of_aware(cls, value: datetime) -> datetime:
+    def as_of_aware(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("outcome timestamp must include a timezone")
         return value.astimezone(UTC)
@@ -167,12 +182,87 @@ class PaperOutcome(BaseModel):
         "fill_quality",
         "data_reliability",
         "failure_rate",
+        "fx_usd_per_quote",
     )
     @classmethod
     def finite_decimal(cls, value: Decimal | None) -> Decimal | None:
         if value is not None and not value.is_finite():
             raise ValueError("outcome metrics must be finite")
         return value
+
+    @field_validator("fx_quote_currency", mode="before")
+    @classmethod
+    def normalize_fx_currency(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("FX quote currency must be a non-empty currency code")
+        return value.strip().upper()
+
+    @field_validator("fx_rate_source", "quality_source")
+    @classmethod
+    def normalize_evidence_source(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("outcome evidence source cannot be blank")
+        return normalized
+
+    @field_validator("quality_measurement_hash")
+    @classmethod
+    def validate_quality_measurement_hash(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+            raise ValueError("outcome quality measurement hash must be a SHA-256 digest")
+        return value
+
+    @model_validator(mode="after")
+    def validate_optional_provenance(self) -> PaperOutcome:
+        fx_values = (
+            self.fx_quote_currency,
+            self.fx_usd_per_quote,
+            self.fx_snapshot_id,
+            self.fx_evidence_id,
+            self.fx_rate_source,
+            self.fx_rate_as_of,
+        )
+        if any(value is not None for value in fx_values) and any(
+            value is None for value in fx_values
+        ):
+            raise ValueError("FX outcome provenance must be complete or entirely absent")
+        quality_values = (
+            self.quality_evidence_id,
+            self.quality_source,
+            self.quality_snapshot_id,
+            self.quality_as_of,
+        )
+        if any(value is not None for value in quality_values) and any(
+            value is None for value in quality_values
+        ):
+            raise ValueError("outcome quality evidence must be complete or entirely absent")
+        measurement_values = (
+            self.quality_sample_count,
+            self.quality_failed_count,
+            self.quality_measurement_hash,
+        )
+        if any(value is not None for value in measurement_values) and any(
+            value is None for value in measurement_values
+        ):
+            raise ValueError("outcome quality measurement details must be complete")
+        if any(value is not None for value in measurement_values):
+            if self.quality_evidence_id is None:
+                raise ValueError("outcome quality measurement requires evidence provenance")
+            assert self.quality_sample_count is not None and self.quality_failed_count is not None
+            if self.quality_failed_count > self.quality_sample_count:
+                raise ValueError("outcome quality failure count exceeds its sample count")
+            measured_failure_rate = Decimal(self.quality_failed_count) / Decimal(
+                self.quality_sample_count
+            )
+            if self.failure_rate != measured_failure_rate:
+                raise ValueError("outcome failure rate differs from its measured counts")
+        return self
 
 
 class PaperLearningLoop:
@@ -412,6 +502,22 @@ class PaperLearningLoop:
 
     def decision(self, decision_id: UUID) -> PaperDecisionRecord | None:
         return self._decisions.get(decision_id)
+
+    def decisions(self) -> tuple[PaperDecisionRecord, ...]:
+        """Return durable decision records in their ledger projection order."""
+        return tuple(self._decisions.values())
+
+    def unresolved_decisions(self, *, as_of: datetime) -> tuple[PaperDecisionRecord, ...]:
+        """Decisions whose horizons closed without an immutable outcome."""
+        if as_of.tzinfo is None or as_of.utcoffset() is None:
+            raise ValueError("outcome query time must include a timezone")
+        cutoff = as_of.astimezone(UTC)
+        recorded = {decision_id for decision_id, _at in self._outcomes}
+        return tuple(
+            decision
+            for decision in self._decisions.values()
+            if decision.horizon_end <= cutoff and decision.decision_id not in recorded
+        )
 
     def problems(self) -> tuple[LearningProblem, ...]:
         return tuple(self._problems.values())

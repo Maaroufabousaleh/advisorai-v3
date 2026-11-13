@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  FlaskConical,
   Wifi,
   X,
   Zap,
@@ -47,12 +48,19 @@ import type {
   CommandRequest,
   DashboardOverview,
   DashboardMetric,
+  LedgerChainView,
+  PaperFillView,
+  StrategyComparisonView,
+  PerformanceSliceView,
+  PaperOrderView,
+  ResearchRecordView,
+  TraceLinkView,
   SourceHealthView,
   Tone,
 } from './types'
 import './styles.css'
 
-type Section = 'overview' | 'missions' | 'portfolio' | 'risk' | 'data' | 'system' | 'incidents' | 'audit' | 'settings'
+type Section = 'overview' | 'missions' | 'research' | 'portfolio' | 'risk' | 'data' | 'system' | 'incidents' | 'audit' | 'settings'
 
 interface NavItem {
   id: Section
@@ -64,6 +72,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'overview', label: 'Overview', hint: 'Control room', icon: LayoutDashboard },
   { id: 'missions', label: 'Missions', hint: 'Evidence councils', icon: Sparkles },
+  { id: 'research', label: 'Research', hint: 'Brain & experiments', icon: FlaskConical },
   { id: 'portfolio', label: 'Portfolio', hint: 'Paper execution', icon: CircleDollarSign },
   { id: 'risk', label: 'Risk & limits', hint: 'Deterministic gate', icon: ShieldCheck },
   { id: 'data', label: 'Data & models', hint: 'Point-in-time spine', icon: Database },
@@ -327,6 +336,7 @@ function Overview({ data, onCommand, onNavigate }: { data: DashboardOverview; on
         <RiskPanel data={data} onNavigate={onNavigate} />
       </section>
       <MissionBoard data={data} onNavigate={onNavigate} />
+      <SessionRecoveryPanel data={data} />
       <section className="lower-grid">
         <ExposurePanel data={data} onNavigate={onNavigate} />
         <QualityPanel data={data} onNavigate={onNavigate} />
@@ -350,6 +360,7 @@ function WorkspaceView({ section, data, onCommand, onNavigate }: { section: Sect
         <div className="workspace-actions"><button className="secondary-button" onClick={() => onCommand('refresh_data')}><RefreshCw size={15} /> REFRESH STATE</button>{section === 'settings' && <button className="danger-outline" onClick={() => onCommand('halt_paper')}><PauseCircle size={15} /> HALT PAPER</button>}</div>
       </div>
       {section === 'missions' && <MissionWorkspace data={data} onNavigate={onNavigate} />}
+      {section === 'research' && <ResearchWorkspace />}
       {section === 'portfolio' && <PortfolioWorkspace data={data} onNavigate={onNavigate} />}
       {section === 'risk' && <RiskWorkspace data={data} onCommand={onCommand} />}
       {section === 'data' && <DataWorkspace data={data} />}
@@ -370,10 +381,17 @@ function workspaceDescription(section: Section) {
     data: 'Point-in-time availability, source families, models, and quality findings.',
     system: 'Service ownership, measured resources, and load-shedding state.',
     incidents: 'Containment, reconciliation, runbooks, and corrective-test links.',
+    research: 'Paper, hypothesis, factor, experiment, validation, and promotion records with lineage.',
     audit: 'Append-only evidence for every mission, decision, control, and approval.',
     settings: 'Guarded configuration proposals and local security posture.',
   }
   return descriptions[section]
+}
+
+function SessionRecoveryPanel({ data }: { data: DashboardOverview }) {
+  const sessions = data.sessions ?? []
+  const research = data.research
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker">SESSION LIFECYCLE</div><h2>Recovery and research state</h2></div><span className="panel-heading-meta">{sessions.length} SESSION{sessions.length === 1 ? '' : 'S'}</span></div>{sessions.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No supervised session is recorded in the ledger. Start, checkpoint, and stop events appear here.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>SESSION</span><span>CLASSIFICATION</span><span>MODE</span><span>LEASES</span><span>GAPS</span></div>{sessions.slice(-5).map((session) => <div className="data-table-row" key={session.session_id}><span>{session.session_id.slice(0, 8)}</span><span>{session.recovery_classification}</span><span>{session.recovery_mode}</span><span>{session.open_leases} open</span><span>{session.data_gaps} gaps / {session.backfilled_gaps} backfilled</span></div>)}</div>}{research && <div className="source-health-note"><span>Research: {research.decisions_recorded} decisions, {research.outcomes_recorded} outcomes, {research.proposals_recorded} proposals ({research.proposals_abstained} abstained), {research.problems_open} open problems.</span></div>}</section>
 }
 
 function Metric({ metric }: { metric: DashboardMetric }) {
@@ -437,11 +455,92 @@ function AuditLine({ event }: { event: DashboardOverview['audit'][number] }) {
 function StatusPill({ tone, label }: { tone: Tone; label: string }) { return <span className={`status-pill ${toneClass(tone)}`}><span />{label}</span> }
 
 function MissionWorkspace({ data, onNavigate }: { data: DashboardOverview; onNavigate: (section: Section) => void }) {
-  return <div className="workspace-stack"><div className="feature-strip"><div className="feature-icon"><Sparkles size={20} /></div><div><strong>Evidence before action.</strong><span>Each mission expires, records dissent, and must pass source-family and factor-family gates before risk evaluation.</span></div><button className="text-button" onClick={() => onNavigate('risk')}>SEE GATE RULES <ArrowUpRight size={14} /></button></div><MissionBoard data={data} onNavigate={onNavigate} /><div className="detail-grid">{data.missions.map((mission) => <article className="detail-panel" key={mission.mission_id}><div className="detail-panel-top"><span className="section-kicker">{mission.mission_id}</span><StatusPill tone={mission.tone} label={mission.state} /></div><h2>{mission.title}</h2><div className="detail-facts"><span><small>MODE</small><strong>{mission.mode}</strong></span><span><small>CONFIDENCE</small><strong>{mission.confidence}</strong></span><span><small>EXPIRES</small><strong>{mission.expires}</strong></span></div><div className="evidence-line"><BookOpenCheck size={15} /><span>{mission.evidence}</span><em>{mission.dissent}</em></div><button className="secondary-button wide-button" onClick={() => onNavigate('audit')}>OPEN DECISION BUNDLE <ArrowUpRight size={14} /></button></article>)}</div></div>
+  return <div className="workspace-stack"><div className="feature-strip"><div className="feature-icon"><Sparkles size={20} /></div><div><strong>Evidence before action.</strong><span>Each mission expires, records dissent, and must pass source-family and factor-family gates before risk evaluation.</span></div><button className="text-button" onClick={() => onNavigate('risk')}>SEE GATE RULES <ArrowUpRight size={14} /></button></div><MissionBoard data={data} onNavigate={onNavigate} /><div className="detail-grid">{data.missions.map((mission) => <article className="detail-panel" key={mission.mission_id}><div className="detail-panel-top"><span className="section-kicker">{mission.mission_id}</span><StatusPill tone={mission.tone} label={mission.state} /></div><h2>{mission.title}</h2><div className="detail-facts"><span><small>MODE</small><strong>{mission.mode}</strong></span><span><small>CONFIDENCE</small><strong>{mission.confidence}</strong></span><span><small>EXPIRES</small><strong>{mission.expires}</strong></span></div><div className="evidence-line"><BookOpenCheck size={15} /><span>{mission.evidence}</span><em>{mission.dissent}</em></div><button className="secondary-button wide-button" onClick={() => onNavigate('audit')}>OPEN DECISION BUNDLE <ArrowUpRight size={14} /></button></article>)}</div><TraceabilityPanel /></div>
 }
 
 function PortfolioWorkspace({ data, onNavigate }: { data: DashboardOverview; onNavigate: (section: Section) => void }) {
-  return <div className="workspace-stack"><div className="portfolio-summary"><Metric metric={data.metrics[0]} /><Metric metric={data.metrics[1]} /><div className="portfolio-callout"><div className="section-kicker"><ShieldCheck size={14} /> EXECUTION BOUNDARY</div><strong>Paper / testnet only</strong><span>Target portfolios never become orders without RiskKernel approval.</span><button className="text-button" onClick={() => onNavigate('risk')}>VIEW POLICY <ArrowUpRight size={14} /></button></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> POSITION REGISTER</div><h2>All positions at authoritative mark</h2></div><span className="panel-heading-meta">{data.exposures.length} LINES · {formatTime(data.as_of)} UTC</span></div><div className="data-table"><div className="data-table-row table-head"><span>INSTRUMENT</span><span>SIDE</span><span>MARK</span><span>NOTIONAL</span><span>WEIGHT</span><span>P&L</span><span>STATE</span></div>{data.exposures.map((row) => <div className="data-table-row" key={row.instrument}><span><strong>{row.instrument}</strong><small>{row.asset_class}</small></span><span className="mono">{row.side}</span><span className="mono">{row.mark}</span><span className="mono">{row.notional}</span><span className="mono">{row.weight}</span><span className={toneClass(row.tone)}>{row.pnl}</span><span><StatusPill tone={row.tone} label="marked" /></span></div>)}</div></section></div>
+  return (
+    <div className="workspace-stack">
+      <div className="portfolio-summary"><Metric metric={data.metrics[0]} /><Metric metric={data.metrics[1]} /><div className="portfolio-callout"><div className="section-kicker"><ShieldCheck size={14} /> EXECUTION BOUNDARY</div><strong>Paper / testnet only</strong><span>Target portfolios never become orders without RiskKernel approval.</span><button className="text-button" onClick={() => onNavigate('risk')}>VIEW POLICY <ArrowUpRight size={14} /></button></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> POSITION REGISTER</div><h2>All positions at authoritative mark</h2></div><span className="panel-heading-meta">{data.exposures.length} LINES · {formatTime(data.as_of)} UTC</span></div><div className="data-table"><div className="data-table-row table-head"><span>INSTRUMENT</span><span>SIDE</span><span>MARK</span><span>NOTIONAL</span><span>WEIGHT</span><span>P&L</span><span>STATE</span></div>{data.exposures.map((row) => <div className="data-table-row" key={row.instrument}><span><strong>{row.instrument}</strong><small>{row.asset_class}</small></span><span className="mono">{row.side}</span><span className="mono">{row.mark}</span><span className="mono">{row.notional}</span><span className="mono">{row.weight}</span><span className={toneClass(row.tone)}>{row.pnl}</span><span><StatusPill tone={row.tone} label="marked" /></span></div>)}</div></section>
+      <PaperOrdersPanel />
+      <PerformancePanel />
+      <StrategyComparisonPanel />
+    </div>
+  );
+}
+
+
+function PaperOrdersPanel() {
+  const [orders, setOrders] = useState<PaperOrderView[] | null>(null)
+  const [fills, setFills] = useState<PaperFillView[]>([])
+  const [selected, setSelected] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.paperOrders()
+      .then((rows) => { if (!cancelled) setOrders(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  const showFills = (orderId: string) => {
+    setSelected(orderId)
+    dashboardApi.paperFills(orderId)
+      .then((rows) => setFills(rows.filter((fill) => fill.order_id === orderId)))
+      .catch((fetchError: Error) => setError(fetchError.message))
+  }
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><CircleDollarSign size={14} /> PAPER ORDERS</div><h2>Lifecycle states from the ledger</h2></div><span className="panel-heading-meta">{orders ? orders.length : '—'} ORDERS</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Paper orders unavailable: {error}</span></div> : !orders ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading paper orders…</span></div> : orders.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No paper orders are recorded yet.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>ORDER</span><span>INSTRUMENT</span><span>SIDE</span><span>QTY</span><span>STATE</span><span /></div>{orders.slice(-10).map((order) => <div className="data-table-row" key={order.order_id}><span>{order.order_id.slice(0, 8)}</span><span>{order.instrument}</span><span>{order.side}</span><span>{order.quantity}</span><span>{order.state}</span><span><button className="text-button" onClick={() => showFills(order.order_id)}>FILLS <ChevronRight size={13} /></button></span></div>)}</div>}{selected && <div className="source-health-note"><span>Fills for {selected.slice(0, 8)}: {fills.length === 0 ? 'none recorded' : fills.map((fill) => `${fill.quantity} @ ${fill.price}`).join(', ')}</span><button className="text-button" onClick={() => setSelected(null)}>CLOSE <X size={13} /></button></div>}</section>
+}
+
+function TraceabilityPanel() {
+  const [chains, setChains] = useState<TraceLinkView[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.traceability()
+      .then((rows) => { if (!cancelled) setChains(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><FileClock size={14} /> TRACEABILITY</div><h2>Decision to outcome lineage</h2></div><span className="panel-heading-meta">{chains ? chains.length : '—'} CHAINS</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Traceability unavailable: {error}</span></div> : !chains ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading lineage…</span></div> : chains.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No decision chains are recorded yet. Chains appear after a mission produces a proposal and paper decision records link orders, fills, and outcomes.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>MISSION</span><span>STANCE</span><span>RISK</span><span>ORDERS</span><span>RECONCILED</span><span>OUTCOME</span></div>{chains.slice(-10).map((chain) => <div className="data-table-row" key={chain.mission_id}><span>{chain.mission_id.slice(0, 8)}</span><span>{chain.abstained ? 'ABSTAIN' : chain.proposal_stance}</span><span>{chain.risk_outcome}</span><span>{chain.order_ids.length} orders / {chain.fill_ids.length} fills</span><span>{chain.reconciled ? 'clean' : 'pending'}</span><span>{chain.outcome_recorded ? chain.net_utility : '—'}</span></div>)}</div>}</section>
+}
+
+function ChainAttestationPanel() {
+  const [chain, setChain] = useState<LedgerChainView | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.ledgerChain()
+      .then((rows) => { if (!cancelled) setChain(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><ClipboardList size={14} /> TAMPER EVIDENCE</div><h2>Ledger hash chain</h2></div><span className="panel-heading-meta">{chain ? `${chain.total_events} EVENTS` : '—'}</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Chain attestation unavailable: {error}</span></div> : !chain ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading chain attestation…</span></div> : <div><div className="source-health-note"><span>Chain head <code>{chain.chain_hash.slice(0, 16)}…</code> over {chain.total_events} events. Any deletion, reorder, or mutation changes this hash.</span></div><div className="data-table"><div className="data-table-row table-head"><span>NAMESPACE</span><span>EVENTS</span><span>HEAD</span></div>{chain.chains.map((entry) => <div className="data-table-row" key={entry.namespace}><span>{entry.namespace}</span><span>{entry.events}</span><span>{entry.head_hash.slice(0, 16)}…</span></div>)}</div></div>}</section>
+}
+
+function PerformancePanel() {
+  const [slices, setSlices] = useState<PerformanceSliceView[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.performance()
+      .then((rows) => { if (!cancelled) setSlices(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> PAPER PERFORMANCE</div><h2>Utility by regime</h2></div><span className="panel-heading-meta">{slices ? slices.length : '—'} SLICES</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Performance unavailable: {error}</span></div> : !slices ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading performance…</span></div> : slices.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No realized outcomes are recorded yet. Slices appear after paper horizons close.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>ASSET</span><span>REGIME</span><span>TRADES</span><span>TOTAL</span><span>WIN</span><span>DRAWDOWN</span><span>REVIEW</span></div>{slices.map((slice) => <div className="data-table-row" key={`${slice.asset}-${slice.regime}-${slice.horizon}`}><span>{slice.asset} / {slice.horizon}</span><span>{slice.regime}</span><span>{slice.samples}</span><span>{slice.total_utility}</span><span>{slice.win_rate}</span><span>{slice.max_drawdown}</span><span>{slice.expiry_action === 'none' ? '—' : slice.expiry_action}</span></div>)}</div>}</section>
+}
+
+function StrategyComparisonPanel() {
+  const [comparisons, setComparisons] = useState<StrategyComparisonView[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.strategyComparison()
+      .then((rows) => { if (!cancelled) setComparisons(rows) })
+      .catch((fetchError: Error) => { if (!cancelled) setError(fetchError.message) })
+    return () => { cancelled = true }
+  }, [])
+  return <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><BarChart3 size={14} /> STRATEGY COMPARISON</div><h2>Challengers vs baseline</h2></div><span className="panel-heading-meta">{comparisons ? comparisons.length : '—'} CHALLENGERS</span></div><div className="source-health-note"><span>Shared recorded slices only. A lead is evidence for human-reviewed paper shadow, never admission.</span></div>{error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>Comparison unavailable: {error}</span></div> : !comparisons ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading comparison…</span></div> : comparisons.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No challenger has recorded outcomes yet. Comparisons appear after paper horizons close.</span></div> : <div className="data-table"><div className="data-table-row table-head"><span>CHALLENGER</span><span>BASELINE</span><span>DELTA</span><span>SHARED</span><span>NO-TRADE</span><span>REVIEW</span></div>{comparisons.map((row) => <div className="data-table-row" key={row.challenger_subject}><span>{row.challenger_subject}</span><span>{row.baseline_utility}</span><span>{row.delta_utility}</span><span>{row.shared_slices}</span><span>{row.beats_no_trade ? 'beats' : '—'}</span><span>{row.expiry_action === 'none' ? '—' : row.expiry_action}</span></div>)}</div>}</section>
 }
 
 function RiskWorkspace({ data, onCommand }: { data: DashboardOverview; onCommand: (command: CommandKind) => void }) {
@@ -475,12 +574,35 @@ function SystemWorkspace({ data }: { data: DashboardOverview }) {
   return <div className="workspace-stack"><div className="system-overview"><div className="system-stat"><span className="section-kicker"><Cpu size={14} /> RESOURCE HEADROOM</span><strong>{data.status.resource_headroom_gib.toFixed(1)} <small>GiB</small></strong><span>of required 1.5 GiB minimum</span></div><div className="system-stat"><span className="section-kicker"><Activity size={14} /> ALWAYS-ON SERVICES</span><strong>4 <small>/ 4</small></strong><span>one degraded source worker</span></div><div className="system-stat"><span className="section-kicker"><HardDrive size={14} /> LEDGER</span><strong>WAL <small>live</small></strong><span>last event {formatTime(data.status.last_ledger_event_at)} UTC</span></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><ServerCog size={14} /> SERVICE REGISTRY</div><h2>Ownership and runtime state</h2></div><span className="panel-heading-meta">MODE {data.status.operating_mode.toUpperCase()}</span></div><div className="data-table service-table"><div className="data-table-row table-head"><span>SERVICE</span><span>KIND</span><span>STATE</span><span>OWNS</span><span>LATENCY</span><span>ADMISSION</span></div>{data.services.map((row) => <div className="data-table-row" key={row.name}><span><strong>{row.name}</strong><small>resource bounded</small></span><span>{row.kind}</span><span><StatusPill tone={row.tone} label={row.state} /></span><span className="muted">{row.owns}</span><span className="mono">{row.latency}</span><span className="mono">{row.tone === 'warning' ? 'review' : 'admitted'}</span></div>)}</div></section><section className="panel load-panel"><div className="panel-heading"><div><div className="section-kicker"><Zap size={14} /> LOAD SHEDDING ORDER</div><h2>Protect the spine first</h2></div></div><div className="load-order">{['archive', 'browser', 'Hermes / Skill Foundry', 'low-priority research', 'training / backtests', 'optional challengers', 'noncritical collectors'].map((item, index) => <div className={`load-step ${index === 6 ? 'last' : ''}`} key={item}><span>{String(index + 1).padStart(2, '0')}</span><strong>{item}</strong>{index < 3 && <small>shed first</small>}</div>)}</div></section></div>
 }
 
+function ResearchWorkspace() {
+  const [records, setRecords] = useState<ResearchRecordView[] | null>(null)
+  const [lineage, setLineage] = useState<ResearchRecordView[] | null>(null)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let cancelled = false
+    dashboardApi.researchRecords()
+      .then((rows) => { if (!cancelled) { setRecords(rows); setLoading(false) } })
+      .catch((fetchError: Error) => { if (!cancelled) { setError(fetchError.message); setLoading(false) } })
+    return () => { cancelled = true }
+  }, [])
+  const inspect = (artifactId: string) => {
+    setSelected(artifactId)
+    setLineage(null)
+    dashboardApi.researchLineage(artifactId)
+      .then((rows) => setLineage(rows))
+      .catch((fetchError: Error) => setError(fetchError.message))
+  }
+  return <div className="workspace-stack"><div className="data-health-strip"><div><FlaskConical size={20} /><strong>Research Brain inspection</strong><span>Immutable registry records with lineage. Retrieval only — nothing here promotes, executes, or admits.</span></div><div className="health-number"><strong>{records ? records.length : '—'}</strong><span>records</span></div></div>{loading ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>Loading research records…</span></div> : error ? <div className="source-health-empty" role="status"><span className="signal-dot tone-critical" /><span>No research registry is available: {error}</span></div> : records && records.length === 0 ? <div className="source-health-empty" role="status"><span className="signal-dot tone-info" /><span>No research records are recorded yet. Run the paper-to-approval workflow to populate the registry.</span></div> : <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><FlaskConical size={14} /> REGISTRY</div><h2>Paper to promotion chain</h2></div><span className="panel-heading-meta">{records ? records.length : 0} RECORDS</span></div><div className="data-table"><div className="data-table-row table-head"><span>TYPE</span><span>SUMMARY</span><span>VERDICT</span><span /></div>{(records ?? []).map((record) => <div className="data-table-row" key={record.artifact_id}><span>{record.record_type}</span><span>{record.summary.slice(0, 90)}</span><span>{record.approved === null || record.approved === undefined ? '—' : record.approved ? 'approved' : 'rejected'}</span><span><button className="text-button" onClick={() => inspect(record.artifact_id)}>LINEAGE <ChevronRight size={13} /></button></span></div>)}</div></section>}{selected && lineage && <section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker">LINEAGE</div><h2>Chain for {selected.slice(0, 8)}</h2></div><button className="text-button" onClick={() => setSelected(null)}>CLOSE <X size={13} /></button></div><div className="data-table">{lineage.map((item) => <div className="data-table-row" key={item.artifact_id}><span>{item.record_type}</span><span>{item.summary.slice(0, 90)}</span><span>{item.artifact_id.slice(0, 8)}</span></div>)}</div></section>}</div>
+}
+
 function IncidentWorkspace({ data }: { data: DashboardOverview }) {
   return <div className="workspace-stack"><div className="incident-banner"><AlertTriangle size={21} /><div><strong>{data.incidents.filter((incident) => incident.status === 'open').length} open incident</strong><span>Containment and reconciliation stay linked to the immutable ledger.</span></div><button className="secondary-button"><BookOpenCheck size={15} /> OPEN RUNBOOK</button></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><AlertTriangle size={14} /> INCIDENT LEDGER</div><h2>Containment and recovery</h2></div><span className="panel-heading-meta">AUDIT REQUIRED FOR CLOSE</span></div><div className="data-table"><div className="data-table-row table-head"><span>INCIDENT</span><span>SEVERITY</span><span>SUMMARY</span><span>OWNER</span><span>OPENED</span><span>STATE</span></div>{data.incidents.map((row) => <div className="data-table-row" key={row.incident_id}><span><strong>{row.incident_id}</strong><small>runbook linked</small></span><span className={toneClass(row.tone)}>{row.severity}</span><span>{row.summary}</span><span className="mono">{row.owner}</span><span className="mono">{row.opened}</span><span><StatusPill tone={row.tone} label={row.status} /></span></div>)}</div></section><div className="recovery-grid"><div className="recovery-step complete"><span><Check size={14} /></span><strong>Contain</strong><small>Owner and safe state recorded</small></div><div className="recovery-step complete"><span><Check size={14} /></span><strong>Reconcile</strong><small>Account and venue projections aligned</small></div><div className="recovery-step"><span>03</span><strong>Correct</strong><small>Test and rollback link required</small></div></div></div>
 }
 
 function AuditWorkspace({ data }: { data: DashboardOverview }) {
-  return <div className="workspace-stack"><div className="audit-intro"><div className="audit-seal"><ClipboardList size={24} /></div><div><strong>Append-only evidence trail.</strong><span>Hashes, actors, timestamps, and owning services make the decision chain inspectable.</span></div><div className="audit-identity"><span>CONTRACT</span><strong>v3.0</strong></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><FileClock size={14} /> IMMUTABLE EVENTS</div><h2>Recent audit activity</h2></div><div className="search-field"><Search size={14} /><input placeholder="Filter event type or actor" aria-label="Filter audit events" /></div></div><div className="data-table audit-table"><div className="data-table-row table-head"><span>EVENT</span><span>TIME</span><span>ACTOR</span><span>TYPE</span><span>SUMMARY</span><span>HASH</span></div>{data.audit.map((row) => <div className="data-table-row" key={row.event_id}><span><strong>{row.event_id}</strong><small>ledger / WAL</small></span><span className="mono">{formatDate(row.at)}</span><span>{row.actor}</span><span className="mono">{row.event_type}</span><span>{row.summary}</span><span className="hash-cell">#{row.hash.slice(0, 12)}</span></div>)}</div></section></div>
+  return <div className="workspace-stack"><div className="audit-intro"><div className="audit-seal"><ClipboardList size={24} /></div><div><strong>Append-only evidence trail.</strong><span>Hashes, actors, timestamps, and owning services make the decision chain inspectable.</span></div><div className="audit-identity"><span>CONTRACT</span><strong>v3.0</strong></div></div><section className="panel wide-table"><div className="panel-heading"><div><div className="section-kicker"><FileClock size={14} /> IMMUTABLE EVENTS</div><h2>Recent audit activity</h2></div><div className="search-field"><Search size={14} /><input placeholder="Filter event type or actor" aria-label="Filter audit events" /></div></div><div className="data-table audit-table"><div className="data-table-row table-head"><span>EVENT</span><span>TIME</span><span>ACTOR</span><span>TYPE</span><span>SUMMARY</span><span>HASH</span></div>{data.audit.map((row) => <div className="data-table-row" key={row.event_id}><span><strong>{row.event_id}</strong><small>ledger / WAL</small></span><span className="mono">{formatDate(row.at)}</span><span>{row.actor}</span><span className="mono">{row.event_type}</span><span>{row.summary}</span><span className="hash-cell">#{row.hash.slice(0, 12)}</span></div>)}</div></section><ChainAttestationPanel /></div>
 }
 
 function SettingsWorkspace({ data, onCommand }: { data: DashboardOverview; onCommand: (command: CommandKind) => void }) {

@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
@@ -102,6 +103,85 @@ class ExposureRow(BaseModel):
     mark: str = Field(min_length=1)
 
 
+class PaperOrderView(BaseModel):
+    """One paper order with its terminal lifecycle state from the ledger."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    order_id: str = Field(min_length=1)
+    instrument: str = Field(min_length=1)
+    side: str = Field(min_length=1)
+    quantity: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+    idempotency_key: str = Field(min_length=1)
+    tone: SystemTone
+
+
+class PaperFillView(BaseModel):
+    """One paper fill linked to its order by exact ID."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    fill_id: str = Field(min_length=1)
+    order_id: str = Field(min_length=1)
+    quantity: str = Field(min_length=1)
+    price: str = Field(min_length=1)
+    tone: SystemTone
+
+
+class StrategyComparisonView(BaseModel):
+    """Baseline vs challenger on shared recorded slices. Read-only evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    baseline_subject: str = Field(min_length=1)
+    challenger_subject: str = Field(min_length=1)
+    baseline_utility: str = Field(min_length=1)
+    challenger_utility: str = Field(min_length=1)
+    delta_utility: str = Field(min_length=1)
+    shared_slices: int = Field(ge=0)
+    verdict: str = Field(min_length=1)
+    beats_no_trade: bool = False
+    expiry_action: str = Field(default="none", min_length=1)
+    tone: SystemTone
+
+
+class TraceLinkView(BaseModel):
+    """One source-to-decision-to-outcome chain link, joined by exact IDs."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    mission_id: str = Field(min_length=1)
+    snapshot_id: str = Field(min_length=1)
+    proposal_stance: str = Field(min_length=1)
+    abstained: bool = False
+    risk_outcome: str = Field(default="unknown", min_length=1)
+    order_ids: tuple[str, ...] = ()
+    fill_ids: tuple[str, ...] = ()
+    reconciled: bool = False
+    outcome_recorded: bool = False
+    net_utility: str = Field(default="not recorded", min_length=1)
+    tone: SystemTone
+
+
+class PerformanceSliceView(BaseModel):
+    """One paper performance slice with review flags. Read-only."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    asset: str = Field(min_length=1)
+    regime: str = Field(min_length=1)
+    horizon: str = Field(min_length=1)
+    samples: int = Field(ge=0)
+    total_utility: str = Field(min_length=1)
+    mean_utility: str = Field(min_length=1)
+    win_rate: str = Field(min_length=1)
+    max_drawdown: str = Field(min_length=1)
+    total_cost: str = Field(min_length=1)
+    expiry_action: str = Field(default="none", min_length=1)
+    tone: SystemTone
+
+
 class RiskLimitView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -172,6 +252,45 @@ class MissionView(BaseModel):
     tone: SystemTone
 
 
+class SessionLifecycleView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    session_id: str = Field(min_length=1)
+    recovery_classification: str = Field(min_length=1)
+    recovery_mode: str = Field(min_length=1)
+    venue_profile: str = Field(default="unknown", min_length=1)
+    scenario: str = Field(default="unknown", min_length=1)
+    open_leases: int = Field(ge=0)
+    checkpoints: int = Field(ge=0)
+    data_gaps: int = Field(ge=0)
+    backfilled_gaps: int = Field(ge=0)
+    tone: SystemTone
+
+
+class ResearchActivityView(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decisions_recorded: int = Field(ge=0)
+    outcomes_recorded: int = Field(ge=0)
+    problems_open: int = Field(ge=0)
+    replays_passed: int = Field(ge=0)
+    proposals_recorded: int = Field(ge=0)
+    proposals_abstained: int = Field(ge=0)
+    tone: SystemTone
+
+
+class ResearchRecordView(BaseModel):
+    """One immutable research artifact projected for operator inspection."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    artifact_id: str = Field(min_length=1)
+    record_type: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    approved: bool | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class ServiceView(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -192,6 +311,17 @@ class AuditEventView(BaseModel):
     event_type: str = Field(min_length=1)
     summary: str = Field(min_length=1)
     hash: str = Field(min_length=12)
+    tone: SystemTone
+
+
+class LedgerChainView(BaseModel):
+    """Hash-chained tamper-evidence attestation over the ledgers."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    total_events: int = Field(ge=0)
+    chain_hash: str = Field(min_length=64, max_length=64)
+    chains: tuple[dict[str, str], ...] = ()
     tone: SystemTone
 
 
@@ -224,6 +354,8 @@ class DashboardOverview(BaseModel):
     audit: tuple[AuditEventView, ...]
     live_readiness: LiveReadinessView
     source_health: tuple[SourceHealthView, ...] = ()
+    sessions: tuple[SessionLifecycleView, ...] = ()
+    research: ResearchActivityView | None = None
 
     @model_validator(mode="after")
     def require_aware_as_of(self) -> DashboardOverview:
@@ -817,6 +949,35 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
         for descriptor in DEFAULT_SERVICES
     )
     open_incidents = sum(1 for item in incidents if item.status == "open")
+    mission_events_by_type: dict[str, int] = {}
+    proposals_abstained = 0
+    for event in mission_events:
+        mission_events_by_type[event.event_type] = (
+            mission_events_by_type.get(event.event_type, 0) + 1
+        )
+        if event.event_type == "proposal_recorded":
+            proposal = event.payload.get("proposal")
+            if isinstance(proposal, dict) and proposal.get("abstained"):
+                proposals_abstained += 1
+    model_events = ledgers.events(LedgerNamespace.MODEL)
+    outcomes_recorded = sum(
+        1 for event in model_events if event.event_type == "paper_scorecard_recorded"
+    )
+    decisions_recorded = mission_events_by_type.get("paper_decision_chain", 0)
+    problems_open = mission_events_by_type.get(
+        "paper_learning_problem", 0
+    ) - mission_events_by_type.get("paper_replay_recorded", 0)
+    replays_passed = mission_events_by_type.get("paper_replay_recorded", 0)
+    sessions = _project_sessions(mission_events)
+    research = ResearchActivityView(
+        decisions_recorded=decisions_recorded,
+        outcomes_recorded=outcomes_recorded,
+        problems_open=max(0, problems_open),
+        replays_passed=replays_passed,
+        proposals_recorded=mission_events_by_type.get("proposal_recorded", 0),
+        proposals_abstained=proposals_abstained,
+        tone=SystemTone.INFO,
+    )
     return DashboardOverview(
         as_of=current,
         environment=DashboardEnvironment.PAPER_TESTNET,
@@ -891,7 +1052,126 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
             blockers=("Phase 7 paper soak evidence not admitted", "Live activation is disabled"),
             approval="sealed by paper-only boundary",
         ),
+        sessions=sessions,
+        research=research,
     )
+
+
+_RECORD_TYPE_NAMES = {
+    "PaperCard": "paper",
+    "HypothesisCard": "hypothesis",
+    "CandidateFactorArtifact": "factor",
+    "ExperimentArtifact": "experiment",
+    "ValidationReport": "validation",
+    "PromotionDecision": "promotion",
+}
+
+
+def _record_type_name(record: object) -> str:
+    """Map a research record instance to its registry record type."""
+    return _RECORD_TYPE_NAMES.get(type(record).__name__, "unknown")
+
+
+def _research_summary(record_type: str, payload: dict) -> str:
+    """One-line operator summary per research artifact type."""
+    get = payload.get if isinstance(payload, dict) else {}.get
+    if record_type == "paper":
+        return str(get("claimed_result", get("source_url", "paper")) or "paper")
+    if record_type == "hypothesis":
+        return str(get("economic_rationale", "hypothesis") or "hypothesis")
+    if record_type == "factor":
+        return str(get("dsl_source", get("universe", "factor")) or "factor")
+    if record_type == "experiment":
+        return str(get("metrics", "experiment") or "experiment")
+    if record_type == "validation":
+        verdict = "approved" if get("approved") else "rejected"
+        return f"{verdict}: {get('rationale', '') or 'validation'}".strip()
+    if record_type == "promotion":
+        return f"scope={get('scope', '?')} policy={get('policy_version', '?')}"
+    return record_type
+
+
+def _project_sessions(mission_events) -> tuple[SessionLifecycleView, ...]:
+    """Project per-session start/recovery/checkpoint/lease/gap state.
+
+    Every count is scoped to its own session ID: checkpoint, lease, and
+    data-gap events carry the session they belong to (leases via the lease
+    payload, checkpoints and gaps via the most recent session_started event
+    at or before them in ledger order). Global totals are never smeared
+    across sessions.
+    """
+    starts: dict[str, dict] = {}
+    recoveries: dict[str, dict] = {}
+    profiles: dict[str, dict] = {}
+    per_session_checkpoints: dict[str, int] = {}
+    per_session_gaps: dict[str, int] = {}
+    per_session_backfilled: dict[str, int] = {}
+    lease_session: dict[str, str] = {}
+    lease_acquired: set[str] = set()
+    lease_released: set[str] = set()
+    current_session: str | None = None
+    for event in mission_events:
+        payload = event.payload
+        if event.event_type == "session_started" and isinstance(payload.get("start"), dict):
+            start = payload["start"]
+            session_id = str(start.get("session_id", ""))
+            starts[session_id] = start
+            current_session = session_id
+        elif event.event_type == "recovery_recorded" and isinstance(payload.get("recovery"), dict):
+            recovery = payload["recovery"]
+            recoveries[str(recovery.get("session_id", ""))] = recovery
+        elif event.event_type == "session_profile" and isinstance(payload.get("profile"), dict):
+            profile = payload["profile"]
+            profiles[str(profile.get("session_id", ""))] = profile
+        elif event.event_type == "session_checkpoint":
+            checkpoint = payload.get("checkpoint")
+            owner = (
+                str(checkpoint.get("session_id", ""))
+                if isinstance(checkpoint, dict)
+                else (current_session or "")
+            )
+            if owner:
+                per_session_checkpoints[owner] = per_session_checkpoints.get(owner, 0) + 1
+        elif event.event_type == "data_gap_recorded":
+            owner = current_session or ""
+            if owner:
+                per_session_gaps[owner] = per_session_gaps.get(owner, 0) + 1
+                gap = payload.get("gap")
+                if isinstance(gap, dict) and gap.get("backfilled"):
+                    per_session_backfilled[owner] = per_session_backfilled.get(owner, 0) + 1
+        elif event.event_type == "lease_acquired" and isinstance(payload.get("lease"), dict):
+            lease = payload["lease"]
+            lease_id = str(lease.get("lease_id", ""))
+            owner = str(lease.get("session_id", "")) or (current_session or "")
+            lease_session[lease_id] = owner
+            lease_acquired.add(lease_id)
+        elif event.event_type == "lease_released" and isinstance(payload.get("lease"), dict):
+            lease_released.add(str(payload["lease"].get("lease_id", "")))
+    views: list[SessionLifecycleView] = []
+    for session_id, start in starts.items():
+        recovery = recoveries.get(session_id, {})
+        mode = str(recovery.get("recovery_mode", "normal"))
+        open_leases = sum(
+            1
+            for lease_id in lease_acquired - lease_released
+            if lease_session.get(lease_id) == session_id
+        )
+        tone = SystemTone.WARNING if mode in {"recovery", "abstain"} else SystemTone.INFO
+        views.append(
+            SessionLifecycleView(
+                session_id=session_id,
+                recovery_classification=str(start.get("recovery_classification", "unknown")),
+                recovery_mode=mode,
+                venue_profile=str(profiles.get(session_id, {}).get("venue_profile", "unknown")),
+                scenario=str(profiles.get(session_id, {}).get("scenario", "unknown")),
+                open_leases=open_leases,
+                checkpoints=per_session_checkpoints.get(session_id, 0),
+                data_gaps=per_session_gaps.get(session_id, 0),
+                backfilled_gaps=per_session_backfilled.get(session_id, 0),
+                tone=tone,
+            )
+        )
+    return tuple(views[-20:])
 
 
 class DashboardProjection:
@@ -907,6 +1187,7 @@ class DashboardProjection:
         runtime: Any | None = None,
         config_store: ConfigBundleStore | None = None,
         source_health_path: Path | None = None,
+        research_registry_path: Path | None = None,
     ) -> None:
         self._ledgers = ledgers
         self._runtime = runtime
@@ -914,6 +1195,11 @@ class DashboardProjection:
         self._source_health_path = source_health_path or (
             Path(os.environ["ADVISORAI_PHASE3_HEALTH_SNAPSHOT"])
             if os.getenv("ADVISORAI_PHASE3_HEALTH_SNAPSHOT")
+            else None
+        )
+        self._research_registry_path = research_registry_path or (
+            Path(os.environ["ADVISORAI_RESEARCH_REGISTRY_PATH"])
+            if os.getenv("ADVISORAI_RESEARCH_REGISTRY_PATH")
             else None
         )
         self._overview = (
@@ -1026,6 +1312,376 @@ class DashboardProjection:
             if event.event_type == "paper_runtime_cycle"
             and isinstance(event.payload.get("cycle"), dict)
         )
+
+    def research_records(self, record_type: str | None = None) -> tuple[ResearchRecordView, ...]:
+        """Project immutable research artifacts for operator inspection.
+
+        Read-only projection over the ResearchRegistry; empty when no
+        registry is configured. Never mutates, promotes, or executes.
+        """
+        if self._research_registry_path is None or not self._research_registry_path.exists():
+            return ()
+        import sqlite3
+
+        with sqlite3.connect(self._research_registry_path) as connection:
+            connection.row_factory = sqlite3.Row
+            if record_type is None:
+                rows = connection.execute(
+                    "SELECT artifact_id, record_type, payload_json FROM research_records"
+                    " ORDER BY rowid DESC LIMIT 100"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT artifact_id, record_type, payload_json FROM research_records"
+                    " WHERE record_type = ? ORDER BY rowid DESC LIMIT 100",
+                    (record_type,),
+                ).fetchall()
+        import json as _json
+
+        views: list[ResearchRecordView] = []
+        for row in rows:
+            try:
+                payload = _json.loads(row["payload_json"])
+            except Exception:
+                continue
+            views.append(
+                ResearchRecordView(
+                    artifact_id=row["artifact_id"],
+                    record_type=row["record_type"],
+                    summary=_research_summary(row["record_type"], payload),
+                    approved=payload.get("approved")
+                    if isinstance(payload.get("approved"), bool)
+                    else None,
+                    payload=payload if isinstance(payload, dict) else {},
+                )
+            )
+        return tuple(views)
+
+    def research_lineage(self, artifact_id: str) -> tuple[ResearchRecordView, ...]:
+        """Project the full lineage neighborhood for one research artifact."""
+        if self._research_registry_path is None or not self._research_registry_path.exists():
+            return ()
+        from advisorai.research.registry import ResearchRegistry
+
+        registry = ResearchRegistry(self._research_registry_path)
+        try:
+            target = registry.get(uuid.UUID(artifact_id))
+        except Exception:
+            return ()
+        if target is None:
+            return ()
+        seen: set[str] = set()
+        ordered: list[str] = [str(target.artifact_id)]
+        stack = [str(target.artifact_id)]
+        while stack:
+            current = stack.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            try:
+                edges = registry.lineage(uuid.UUID(current))
+            except Exception:
+                continue
+            for from_id, to_id, _relation in edges:
+                for member in (from_id, to_id):
+                    if member not in seen and member not in ordered:
+                        ordered.append(member)
+                    if member not in seen:
+                        stack.append(member)
+        views: list[ResearchRecordView] = []
+        for member in ordered:
+            try:
+                record = registry.get(uuid.UUID(member))
+            except Exception:
+                continue
+            if record is None:
+                continue
+            payload = record.model_dump(mode="json", round_trip=True)
+            rtype = _record_type_name(record)
+            approved = payload.get("approved")
+            views.append(
+                ResearchRecordView(
+                    artifact_id=member,
+                    record_type=rtype,
+                    summary=_research_summary(rtype, payload),
+                    approved=approved if isinstance(approved, bool) else None,
+                    payload=payload,
+                )
+            )
+        return tuple(views)
+
+    def paper_orders(self) -> tuple[PaperOrderView, ...]:
+        """Project paper orders with lifecycle states. Empty when no ledgers."""
+        if self._ledgers is None:
+            return ()
+        latest: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            artifact = event.payload.get("artifact")
+            if not isinstance(artifact, dict):
+                continue
+            if event.event_type.startswith("order_") or event.event_type in {
+                "order_created",
+                "order_ack_ambiguous",
+            }:
+                order_id = str(artifact.get("artifact_id", ""))
+                if order_id:
+                    latest[order_id] = artifact
+        views: list[PaperOrderView] = []
+        for order_id, artifact in latest.items():
+            instrument = artifact.get("instrument", {})
+            state = str(artifact.get("state", "unknown"))
+            views.append(
+                PaperOrderView(
+                    order_id=order_id,
+                    instrument=str(
+                        instrument.get("canonical_id", instrument)
+                        if isinstance(instrument, dict)
+                        else instrument
+                    ),
+                    side=str(artifact.get("side", "?")),
+                    quantity=str(artifact.get("quantity", "?")),
+                    state=state,
+                    idempotency_key=str(artifact.get("idempotency_key", "")),
+                    tone=SystemTone.POSITIVE if state == "reconciled" else SystemTone.INFO,
+                )
+            )
+        return tuple(views)
+
+    def paper_fills(self) -> tuple[PaperFillView, ...]:
+        """Project paper fills linked to orders by exact ID."""
+        if self._ledgers is None:
+            return ()
+        views: list[PaperFillView] = []
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            if event.event_type != "fill_recorded":
+                continue
+            artifact = event.payload.get("artifact")
+            if not isinstance(artifact, dict):
+                continue
+            views.append(
+                PaperFillView(
+                    fill_id=str(artifact.get("artifact_id", "")),
+                    order_id=str(artifact.get("order_id", "")),
+                    quantity=str(artifact.get("quantity", "?")),
+                    price=str(artifact.get("price", "?")),
+                    tone=SystemTone.INFO,
+                )
+            )
+        return tuple(views)
+
+    def ledger_chain(self) -> LedgerChainView:
+        """Attest the current ledger hash chain. Read-only, no mutation."""
+        from advisorai.ledger.audit import audit as audit_ledger
+
+        if self._ledgers is None:
+            return LedgerChainView(
+                total_events=0,
+                chain_hash="0" * 64,
+                chains=(),
+                tone=SystemTone.NEUTRAL,
+            )
+        report = audit_ledger(self._ledgers)
+        return LedgerChainView(
+            total_events=report.total_events,
+            chain_hash=report.chain_hash,
+            chains=tuple(
+                {
+                    "namespace": chain.namespace.value,
+                    "events": str(chain.events),
+                    "head_hash": chain.head_hash,
+                }
+                for chain in report.chains
+            ),
+            tone=SystemTone.POSITIVE if report.total_events else SystemTone.NEUTRAL,
+        )
+
+    def performance(self) -> tuple[PerformanceSliceView, ...]:
+        """Project paper performance slices with expiry review flags.
+
+        A slice is marked review_for_retirement when every subject that
+        contributed to it is flagged with negative trailing utility.
+        """
+        if self._ledgers is None:
+            return ()
+        from advisorai.learning.monitor import expiry_flags, load_scorecards, summarize
+
+        scorecards = load_scorecards(self._ledgers)
+        flagged_subjects = {
+            (flag.subject, flag.subject_version) for flag in expiry_flags(scorecards)
+        }
+        contributors: dict[tuple[str, str, str], set[tuple[str, str]]] = {}
+        for card in scorecards:
+            contributors.setdefault((card.asset, card.regime, card.horizon), set()).add(
+                (card.subject, card.subject_version)
+            )
+        views: list[PerformanceSliceView] = []
+        for entry in summarize(scorecards):
+            members = contributors.get((entry.asset, entry.regime, entry.horizon), set())
+            under_review = bool(members) and members <= flagged_subjects
+            views.append(
+                PerformanceSliceView(
+                    asset=entry.asset,
+                    regime=entry.regime,
+                    horizon=entry.horizon,
+                    samples=entry.samples,
+                    total_utility=str(entry.total_utility),
+                    mean_utility=str(entry.mean_utility),
+                    win_rate=str(entry.win_rate),
+                    max_drawdown=str(entry.max_drawdown),
+                    total_cost=str(entry.total_cost),
+                    expiry_action="review_for_retirement" if under_review else "none",
+                    tone=(
+                        SystemTone.WARNING
+                        if under_review
+                        else SystemTone.POSITIVE
+                        if entry.total_utility > 0
+                        else SystemTone.NEUTRAL
+                    ),
+                )
+            )
+        return tuple(views)
+
+    def strategy_comparison(self) -> tuple[StrategyComparisonView, ...]:
+        """Compare the baseline subject against recorded challengers.
+
+        Baseline identity is the most-sampled non-no-trade subject; every
+        comparison uses shared slices only. Evidence for human review, never
+        admission.
+        """
+        if self._ledgers is None:
+            return ()
+        from advisorai.learning.monitor import compare_strategies, load_scorecards
+
+        scorecards = load_scorecards(self._ledgers)
+        present = sorted({card.subject for card in scorecards} - {"no-trade"})
+        if not present:
+            return ()
+        baseline = max(
+            present, key=lambda subject: sum(1 for card in scorecards if card.subject == subject)
+        )
+        views: list[StrategyComparisonView] = []
+        for item in compare_strategies(scorecards, baseline_subject=baseline):
+            if item.challenger_subject == baseline:
+                continue
+            views.append(
+                StrategyComparisonView(
+                    baseline_subject=item.baseline_subject,
+                    challenger_subject=item.challenger_subject,
+                    baseline_utility=str(item.baseline_utility),
+                    challenger_utility=str(item.challenger_utility),
+                    delta_utility=str(item.delta_utility),
+                    shared_slices=item.shared_slices,
+                    verdict=item.verdict,
+                    beats_no_trade=item.beats_no_trade,
+                    expiry_action=item.expiry_action,
+                    tone=(
+                        SystemTone.WARNING
+                        if item.expiry_action != "none"
+                        else SystemTone.POSITIVE
+                        if item.delta_utility > 0
+                        else SystemTone.NEUTRAL
+                    ),
+                )
+            )
+        return tuple(views)
+
+    def traceability(self) -> tuple[TraceLinkView, ...]:
+        """Project source-to-decision-to-outcome chains joined by exact IDs.
+
+        Joins mission decisions + proposals (MISSION) with paper decision
+        records (MISSION paper_decision_chain), orders/fills/reconciliation
+        (ORDER), and scorecards/outcomes (MODEL). Missing links are reported
+        as absent, never invented.
+        """
+        if self._ledgers is None:
+            return ()
+        proposals: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.MISSION):
+            payload = event.payload
+            if event.event_type == "proposal_recorded" and isinstance(
+                payload.get("proposal"), dict
+            ):
+                proposal = payload["proposal"]
+                proposals[str(proposal.get("mission_id", ""))] = proposal
+            elif event.event_type == "decision_built" and isinstance(payload.get("decision"), dict):
+                decision = payload["decision"]
+                proposals.setdefault(
+                    str(decision.get("mission_id", "")),
+                    {"__decision_only__": True, "snapshot_id": decision.get("snapshot_id", "")},
+                )
+        chains: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.MISSION):
+            if event.event_type != "paper_decision_chain":
+                continue
+            record = event.payload.get("decision")
+            if not isinstance(record, dict):
+                continue
+            mission_id = str(record.get("mission_id", ""))
+            if mission_id:
+                chains[mission_id] = record
+        fills_by_order: dict[str, str] = {}
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            if event.event_type != "fill_recorded":
+                continue
+            artifact = event.payload.get("artifact")
+            if isinstance(artifact, dict):
+                fills_by_order[
+                    str(artifact.get("venue_fill_id", artifact.get("artifact_id", "")))
+                ] = str(artifact.get("order_id", ""))
+        reconciled_orders: set[str] = set()
+        for event in self._ledgers.events(LedgerNamespace.ORDER):
+            if event.event_type == "order_reconciled":
+                artifact = event.payload.get("artifact")
+                if isinstance(artifact, dict):
+                    reconciled_orders.add(str(artifact.get("artifact_id", "")))
+            elif event.event_type == "reconciliation_recorded":
+                artifact = event.payload.get("artifact")
+                if isinstance(artifact, dict) and artifact.get("reconciled"):
+                    for order_id in artifact.get("order_ids", []) or []:
+                        reconciled_orders.add(str(order_id))
+        outcomes: dict[str, dict] = {}
+        for event in self._ledgers.events(LedgerNamespace.MODEL):
+            if event.event_type != "paper_scorecard_recorded":
+                continue
+            decision_id = event.payload.get("decision_id")
+            scorecard = event.payload.get("scorecard")
+            outcome = event.payload.get("outcome")
+            if isinstance(decision_id, str):
+                outcomes[decision_id] = {
+                    "scorecard": scorecard if isinstance(scorecard, dict) else {},
+                    "outcome": outcome if isinstance(outcome, dict) else {},
+                }
+        views: list[TraceLinkView] = []
+        for mission_id in sorted(set(proposals) | set(chains)):
+            proposal = proposals.get(mission_id, {})
+            chain = chains.get(mission_id, {})
+            order_ids = tuple(str(item) for item in chain.get("order_ids", []) or [])
+            fill_ids = tuple(str(item) for item in chain.get("fill_ids", []) or [])
+            risk_id = str(chain.get("risk_decision_id", "") or "")
+            risk_outcome = "evaluated" if risk_id else "none"
+            decision_id = str(chain.get("decision_id", "") or "")
+            outcome = outcomes.get(decision_id, {})
+            outcome_payload = outcome.get("outcome", {})
+            net_utility = str(outcome_payload.get("net_utility", "not recorded"))
+            views.append(
+                TraceLinkView(
+                    mission_id=mission_id,
+                    snapshot_id=str(
+                        proposal.get("snapshot_id", chain.get("snapshot_id", "")) or ""
+                    ),
+                    proposal_stance=str(proposal.get("stance", "unknown") or "unknown"),
+                    abstained=bool(proposal.get("abstained", False)),
+                    risk_outcome=risk_outcome,
+                    order_ids=order_ids,
+                    fill_ids=fill_ids,
+                    reconciled=bool(order_ids)
+                    and all(item in reconciled_orders for item in order_ids),
+                    outcome_recorded=bool(outcome),
+                    net_utility=net_utility,
+                    tone=SystemTone.INFO if order_ids else SystemTone.NEUTRAL,
+                )
+            )
+        return tuple(views[-20:])
 
     def execute(self, command: DashboardCommandRequest, *, actor: str) -> CommandReceipt:
         prior = self._receipts.get(command.idempotency_key)
@@ -1219,6 +1875,7 @@ def create_dashboard_app(
     ledger = SqliteLedgers(Path(ledger_path)) if ledger_path else None
     config_root = os.getenv("ADVISORAI_CONFIG_BUNDLE_PATH")
     bundle_store = ConfigBundleStore(Path(config_root)) if config_root else None
+    research_registry_path = os.getenv("ADVISORAI_RESEARCH_REGISTRY_PATH")
     store = projection or DashboardProjection(
         ledgers=ledger,
         config_store=bundle_store,
@@ -1227,6 +1884,7 @@ def create_dashboard_app(
             if os.getenv("ADVISORAI_PHASE3_HEALTH_SNAPSHOT")
             else None
         ),
+        research_registry_path=Path(research_registry_path) if research_registry_path else None,
     )
     login_limiter = LoginRateLimiter()
     password_hash = configured_password_hash()
@@ -1414,9 +2072,53 @@ def create_dashboard_app(
     async def paper_cycles(_: Principal = Depends(principal_for)) -> tuple[RuntimeCycle, ...]:  # noqa: B008
         return store.paper_cycles()
 
+    @app.get("/api/v1/paper/orders", response_model=tuple[PaperOrderView, ...])
+    async def paper_orders(_: Principal = Depends(principal_for)) -> tuple[PaperOrderView, ...]:  # noqa: B008
+        return store.paper_orders()
+
+    @app.get("/api/v1/paper/fills", response_model=tuple[PaperFillView, ...])
+    async def paper_fills(_: Principal = Depends(principal_for)) -> tuple[PaperFillView, ...]:  # noqa: B008
+        return store.paper_fills()
+
+    @app.get("/api/v1/performance", response_model=tuple[PerformanceSliceView, ...])
+    async def performance(
+        _: Principal = Depends(principal_for),  # noqa: B008
+    ) -> tuple[PerformanceSliceView, ...]:
+        return store.performance()
+
+    @app.get("/api/v1/strategies/comparison", response_model=tuple[StrategyComparisonView, ...])
+    async def strategy_comparison(
+        _: Principal = Depends(principal_for),  # noqa: B008
+    ) -> tuple[StrategyComparisonView, ...]:
+        return store.strategy_comparison()
+
+    @app.get("/api/v1/traceability", response_model=tuple[TraceLinkView, ...])
+    async def traceability(_: Principal = Depends(principal_for)) -> tuple[TraceLinkView, ...]:  # noqa: B008
+        return store.traceability()
+
+    @app.get("/api/v1/audit/chain", response_model=LedgerChainView)
+    async def ledger_chain(_: Principal = Depends(principal_for)) -> LedgerChainView:  # noqa: B008
+        return store.ledger_chain()
+
     @app.get("/api/v1/dashboard/source-health", response_model=tuple[SourceHealthView, ...])
     async def source_health(_: Principal = Depends(principal_for)) -> tuple[SourceHealthView, ...]:  # noqa: B008
         return store.source_health()
+
+    @app.get("/api/v1/research/records", response_model=tuple[ResearchRecordView, ...])
+    async def research_records(
+        _: Principal = Depends(principal_for),  # noqa: B008
+        record_type: str | None = None,
+    ) -> tuple[ResearchRecordView, ...]:
+        return store.research_records(record_type)
+
+    @app.get(
+        "/api/v1/research/lineage/{artifact_id}", response_model=tuple[ResearchRecordView, ...]
+    )
+    async def research_lineage(
+        artifact_id: str,
+        _: Principal = Depends(principal_for),  # noqa: B008
+    ) -> tuple[ResearchRecordView, ...]:
+        return store.research_lineage(artifact_id)
 
     @app.post("/api/v1/control/command", response_model=CommandReceipt)
     async def command(

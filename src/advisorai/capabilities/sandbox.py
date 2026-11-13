@@ -867,15 +867,16 @@ class SandboxLaunchSpec(BaseModel):
         if "--name" not in docker_options:
             raise SandboxPolicyError("launch command must name its container for cleanup")
         name_index = docker_options.index("--name")
-        if name_index + 1 >= len(docker_options) or docker_options[name_index + 1] != self.container_name:
+        if (
+            name_index + 1 >= len(docker_options)
+            or docker_options[name_index + 1] != self.container_name
+        ):
             raise SandboxPolicyError("launch command container name does not match its identity")
         if "--network" not in docker_options:
             raise SandboxPolicyError("launch command must set an explicit network policy")
         network_index = docker_options.index("--network")
         expected_network = (
-            self.network.enforcer_network
-            if self.network.mode is NetworkMode.ALLOWLIST
-            else "none"
+            self.network.enforcer_network if self.network.mode is NetworkMode.ALLOWLIST else "none"
         )
         if (
             network_index + 1 >= len(docker_options)
@@ -1333,11 +1334,7 @@ class _DockerSandboxBackend(SandboxBackend):
             provenance=provenance,
         )
         return launch_spec.model_copy(
-            update={
-                "integrity_signature": _sign_launch_spec(
-                    launch_spec.model_dump(mode="json")
-                )
-            }
+            update={"integrity_signature": _sign_launch_spec(launch_spec.model_dump(mode="json"))}
         )
 
 
@@ -1781,9 +1778,9 @@ class SandboxProcessRunner:
                         )
                         if self._container_running(validated_spec, container_id) is True:
                             self._docker(validated_spec, ("kill", container_id), timeout=10)
-                        container_stopped = self._container_running(
-                            validated_spec, container_id
-                        ) is False
+                        container_stopped = (
+                            self._container_running(validated_spec, container_id) is False
+                        )
                         exit_code = self._container_exit_code(validated_spec, container_id)
                         exit_reason = SandboxExitReason.WALL_TIME_LIMIT
                         break

@@ -1,12 +1,14 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from advisorai.agents.fusion import DecisionBundle, EvidenceGateResult
 from advisorai.api.service import DecisionPipelineResult
 from advisorai.contracts import (
     AssetClass,
+    Fill,
     InstrumentIdentity,
+    OrderState,
     RiskLimit,
     RiskPolicy,
     Snapshot,
@@ -14,6 +16,7 @@ from advisorai.contracts import (
     TargetPosition,
 )
 from advisorai.execution import (
+    AccountLedger,
     AccountState,
     OrderManager,
     PaperVenueAdapter,
@@ -21,11 +24,12 @@ from advisorai.execution import (
     VenueAccountSnapshot,
 )
 from advisorai.learning import PaperLearningLoop
-from advisorai.ledger import LedgerNamespace, SqliteLedgers
+from advisorai.ledger import LedgerEvent, LedgerNamespace, SqliteLedgers
 from advisorai.runtime import (
     CadenceGate,
     PaperRuntime,
     PaperRuntimeConfig,
+    RuntimeCycle,
     RuntimeStage,
     build_default_orders,
 )
@@ -170,6 +174,86 @@ def test_runtime_routes_only_after_risk_and_records_cycle(tmp_path):
         event.event_type == "paper_runtime_cycle"
         for event in ledgers.events(LedgerNamespace.MISSION)
     )
+
+
+def test_runtime_ingests_current_fills_from_non_simulated_paper_adapter(tmp_path):
+    class CurrentFillAdapter(PaperVenueAdapter):
+        def __init__(self):
+            super().__init__(venue="paper")
+            self._fills = []
+
+        def submit(self, order):
+            acknowledgement = super().submit(order)
+            self._fills.append(
+                Fill(
+                    order_id=order.artifact_id,
+                    venue_fill_id=f"provider-fill-{order.artifact_id}",
+                    quantity=order.quantity,
+                    price=Decimal("100"),
+                    fee=Decimal("0.01"),
+                    occurred_at=datetime(2026, 8, 5, 15, 0, tzinfo=UTC),
+                )
+            )
+            return acknowledgement
+
+        @property
+        def fills(self):
+            return tuple(self._fills)
+
+    adapter = CurrentFillAdapter()
+    runtime, cutoff, _ledgers, _learning = _runtime(
+        tmp_path,
+        admitted=True,
+        adapter=adapter,
+        database_name="runtime-provider-fills.sqlite3",
+    )
+    runtime.account_ledger = AccountLedger(runtime.ledgers, runtime.account)
+
+    result = runtime.run_once(cutoff)
+
+    assert result.stage is RuntimeStage.ORDERS_ROUTED
+    assert len(runtime.orders.fills) == 1
+    assert runtime.orders.orders[result.order_ids[0]].state is OrderState.RECONCILED
+    assert adapter.fills[0].venue_fill_id in runtime.account_ledger.applied_fill_ids
+    before = runtime.account.snapshot()
+    runtime._settle_paper_venue_fills(current_order_ids=frozenset(result.order_ids))
+    assert runtime.account.snapshot() == before
+    assert len(runtime.orders.fills) == 1
+
+
+def test_interrupted_cycle_is_not_replayed_and_following_cutoff_can_run(tmp_path):
+    runtime, cutoff, ledgers, _ = _runtime(tmp_path, admitted=True)
+    cycle_id = uuid5(
+        NAMESPACE_URL,
+        f"advisorai-v3/runtime-cycle/{runtime.config.run_id}/{cutoff.isoformat()}",
+    )
+    interrupted = RuntimeCycle(
+        cycle_id=cycle_id,
+        run_id=runtime.config.run_id,
+        cutoff=cutoff,
+        stage=RuntimeStage.STARTED,
+        created_at=cutoff,
+    )
+    ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.MISSION,
+            event_type="paper_runtime_cycle",
+            idempotency_key=f"runtime:{runtime.config.run_id}:{cycle_id}:started",
+            occurred_at=cutoff,
+            payload={"cycle": interrupted.model_dump(mode="json", round_trip=True)},
+        )
+    )
+
+    recovered = runtime.run_once(cutoff)
+    assert recovered.stage is RuntimeStage.FAILED
+    assert recovered.reasons == ("interrupted_cycle_requires_recovery",)
+    # The idempotent record stays failed; no old decision or order is replayed.
+    assert runtime.run_once(cutoff) == recovered
+
+    next_cycle = runtime.run_once(cutoff + timedelta(hours=1))
+    assert next_cycle.stage is RuntimeStage.ORDERS_ROUTED
+    assert len(next_cycle.order_ids) == 1
+    assert len(runtime.orders.orders) == 1
 
 
 def test_runtime_requires_closed_hourly_cutoff(tmp_path):

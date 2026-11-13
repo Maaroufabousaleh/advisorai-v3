@@ -122,6 +122,27 @@ export interface LiveReadinessView {
   approval: string
 }
 
+export interface SessionLifecycleView {
+  session_id: string
+  recovery_classification: string
+  recovery_mode: string
+  open_leases: number
+  checkpoints: number
+  data_gaps: number
+  backfilled_gaps: number
+  tone: Tone
+}
+
+export interface ResearchActivityView {
+  decisions_recorded: number
+  outcomes_recorded: number
+  problems_open: number
+  replays_passed: number
+  proposals_recorded: number
+  proposals_abstained: number
+  tone: Tone
+}
+
 export interface DashboardOverview {
   schema_version: string
   as_of: string
@@ -139,6 +160,82 @@ export interface DashboardOverview {
   audit: AuditEventView[]
   live_readiness: LiveReadinessView
   source_health: SourceHealthView[]
+  sessions?: SessionLifecycleView[]
+  research?: ResearchActivityView | null
+}
+
+export interface PaperOrderView {
+  order_id: string
+  instrument: string
+  side: string
+  quantity: string
+  state: string
+  idempotency_key: string
+  tone: Tone
+}
+
+export interface PaperFillView {
+  fill_id: string
+  order_id: string
+  quantity: string
+  price: string
+  tone: Tone
+}
+
+export interface LedgerChainView {
+  total_events: number
+  chain_hash: string
+  chains: { namespace: string; events: string; head_hash: string }[]
+  tone: Tone
+}
+
+export interface StrategyComparisonView {
+  baseline_subject: string
+  challenger_subject: string
+  baseline_utility: string
+  challenger_utility: string
+  delta_utility: string
+  shared_slices: number
+  verdict: string
+  beats_no_trade: boolean
+  expiry_action: string
+  tone: Tone
+}
+
+export interface PerformanceSliceView {
+  asset: string
+  regime: string
+  horizon: string
+  samples: number
+  total_utility: string
+  mean_utility: string
+  win_rate: string
+  max_drawdown: string
+  total_cost: string
+  expiry_action: string
+  tone: Tone
+}
+
+export interface TraceLinkView {
+  mission_id: string
+  snapshot_id: string
+  proposal_stance: string
+  abstained: boolean
+  risk_outcome: string
+  order_ids: string[]
+  fill_ids: string[]
+  reconciled: boolean
+  outcome_recorded: boolean
+  net_utility: string
+  tone: Tone
+}
+
+export interface ResearchRecordView {
+  artifact_id: string
+  record_type: string
+  summary: string
+  approved: boolean | null
+  payload: Record<string, unknown>
 }
 
 export type CommandKind =

@@ -1414,6 +1414,39 @@ def test_reconciliation_compares_independent_venue_projection_and_persists_recor
     )
 
 
+def test_reconciliation_accepts_newer_venue_observation_when_balances_match(tmp_path, timestamp):
+    account = AccountState(cash=Decimal("1000"), as_of=timestamp)
+    orders = OrderManager(SqliteLedgers(tmp_path / "newer-venue.sqlite"), PaperVenueAdapter())
+    result = ReconciliationService().run(
+        account=account,
+        orders=orders,
+        venue_snapshot=VenueAccountSnapshot(
+            as_of=timestamp + timedelta(minutes=5),
+            cash=Decimal("1000"),
+            positions={},
+        ),
+    )
+    assert result.reconciled is True, result.discrepancies
+
+
+def test_reconciliation_rejects_venue_observation_older_than_local_account_state(
+    tmp_path, timestamp
+):
+    account = AccountState(cash=Decimal("1000"), as_of=timestamp)
+    orders = OrderManager(SqliteLedgers(tmp_path / "older-venue.sqlite"), PaperVenueAdapter())
+    result = ReconciliationService().run(
+        account=account,
+        orders=orders,
+        venue_snapshot=VenueAccountSnapshot(
+            as_of=timestamp - timedelta(minutes=5),
+            cash=Decimal("1000"),
+            positions={},
+        ),
+    )
+    assert result.reconciled is False
+    assert "venue_account_snapshot_predates_local_state" in result.discrepancies
+
+
 def test_reconciliation_compares_venue_open_order_projection(tmp_path, btc_usdt, timestamp):
     ledgers = SqliteLedgers(tmp_path / "recon-open-orders.sqlite")
     oms = OrderManager(ledgers, PaperVenueAdapter())

@@ -141,11 +141,7 @@ class TimesFM3ForecastArtifact(BaseModel):
 
     @model_validator(mode="after")
     def validate_artifact(self) -> TimesFM3ForecastArtifact:
-        if not (
-            len(self.forecasts)
-            == len(self.full_point_forecasts)
-            == len(self.target_variates)
-        ):
+        if not (len(self.forecasts) == len(self.full_point_forecasts) == len(self.target_variates)):
             raise ValueError("TimesFM3 forecast artifact variate counts must agree")
         return self
 

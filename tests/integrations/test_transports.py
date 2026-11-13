@@ -104,6 +104,10 @@ def test_http_client_enforces_https_host_and_retries_5xx():
     client, calls = client_for([(500, b"temporary", ()), response], retries=1)
     assert client.get("https://sandbox.example.test/status").status_code == 200
     assert len(calls) == 2
+    metrics = client.request_metrics
+    assert metrics.attempt_count == 2
+    assert metrics.failed_count == 1
+    assert metrics.latency_ms_total >= 0
     with pytest.raises(HttpTransportError, match="reviewed"):
         client.get("https://evil.example.test/status")
     with pytest.raises(HttpTransportError, match="HTTPS"):

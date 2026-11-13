@@ -1,0 +1,182 @@
+"""Ledger-backed paper orders and fills projection."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from uuid import uuid4
+
+from advisorai.api.dashboard import DashboardProjection
+from advisorai.contracts import (
+    AssetClass,
+    ExecutionPlan,
+    Fill,
+    InstrumentIdentity,
+    Order,
+    OrderState,
+)
+from advisorai.execution import OrderManager, PaperVenueAdapter
+from advisorai.ledger import SqliteLedgers
+
+
+def _setup(tmp_path):
+    ledgers = SqliteLedgers(tmp_path / "orders.sqlite3")
+    orders = OrderManager(ledgers, PaperVenueAdapter())
+    btc = InstrumentIdentity(canonical_id="BTC", asset_class=AssetClass.CRYPTO, venue="paper")
+    cutoff = datetime(2026, 8, 5, 15, tzinfo=UTC)
+    plan = ExecutionPlan(
+        risk_decision_id=uuid4(),
+        target_portfolio_id=uuid4(),
+        policy_version="risk-v1",
+        instructions=("inspection",),
+        expires_at=datetime(2026, 8, 5, 16, tzinfo=UTC),
+        created_at=cutoff,
+    )
+    order = Order(
+        parent_intent_id=uuid4(),
+        execution_plan_id=plan.artifact_id,
+        instrument=btc,
+        side="buy",
+        quantity=Decimal("1"),
+        order_type="limit",
+        price=Decimal("50000"),
+        time_in_force="GTC",
+        idempotency_key=f"inspection-{uuid4()}",
+    )
+    created = orders.create(order)
+    orders.transition(created.artifact_id, OrderState.RISK_APPROVED)
+    assert orders.route(created.artifact_id) is not None
+    fill = Fill(
+        order_id=created.artifact_id,
+        venue_fill_id=f"venue-{created.artifact_id}",
+        quantity=Decimal("1"),
+        price=Decimal("50000"),
+        fee=Decimal("0.5"),
+        occurred_at=datetime(2026, 8, 5, 15, 30, tzinfo=UTC),
+    )
+    orders.record_fill(fill, "buy")
+    orders.reconcile(created.artifact_id)
+    return ledgers, created, fill
+
+
+def test_paper_orders_project_lifecycle_states(tmp_path):
+    ledgers, created, _ = _setup(tmp_path)
+    store = DashboardProjection(
+        ledgers=ledgers, research_registry_path=tmp_path / "missing.sqlite3"
+    )
+    views = store.paper_orders()
+    assert len(views) == 1
+    view = views[0]
+    assert view.order_id == str(created.artifact_id)
+    assert view.state == "reconciled"
+    assert view.instrument == "BTC"
+    assert view.side == "buy"
+
+
+def test_paper_fills_link_to_orders_by_id(tmp_path):
+    ledgers, created, fill = _setup(tmp_path)
+    store = DashboardProjection(ledgers=ledgers)
+    fills = store.paper_fills()
+    assert len(fills) == 1
+    assert fills[0].order_id == str(created.artifact_id)
+    assert fills[0].fill_id == str(fill.artifact_id)
+    assert fills[0].price == "50000"
+
+
+def test_no_ledgers_returns_empty():
+    store = DashboardProjection()
+    assert store.paper_orders() == ()
+    assert store.paper_fills() == ()
+
+
+def test_performance_projects_slices_and_expiry(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from advisorai.api.dashboard import DashboardProjection
+    from advisorai.learning import PaperDecisionRecord, PaperLearningLoop, PaperOutcome
+    from advisorai.ledger import SqliteLedgers
+
+    ledgers = SqliteLedgers(tmp_path / "perf.sqlite3")
+    loop = PaperLearningLoop(ledgers)
+    cutoff = datetime(2026, 8, 5, 15, tzinfo=UTC)
+    for utility in (Decimal("-4"), Decimal("-6")):
+        record = loop.record_decision(
+            PaperDecisionRecord(
+                decision_id=uuid4(),
+                mission_id=uuid4(),
+                snapshot_id=uuid4(),
+                subject="loser-v1",
+                subject_version="v1",
+                asset="BTC",
+                horizon="1h",
+                cutoff=cutoff,
+                horizon_end=cutoff + timedelta(hours=1),
+            )
+        )
+        loop.record_outcome(
+            PaperOutcome(
+                decision_id=record.decision_id,
+                as_of=record.horizon_end,
+                net_utility=utility,
+                cost_usd=Decimal("1"),
+                fill_quality=Decimal("1"),
+                data_reliability=Decimal("1"),
+                latency_ms=5,
+                failure_rate=Decimal("0"),
+            )
+        )
+    store = DashboardProjection(ledgers=ledgers)
+    slices = store.performance()
+    assert len(slices) == 1
+    assert slices[0].expiry_action == "review_for_retirement"
+    assert slices[0].tone.value == "warning"
+    assert DashboardProjection().performance() == ()
+
+
+def test_strategy_comparison_uses_shared_slices(tmp_path):
+    from datetime import UTC, datetime, timedelta
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from advisorai.api.dashboard import DashboardProjection
+    from advisorai.learning import PaperDecisionRecord, PaperLearningLoop, PaperOutcome
+    from advisorai.ledger import SqliteLedgers
+
+    ledgers = SqliteLedgers(tmp_path / "compare.sqlite3")
+    loop = PaperLearningLoop(ledgers)
+    cutoff = datetime(2026, 8, 5, 15, tzinfo=UTC)
+    for subject, utility in (("baseline-v1", Decimal("2")), ("challenger-v1", Decimal("9"))):
+        record = loop.record_decision(
+            PaperDecisionRecord(
+                decision_id=uuid4(),
+                mission_id=uuid4(),
+                snapshot_id=uuid4(),
+                subject=subject,
+                subject_version="v1",
+                asset="BTC",
+                horizon="1h",
+                cutoff=cutoff,
+                horizon_end=cutoff + timedelta(hours=1),
+            )
+        )
+        loop.record_outcome(
+            PaperOutcome(
+                decision_id=record.decision_id,
+                as_of=record.horizon_end,
+                net_utility=utility,
+                cost_usd=Decimal("1"),
+                fill_quality=Decimal("1"),
+                data_reliability=Decimal("1"),
+                latency_ms=5,
+                failure_rate=Decimal("0"),
+            )
+        )
+    store = DashboardProjection(ledgers=ledgers)
+    comparisons = store.strategy_comparison()
+    assert len(comparisons) == 1
+    assert comparisons[0].challenger_subject == "challenger-v1"
+    assert comparisons[0].baseline_subject == "baseline-v1"
+    assert comparisons[0].beats_no_trade is True
+    assert DashboardProjection().strategy_comparison() == ()

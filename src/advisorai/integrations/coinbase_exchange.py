@@ -362,6 +362,11 @@ class CoinbaseExchangeSandboxTransport(NativeTransport):
                 "Coinbase product is not admitted from the sandbox product list"
             ) from exc
 
+    def verified_product_spec(self, product_id: str) -> CoinbaseProductSpec:
+        """Return the exchange-verified mapping for one admitted product."""
+
+        return self._verified_product(product_id)
+
     def _catalogue_product(self, product_id: str) -> CoinbaseProductSpec:
         normalized = product_id.strip().upper()
         try:
@@ -592,15 +597,17 @@ class CoinbaseExchangeSandboxTransport(NativeTransport):
 
     def fill_contract_values(self, record: Mapping[str, object]) -> dict[str, Any]:
         """Convert a Coinbase fill into values for the canonical ``Fill`` contract."""
-
+        product_id = str(record.get("product_id", "")).strip().upper()
+        product = self._verified_product(product_id)
         return {
             "venue_fill_id": str(record.get("trade_id", record.get("id", ""))).strip(),
             "order_id": str(record.get("order_id", "")).strip(),
-            "product_id": str(record.get("product_id", "")).strip().upper(),
+            "product_id": product.product_id,
             "side": str(record.get("side", "")).strip().lower(),
             "quantity": _decimal(record.get("size"), "fill size", positive=True),
             "price": _decimal(record.get("price"), "fill price", positive=True),
             "fee": _decimal(record.get("fee", "0"), "fill fee"),
+            "fee_currency": product.quote_currency,
             "occurred_at": _iso_datetime(record.get("created_at"), "fill timestamp"),
         }
 

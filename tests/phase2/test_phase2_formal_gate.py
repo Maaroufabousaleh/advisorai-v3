@@ -16,17 +16,22 @@ from scripts.evaluate_phase2_gate import (
     validate_phase2_record,
 )
 
+PHASE2_READ_ONLY = Path(
+    "artifacts/phase2/binance-spot-testnet/read-only-smoke/"
+    "20260810T193840.598161Z/binance-spot-testnet-read-only-smoke.json"
+)
+PHASE2_LIFECYCLE = Path(
+    "artifacts/phase2/binance-spot-testnet/paper-lifecycle/"
+    "20260810T195818.312420Z/binance-spot-testnet-paper-lifecycle.json"
+)
+REQUIRES_PHASE2_EVIDENCE = pytest.mark.skipif(
+    not PHASE2_READ_ONLY.is_file() or not PHASE2_LIFECYCLE.is_file(),
+    reason="phase-2 venue evidence is generated locally and not committed",
+)
+
 
 def _reports() -> tuple[dict, dict]:
-    read_only_path = Path(
-        "artifacts/phase2/binance-spot-testnet/read-only-smoke/"
-        "20260810T193840.598161Z/binance-spot-testnet-read-only-smoke.json"
-    )
-    lifecycle_path = Path(
-        "artifacts/phase2/binance-spot-testnet/paper-lifecycle/"
-        "20260810T195818.312420Z/binance-spot-testnet-paper-lifecycle.json"
-    )
-    return json.loads(read_only_path.read_text()), json.loads(lifecycle_path.read_text())
+    return json.loads(PHASE2_READ_ONLY.read_text()), json.loads(PHASE2_LIFECYCLE.read_text())
 
 
 def _write_record(
@@ -61,6 +66,7 @@ def _write_record(
     path.write_text(record.model_dump_json(), encoding="utf-8")
 
 
+@REQUIRES_PHASE2_EVIDENCE
 def test_existing_binance_evidence_formalizes_phase2_without_network():
     checklist, record = evaluate(evaluated_at=datetime(2026, 8, 11, 23, tzinfo=UTC))
 
@@ -76,6 +82,7 @@ def test_existing_binance_evidence_formalizes_phase2_without_network():
     )
 
 
+@REQUIRES_PHASE2_EVIDENCE
 def test_missing_required_read_operation_fails_closed():
     read_only, lifecycle = _reports()
     read_only = copy.deepcopy(read_only)
@@ -88,6 +95,7 @@ def test_missing_required_read_operation_fails_closed():
     assert checks["authenticated_account_reads"] is False
 
 
+@REQUIRES_PHASE2_EVIDENCE
 def test_wrong_venue_identity_is_not_admitted():
     read_only, lifecycle = _reports()
     read_only = copy.deepcopy(read_only)
@@ -98,6 +106,7 @@ def test_wrong_venue_identity_is_not_admitted():
     assert checks["venue_identity_and_host"] is False
 
 
+@REQUIRES_PHASE2_EVIDENCE
 def test_production_endpoint_contamination_is_not_admitted():
     read_only, lifecycle = _reports()
     lifecycle = copy.deepcopy(lifecycle)
@@ -109,6 +118,7 @@ def test_production_endpoint_contamination_is_not_admitted():
     assert checks["no_production_execution"] is False
 
 
+@REQUIRES_PHASE2_EVIDENCE
 def test_missing_eth_provider_truth_is_not_admitted():
     read_only, lifecycle = _reports()
     read_only = copy.deepcopy(read_only)
@@ -123,6 +133,7 @@ def test_missing_eth_provider_truth_is_not_admitted():
     assert checks["provider_truth_btc_eth"] is False
 
 
+@REQUIRES_PHASE2_EVIDENCE
 def test_missing_risk_or_oms_binding_is_not_admitted():
     read_only, lifecycle = _reports()
     lifecycle = copy.deepcopy(lifecycle)
@@ -164,6 +175,7 @@ def test_non_passed_phase2_decision_is_rejected(tmp_path: Path):
         validate_phase2_record(path, at=datetime(2026, 8, 11, 12, tzinfo=UTC))
 
 
+@REQUIRES_PHASE2_EVIDENCE
 def test_passed_phase2_record_validates_offline(tmp_path: Path):
     _checklist, record = evaluate(evaluated_at=datetime(2026, 8, 11, 23, tzinfo=UTC))
     path = tmp_path / "phase2.json"

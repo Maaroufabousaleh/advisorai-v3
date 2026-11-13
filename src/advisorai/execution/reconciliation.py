@@ -132,8 +132,8 @@ class ReconciliationService:
             discrepancies.append("terminal_orders_not_reconciled")
         local_snapshot = account.snapshot()
         if venue_snapshot is not None:
-            if venue_snapshot.normalized_as_of > local_snapshot.as_of:
-                discrepancies.append("local_account_state_lags_venue_snapshot")
+            if venue_snapshot.normalized_as_of < local_snapshot.as_of:
+                discrepancies.append("venue_account_snapshot_predates_local_state")
             if venue_snapshot.cash != local_snapshot.cash:
                 discrepancies.append(
                     f"venue_cash_mismatch:{venue_snapshot.cash}!={local_snapshot.cash}"

@@ -235,9 +235,7 @@ def test_injected_runner_emits_forecast_compatible_research_artifact():
 
 def test_artifact_rejects_mismatched_variate_counts():
     adapter = TimesFM3ResearchAdapter(
-        runner=lambda _input: TimesFM3RawOutput(
-            point_forecasts=((Decimal("101"), Decimal("102")),)
-        )
+        runner=lambda _input: TimesFM3RawOutput(point_forecasts=((Decimal("101"), Decimal("102")),))
     )
     artifact = adapter.forecast(_research_input())
     payload = artifact.model_dump()

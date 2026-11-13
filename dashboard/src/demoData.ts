@@ -73,4 +73,25 @@ export const demoOverview: DashboardOverview = {
     approval: 'sealed by Phase 10 guard',
   },
   source_health: [],
+  sessions: [
+    {
+      session_id: 'demo-session-1',
+      recovery_classification: 'clean_start',
+      recovery_mode: 'normal',
+      open_leases: 0,
+      checkpoints: 2,
+      data_gaps: 0,
+      backfilled_gaps: 0,
+      tone: 'info',
+    },
+  ],
+  research: {
+    decisions_recorded: 4,
+    outcomes_recorded: 2,
+    problems_open: 0,
+    replays_passed: 1,
+    proposals_recorded: 4,
+    proposals_abstained: 1,
+    tone: 'info',
+  },
 }

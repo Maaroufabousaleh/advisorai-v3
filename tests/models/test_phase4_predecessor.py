@@ -18,8 +18,13 @@ PHASE3 = Path(
     "phase3-gate-record.json"
 )
 ROSTER = Path("configs/models/phase0_local_roster.json")
+REQUIRES_PHASE3_EVIDENCE = pytest.mark.skipif(
+    not PHASE3.is_file(),
+    reason="phase-3 gate evidence is generated locally and not committed",
+)
 
 
+@REQUIRES_PHASE3_EVIDENCE
 def test_phase4_dependency_opens_only_measurement_from_phase3_and_roles():
     decision = evaluate(
         phase3_gate_path=PHASE3,
@@ -39,6 +44,7 @@ def test_phase4_dependency_opens_only_measurement_from_phase3_and_roles():
     )
 
 
+@REQUIRES_PHASE3_EVIDENCE
 def test_phase4_dependency_refuses_unpassed_phase3(tmp_path: Path):
     payload = json.loads(PHASE3.read_text())
     payload["decision"] = "pending"
@@ -50,6 +56,7 @@ def test_phase4_dependency_refuses_unpassed_phase3(tmp_path: Path):
         evaluate(phase3_gate_path=path, local_roster_path=ROSTER)
 
 
+@REQUIRES_PHASE3_EVIDENCE
 def test_phase4_dependency_evidence_is_immutable(tmp_path: Path):
     decision = evaluate(
         phase3_gate_path=PHASE3,
