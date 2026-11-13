@@ -187,6 +187,7 @@ def test_owner_adapter_projects_order_fill_and_identity_across_restart(tmp_path)
     reloaded_fill, = restarted.fills
     assert reloaded_fill.artifact_id == fill.artifact_id
     assert reloaded_fill.order_id == order.artifact_id
+    assert reloaded_fill.fee_currency == "USDT"
     assert restarted_manager.orders[order.artifact_id].state is OrderState.FILLED
 
 

@@ -151,10 +151,22 @@ class PaperOutcome(BaseModel):
     data_reliability: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
     latency_ms: int = Field(ge=0)
     failure_rate: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
+    fx_quote_currency: str | None = None
+    fx_usd_per_quote: Decimal | None = Field(default=None, gt=Decimal("0"))
+    fx_snapshot_id: UUID | None = None
+    fx_evidence_id: UUID | None = None
+    fx_rate_source: str | None = None
+    fx_rate_as_of: datetime | None = None
+    quality_evidence_id: UUID | None = None
+    quality_source: str | None = None
+    quality_snapshot_id: UUID | None = None
+    quality_as_of: datetime | None = None
 
-    @field_validator("as_of")
+    @field_validator("as_of", "fx_rate_as_of", "quality_as_of")
     @classmethod
-    def as_of_aware(cls, value: datetime) -> datetime:
+    def as_of_aware(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("outcome timestamp must include a timezone")
         return value.astimezone(UTC)
@@ -167,12 +179,58 @@ class PaperOutcome(BaseModel):
         "fill_quality",
         "data_reliability",
         "failure_rate",
+        "fx_usd_per_quote",
     )
     @classmethod
     def finite_decimal(cls, value: Decimal | None) -> Decimal | None:
         if value is not None and not value.is_finite():
             raise ValueError("outcome metrics must be finite")
         return value
+
+    @field_validator("fx_quote_currency", mode="before")
+    @classmethod
+    def normalize_fx_currency(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("FX quote currency must be a non-empty currency code")
+        return value.strip().upper()
+
+    @field_validator("fx_rate_source", "quality_source")
+    @classmethod
+    def normalize_evidence_source(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("outcome evidence source cannot be blank")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_optional_provenance(self) -> PaperOutcome:
+        fx_values = (
+            self.fx_quote_currency,
+            self.fx_usd_per_quote,
+            self.fx_snapshot_id,
+            self.fx_evidence_id,
+            self.fx_rate_source,
+            self.fx_rate_as_of,
+        )
+        if any(value is not None for value in fx_values) and any(
+            value is None for value in fx_values
+        ):
+            raise ValueError("FX outcome provenance must be complete or entirely absent")
+        quality_values = (
+            self.quality_evidence_id,
+            self.quality_source,
+            self.quality_snapshot_id,
+            self.quality_as_of,
+        )
+        if any(value is not None for value in quality_values) and any(
+            value is None for value in quality_values
+        ):
+            raise ValueError("outcome quality evidence must be complete or entirely absent")
+        return self
 
 
 class PaperLearningLoop:

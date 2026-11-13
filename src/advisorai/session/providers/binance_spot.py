@@ -212,6 +212,7 @@ class BinanceSpotTestnetOwnerAdapter:
                 quantity=fill_quantity,
                 price=Decimal(str(values["price"])),
                 fee=fee,
+                fee_currency=commission_asset or None,
                 occurred_at=values["occurred_at"],
             )
             prior = normalized.get(provider_fill_id)

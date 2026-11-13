@@ -591,6 +591,7 @@ class Fill(ArtifactModel):
     quantity: Decimal = Field(gt=Decimal("0"))
     price: Decimal = Field(gt=Decimal("0"))
     fee: Decimal = Field(ge=Decimal("0"))
+    fee_currency: str | None = Field(default=None, min_length=1)
     occurred_at: datetime
 
     _occurred_at_aware = field_validator("occurred_at")(require_aware)
@@ -601,6 +602,15 @@ class Fill(ArtifactModel):
         if not value.strip():
             raise ValueError("venue_fill_id cannot be blank")
         return value.strip()
+
+    @field_validator("fee_currency", mode="before")
+    @classmethod
+    def normalize_fee_currency(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("fee_currency must be a non-empty currency code")
+        return value.strip().upper()
 
 
 class Reconciliation(ArtifactModel):

@@ -10,15 +10,17 @@ PR #211 remains unmerged.
   reconciliation, authoritative recovery checks, research job limits/restart
   behavior, subprocess acceptance, CI, and the atomic private owner-record
   write. Commit `96abad3` adds typed data/model/paper-venue/outcome composition
-  under the same owner supervisor. This checkpoint adds a single-symbol
-  Binance Spot Testnet owner adapter and runtime ingestion of current fills;
-  provider profiles, Coinbase mapping, and provider-specific scoring remain
-  partial.
+  under the same owner supervisor. Commit `ef8ecfc` adds a single-symbol
+  Binance Spot Testnet owner adapter and runtime ingestion of current fills.
+  This checkpoint adds snapshot-bound quote conversion and evidence-backed
+  outcome quality; provider profiles, Coinbase mapping, and provider-specific
+  quality providers remain partial.
 - Leave the pre-existing untracked user files `overnight-canary-monitor/` and
   `plan-refact.md` untouched.
 - The untracked `src/advisorai/integrations/provider_venue.py` and
-  `src/advisorai/session/provider_profiles.py` appeared during this work and
-  were left untouched and unstaged; they are not part of this checkpoint.
+  `src/advisorai/session/provider_profiles.py` plus
+  `tests/session/test_provider_profiles.py` appeared during this work and were
+  left untouched and unstaged; they are not part of this checkpoint.
 - The roadmap audit is in
   [roadmap-execution-matrix.md](roadmap-execution-matrix.md). It separates
   software implementation from operational admission.
@@ -39,6 +41,9 @@ PR #211 remains unmerged.
   session, runtime, and Binance integration lifecycle suites: **63 passed**;
   provider bridge and Binance integration suites after quote-asset validation:
   **18 passed**. Targeted Ruff and `git diff --check` passed.
+- After adding `fee_currency` and quote-aware outcome provenance: **121 passed**
+  across session, learning, traceability/paper-order APIs, and execution suites;
+  targeted Ruff passed. `uv lock --check` and `uv pip check` passed.
 - Ruff, `uv lock --check`, `uv pip check`, license policy, and locked all-extras
   sync dry-run passed. Dashboard `npm audit --audit-level=high` found zero
   vulnerabilities and `npm run build` succeeded.
@@ -50,9 +55,11 @@ PR #211 remains unmerged.
 The local profile, typed adapter-composition seam, and required outcome
 adapter boundary are implemented. A single-symbol Binance Spot Testnet bridge
 now maps durable local orders, current fills, and account positions under the
-paper alias. The next software items are explicit provider profile composition
-with a verified account baseline, Coinbase sandbox mapping, and quote-aware
-outcome/scoring semantics. Pending credentials, model qualification, venue
+paper alias. Quote-aware outcomes convert fill-to-horizon PnL and fees using a
+current snapshot-bound FX rate, and persist both FX and measured quality
+evidence. The next software items are explicit provider profile composition
+with a verified account baseline, Coinbase sandbox mapping, and provider
+quality evidence adapters. Pending credentials, model qualification, venue
 evidence, and human approval are separate gates and are not reasons to classify
 that software work as externally blocked.
 
