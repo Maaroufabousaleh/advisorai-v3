@@ -53,6 +53,8 @@ class ResearchMetadataProvider(StrEnum):
     OPENALEX_API = "openalex_api"
     CROSSREF_API = "crossref_api"
     GITHUB_RELEASE_API = "github_release_api"
+    SEC_EDGAR_API = "sec_edgar_api"
+    FRED_API = "fred_api"
 
 
 class ResearchLicenseEvidenceSource(StrEnum):
@@ -74,7 +76,7 @@ class PaperCard(ArtifactModel):
     source_policy_version: str | None = None
     source_metadata_provider: ResearchMetadataProvider | None = None
     source_metadata_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    source_metadata_size_bytes: int | None = Field(default=None, ge=1, le=512 * 1024)
+    source_metadata_size_bytes: int | None = Field(default=None, ge=1, le=4 * 1024 * 1024)
     source_metadata_observed_at: datetime | None = None
     source_version_reference: str | None = Field(default=None, max_length=2048)
     source_version_label: str | None = Field(default=None, max_length=128)

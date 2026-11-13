@@ -103,6 +103,8 @@ class ResearchSourcePolicy:
             ResearchMetadataProvider.OPENALEX_API: ResearchSourceFamily.OPENALEX,
             ResearchMetadataProvider.CROSSREF_API: ResearchSourceFamily.CROSSREF,
             ResearchMetadataProvider.GITHUB_RELEASE_API: ResearchSourceFamily.GITHUB_RELEASE,
+            ResearchMetadataProvider.SEC_EDGAR_API: ResearchSourceFamily.SEC_EDGAR,
+            ResearchMetadataProvider.FRED_API: ResearchSourceFamily.FRED,
         }.get(card.source_metadata_provider)
         if metadata_family is not None and metadata_family is not assessment.family:
             raise ValueError("metadata provider does not match the cited source family")

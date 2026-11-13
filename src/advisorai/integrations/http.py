@@ -187,6 +187,13 @@ class SafeHttpClient:
         self._metric_failed_count = 0
         self._metric_latency_ms_total = 0
 
+    def register_secret_value(self, name: str, value: str) -> None:
+        """Add a credential to transport error redaction without persisting it."""
+
+        if not name.strip() or not value:
+            raise ValueError("secret redaction entries require a name and value")
+        self._secret_values[name] = value
+
     @property
     def request_metrics(self) -> HttpRequestMetrics:
         """Return a thread-safe aggregate with no URLs, headers, or payloads."""

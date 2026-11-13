@@ -28,12 +28,21 @@ from .registry import ResearchRegistry
 from .source_policy import ResearchSourcePolicy
 
 _MAX_METADATA_RESPONSE_BYTES = 512 * 1024
+_MAX_SEC_METADATA_RESPONSE_BYTES = 4 * 1024 * 1024
 _MAX_SOURCE_DOCUMENT_BYTES = 64 * 1024 * 1024
 _MAX_SCOUT_JOB_CARD_BYTES = 64 * 1024
 _METADATA_TIMEOUT_SECONDS = 15.0
 _ATOM_NAMESPACE = "http://www.w3.org/2005/Atom"
 _ARXIV_NAMESPACE = "http://arxiv.org/schemas/atom"
 _ARXIV_VERSION_SUFFIX = re.compile(r"v[1-9]\d*$")
+_SEC_SOURCE_PATH = re.compile(
+    r"^/Archives/edgar/data/(?P<cik>\d{1,10})/(?P<accession>\d{18})/"
+    r"(?P<document>[A-Za-z0-9._-]+\.(?:htm|html|txt|pdf))$",
+    re.IGNORECASE,
+)
+_SEC_HISTORY_NAME = re.compile(r"^CIK\d{10}-submissions-\d+\.json$")
+_FRED_API_KEY = re.compile(r"^[a-z0-9]{32}$")
+_EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +94,8 @@ class ResearchMetadataScout:
         ResearchMetadataProvider.OPENALEX_API: 1.0,
         ResearchMetadataProvider.CROSSREF_API: 1.0,
         ResearchMetadataProvider.GITHUB_RELEASE_API: 60.0,
+        ResearchMetadataProvider.SEC_EDGAR_API: 0.2,
+        ResearchMetadataProvider.FRED_API: 0.5,
     }
 
     def __init__(
@@ -94,11 +105,25 @@ class ResearchMetadataScout:
         coordinator: ResearchCoordinator,
         clients: dict[ResearchMetadataProvider, SafeHttpClient] | None = None,
         source_clients: dict[str, SafeHttpClient] | None = None,
+        sec_user_agent: str | None = None,
+        fred_api_key: str | None = None,
     ) -> None:
         self.registry = registry
         self.coordinator = coordinator
         self.source_policy = ResearchSourcePolicy()
-        self.clients = clients or self._build_clients()
+        if fred_api_key is not None and _FRED_API_KEY.fullmatch(fred_api_key) is None:
+            raise ValueError("FRED API key must be 32 lowercase alphanumeric characters")
+        self.fred_api_key = fred_api_key
+        self.clients = self._build_clients(
+            sec_user_agent=sec_user_agent,
+            fred_api_key=fred_api_key,
+        )
+        if clients:
+            self.clients.update(clients)
+        if fred_api_key is not None and ResearchMetadataProvider.FRED_API in self.clients:
+            self.clients[ResearchMetadataProvider.FRED_API].register_secret_value(
+                "FRED_API_KEY", fred_api_key
+            )
         self.source_clients = source_clients or self._build_source_clients()
         self._rate_lock = threading.Lock()
         self._next_request_at: dict[ResearchMetadataProvider, float] = {}
@@ -114,6 +139,12 @@ class ResearchMetadataScout:
             license_claim=paper.license,
             requested_use=ResearchSourceUse.CITATION_ONLY,
         )
+        if source_assessment.family is ResearchSourceFamily.FRED and self.fred_api_key is None:
+            raise ValueError("FRED Scout requires an explicitly configured API key")
+        if source_assessment.family is ResearchSourceFamily.SEC_EDGAR:
+            sec_client = self.clients.get(ResearchMetadataProvider.SEC_EDGAR_API)
+            if sec_client is None or not _valid_sec_user_agent(sec_client.config.user_agent):
+                raise ValueError("SEC Scout requires a declared User-Agent with a contact email")
         if (
             paper.requested_use is ResearchSourceUse.CONTENT_USE
             and source_assessment.family is not ResearchSourceFamily.ARXIV
@@ -223,10 +254,27 @@ class ResearchMetadataScout:
             license_claim=paper.license,
             requested_use=ResearchSourceUse.CITATION_ONLY,
         )
-        provider, endpoint, headers = self._metadata_endpoint(paper.source_url, assessment.family)
+        provider, endpoint, headers = self._metadata_endpoint(
+            paper.source_url,
+            assessment.family,
+            fred_api_key=self.fred_api_key,
+        )
         client = self.clients.get(provider)
         if client is None:
             raise ValueError(f"metadata Scout has no reviewed client for {provider.value}")
+        if provider is ResearchMetadataProvider.SEC_EDGAR_API:
+            if not _valid_sec_user_agent(client.config.user_agent):
+                raise ValueError("SEC Scout requires a declared User-Agent with a contact email")
+            return self._fetch_sec_metadata(
+                paper,
+                client,
+                endpoint,
+                headers,
+                cancelled=cancelled,
+                deadline=deadline,
+            )
+        if provider is ResearchMetadataProvider.FRED_API and self.fred_api_key is None:
+            raise ValueError("FRED Scout requires an explicitly configured API key")
         if not self._claim_request_slot(provider, cancelled=cancelled, deadline=deadline):
             raise _RateBudgetExpired("provider rate window exceeds the remaining Scout budget")
         response = client.get(
@@ -245,6 +293,10 @@ class ResearchMetadataScout:
             parsed = self._parse_response(provider, response.body)
         except (ET.ParseError, UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
             raise ValueError("metadata Scout response failed typed parsing") from None
+        if provider is ResearchMetadataProvider.FRED_API:
+            expected_reference = f"https://fred.stlouisfed.org{urlsplit(paper.source_url).path}"
+            if parsed.get("version_reference") != expected_reference:
+                raise ValueError("FRED response does not identify the cited series")
         title = _required_text(parsed.get("title"), "title", maximum=2048)
         authors = _authors(parsed.get("authors"))
         publication_date = _optional_text(parsed.get("publication_date"), maximum=128)
@@ -376,10 +428,122 @@ class ResearchMetadataScout:
                     return False
             time.sleep(min(wait_seconds, 0.1))
 
+    def _fetch_sec_metadata(
+        self,
+        paper: PaperCard,
+        client: SafeHttpClient,
+        endpoint: str,
+        headers: dict[str, str],
+        *,
+        cancelled,
+        deadline: float,
+    ) -> _SourceMetadata:
+        match = _SEC_SOURCE_PATH.fullmatch(urlsplit(paper.source_url).path)
+        if match is None:
+            raise ValueError("SEC filing URL did not match the reviewed archive path")
+        cik = str(int(match.group("cik")))
+        accession_folder = match.group("accession")
+        accession = f"{accession_folder[:10]}-{accession_folder[10:12]}-{accession_folder[12:]}"
+        wanted_document = match.group("document").casefold()
+        metadata_responses: list[bytes] = []
+        matched_observed_at = None
+
+        def fetch(url: str):
+            if cancelled() or not self._claim_request_slot(
+                ResearchMetadataProvider.SEC_EDGAR_API,
+                cancelled=cancelled,
+                deadline=deadline,
+            ):
+                raise _RateBudgetExpired("SEC metadata request exceeds the remaining Scout budget")
+            response = client.get(
+                url,
+                headers=headers,
+                max_retries=0,
+                timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+            )
+            if len(response.body) > _MAX_SEC_METADATA_RESPONSE_BYTES:
+                raise ValueError("SEC metadata response exceeds its configured size limit")
+            if (
+                sum(map(len, metadata_responses)) + len(response.body)
+                > _MAX_SEC_METADATA_RESPONSE_BYTES
+            ):
+                raise ValueError("SEC metadata evidence exceeds its configured size limit")
+            if response.status_code != 200:
+                raise ValueError("SEC metadata Scout received an unexpected status")
+            if _has_xml_declaration(response.body):
+                raise ValueError("SEC metadata Scout refuses XML document/entity declarations")
+            metadata_responses.append(response.body)
+            return response
+
+        first = fetch(endpoint)
+        matched = _sec_filing_record(first.body, cik, accession, wanted_document)
+        if matched is not None:
+            matched_observed_at = first.fetched_at
+        if matched is None:
+            filings = _json_object(first.body).get("filings")
+            history = filings.get("files") if isinstance(filings, dict) else None
+            if not isinstance(history, list):
+                raise ValueError("SEC submissions response does not contain filing metadata")
+            target_year = int(accession_folder[10:12])
+            target_year += 1900 if target_year >= 80 else 2000
+            candidates = []
+            for item in history[:128]:
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name")
+                start, end = item.get("filingFrom"), item.get("filingTo")
+                if (
+                    isinstance(name, str)
+                    and _SEC_HISTORY_NAME.fullmatch(name)
+                    and isinstance(start, str)
+                    and isinstance(end, str)
+                    and start[:4].isdigit()
+                    and end[:4].isdigit()
+                    and int(start[:4]) <= target_year <= int(end[:4])
+                ):
+                    candidates.append(name)
+            if not candidates:
+                raise ValueError("SEC filing accession was not found in the submissions index")
+            if len(candidates) > 3:
+                raise ValueError("SEC submissions history is ambiguous for this accession")
+            for name in candidates:
+                historical = fetch(f"https://data.sec.gov/submissions/{name}")
+                matched = _sec_filing_record(historical.body, cik, accession, wanted_document)
+                if matched is not None:
+                    matched_observed_at = historical.fetched_at
+                    break
+        if matched is None:
+            raise ValueError("SEC submissions metadata did not verify the cited primary document")
+
+        issuer = _optional_text(matched.get("issuer"), maximum=512) or "SEC registrant"
+        form = _required_text(matched.get("form"), "filing form", maximum=64)
+        filing_date = _required_text(matched.get("filing_date"), "filing date", maximum=32)
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", filing_date) is None:
+            raise ValueError("SEC filing date was malformed")
+        response_hash = hashlib.sha256(b"\0".join(metadata_responses)).hexdigest()
+        total_size = sum(len(response_body) for response_body in metadata_responses)
+        observed_at = matched_observed_at or first.fetched_at
+        return _SourceMetadata(
+            provider=ResearchMetadataProvider.SEC_EDGAR_API,
+            title=f"{issuer} {form} filing",
+            authors=(issuer,),
+            publication_date=filing_date,
+            license_claim="unknown",
+            response_sha256=response_hash,
+            response_size_bytes=total_size,
+            observed_at=observed_at,
+            version_reference=paper.source_url,
+            version_label=accession,
+            license_evidence_source=None,
+            license_evidence_reference=None,
+        )
+
     @staticmethod
     def _metadata_endpoint(
         source_url: str,
         family: ResearchSourceFamily,
+        *,
+        fred_api_key: str | None = None,
     ) -> tuple[ResearchMetadataProvider, str, dict[str, str]]:
         path = urlsplit(source_url).path
         if family is ResearchSourceFamily.ARXIV:
@@ -414,6 +578,32 @@ class ResearchMetadataScout:
                     "Accept": "application/vnd.github+json",
                     "X-GitHub-Api-Version": "2022-11-28",
                 },
+            )
+        if family is ResearchSourceFamily.SEC_EDGAR:
+            match = _SEC_SOURCE_PATH.fullmatch(path)
+            if match is None:
+                raise ValueError("SEC filing URL did not match the reviewed archive path")
+            cik = str(int(match.group("cik"))).zfill(10)
+            return (
+                ResearchMetadataProvider.SEC_EDGAR_API,
+                f"https://data.sec.gov/submissions/CIK{cik}.json",
+                {"Accept": "application/json"},
+            )
+        if family is ResearchSourceFamily.FRED:
+            if fred_api_key is None or _FRED_API_KEY.fullmatch(fred_api_key) is None:
+                raise ValueError("FRED Scout requires an explicitly configured API key")
+            series_id = path.removeprefix("/series/")
+            query = urlencode(
+                {
+                    "series_id": series_id,
+                    "api_key": fred_api_key,
+                    "file_type": "json",
+                }
+            )
+            return (
+                ResearchMetadataProvider.FRED_API,
+                f"https://api.stlouisfed.org/fred/series?{query}",
+                {"Accept": "application/json"},
             )
         raise ValueError("metadata Scout does not support this reviewed citation family")
 
@@ -531,6 +721,23 @@ class ResearchMetadataScout:
                 if data.get("id") or data.get("tag_name")
                 else None,
             }
+        if provider is ResearchMetadataProvider.FRED_API:
+            series = data.get("seriess")
+            if not isinstance(series, list) or len(series) != 1 or not isinstance(series[0], dict):
+                raise ValueError("FRED response must contain exactly one series")
+            item = series[0]
+            return {
+                "title": item.get("title"),
+                "authors": (),
+                "publication_date": item.get("last_updated"),
+                "license": None,
+                "version_reference": (
+                    f"https://fred.stlouisfed.org/series/{item.get('id')}"
+                    if item.get("id")
+                    else None
+                ),
+                "version_label": item.get("last_updated") or item.get("realtime_end"),
+            }
         raise ValueError("metadata Scout provider parser is unavailable")
 
     @staticmethod
@@ -609,14 +816,18 @@ class ResearchMetadataScout:
         return PaperCard.model_validate(payload)
 
     @staticmethod
-    def _build_clients() -> dict[ResearchMetadataProvider, SafeHttpClient]:
+    def _build_clients(
+        *,
+        sec_user_agent: str | None,
+        fred_api_key: str | None,
+    ) -> dict[ResearchMetadataProvider, SafeHttpClient]:
         api_hosts = {
             ResearchMetadataProvider.ARXIV_API: "export.arxiv.org",
             ResearchMetadataProvider.OPENALEX_API: "api.openalex.org",
             ResearchMetadataProvider.CROSSREF_API: "api.crossref.org",
             ResearchMetadataProvider.GITHUB_RELEASE_API: "api.github.com",
         }
-        return {
+        clients = {
             provider: SafeHttpClient(
                 HttpClientConfig(
                     allowed_hosts=(host,),
@@ -632,6 +843,32 @@ class ResearchMetadataScout:
             )
             for provider, host in api_hosts.items()
         }
+        if sec_user_agent is not None:
+            if not _valid_sec_user_agent(sec_user_agent):
+                raise ValueError("SEC User-Agent must identify a software contact email")
+            clients[ResearchMetadataProvider.SEC_EDGAR_API] = SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=("data.sec.gov",),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_SEC_METADATA_RESPONSE_BYTES,
+                    user_agent=sec_user_agent,
+                )
+            )
+        if fred_api_key is not None:
+            clients[ResearchMetadataProvider.FRED_API] = SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=("api.stlouisfed.org",),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_METADATA_RESPONSE_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                ),
+                secret_values={"FRED_API_KEY": fred_api_key},
+            )
+        return clients
 
     @staticmethod
     def _build_source_clients() -> dict[str, SafeHttpClient]:
@@ -746,6 +983,71 @@ def _arxiv_document_url(version_reference: str) -> str:
 
 def _header_value(headers, name: str) -> str:
     return next((value.lower() for key, value in headers if key.lower() == name), "")
+
+
+def _json_object(body: bytes) -> dict[str, object]:
+    try:
+        value = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise ValueError("metadata response is not valid UTF-8 JSON") from None
+    if not isinstance(value, dict):
+        raise ValueError("metadata response must be a JSON object")
+    return value
+
+
+def _valid_sec_user_agent(value: str) -> bool:
+    return (
+        bool(value)
+        and len(value) <= 200
+        and _EMAIL.search(value) is not None
+        and all(0x20 <= ord(character) <= 0x7E for character in value)
+    )
+
+
+def _sec_filing_record(
+    body: bytes,
+    expected_cik: str,
+    accession: str,
+    document: str,
+) -> dict[str, str] | None:
+    data = _json_object(body)
+    cik_value = data.get("cik")
+    if not isinstance(cik_value, (str, int)) or not str(cik_value).isdigit():
+        return None
+    if str(int(cik_value)) != expected_cik:
+        return None
+    filings = data.get("filings")
+    recent = filings.get("recent") if isinstance(filings, dict) else None
+    records = recent if isinstance(recent, dict) else data
+    accessions = records.get("accessionNumber")
+    forms = records.get("form")
+    filing_dates = records.get("filingDate")
+    primary_documents = records.get("primaryDocument")
+    columns = (accessions, forms, filing_dates, primary_documents)
+    if not all(isinstance(column, list) for column in columns):
+        return None
+    lengths = {len(column) for column in columns}
+    if len(lengths) != 1:
+        return None
+    found = [
+        index
+        for index, candidate in enumerate(accessions)
+        if isinstance(candidate, str)
+        and candidate == accession
+        and isinstance(primary_documents[index], str)
+        and primary_documents[index].casefold() == document
+    ]
+    if len(found) != 1:
+        return None
+    index = found[0]
+    form, filing_date = forms[index], filing_dates[index]
+    if not isinstance(form, str) or not isinstance(filing_date, str):
+        return None
+    return {
+        "issuer": str(data.get("name", "")),
+        "form": form,
+        "filing_date": filing_date,
+    }
 
 
 def _checkpoint_payload(

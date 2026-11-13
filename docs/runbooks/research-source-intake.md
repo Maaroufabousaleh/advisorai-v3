@@ -56,16 +56,22 @@ metadata fields.
 ## Metadata Scout
 
 `ResearchMetadataScout` runs a lookup as a durable `ResearchRole.SCOUT` job
-through `ResearchCoordinator`. It supports arXiv, OpenAlex, Crossref DOI, and
-GitHub release citations. Citation-only jobs use one metadata request. An
-explicit arXiv `content_use` request adds exact-version page and PDF requests.
-SEC and FRED citation records pass the URL policy, but do not yet have Scout
-adapters.
+through `ResearchCoordinator`. It supports arXiv, OpenAlex, Crossref DOI,
+GitHub release, SEC EDGAR filing, and FRED series citations. Most citation-only
+jobs use one metadata request; an SEC filing outside the current submission
+index may use up to three additional, index-listed historical submission
+files. An explicit arXiv `content_use` request adds exact-version page and PDF
+requests. SEC filing documents and FRED observations are not fetched or stored.
 
 The Scout uses exact API hosts, HTTPS, no retries, a 15-second request timeout,
-and a 512 KiB metadata/page response cap. Exact-version PDF hashing uses a 64
-MiB response cap. Provider pacing is cancellation-aware and must fit inside the
-job's remaining execution budget.
+and cancellation-aware provider pacing. Generic metadata and arXiv page
+responses are capped at 512 KiB. SEC submission metadata is capped at 4 MiB
+across the current index and any historical files used to verify an accession.
+Exact-version PDF hashing uses a 64 MiB response cap. Provider pacing must fit
+inside the job's remaining execution budget. SEC requests require a configured
+User-Agent containing a contact email. FRED requests require an explicitly
+provided 32-character API key; its transport errors redact that key, and the
+key is never placed in the durable job or PaperCard.
 The response is parsed for title, authors, publication date, and license
 metadata; raw bodies, abstracts, and release notes are not written to the
 registry. Each stored PaperCard includes the API provider, response SHA-256,
@@ -82,8 +88,15 @@ is a hash of the cited document bytes. Upstream license provenance remains a
 claim, not an authoritative rights determination. The arXiv content-use path
 checks the first-party version page and hashes the exact PDF without retaining
 it. First-party license verification for OpenAlex, Crossref, and GitHub remains
-software work. The Scout does not download source archives, SEC filings, or
-FRED data.
+software work. SEC citations are resolved against the SEC submissions API
+using the CIK and accession in the cited archive path. The Scout requires the
+filing's primary document name to match the citation before recording issuer,
+form, filing date, and accession metadata. FRED citations resolve one series by
+its series ID and record its title, last-updated timestamp, metadata response
+hash, and FRED page reference. These fields identify metadata snapshots; they
+do not establish source-data rights or point-in-time observation availability.
+The Scout does not download source archives, SEC filings, or FRED observations;
+SEC/FRED content use remains closed.
 
 Stored PaperCards include their derived source family, requested and permitted
 use, and policy version. Caller-supplied assessment fields are overwritten at

@@ -173,6 +173,28 @@ def test_http_client_rejects_responses_over_the_configured_size_limit():
     assert client.request_metrics.failed_count == 1
 
 
+def test_http_client_redacts_a_credential_registered_after_construction():
+    api_key = "a" * 32
+    client = SafeHttpClient(
+        HttpClientConfig(
+            allowed_hosts=("api.stlouisfed.org",),
+            max_retries=0,
+            requests_per_second=100,
+        ),
+        requester=lambda *_args: (400, f"invalid key {api_key}".encode(), ()),
+        sleeper=lambda _: None,
+    )
+    client.register_secret_value("FRED_API_KEY", api_key)
+
+    with pytest.raises(HttpTransportError) as error:
+        client.get(
+            f"https://api.stlouisfed.org/fred/series?api_key={api_key}",
+            max_retries=0,
+        )
+
+    assert api_key not in str(error.value)
+
+
 def test_http_client_spools_failed_response_before_raising(tmp_path):
     spool = RawHttpSpool(tmp_path / "failed-http.jsonl")
 

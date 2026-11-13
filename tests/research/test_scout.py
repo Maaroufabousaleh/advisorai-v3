@@ -35,6 +35,7 @@ _ARXIV_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
   </entry>
 </feed>
 """
+_FRED_API_KEY = "a" * 32
 
 
 def _paper(source_url: str, *, use=ResearchSourceUse.CITATION_ONLY) -> PaperCard:
@@ -52,6 +53,7 @@ def _scout(
     provider: ResearchMetadataProvider,
     host: str,
     response_body: bytes,
+    response_sequence: list[bytes] | None = None,
     ledgers: SqliteLedgers | None = None,
     on_request=None,
     on_source_request=None,
@@ -59,12 +61,14 @@ def _scout(
     arxiv_document_body: bytes | None = None,
 ):
     calls: list[str] = []
+    responses = list(response_sequence or [])
 
     def requester(method, url, headers, body, timeout):
         calls.append(url)
         if on_request is not None:
             on_request()
-        return 200, response_body, (("Content-Type", "application/json"),)
+        body = responses.pop(0) if responses else response_body
+        return 200, body, (("Content-Type", "application/json"),)
 
     client = SafeHttpClient(
         HttpClientConfig(
@@ -72,6 +76,11 @@ def _scout(
             max_retries=0,
             max_response_bytes=512 * 1024,
             requests_per_second=100,
+            user_agent=(
+                "AdvisorAI test suite research@example.org"
+                if provider is ResearchMetadataProvider.SEC_EDGAR_API
+                else "advisorai-v3/research-metadata-scout"
+            ),
         ),
         requester=requester,
         sleeper=lambda _delay: None,
@@ -121,6 +130,7 @@ def _scout(
         coordinator=coordinator,
         clients={provider: client},
         source_clients=source_clients,
+        fred_api_key=_FRED_API_KEY if provider is ResearchMetadataProvider.FRED_API else None,
     )
     return scout, coordinator, calls
 
@@ -192,6 +202,45 @@ def _scout(
             ).encode(),
             "/repos/pandas-dev/pandas/releases/tags/v2.2.0",
         ),
+        (
+            "https://www.sec.gov/Archives/edgar/data/320193/000032019323000064/aapl-20230930.htm",
+            ResearchMetadataProvider.SEC_EDGAR_API,
+            "data.sec.gov",
+            json.dumps(
+                {
+                    "cik": "320193",
+                    "name": "Apple Inc.",
+                    "filings": {
+                        "recent": {
+                            "accessionNumber": ["0000320193-23-000064"],
+                            "form": ["10-K"],
+                            "filingDate": ["2023-11-03"],
+                            "primaryDocument": ["aapl-20230930.htm"],
+                        },
+                        "files": [],
+                    },
+                }
+            ).encode(),
+            "/submissions/CIK0000320193.json",
+        ),
+        (
+            "https://fred.stlouisfed.org/series/UNRATE",
+            ResearchMetadataProvider.FRED_API,
+            "api.stlouisfed.org",
+            json.dumps(
+                {
+                    "seriess": [
+                        {
+                            "id": "UNRATE",
+                            "title": "Unemployment Rate",
+                            "last_updated": "2024-05-03 07:45:01-05",
+                            "realtime_end": "2024-05-03",
+                        }
+                    ]
+                }
+            ).encode(),
+            "/fred/series",
+        ),
     ],
 )
 def test_metadata_scout_uses_pinned_endpoints_and_persists_only_hashes(
@@ -213,6 +262,7 @@ def test_metadata_scout_uses_pinned_endpoints_and_persists_only_hashes(
         registry=scout.registry,
         coordinator=restarted,
         clients=scout.clients,
+        fred_api_key=_FRED_API_KEY if provider is ResearchMetadataProvider.FRED_API else None,
     )
 
     result = scout.run(submitted.job_id)
@@ -235,8 +285,20 @@ def test_metadata_scout_uses_pinned_endpoints_and_persists_only_hashes(
             ResearchMetadataProvider.OPENALEX_API: ResearchSourceFamily.OPENALEX,
             ResearchMetadataProvider.CROSSREF_API: ResearchSourceFamily.CROSSREF,
             ResearchMetadataProvider.GITHUB_RELEASE_API: ResearchSourceFamily.GITHUB_RELEASE,
+            ResearchMetadataProvider.SEC_EDGAR_API: ResearchSourceFamily.SEC_EDGAR,
+            ResearchMetadataProvider.FRED_API: ResearchSourceFamily.FRED,
         }[provider]
     )
+    if provider is ResearchMetadataProvider.SEC_EDGAR_API:
+        assert result.paper.title == "Apple Inc. 10-K filing"
+        assert result.paper.publication_date == "2023-11-03"
+        assert result.paper.source_version_label == "0000320193-23-000064"
+        assert "@example.org" in scout.clients[provider].config.user_agent
+    if provider is ResearchMetadataProvider.FRED_API:
+        assert result.paper.title == "Unemployment Rate"
+        assert result.paper.source_version_reference == "https://fred.stlouisfed.org/series/UNRATE"
+        assert _FRED_API_KEY not in result.job.detail
+        assert _FRED_API_KEY not in result.paper.model_dump_json()
     assert result.paper.title != "untitled"
     assert "RESEARCHER SUPPLIED" in result.paper.claimed_result.upper()
     assert "ABSTRACT BODY MUST NOT BE STORED" not in result.paper.model_dump_json()
@@ -267,6 +329,118 @@ def test_metadata_scout_uses_pinned_endpoints_and_persists_only_hashes(
             (str(result.paper.artifact_id),),
         ).fetchone()[0]
     assert body.decode("utf-8", errors="ignore")[:64] not in stored_payload
+
+
+def test_sec_metadata_scout_follows_bounded_historical_submissions_reference(tmp_path):
+    index = json.dumps(
+        {
+            "cik": "320193",
+            "name": "Apple Inc.",
+            "filings": {
+                "recent": {
+                    "accessionNumber": ["0000320193-24-000001"],
+                    "form": ["8-K"],
+                    "filingDate": ["2024-01-02"],
+                    "primaryDocument": ["apple-8k.htm"],
+                },
+                "files": [
+                    {
+                        "name": "CIK0000320193-submissions-001.json",
+                        "filingFrom": "2020-01-01",
+                        "filingTo": "2023-12-31",
+                    }
+                ],
+            },
+        }
+    ).encode()
+    historical = json.dumps(
+        {
+            "cik": "320193",
+            "name": "Apple Inc.",
+            "accessionNumber": ["0000320193-23-000064"],
+            "form": ["10-K"],
+            "filingDate": ["2023-11-03"],
+            "primaryDocument": ["aapl-20230930.htm"],
+        }
+    ).encode()
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.SEC_EDGAR_API,
+        host="data.sec.gov",
+        response_body=index,
+        response_sequence=[index, historical],
+    )
+
+    result = scout.execute(
+        _paper(
+            "https://www.sec.gov/Archives/edgar/data/320193/000032019323000064/aapl-20230930.htm"
+        )
+    )
+
+    assert result.paper is not None
+    assert result.paper.title == "Apple Inc. 10-K filing"
+    assert len(calls) == 2
+    assert calls[1] == "https://data.sec.gov/submissions/CIK0000320193-submissions-001.json"
+    assert result.paper.source_metadata_size_bytes == len(index) + len(historical)
+
+
+def test_sec_metadata_scout_rejects_accession_document_mismatch(tmp_path):
+    body = json.dumps(
+        {
+            "cik": "320193",
+            "name": "Apple Inc.",
+            "filings": {
+                "recent": {
+                    "accessionNumber": ["0000320193-23-000064"],
+                    "form": ["10-K"],
+                    "filingDate": ["2023-11-03"],
+                    "primaryDocument": ["different-filing.htm"],
+                },
+                "files": [],
+            },
+        }
+    ).encode()
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.SEC_EDGAR_API,
+        host="data.sec.gov",
+        response_body=body,
+    )
+
+    result = scout.execute(
+        _paper(
+            "https://www.sec.gov/Archives/edgar/data/320193/000032019323000064/aapl-20230930.htm"
+        )
+    )
+
+    assert result.job.state is JobState.INTERRUPTED
+    assert result.paper is None
+    assert len(calls) == 1
+    assert scout.registry.count("paper") == 0
+
+
+def test_fred_requires_an_explicit_key_and_never_admits_content_use(tmp_path):
+    with pytest.raises(ValueError, match="explicitly configured API key"):
+        ResearchMetadataScout._metadata_endpoint(
+            "https://fred.stlouisfed.org/series/UNRATE",
+            ResearchSourceFamily.FRED,
+        )
+
+    body = json.dumps({"seriess": [{"id": "UNRATE", "title": "Unemployment Rate"}]}).encode()
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.FRED_API,
+        host="api.stlouisfed.org",
+        response_body=body,
+    )
+    with pytest.raises(ValueError, match="first-party source-version verifier"):
+        scout.submit(
+            _paper(
+                "https://fred.stlouisfed.org/series/UNRATE",
+                use=ResearchSourceUse.CONTENT_USE,
+            )
+        )
+    assert not calls
 
 
 def test_repeated_scout_observation_is_idempotent_across_job_restart(tmp_path):
