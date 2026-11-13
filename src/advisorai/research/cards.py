@@ -57,6 +57,7 @@ class ResearchMetadataProvider(StrEnum):
 
 class ResearchLicenseEvidenceSource(StrEnum):
     ARXIV_METADATA = "arxiv_metadata"
+    ARXIV_FIRST_PARTY_VERSION_PAGE = "arxiv_first_party_version_page"
     OPENALEX_AGGREGATED_METADATA = "openalex_aggregated_metadata"
     CROSSREF_DEPOSIT_METADATA = "crossref_deposit_metadata"
 
@@ -82,6 +83,9 @@ class PaperCard(ArtifactModel):
     source_license_evidence_reference: str | None = Field(default=None, max_length=2048)
     source_license_evidence_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     source_license_evidence_observed_at: datetime | None = None
+    source_document_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_document_size_bytes: int | None = Field(default=None, ge=1, le=64 * 1024 * 1024)
+    source_document_observed_at: datetime | None = None
     claimed_result: str = Field(min_length=1)
     limitations: tuple[str, ...] = ()
     relevance: str = Field(default="", min_length=0)
@@ -135,16 +139,17 @@ class PaperCard(ArtifactModel):
             )
         if any(license_provenance) and not all(provenance):
             raise ValueError("source license evidence requires complete metadata provenance")
-        if (
-            self.source_license_evidence_sha256 is not None
-            and self.source_license_evidence_sha256 != self.source_metadata_sha256
-        ):
-            raise ValueError("license evidence hash must identify its metadata response")
-        if (
-            self.source_license_evidence_observed_at is not None
-            and self.source_license_evidence_observed_at != self.source_metadata_observed_at
-        ):
-            raise ValueError("license evidence time must match its metadata observation")
+        document_provenance = (
+            self.source_document_sha256 is not None,
+            self.source_document_size_bytes is not None,
+            self.source_document_observed_at is not None,
+        )
+        if any(document_provenance) and not all(document_provenance):
+            raise ValueError(
+                "source document hash, size, and observation time must be recorded together"
+            )
+        if any(document_provenance) and not all(version_provenance):
+            raise ValueError("source document hash requires an exact source version identity")
         return self
 
     @field_validator("source_metadata_observed_at")
@@ -155,6 +160,11 @@ class PaperCard(ArtifactModel):
     @field_validator("source_license_evidence_observed_at")
     @classmethod
     def license_evidence_time_aware(cls, value: datetime | None) -> datetime | None:
+        return _aware(value) if value is not None else None
+
+    @field_validator("source_document_observed_at")
+    @classmethod
+    def source_document_time_aware(cls, value: datetime | None) -> datetime | None:
         return _aware(value) if value is not None else None
 
 

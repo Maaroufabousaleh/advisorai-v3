@@ -114,6 +114,7 @@ class ResearchRegistry:
                     "created_at",
                     "source_metadata_observed_at",
                     "source_license_evidence_observed_at",
+                    "source_document_observed_at",
                 },
             )
             observation_key = hashlib.sha256(_json(stable_identity).encode()).hexdigest()

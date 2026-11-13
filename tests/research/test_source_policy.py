@@ -39,7 +39,7 @@ def test_reviewed_exact_source_paths_are_classified(source_url, family):
     )
     assert result.family is family
     assert result.permitted_use is ResearchSourceUse.CITATION_ONLY
-    assert result.policy_version == "research-source-policy-v1"
+    assert result.policy_version == "research-source-policy-v2"
 
 
 def test_source_policy_rejects_unrecognized_requested_use():
@@ -90,7 +90,7 @@ def test_registry_stamps_derived_assessment_and_idempotently_returns_it(tmp_path
     assert stored.source_family is ResearchSourceFamily.ARXIV
     assert stored.requested_use is ResearchSourceUse.CITATION_ONLY
     assert stored.permitted_use is ResearchSourceUse.CITATION_ONLY
-    assert stored.source_policy_version == "research-source-policy-v1"
+    assert stored.source_policy_version == "research-source-policy-v2"
     assert registry.store(paper, record_type="paper") == stored
     assert registry.get(stored.artifact_id) == stored
     assert registry.count("paper") == 1
@@ -108,10 +108,9 @@ def test_caller_supplied_assessment_cannot_override_registry_policy(tmp_path):
         source_policy_version="caller-supplied-policy",
     )
 
-    stored = registry.store(paper, record_type="paper")
-    assert stored.source_family is ResearchSourceFamily.ARXIV
-    assert stored.source_policy_version == "research-source-policy-v1"
-    assert stored.permitted_use is ResearchSourceUse.CONTENT_USE
+    with pytest.raises(ValueError, match="first-party exact-version license evidence"):
+        registry.store(paper, record_type="paper")
+    assert registry.count("paper") == 0
 
 
 def test_unknown_license_is_citation_only_and_cannot_authorize_content_use(tmp_path):
@@ -156,7 +155,7 @@ def test_content_use_requires_a_source_family_license_pair(tmp_path, source_url,
     assert registry.count("paper") == 0
 
 
-def test_content_use_accepts_only_exact_family_license_identifiers(tmp_path):
+def test_content_use_license_claim_does_not_replace_versioned_source_evidence(tmp_path):
     registry = ResearchRegistry(tmp_path / "research.sqlite3")
     paper = PaperCard(
         source_url="https://github.com/pandas-dev/pandas/releases/tag/v2.2.0",
@@ -164,6 +163,12 @@ def test_content_use_accepts_only_exact_family_license_identifiers(tmp_path):
         license="MIT",
         requested_use=ResearchSourceUse.CONTENT_USE,
     )
-    stored = registry.store(paper, record_type="paper")
-    assert stored.source_family is ResearchSourceFamily.GITHUB_RELEASE
-    assert stored.permitted_use is ResearchSourceUse.CONTENT_USE
+    assessment = ResearchSourcePolicy().assess(
+        source_url=paper.source_url,
+        license_claim=paper.license,
+        requested_use=ResearchSourceUse.CONTENT_USE,
+    )
+    assert assessment.family is ResearchSourceFamily.GITHUB_RELEASE
+    with pytest.raises(ValueError, match="first-party exact-version license evidence"):
+        registry.store(paper, record_type="paper")
+    assert registry.count("paper") == 0

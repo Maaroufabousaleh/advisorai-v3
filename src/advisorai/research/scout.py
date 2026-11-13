@@ -10,7 +10,8 @@ import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
-from urllib.parse import quote, urlencode, urlsplit
+from html.parser import HTMLParser
+from urllib.parse import quote, urlencode, urljoin, urlsplit
 from uuid import UUID, uuid4
 
 from advisorai.integrations.http import HttpClientConfig, SafeHttpClient
@@ -27,6 +28,7 @@ from .registry import ResearchRegistry
 from .source_policy import ResearchSourcePolicy
 
 _MAX_METADATA_RESPONSE_BYTES = 512 * 1024
+_MAX_SOURCE_DOCUMENT_BYTES = 64 * 1024 * 1024
 _MAX_SCOUT_JOB_CARD_BYTES = 64 * 1024
 _METADATA_TIMEOUT_SECONDS = 15.0
 _ATOM_NAMESPACE = "http://www.w3.org/2005/Atom"
@@ -56,14 +58,26 @@ class _SourceMetadata:
     license_evidence_reference: str | None
 
 
-class ResearchMetadataScout:
-    """Fetch one metadata record inside the coordinator's bounded job model.
+@dataclass(frozen=True, slots=True)
+class _VerifiedArxivSource:
+    license_claim: str
+    license_evidence_sha256: str
+    license_evidence_reference: str
+    license_evidence_observed_at: datetime
+    document_sha256: str
+    document_size_bytes: int
+    document_observed_at: datetime
 
-    Only citation metadata is parsed. The response is size-capped, hashed, and
-    discarded after typed fields are extracted; it is never saved as a source
-    body. The coordinator's durable job detail is sufficient to resume after a
-    restart, and registry observation keys prevent duplicate records when a
-    completed fetch is replayed after a process interruption.
+
+class ResearchMetadataScout:
+    """Fetch one citation record inside the coordinator's bounded job model.
+
+    Metadata is size-capped, hashed, and reduced to typed fields. Explicit
+    arXiv content-use jobs first verify the exact-version page and then hash a
+    bounded PDF; neither response body is saved. The coordinator's durable job
+    detail is sufficient to resume after a restart, and registry observation
+    keys prevent duplicate records when a completed fetch is replayed after a
+    process interruption.
     """
 
     _MIN_REQUEST_INTERVAL_SECONDS = {
@@ -79,11 +93,13 @@ class ResearchMetadataScout:
         registry: ResearchRegistry,
         coordinator: ResearchCoordinator,
         clients: dict[ResearchMetadataProvider, SafeHttpClient] | None = None,
+        source_clients: dict[str, SafeHttpClient] | None = None,
     ) -> None:
         self.registry = registry
         self.coordinator = coordinator
         self.source_policy = ResearchSourcePolicy()
         self.clients = clients or self._build_clients()
+        self.source_clients = source_clients or self._build_source_clients()
         self._rate_lock = threading.Lock()
         self._next_request_at: dict[ResearchMetadataProvider, float] = {}
 
@@ -91,13 +107,25 @@ class ResearchMetadataScout:
         self,
         paper: PaperCard,
         *,
-        execution_budget_seconds: float = 45.0,
+        execution_budget_seconds: float = 60.0,
     ) -> ResearchJob:
-        self.source_policy.assess(
+        source_assessment = self.source_policy.assess(
             source_url=paper.source_url,
             license_claim=paper.license,
             requested_use=ResearchSourceUse.CITATION_ONLY,
         )
+        if (
+            paper.requested_use is ResearchSourceUse.CONTENT_USE
+            and source_assessment.family is not ResearchSourceFamily.ARXIV
+        ):
+            raise ValueError(
+                "content use is not enabled without a first-party source-version verifier"
+            )
+        if (
+            paper.requested_use is ResearchSourceUse.CONTENT_USE
+            and _ARXIV_VERSION_SUFFIX.search(urlsplit(paper.source_url).path) is None
+        ):
+            raise ValueError("arXiv content use requires an explicitly versioned citation URL")
         if not 0 < execution_budget_seconds <= 60:
             raise ValueError("metadata Scout execution budget must be within 60 seconds")
         detail = paper.model_dump_json(round_trip=True)
@@ -153,7 +181,22 @@ class ResearchMetadataScout:
             )
             if cancelled():
                 return "cancelled_before_registry_write"
-            candidate = self._enrich(paper, metadata)
+            verified_source = None
+            if paper.requested_use is ResearchSourceUse.CONTENT_USE:
+                try:
+                    verified_source = self._verify_arxiv_source(
+                        paper,
+                        metadata,
+                        cancelled=cancelled,
+                        deadline=deadline,
+                    )
+                except _RateBudgetExpired:
+                    if cancelled():
+                        return "cancelled_before_source_verification"
+                    raise
+            if cancelled():
+                return "cancelled_before_registry_write"
+            candidate = self._enrich(paper, metadata, verified_source=verified_source)
             accepted = self.registry.store(candidate, record_type="paper")
             stored["paper"] = accepted
             return (
@@ -250,6 +293,71 @@ class ResearchMetadataScout:
             version_label=version_label,
             license_evidence_source=evidence_source,
             license_evidence_reference=evidence_reference if evidence_source is not None else None,
+        )
+
+    def _verify_arxiv_source(
+        self,
+        paper: PaperCard,
+        metadata: _SourceMetadata,
+        *,
+        cancelled,
+        deadline: float,
+    ) -> _VerifiedArxivSource:
+        if metadata.version_reference is None or metadata.version_label is None:
+            raise ValueError("content use requires an exact arXiv version reference")
+        page_client = self.source_clients.get("arxiv_version_page")
+        document_client = self.source_clients.get("arxiv_document")
+        if page_client is None or document_client is None:
+            raise ValueError("metadata Scout has no reviewed arXiv source verifier")
+        if cancelled() or not self._claim_request_slot(
+            ResearchMetadataProvider.ARXIV_API,
+            cancelled=cancelled,
+            deadline=deadline,
+        ):
+            raise _RateBudgetExpired("arXiv verification exceeds the remaining Scout budget")
+        page = page_client.get(
+            metadata.version_reference,
+            headers={"Accept": "text/html"},
+            max_retries=0,
+            timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+        )
+        if page.status_code != 200 or not _header_value(page.headers, "content-type").startswith(
+            "text/html"
+        ):
+            raise ValueError("arXiv version page returned an unexpected response")
+        license_claim = _arxiv_license_claim(page.body, metadata.version_reference)
+        self.source_policy.assess(
+            source_url=paper.source_url,
+            license_claim=license_claim,
+            requested_use=ResearchSourceUse.CONTENT_USE,
+        )
+        if cancelled() or not self._claim_request_slot(
+            ResearchMetadataProvider.ARXIV_API,
+            cancelled=cancelled,
+            deadline=deadline,
+        ):
+            raise _RateBudgetExpired("arXiv document hash exceeds the remaining Scout budget")
+        document_url = _arxiv_document_url(metadata.version_reference)
+        document = document_client.get(
+            document_url,
+            headers={"Accept": "application/pdf"},
+            max_retries=0,
+            timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+        )
+        if (
+            document.status_code != 200
+            or not _header_value(document.headers, "content-type").startswith("application/pdf")
+            or not document.body.startswith(b"%PDF-")
+        ):
+            raise ValueError("arXiv exact-version document returned an unexpected response")
+        return _VerifiedArxivSource(
+            license_claim=license_claim,
+            license_evidence_sha256=hashlib.sha256(page.body).hexdigest(),
+            license_evidence_reference=metadata.version_reference,
+            license_evidence_observed_at=page.fetched_at,
+            document_sha256=hashlib.sha256(document.body).hexdigest(),
+            document_size_bytes=len(document.body),
+            document_observed_at=document.fetched_at,
         )
 
     def _claim_request_slot(self, provider, *, cancelled, deadline: float) -> bool:
@@ -426,7 +534,12 @@ class ResearchMetadataScout:
         raise ValueError("metadata Scout provider parser is unavailable")
 
     @staticmethod
-    def _enrich(paper: PaperCard, metadata: _SourceMetadata) -> PaperCard:
+    def _enrich(
+        paper: PaperCard,
+        metadata: _SourceMetadata,
+        *,
+        verified_source: _VerifiedArxivSource | None = None,
+    ) -> PaperCard:
         payload = paper.model_dump(mode="python")
         version_hash = None
         if metadata.version_reference and metadata.version_label:
@@ -448,7 +561,7 @@ class ResearchMetadataScout:
             title=metadata.title,
             authors=metadata.authors,
             publication_date=metadata.publication_date,
-            license=metadata.license_claim,
+            license=(verified_source.license_claim if verified_source else metadata.license_claim),
             source_family=None,
             permitted_use=None,
             source_policy_version=None,
@@ -459,13 +572,38 @@ class ResearchMetadataScout:
             source_version_reference=metadata.version_reference,
             source_version_label=metadata.version_label,
             source_version_identity_sha256=version_hash,
-            source_license_evidence_source=metadata.license_evidence_source,
-            source_license_evidence_reference=metadata.license_evidence_reference,
+            source_license_evidence_source=(
+                ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE
+                if verified_source
+                else metadata.license_evidence_source
+            ),
+            source_license_evidence_reference=(
+                verified_source.license_evidence_reference
+                if verified_source
+                else metadata.license_evidence_reference
+            ),
             source_license_evidence_sha256=(
-                metadata.response_sha256 if metadata.license_evidence_source is not None else None
+                verified_source.license_evidence_sha256
+                if verified_source
+                else (
+                    metadata.response_sha256
+                    if metadata.license_evidence_source is not None
+                    else None
+                )
             ),
             source_license_evidence_observed_at=(
-                metadata.observed_at if metadata.license_evidence_source is not None else None
+                verified_source.license_evidence_observed_at
+                if verified_source
+                else (
+                    metadata.observed_at if metadata.license_evidence_source is not None else None
+                )
+            ),
+            source_document_sha256=(verified_source.document_sha256 if verified_source else None),
+            source_document_size_bytes=(
+                verified_source.document_size_bytes if verified_source else None
+            ),
+            source_document_observed_at=(
+                verified_source.document_observed_at if verified_source else None
             ),
         )
         return PaperCard.model_validate(payload)
@@ -495,14 +633,119 @@ class ResearchMetadataScout:
             for provider, host in api_hosts.items()
         }
 
+    @staticmethod
+    def _build_source_clients() -> dict[str, SafeHttpClient]:
+        return {
+            "arxiv_version_page": SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=("arxiv.org",),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_METADATA_RESPONSE_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                )
+            ),
+            "arxiv_document": SafeHttpClient(
+                HttpClientConfig(
+                    allowed_hosts=("arxiv.org",),
+                    timeout_seconds=_METADATA_TIMEOUT_SECONDS,
+                    max_retries=0,
+                    requests_per_second=100,
+                    max_response_bytes=_MAX_SOURCE_DOCUMENT_BYTES,
+                    user_agent="advisorai-v3/research-metadata-scout",
+                )
+            ),
+        }
+
 
 class _RateBudgetExpired(RuntimeError):
     """No provider slot fits inside the running job's remaining time budget."""
 
 
+class _ArxivLicensePageParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.license_links: list[str] = []
+        self._active_href: str | None = None
+        self._active_text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag.lower() == "a":
+            self._active_href = dict(attrs).get("href")
+            self._active_text = []
+
+    def handle_data(self, data: str) -> None:
+        if self._active_href is not None:
+            self._active_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "a" and self._active_href is not None:
+            if "license" in " ".join(self._active_text).casefold():
+                self.license_links.append(self._active_href)
+            self._active_href = None
+            self._active_text = []
+
+
 def _has_xml_declaration(body: bytes) -> bool:
     upper = body.upper()
     return b"<!DOCTYPE" in upper or b"<!ENTITY" in upper
+
+
+def _arxiv_license_claim(body: bytes, version_reference: str) -> str:
+    try:
+        parser = _ArxivLicensePageParser()
+        parser.feed(body.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError):
+        raise ValueError("arXiv version page failed license parsing") from None
+    claims = [
+        _recognized_arxiv_license(urljoin(version_reference, href)) for href in parser.license_links
+    ]
+    if not claims or any(claim is None for claim in claims) or len(set(claims)) != 1:
+        raise ValueError("arXiv version page does not establish one allowlisted license")
+    return claims[0]
+
+
+def _recognized_arxiv_license(value: str) -> str | None:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
+        return None
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "creativecommons.org"
+        or parsed.username is not None
+        or parsed.password is not None
+        or port is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        return None
+    path = parsed.path.rstrip("/")
+    if path in {"/licenses/by/4.0", "/licenses/by/4.0/legalcode"}:
+        return "CC-BY-4.0"
+    if path in {
+        "/publicdomain/zero/1.0",
+        "/publicdomain/zero/1.0/legalcode",
+    }:
+        return "CC0-1.0"
+    return None
+
+
+def _arxiv_document_url(version_reference: str) -> str:
+    parsed = urlsplit(version_reference)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "arxiv.org"
+        or not parsed.path.startswith("/abs/")
+    ):
+        raise ValueError("arXiv source document reference is not canonical")
+    return f"https://arxiv.org/pdf/{parsed.path.removeprefix('/abs/')}"
+
+
+def _header_value(headers, name: str) -> str:
+    return next((value.lower() for key, value in headers if key.lower() == name), "")
 
 
 def _checkpoint_payload(
@@ -549,7 +792,8 @@ def _validate_arxiv_version(
         or not returned.path.startswith("/abs/")
     ):
         raise ValueError("arXiv returned an invalid version reference")
-    requested_id = requested.path.removeprefix("/abs/")
+    requested_path_segments = requested.path.split("/", 2)
+    requested_id = requested_path_segments[2] if len(requested_path_segments) == 3 else ""
     returned_id = returned.path.removeprefix("/abs/")
     requested_base = _ARXIV_VERSION_SUFFIX.sub("", requested_id)
     returned_base = _ARXIV_VERSION_SUFFIX.sub("", returned_id)

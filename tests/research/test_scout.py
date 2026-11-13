@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 from urllib.parse import parse_qs, urlsplit
@@ -14,6 +15,7 @@ from advisorai.research import (
     JobState,
     PaperCard,
     ResearchCoordinator,
+    ResearchLicenseEvidenceSource,
     ResearchMetadataProvider,
     ResearchMetadataScout,
     ResearchRegistry,
@@ -52,6 +54,9 @@ def _scout(
     response_body: bytes,
     ledgers: SqliteLedgers | None = None,
     on_request=None,
+    on_source_request=None,
+    arxiv_version_page_body: bytes | None = None,
+    arxiv_document_body: bytes | None = None,
 ):
     calls: list[str] = []
 
@@ -71,11 +76,51 @@ def _scout(
         requester=requester,
         sleeper=lambda _delay: None,
     )
+
+    def source_requester(method, url, headers, body, timeout):
+        calls.append(url)
+        if on_source_request is not None:
+            on_source_request()
+        if urlsplit(url).path.startswith("/abs/"):
+            return (
+                200 if arxiv_version_page_body is not None else 404,
+                arxiv_version_page_body or b"",
+                (("Content-Type", "text/html; charset=utf-8"),),
+            )
+        return (
+            200 if arxiv_document_body is not None else 404,
+            arxiv_document_body or b"",
+            (("Content-Type", "application/pdf"),),
+        )
+
+    source_clients = {
+        "arxiv_version_page": SafeHttpClient(
+            HttpClientConfig(
+                allowed_hosts=("arxiv.org",),
+                max_retries=0,
+                max_response_bytes=512 * 1024,
+                requests_per_second=100,
+            ),
+            requester=source_requester,
+            sleeper=lambda _delay: None,
+        ),
+        "arxiv_document": SafeHttpClient(
+            HttpClientConfig(
+                allowed_hosts=("arxiv.org",),
+                max_retries=0,
+                max_response_bytes=64 * 1024 * 1024,
+                requests_per_second=100,
+            ),
+            requester=source_requester,
+            sleeper=lambda _delay: None,
+        ),
+    }
     coordinator = ResearchCoordinator(ledgers, max_workers=2)
     scout = ResearchMetadataScout(
         registry=ResearchRegistry(tmp_path / "research.sqlite3"),
         coordinator=coordinator,
         clients={provider: client},
+        source_clients=source_clients,
     )
     return scout, coordinator, calls
 
@@ -290,6 +335,23 @@ def test_arxiv_versioned_request_rejects_a_different_returned_version(tmp_path):
     assert scout.registry.count("paper") == 0
 
 
+@pytest.mark.parametrize("path_kind", ["abs", "pdf", "html"])
+def test_arxiv_version_identity_normalizes_all_reviewed_citation_path_kinds(tmp_path, path_kind):
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.ARXIV_API,
+        host="export.arxiv.org",
+        response_body=_ARXIV_XML,
+    )
+
+    result = scout.execute(_paper(f"https://arxiv.org/{path_kind}/cs.LG/0301001v2"))
+
+    assert result.job.state is JobState.COMPLETED
+    assert result.paper is not None
+    assert result.paper.source_version_reference == "https://arxiv.org/abs/cs.LG/0301001v2"
+    assert parse_qs(urlsplit(calls[0]).query)["id_list"] == ["cs.LG/0301001v2"]
+
+
 def test_crossref_ambiguous_versioned_license_is_not_collapsed(tmp_path):
     body = json.dumps(
         {
@@ -324,7 +386,7 @@ def test_crossref_ambiguous_versioned_license_is_not_collapsed(tmp_path):
     assert result.paper.source_version_label is None
 
 
-def test_unknown_license_content_use_fails_closed_after_metadata_fetch(tmp_path):
+def test_content_use_requires_a_first_party_verifier_for_the_source_family(tmp_path):
     body = json.dumps({"title": "unlicensed", "authorships": []}).encode()
     scout, _coordinator, calls = _scout(
         tmp_path,
@@ -332,13 +394,158 @@ def test_unknown_license_content_use_fails_closed_after_metadata_fetch(tmp_path)
         host="api.openalex.org",
         response_body=body,
     )
+    with pytest.raises(ValueError, match="first-party source-version verifier"):
+        scout.submit(_paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE))
+    assert calls == []
+    assert scout.registry.count("paper") == 0
+
+
+def test_arxiv_content_use_requires_an_explicit_version_in_the_citation(tmp_path):
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.ARXIV_API,
+        host="export.arxiv.org",
+        response_body=_ARXIV_XML,
+    )
+
+    with pytest.raises(ValueError, match="explicitly versioned citation URL"):
+        scout.submit(
+            _paper("https://arxiv.org/abs/cs.LG/0301001", use=ResearchSourceUse.CONTENT_USE)
+        )
+
+    assert calls == []
+
+
+def test_arxiv_content_use_hashes_exact_document_only_after_license_verification(tmp_path):
+    metadata_body = b"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.00001v2</id>
+    <title>Versioned licensed paper</title>
+    <published>2024-01-01T00:00:00Z</published>
+    <author><name>Example Author</name></author>
+    <arxiv:license>unknown</arxiv:license>
+  </entry>
+</feed>
+"""
+    license_page = (
+        b'<html><a href="https://creativecommons.org/licenses/by/4.0/">View license</a></html>'
+    )
+    document = b"%PDF-1.7\nshort fake source document\n"
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.ARXIV_API,
+        host="export.arxiv.org",
+        response_body=metadata_body,
+        arxiv_version_page_body=license_page,
+        arxiv_document_body=document,
+    )
+
     result = scout.execute(
-        _paper("https://openalex.org/W2741809807", use=ResearchSourceUse.CONTENT_USE)
+        _paper("https://arxiv.org/abs/2401.00001v2", use=ResearchSourceUse.CONTENT_USE)
+    )
+
+    assert result.job.state is JobState.COMPLETED
+    assert result.paper is not None
+    assert result.paper.license == "CC-BY-4.0"
+    assert result.paper.permitted_use is ResearchSourceUse.CONTENT_USE
+    assert result.paper.source_license_evidence_source is (
+        ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE
+    )
+    assert result.paper.source_license_evidence_reference == result.paper.source_version_reference
+    assert result.paper.source_license_evidence_sha256 == hashlib.sha256(license_page).hexdigest()
+    assert result.paper.source_document_sha256 == hashlib.sha256(document).hexdigest()
+    assert result.paper.source_document_size_bytes == len(document)
+    assert [urlsplit(url).path for url in calls] == [
+        "/api/query",
+        "/abs/2401.00001v2",
+        "/pdf/2401.00001v2",
+    ]
+    assert document.decode() not in result.paper.model_dump_json()
+    assert license_page.decode() not in result.paper.model_dump_json()
+    with sqlite3.connect(scout.registry.database_path) as connection:
+        stored_payload = connection.execute(
+            "SELECT payload_json FROM research_records WHERE artifact_id = ?",
+            (str(result.paper.artifact_id),),
+        ).fetchone()[0]
+    assert document.decode() not in stored_payload
+    assert license_page.decode() not in stored_payload
+    mismatched = result.paper.model_copy(
+        update={"source_url": "https://arxiv.org/abs/2401.00001v1"}
+    )
+    with pytest.raises(ValueError, match="explicitly cited arXiv version"):
+        scout.registry.store(mismatched, record_type="paper")
+
+
+def test_arxiv_content_use_does_not_fetch_document_for_unapproved_license(tmp_path):
+    metadata_body = b"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.00001v2</id>
+    <title>Unlicensed paper</title>
+    <published>2024-01-01T00:00:00Z</published>
+  </entry>
+</feed>
+"""
+    license_page = b'<html><a href="https://arxiv.org/licenses/nonexclusive-distrib/1.0/">View license</a></html>'
+    scout, _coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.ARXIV_API,
+        host="export.arxiv.org",
+        response_body=metadata_body,
+        arxiv_version_page_body=license_page,
+        arxiv_document_body=b"%PDF-must-not-be-fetched",
+    )
+
+    result = scout.execute(
+        _paper("https://arxiv.org/abs/2401.00001v2", use=ResearchSourceUse.CONTENT_USE)
     )
 
     assert result.job.state is JobState.INTERRUPTED
     assert result.paper is None
-    assert len(calls) == 1
+    assert [urlsplit(url).path for url in calls] == ["/api/query", "/abs/2401.00001v2"]
+    assert scout.registry.count("paper") == 0
+
+
+def test_arxiv_content_use_honors_cancellation_before_document_fetch(tmp_path):
+    metadata_body = b"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.00001v2</id>
+    <title>Licensed paper</title>
+    <published>2024-01-01T00:00:00Z</published>
+  </entry>
+</feed>
+"""
+    license_page = (
+        b'<html><a href="https://creativecommons.org/licenses/by/4.0/">View license</a></html>'
+    )
+    coordinator: ResearchCoordinator
+    job_id = None
+
+    def cancel_during_version_page():
+        if job_id is not None:
+            coordinator.cancel(job_id)
+
+    scout, coordinator, calls = _scout(
+        tmp_path,
+        provider=ResearchMetadataProvider.ARXIV_API,
+        host="export.arxiv.org",
+        response_body=metadata_body,
+        arxiv_version_page_body=license_page,
+        arxiv_document_body=b"%PDF-must-not-be-fetched",
+        on_source_request=cancel_during_version_page,
+    )
+    job = scout.submit(
+        _paper("https://arxiv.org/abs/2401.00001v2", use=ResearchSourceUse.CONTENT_USE)
+    )
+    job_id = job.job_id
+
+    result = scout.run(job.job_id)
+
+    assert result.job.state is JobState.CANCELLED
+    assert result.paper is None
+    assert [urlsplit(url).path for url in calls] == ["/api/query", "/abs/2401.00001v2"]
     assert scout.registry.count("paper") == 0
 
 

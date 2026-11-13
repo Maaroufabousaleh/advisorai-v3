@@ -43,7 +43,7 @@ it does not qualify a model, source, venue, sandbox, or trading scope.
 | Data gaps | An unresolved or uncovered gap fails recovery; a resolved gap passes only when exact source/instrument coverage is confirmed by a current permitted-source verifier | `tests/session/test_lifecycle.py` |
 | Research jobs | Parallel workers stay within the one/two-worker cap; cancellation, deadline accounting, restart state, and repeated checkpoint identity are durable and tested | `tests/research/test_registry_dsl_jobs.py` |
 | Owner-state backup and restore | A stopped session can create a consistent, hash-verified backup of both owner databases; restore occurs into an empty isolated destination and is typed/SQLite-verified before normal recovery; older backup rollback leaves current and source roots untouched | `tests/session/test_app_entry.py` and `tests/session/test_state_backup.py` |
-| Research source intake | Paper and literature intake accepts only HTTPS URLs on reviewed, exact source/path rules; embedded credentials, query tokens, spoofed suffix hosts, unknown licensing for content use, and unreviewed source families fail closed; citation-only metadata remains distinct from content use | IMPLEMENTED at registry intake by `ResearchSourcePolicy`; assessed source family, requested/permitted use, and policy version are persisted on each stored `PaperCard`. License identifiers are caller claims and are not remotely verified by this boundary | `tests/research/test_source_policy.py` covers exact-host/path allowlists, URL ambiguity and spoof refusal, policy stamping/idempotency, citation-only unknown licenses, and family-specific content-use licenses |
+| Research source intake | Paper and literature intake accepts only HTTPS URLs on reviewed, exact source/path rules; caller-only license claims cannot authorize content use; arXiv content use requires a first-party exact-version license page and hash of the exact PDF; citation-only metadata remains distinct | `ResearchSourcePolicy` stamps the derived source/use decision; `ResearchMetadataScout` records the evidence and refuses unsupported content-use families | `tests/research/test_source_policy.py` and `tests/research/test_scout.py` cover source allowlists, exact arXiv version matching, first-party license refusal, document hashing, and no body persistence |
 | Phase restrictions | Default app path is paper-only and local; no live endpoint, broker credential, or live-capital action is added. Phase 10 remains closed | `tests/session/test_app_entry.py`, `tests/live`, and capability authority tests |
 
 ## Next implementation work
@@ -59,12 +59,15 @@ citation-only/content-use decision. A bounded Scout now reads one record at a
 time from the arXiv, OpenAlex, Crossref, or GitHub release metadata APIs under
 ResearchCoordinator cancellation and budget controls, with fixed-host HTTPS,
 response-size limits, rate pacing, and durable response hashes. It does not
-save response bodies or fetch full papers. Cards now record provider version
-references, labels, identity hashes, and the upstream source of license claims.
-Those identity hashes do not cover document bytes, and upstream license claims
-are not authoritative rights determinations. Source-document byte hashes and
-first-party, exact-version license verification remain software work, followed
-by SEC/FRED metadata adapters. Model
+save response bodies. Citation-only Scout jobs read metadata only; a requested
+arXiv content-use job checks the exact-version page and transiently reads the
+PDF to hash it, then discards the bytes. Cards record provider version
+references, labels, identity hashes, upstream license-claim classes, and, for
+arXiv content use, first-party page and document hashes. The identity hashes do
+not cover document bytes, and upstream OpenAlex/Crossref claims are not
+authoritative rights determinations. Exact-version verifiers and document
+hashes for those families remain software work, followed by SEC/FRED metadata
+adapters. Model
 qualification, provider credentials, venue evidence, and human admission do
 not block this quarantined implementation.
 

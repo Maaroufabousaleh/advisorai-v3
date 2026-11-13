@@ -16,7 +16,7 @@ from .cards import (
     ResearchSourceUse,
 )
 
-SOURCE_POLICY_VERSION = "research-source-policy-v1"
+SOURCE_POLICY_VERSION = "research-source-policy-v2"
 
 _ARXIV_PATH = re.compile(
     r"^/(?:abs|pdf|html)/(?:\d{4}\.\d{4,5}|[A-Za-z][A-Za-z0-9.-]*/\d{7})(?:v\d+)?$"
@@ -31,6 +31,7 @@ _SEC_EDGAR_PATH = re.compile(
     re.IGNORECASE,
 )
 _FRED_PATH = re.compile(r"^/series/[A-Za-z0-9_-]+$")
+_ARXIV_VERSION_SUFFIX = re.compile(r"v[1-9]\d*$")
 
 _CONTENT_LICENSES: dict[ResearchSourceFamily, frozenset[str]] = {
     ResearchSourceFamily.ARXIV: frozenset({"CC0-1.0", "CC-BY-4.0"}),
@@ -55,9 +56,10 @@ class ResearchSourceAssessment:
 class ResearchSourcePolicy:
     """Classify reviewed HTTPS source paths and constrain their recorded use.
 
-    This policy validates a submitted license identifier; it does not fetch a
-    source page or independently establish that the asserted license applies.
-    Unknown or unreviewed sources cannot enter the canonical registry.
+    Citation-only intake validates a submitted claim without asserting rights.
+    Content use additionally requires first-party, exact-version license
+    evidence and a hash of that exact source document. Unknown or unreviewed
+    sources cannot enter the canonical registry.
     """
 
     version = SOURCE_POLICY_VERSION
@@ -122,6 +124,7 @@ class ResearchSourcePolicy:
                 )
         evidence_family = {
             ResearchLicenseEvidenceSource.ARXIV_METADATA: ResearchSourceFamily.ARXIV,
+            ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE: ResearchSourceFamily.ARXIV,
             ResearchLicenseEvidenceSource.OPENALEX_AGGREGATED_METADATA: (
                 ResearchSourceFamily.OPENALEX
             ),
@@ -131,6 +134,25 @@ class ResearchSourcePolicy:
         }.get(card.source_license_evidence_source)
         if evidence_family is not None and evidence_family is not assessment.family:
             raise ValueError("license evidence source does not match the cited source family")
+        if assessment.permitted_use is ResearchSourceUse.CONTENT_USE:
+            if (
+                card.source_license_evidence_source
+                is not ResearchLicenseEvidenceSource.ARXIV_FIRST_PARTY_VERSION_PAGE
+                or assessment.family is not ResearchSourceFamily.ARXIV
+            ):
+                raise ValueError("content use requires first-party exact-version license evidence")
+            if (
+                card.source_version_reference is None
+                or card.source_document_sha256 is None
+                or card.source_document_observed_at is None
+                or card.source_license_evidence_reference != card.source_version_reference
+            ):
+                raise ValueError("content use requires a hash of the verified source version")
+            if not self._same_explicit_arxiv_version(
+                card.source_url,
+                card.source_version_reference,
+            ):
+                raise ValueError("content use requires the explicitly cited arXiv version")
         payload = card.model_dump(mode="python")
         payload.update(
             source_family=assessment.family,
@@ -138,6 +160,26 @@ class ResearchSourcePolicy:
             source_policy_version=assessment.policy_version,
         )
         return PaperCard.model_validate(payload)
+
+    @classmethod
+    def _same_explicit_arxiv_version(cls, source_url: str, version_reference: str) -> bool:
+        try:
+            if cls._source_family(version_reference) is not ResearchSourceFamily.ARXIV:
+                return False
+            source_path = urlsplit(source_url).path
+            version_path = urlsplit(version_reference).path
+        except ValueError:
+            return False
+        source_id = "/".join(source_path.split("/")[2:])
+        version_id = "/".join(version_path.split("/")[2:])
+        source_version = _ARXIV_VERSION_SUFFIX.search(source_id)
+        version = _ARXIV_VERSION_SUFFIX.search(version_id)
+        if source_version is None or version is None:
+            return False
+        return (
+            _ARXIV_VERSION_SUFFIX.sub("", source_id) == _ARXIV_VERSION_SUFFIX.sub("", version_id)
+            and source_version.group() == version.group()
+        )
 
     @staticmethod
     def _source_family(source_url: str) -> ResearchSourceFamily:
