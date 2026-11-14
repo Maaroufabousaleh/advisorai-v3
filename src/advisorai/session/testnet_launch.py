@@ -40,6 +40,7 @@ from advisorai.session.provider_profiles import (
     ProviderProfileContext,
     ProviderProfileRequest,
     build_provider_profile,
+    verify_selected_instrument,
 )
 
 _TESTNET_FIXTURE_SOURCE = "testnet-fixture"
@@ -240,6 +241,39 @@ def _snapshot_bound_fx(
     return provider
 
 
+def _verification_context(validated: TestnetLaunchRequest) -> ProviderProfileContext:
+    """Minimal context for pre-baseline instrument verification.
+
+    Carries the same canonical owner instrument the application builder
+    uses, so the shared verifier checks the identical base/quote binding.
+    The account here is a placeholder for context validation only; the
+    durable baseline is seeded from the venue snapshot after verification.
+    The verifier never touches ledgers; the placeholder is never written.
+    """
+    instrument = InstrumentIdentity(
+        canonical_id="BTC",
+        asset_class=AssetClass.CRYPTO,
+        venue="paper",
+        venue_symbol=validated.provider_instrument_id,
+        base_asset="BTC",
+        quote_asset=validated.quote_currency,
+    )
+    return ProviderProfileContext(
+        data=TestnetFixtureDataAdapter(validated.quote_currency),  # type: ignore[arg-type]
+        evidence_council=EvidenceCouncil({}),
+        decision_model_factory=_reference_factory("quiet"),
+        initial_account=AccountState(
+            cash=validated.initial_cash,
+            marks={"BTC": validated.initial_mark},
+            as_of=datetime(1970, 1, 1, tzinfo=UTC),
+        ),
+        ledgers=None,  # type: ignore[arg-type]
+        instrument=instrument,
+        account_quote_currency=validated.quote_currency,
+        fx_rate_provider=_snapshot_bound_fx(validated.quote_currency),  # type: ignore[arg-type]
+    )
+
+
 def read_testnet_baseline(
     *,
     resolver: CredentialResolver,
@@ -247,10 +281,13 @@ def read_testnet_baseline(
 ) -> tuple[object, AccountState]:
     """Read-only venue snapshot used to seed the durable account baseline.
 
+    Verifies the selected instrument and quote against live provider truth
+    on the same transport before the account read, using the shared
+    profile verifier (exact sandbox host, admitted product, quote match).
     The owner runs this BEFORE first start and records the returned cash,
     positions, and marks in the launch record. A later start with a
     different faucet balance fails closed at reconciliation instead of
-    silently adopting new funds. Performs account/balance reads only;
+    silently adopting new funds. Performs product/account reads only;
     never submits, cancels, transfers, or withdraws.
     """
     from advisorai.integrations import (
@@ -263,6 +300,18 @@ def read_testnet_baseline(
         build_binance_spot_testnet_transport(resolver)
         if validated.provider == "binance_spot_testnet"
         else build_coinbase_exchange_sandbox_transport(resolver)
+    )
+    verify_selected_instrument(
+        transport,
+        ProviderProfileComponents(
+            context=_verification_context(validated),
+            request=ProviderProfileRequest(
+                provider=validated.provider,
+                provider_instrument_id=validated.provider_instrument_id,
+                quote_currency=validated.quote_currency,
+                max_submissions=validated.max_submissions,
+            ),
+        ),
     )
     snapshot = transport.fetch_account_snapshot()
     positions = {

@@ -159,7 +159,9 @@ def _validate_credentials(resolver: CredentialResolver, provider: str) -> None:
         raise ValueError("PAPER_VENUE credentials contain an unadmitted WebSocket endpoint")
 
 
-def _verify_selected_instrument(transport: object, components: ProviderProfileComponents) -> None:
+def verify_selected_instrument(
+    transport: object, components: ProviderProfileComponents
+) -> None:
     request = components.request
     if getattr(transport, "venue_name", None) != request.provider:
         raise ValueError("provider transport identity differs from the selected profile")
@@ -206,7 +208,7 @@ def _compose(
     *,
     transport: BinanceSpotTestnetTransport | CoinbaseExchangeSandboxTransport,
 ) -> OwnerApplicationAdapters:
-    _verify_selected_instrument(transport, components)
+    verify_selected_instrument(transport, components)
     context = components.context
     request = components.request
     instrument = context.instrument.model_copy(
@@ -319,4 +321,5 @@ __all__ = [
     "build_binance_spot_testnet_profile",
     "build_coinbase_exchange_sandbox_profile",
     "build_provider_profile",
+    "verify_selected_instrument",
 ]
