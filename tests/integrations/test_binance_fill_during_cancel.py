@@ -407,8 +407,9 @@ def test_spot_free_balance_semantics_are_pinned_to_spot_profiles() -> None:
     ``apply_fill`` treats a populated ``margin_available`` as a spot
     free-balance projection (settled in the quote asset). This pins the
     supported seeders to the two spot sandbox adapters plus the supervised
-    lifecycle's local seeding from the same venue field, so a future
-    margin-profile seeder cannot silently inherit spot settlement math.
+    lifecycle's and the testnet baseline's local seeding from the same
+    venue field, so a future margin-profile seeder cannot silently
+    inherit spot settlement math.
     """
     from advisorai.integrations import binance_spot, coinbase_exchange
 
@@ -422,9 +423,12 @@ def test_spot_free_balance_semantics_are_pinned_to_spot_profiles() -> None:
     lifecycle_source = Path("scripts/qualify_binance_spot_testnet_lifecycle.py").read_text()
     assert "margin_available=account_snapshot.margin_available" in lifecycle_source
 
-    # Unseeded profiles leave the field None, so apply_fill's projection is
-    # a no-op there: the simulator and launch baseline never opt in.
-    simulator_source = Path("src/advisorai/session/application.py").read_text()
+    # The testnet baseline seeds from the verified venue snapshot's
+    # free-balance field, mirroring the supervised lifecycle.
     baseline_source = Path("src/advisorai/session/testnet_launch.py").read_text()
+    assert "margin_available=snapshot.margin_available" in baseline_source
+
+    # Unseeded profiles leave the field None, so apply_fill's projection is
+    # a no-op there: the simulator never opts in.
+    simulator_source = Path("src/advisorai/session/application.py").read_text()
     assert "margin_available" not in simulator_source
-    assert "margin_available" not in baseline_source

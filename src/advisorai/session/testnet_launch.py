@@ -314,6 +314,7 @@ def read_testnet_baseline(
         ),
     )
     snapshot = transport.fetch_account_snapshot()
+    expected_key = transport.canonical_instrument_id(validated.provider_instrument_id)
     positions = {
         key: value for key, value in dict(snapshot.positions).items() if value != 0
     }
@@ -322,14 +323,19 @@ def read_testnet_baseline(
             raise ValueError(
                 "testnet account holds out-of-profile balances; clear them first"
             )
+        if key != expected_key:
+            raise ValueError(
+                "testnet account holds a nonzero position outside the verified "
+                "instrument; clear it first"
+            )
     mapped_positions = (
-        {"BTC": positions[validated.provider_instrument_id]}
-        if validated.provider_instrument_id in positions
-        else {}
+        {"BTC": positions[expected_key]} if expected_key in positions else {}
     )
     baseline = AccountState(
         cash=snapshot.cash,
         marks={"BTC": validated.initial_mark},
+        margin_used=snapshot.margin_used or Decimal("0"),
+        margin_available=snapshot.margin_available,
         as_of=snapshot.as_of,
     )
     baseline.positions.update(mapped_positions)

@@ -108,10 +108,7 @@ def test_baseline_verifies_instrument_and_quote_before_account_read(monkeypatch)
     assert spec.base_asset == "BTC"
     assert spec.quote_asset == "USDT"
     assert baseline.cash == Decimal("1000")
-    # NOTE: mapped_positions keys the canonical snapshot positions by the
-    # venue symbol, so the BTC position does not map today. Seeding gap is
-    # out of scope for the startup-order fix; flagged for follow-up.
-    assert baseline.positions == {}
+    assert baseline.positions == {"BTC": Decimal("0.010")}
     assert "/api/v3/exchangeInfo" in calls[0][1]
     assert any("/api/v3/account" in url for _, url in calls[1:])
 
