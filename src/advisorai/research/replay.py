@@ -176,6 +176,12 @@ class ReplayReport:
 def load_snapshot_bars(snapshot_root: Path) -> tuple[dict[str, tuple[dict[str, Any], ...]], str]:
     """Load frozen bars; the hash covers the bars file exactly as read."""
     bars_path = snapshot_root / "bars.json"
+    if not bars_path.exists() and snapshot_root.name == "synthetic-daily-2015-2025-v1":
+        # The synthetic fixture is generated, not stored: materialize the
+        # byte-identical bytes (hash-verified) instead of committing 856KB.
+        from advisorai.research.synthetic import materialize
+
+        materialize(snapshot_root)
     payload = bars_path.read_bytes()
     data = json.loads(payload.decode("utf-8"))
     bars = {

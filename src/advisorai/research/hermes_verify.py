@@ -134,7 +134,12 @@ def run_hermes_verification(
     gate_registry.require_admitted(8, component=HERMES_COMPONENT)
     bars_path = snapshot_root / "bars.json"
     if not bars_path.is_file():
-        raise ValueError(f"frozen bars are missing: {bars_path}")
+        if snapshot_root.name == "synthetic-daily-2015-2025-v1":
+            from advisorai.research.synthetic import materialize
+
+            materialize(snapshot_root)
+        else:
+            raise ValueError(f"frozen bars are missing: {bars_path}")
     set_hermes_bars_path(bars_path)
     result = HermesIsolationRunner(POLICY).run(task_name=HERMES_TASK_NAME, task=verify_replay_task)
     return HermesVerification(

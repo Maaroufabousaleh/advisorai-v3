@@ -86,10 +86,10 @@ def test_skip_month_dsl_is_versioned_and_past_only():
 
 
 def test_skip_month_differs_from_baseline_and_replays(tmp_path):
-    import pytest
 
-    if not (FIXTURE / "bars.json").exists():
-        pytest.skip("synthetic fixture snapshot not present")
+    from advisorai.research.synthetic import materialize as _materialize
+
+    _materialize(FIXTURE)
     from advisorai.research.replay import evaluate_momentum, require_window_embargo
 
     bars, snapshot_hash = load_snapshot_bars(FIXTURE)

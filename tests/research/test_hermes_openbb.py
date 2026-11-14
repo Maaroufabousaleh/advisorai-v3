@@ -142,8 +142,9 @@ def test_verification_refuses_without_phase8_admission(tmp_path):
 
 
 def test_verification_recomputes_fixture_replay_exactly(tmp_path):
-    if not (SNAPSHOT / "bars.json").exists():
-        pytest.skip("synthetic fixture snapshot not present")
+    from advisorai.research.synthetic import materialize as _materialize
+
+    _materialize(SNAPSHOT)
     gates = _admitted_gates(tmp_path)
     verification = run_hermes_verification(snapshot_root=SNAPSHOT, gate_registry=gates)
     assert verification.passed

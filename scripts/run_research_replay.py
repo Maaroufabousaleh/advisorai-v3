@@ -132,7 +132,12 @@ def main() -> int:
     ):
         raise ValueError("research replay state must stay outside var/advisorai")
     if not (snapshot_root / "bars.json").exists():
-        raise FileNotFoundError(f"snapshot bars missing: {snapshot_root / 'bars.json'}")
+        if snapshot_root.name == "synthetic-daily-2015-2025-v1":
+            from advisorai.research.synthetic import materialize  # noqa: E402
+
+            materialize(snapshot_root)
+        else:
+            raise FileNotFoundError(f"snapshot bars missing: {snapshot_root / 'bars.json'}")
 
     registry = ResearchRegistry(state_dir / "research-registry.sqlite3")
     paper = registry.store(

@@ -112,8 +112,9 @@ def test_real_inference_is_deterministic_and_labeled():
 
 @needs_lightgbm
 def test_fixture_shadow_runs_real_inference_with_abstentions(tmp_path):
-    if not (FIXTURE / "bars.json").exists():
-        pytest.skip("synthetic fixture snapshot not present")
+    from advisorai.research.synthetic import materialize as _materialize
+
+    _materialize(FIXTURE)
     from advisorai.research import ResearchRegistry
     from advisorai.research.lightgbm_runner import build_lightgbm_adapter as build
     from advisorai.research.shadow import run_shadow

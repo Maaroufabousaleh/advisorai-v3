@@ -227,8 +227,9 @@ def test_costs_charge_once_per_position_change(tmp_path):
 
 def test_fixture_snapshot_reproduces_identical_numerics(tmp_path):
     snapshot_root = FIXTURE_SNAPSHOT
-    if not (snapshot_root / "bars.json").exists():
-        pytest.skip("synthetic fixture snapshot not present")
+    from advisorai.research.synthetic import materialize as _materialize
+
+    _materialize(snapshot_root)
     _, snapshot_hash = load_snapshot_bars(snapshot_root)
     manifest = json.loads((snapshot_root / "manifest.json").read_text())
     assert manifest["counts"] == {"SPY": 2869, "TLT": 2869}
@@ -291,8 +292,9 @@ def test_windows_and_embargo_are_enforced_not_documented(tmp_path):
     with pytest.raises(ValueError, match="has no cutoffs"):
         require_window_embargo(observations)
     # Full fixture snapshot passes with proven 21d+ gaps.
-    if not (FIXTURE_SNAPSHOT / "bars.json").exists():
-        pytest.skip("synthetic fixture snapshot not present")
+    from advisorai.research.synthetic import materialize as _materialize
+
+    _materialize(FIXTURE_SNAPSHOT)
     fixture_bars, _ = load_snapshot_bars(FIXTURE_SNAPSHOT)
     fixture_momentum = evaluate_momentum(fixture_bars["SPY"])
     fixture_obs, _ = build_observations(

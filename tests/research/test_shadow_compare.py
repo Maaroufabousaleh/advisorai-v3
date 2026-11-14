@@ -137,10 +137,9 @@ def test_shadow_reproduces_on_fixture_snapshot(tmp_path):
         / "snapshots"
         / "synthetic-daily-2015-2025-v1"
     )
-    if not (snapshot_root / "bars.json").exists():
-        import pytest
+    from advisorai.research.synthetic import materialize as _materialize
 
-        pytest.skip("synthetic fixture snapshot not present")
+    _materialize(snapshot_root)
     _, snapshot_hash = load_snapshot_bars(snapshot_root)
     first = run_shadow(
         registry=ResearchRegistry(tmp_path / "a.sqlite3"),
