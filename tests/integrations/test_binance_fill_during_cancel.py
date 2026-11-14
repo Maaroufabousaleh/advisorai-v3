@@ -524,3 +524,125 @@ def test_lost_binance_ack_resolves_by_query_without_resubmission(tmp_path) -> No
     posts = [call for call in calls if call[0] == "POST"]
     assert len(posts) == 1
     assert "origClientOrderId" in calls[-1][1]
+
+
+def test_restart_reconciles_routed_order_without_resubmission(tmp_path) -> None:
+    """Crash between POST and ack reconciles on restart via query, no retry.
+
+    The signed POST reaches the venue but the process dies before the ack
+    is recorded, leaving the durable order ROUTED. A restarted OMS over the
+    same ledger must settle through the real ``query_order`` contract and
+    then record the venue fill exactly once — the POST is never re-sent.
+    """
+    from uuid import NAMESPACE_URL, uuid5
+
+    from advisorai.execution.native import NativeVenueAdapter
+    from advisorai.integrations import VenueTransportError
+
+    local_key = "restart-fixture-1"
+    queried = {
+        "symbol": "BTCUSDT",
+        "orderId": 5150,
+        "clientOrderId": local_key,
+        "status": "NEW",
+    }
+    trade = {
+        "symbol": "BTCUSDT",
+        "id": 777001,
+        "orderId": 5150,
+        "qty": "0.001",
+        "price": "10000.00",
+        "commission": "0.01",
+        "commissionAsset": "USDT",
+        "time": 1700000060000,
+        "isBuyer": True,
+    }
+    responses = [
+        urllib.error.URLError("fixture: process died after the POST reached the venue"),
+        (200, json.dumps(queried).encode(), ()),
+        # list_fills fans out per verified symbol: BTCUSDT carries the trade, ETHUSDT is empty.
+        (200, json.dumps([trade]).encode(), ()),
+        (200, json.dumps([]).encode(), ()),
+    ]
+
+    def _raising_requester(method, url, headers, body, timeout):
+        item = responses.pop(0)
+        calls.append((method, url, dict(headers), body))
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    transport, calls = _transport([])
+    transport.client._requester = _raising_requester  # fixture: POST succeeds remotely, ack lost
+    transport.verify_symbol_mappings(_symbols())
+
+    ledgers = SqliteLedgers(tmp_path / "restart.sqlite3")
+
+    def _oms() -> OrderManager:
+        return OrderManager(
+            ledgers,
+            NativeVenueAdapter(
+                venue="binance_spot_testnet",
+                environment="paper_testnet",
+                transport=transport,
+                strict_venue=True,
+            ),
+        )
+
+    oms = _oms()
+    order = Order(
+        parent_intent_id=uuid4(),
+        execution_plan_id=uuid4(),
+        instrument=InstrumentIdentity(
+            canonical_id="crypto:BTCUSDT:binance_spot_testnet:spot",
+            asset_class="crypto",
+            venue="binance_spot_testnet",
+            venue_symbol="BTCUSDT",
+        ),
+        side="buy",
+        quantity=Decimal("0.001"),
+        order_type="passive_limit",
+        price=Decimal("10000.00"),
+        time_in_force="GTC",
+        idempotency_key=local_key,
+    )
+    oms.create(order)
+    oms.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    with pytest.raises(VenueTransportError, match="request failed"):
+        oms.route(order.artifact_id)
+
+    # Restart: a fresh OMS over the same ledger hydrates the ROUTED order.
+    del oms
+    restarted = _oms()
+    assert restarted.orders[order.artifact_id].state is OrderState.ROUTED
+
+    # Settle via the authoritative venue query; the POST is never re-sent.
+    resolved = restarted.reconcile_routed(order.artifact_id)
+    assert resolved.accepted is True
+    assert resolved.venue_order_id == "5150"
+    assert restarted.orders[order.artifact_id].state is OrderState.ACKNOWLEDGED
+
+    # Ingest the venue fill through the real contract, exactly once.
+    fills = transport.list_fills()
+    assert len(fills) == 1
+    values = transport.fill_contract_values(fills[0])
+    assert values["venue_fill_id"] == "BTCUSDT:777001"
+    assert values["order_id"] == "5150"
+    fill = Fill(
+        artifact_id=uuid5(NAMESPACE_URL, f"advisorai-v3/binance-fill/{values['venue_fill_id']}"),
+        order_id=order.artifact_id,
+        venue_fill_id=str(values["venue_fill_id"]),
+        quantity=values["quantity"],
+        price=values["price"],
+        fee=values["fee"],
+        fee_currency="USDT",
+        occurred_at=values["occurred_at"],
+    )
+    restarted.record_fill(fill, "buy")
+    assert restarted.orders[order.artifact_id].state is OrderState.FILLED
+
+    # Re-ingesting the same venue trade is a no-op, not a duplicate.
+    restarted.record_fill(fill, "buy")
+    assert len(restarted.fills) == 1
+    posts = [call for call in calls if call[0] == "POST"]
+    assert len(posts) == 1
