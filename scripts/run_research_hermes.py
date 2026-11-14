@@ -66,7 +66,12 @@ def main() -> int:
     parser.add_argument("--enable-openbb", action="store_true")
     args = parser.parse_args()
 
-    snapshot_root = (REPOSITORY_ROOT / args.snapshot).resolve()
+    snapshot_arg = Path(args.snapshot).expanduser()
+    snapshot_root = (
+        snapshot_arg.resolve()
+        if snapshot_arg.is_absolute()
+        else (REPOSITORY_ROOT / snapshot_arg).resolve()
+    )
     state_dir = _state_dir(args.state_dir)
     gate_path = Path(args.gate_ledger) if args.gate_ledger else (state_dir / "phase-gates.sqlite3")
     gates = PhaseGateRegistry(SqliteLedgers(gate_path))

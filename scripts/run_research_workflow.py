@@ -67,7 +67,12 @@ def main() -> int:
     parser.add_argument("--policy", default="tsmom-sign-only-v1", help="Signal policy identity.")
     args = parser.parse_args()
 
-    snapshot_root = (REPOSITORY_ROOT / args.snapshot).resolve()
+    snapshot_arg = Path(args.snapshot).expanduser()
+    snapshot_root = (
+        snapshot_arg.resolve()
+        if snapshot_arg.is_absolute()
+        else (REPOSITORY_ROOT / snapshot_arg).resolve()
+    )
     state_dir = Path(args.state_dir)
     if not state_dir.is_absolute():
         state_dir = (REPOSITORY_ROOT / state_dir).resolve()

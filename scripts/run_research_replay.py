@@ -117,7 +117,12 @@ def main() -> int:
     args = parser.parse_args()
 
     repository_root = REPOSITORY_ROOT
-    snapshot_root = (repository_root / args.snapshot).resolve()
+    snapshot_arg = Path(args.snapshot).expanduser()
+    snapshot_root = (
+        snapshot_arg.resolve()
+        if snapshot_arg.is_absolute()
+        else (repository_root / snapshot_arg).resolve()
+    )
     state_dir = Path(args.state_dir)
     if not state_dir.is_absolute():
         state_dir = (repository_root / state_dir).resolve()
@@ -197,7 +202,9 @@ def main() -> int:
         "command": "scripts/run_research_replay.py",
         "policy_id": report.policy_id,
         "factor_hash": report.factor_hash,
-        "snapshot": str(snapshot_root.relative_to(repository_root)),
+        "snapshot": str(snapshot_root.relative_to(repository_root))
+        if snapshot_root.is_relative_to(repository_root)
+        else str(snapshot_root),
         "snapshot_hash": report.snapshot_hash,
         "code_hash": report.code_hash,
         "paper_artifact_id": str(paper.artifact_id),
