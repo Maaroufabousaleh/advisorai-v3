@@ -2,6 +2,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+import pytest
+
 from advisorai.agents.fusion import DecisionBundle, EvidenceGateResult
 from advisorai.api.service import DecisionPipelineResult
 from advisorai.contracts import (
@@ -151,6 +153,27 @@ def test_runtime_reconcile_once_trips_kill_switch_on_venue_mismatch(tmp_path):
     result = runtime.reconcile_once()
     assert not result.reconciled
     assert "venue_cash_mismatch" in result.discrepancies[0]
+    assert runtime.risk_kernel.kill_switch.tripped
+
+
+def test_runtime_reconcile_once_trips_kill_switch_on_venue_error(tmp_path):
+    """P09 prep: venue read failure trips the kill switch, then re-raises."""
+
+    class FailingAdapter:
+        def account_snapshot(self):
+            raise RuntimeError("venue unreachable")
+
+        def open_orders(self):
+            raise AssertionError("unreachable after snapshot failure")
+
+    runtime, _cutoff, _ledgers, _learning = _runtime(
+        tmp_path,
+        admitted=False,
+        adapter=FailingAdapter(),
+        database_name="runtime-venue-error.sqlite3",
+    )
+    with pytest.raises(RuntimeError, match="venue unreachable"):
+        runtime.reconcile_once()
     assert runtime.risk_kernel.kill_switch.tripped
 
 
