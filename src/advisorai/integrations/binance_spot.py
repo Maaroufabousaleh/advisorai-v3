@@ -462,11 +462,16 @@ class BinanceSpotTestnetTransport(NativeTransport):
                 # Preserve nonzero out-of-profile balances so an owner adapter
                 # can reject them instead of silently understating account state.
                 positions[f"asset:{asset}"] = quantity
+        # The account response carries no timestamp of its own. Take a fresh
+        # server time at read time so the snapshot never predates fills that
+        # landed after an earlier server_time call. Monotonic guard: a clock
+        # step backwards keeps the prior reading instead of going backwards.
+        prior = self._last_server_time
+        self.server_time()
         as_of = self._last_server_time
-        if as_of is None:
-            self.server_time()
-            as_of = self._last_server_time
         assert as_of is not None
+        if prior is not None and as_of < prior:
+            as_of = prior
         return VenueAccountSnapshot(
             as_of=as_of,
             cash=cash,

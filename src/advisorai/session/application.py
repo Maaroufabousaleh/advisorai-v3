@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -313,6 +314,7 @@ class OwnerApplicationConfig:
     interval_seconds: float = 3600.0
     accelerated_clock: bool = False
     max_rss_mb: int = 2048
+    max_runtime_seconds: float | None = None
 
     def __post_init__(self) -> None:
         if self.scenario not in {"quiet", "qualification"}:
@@ -323,6 +325,8 @@ class OwnerApplicationConfig:
             raise ValueError("scheduler interval must be between 0.1 seconds and one day")
         if not 256 <= self.max_rss_mb <= 8192:
             raise ValueError("owner process RSS limit must be between 256 and 8192 MiB")
+        if self.max_runtime_seconds is not None and not 1 <= self.max_runtime_seconds <= 86_400:
+            raise ValueError("owner runtime deadline must be between 1 second and one day")
 
 
 class PaperOwnerApplication:
@@ -533,10 +537,19 @@ class PaperOwnerApplication:
 
     def _wait_and_stop(self, session_id: UUID) -> int:
         requested_outcome = SessionOutcome.CLEAN
+        deadline = (
+            time.monotonic() + self.config.max_runtime_seconds
+            if self.config.max_runtime_seconds is not None
+            else None
+        )
         while not self.stop_requested.wait(0.25):
             request = self._consume_stop_request(session_id)
             if request is not None:
                 requested_outcome = request
+                self.stop_requested.set()
+                break
+            if deadline is not None and time.monotonic() >= deadline:
+                print("stop_reason=runtime_deadline_reached", flush=True)
                 self.stop_requested.set()
                 break
             if self._scheduler_done.is_set():

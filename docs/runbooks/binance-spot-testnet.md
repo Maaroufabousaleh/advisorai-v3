@@ -108,9 +108,8 @@ ADVISORAI_RUN_PAPER_LIFECYCLE=1 \
   ./.venv/bin/python scripts/qualify_binance_spot_testnet_lifecycle.py \
   --secrets /mnt/c/projects/advisorai-v3/secrets.env \
   --configuration-hash <zero-network-binance-config-sha256> \
-  --read-only-evidence-dir artifacts/phase2/binance-spot-testnet/read-only-smoke \
-  --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle \
-  --ledger <new-supervised-ledger-path>
+  --read-only-evidence artifacts/phase2/binance-spot-testnet/read-only-smoke \
+  --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle
 ```
 
 The runner validates the immutable read-only pointer and performs exactly one
@@ -121,6 +120,65 @@ path, restart recovery, TCA, attribution, duplicate protection, ambiguous-ack
 handling, cancel-race, divergence, interruption, and kill-switch drills. It
 did not observe a real fill, so fill ingestion remains fixture evidence rather
 than an externally measured fill claim.
+
+## Bounded testnet canary
+
+After the lifecycle gate passes, the owner may run a bounded canary session
+under an enforced wall-clock deadline and venue-boundary submission cap.
+Both bounds are explicit and required for any testnet run:
+
+```bash
+ADVISORAI_STATE_DIR=var/advisorai-testnet \
+  uv run python scripts/launch_testnet_paper.py \
+  --provider binance_spot_testnet --instrument BTCUSDT --quote USDT \
+  --reason "owner testnet canary" --interval-seconds 10 \
+  --max-runtime-seconds 120 --max-submissions 0
+```
+
+`--max-submissions 0` hard-refuses any submission at the venue boundary and
+is the correct first canary: it proves SESSION READY, deadline stop, clean
+reconciliation, and lease release with zero venue writes. Expect
+`stop_reason=runtime_deadline_reached` followed by `outcome=clean`,
+`reconciliation=reconciled`, and `leases_released=True`. Record the actual
+submission count from the run output; zero is valid for the first canary.
+The launcher verifies the instrument and quote on the same transport before
+hydrating the funded baseline, and fails closed on any out-of-profile
+balance. Never start the loop without both bounds.
+
+## Fill-evidence validation (P03 prep)
+
+Validate any paper-lifecycle run directory offline before claiming a venue
+fill. The validator is read-only, credential-free, and network-free:
+
+```bash
+uv run python scripts/validate_binance_fill_evidence.py \
+  --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle/<run_id>
+```
+
+It checks manifest schema, single submission, fill linkage and quantity
+match between OMS and account ledgers, fee agreement, the terminal
+filled-to-reconciled chain, clean reconciliation, restart without
+duplicate submission, and event-sequence consistency. Exit 0 certifies a
+fill pass; exit 3 reports a cancellation-only pass, which can never
+certify P03. Ledger reads go through a temporary copy, so evidence
+directories are never modified.
+
+## Canary-evidence validation (P02 prep)
+
+Validate a stopped bounded-canary state directory offline. The validator
+is read-only, credential-free, and network-free:
+
+```bash
+uv run python scripts/validate_testnet_canary_evidence.py \
+  --state-dir var/advisorai-testnet --run-log canary.log
+```
+
+It checks the testnet session profile, a single clean `session_ended`
+record, reconciled state, zero open orders, released leases, no
+unfinished work, a recorded submission count from durable order events,
+and the run-log markers (`SESSION READY`, deadline stop, clean outcome).
+Exit 0 certifies the canary; any failure names the check. Ledger reads
+go through a temporary copy, so state directories are never modified.
 
 No model, LLM, Hermes task, research agent, browser task, dashboard, or venue
 provider can bypass `RiskKernel` or mutate OMS truth. Transfers, withdrawals,
