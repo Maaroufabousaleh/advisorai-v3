@@ -259,3 +259,17 @@ def test_launcher_rejects_out_of_bounds_before_any_venue_touch(capsys) -> None:
         assert exc.value.code == 2
     captured = capsys.readouterr()
     assert "testnet_baseline" not in captured.out
+
+
+def test_testnet_fixture_marks_are_deterministic_and_timezone_safe() -> None:
+    """Fixture bars refuse naive cutoffs; marks are deterministic in time."""
+    from datetime import datetime as dt
+
+    adapter = SandboxFixtureDataAdapter("USDT")
+    with pytest.raises(ValueError, match="must include a timezone"):
+        adapter.snapshot_at(dt(2026, 1, 2, 12, 0, 0))
+
+    early = adapter.snapshot_at(dt(2026, 1, 2, 12, 0, 0, tzinfo=UTC))
+    late = adapter.snapshot_at(dt(2026, 1, 2, 15, 0, 0, tzinfo=UTC))
+    assert adapter.market_at(early).marks["BTC"] == adapter.market_at(early).marks["BTC"]
+    assert adapter.market_at(late).marks["BTC"] > adapter.market_at(early).marks["BTC"]
