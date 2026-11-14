@@ -135,23 +135,71 @@ def cmd_start(args: argparse.Namespace) -> int:
         raise
     stop_event = __import__("threading").Event()
     try:
-        from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
-
-        app = PaperOwnerApplication(
-            ledgers=ledgers,
-            state_dir=state_dir,
-            lock_identity=args.lock_identity,
-            code_hash=code_hash,
-            config_hash=config_hash,
-            supervisor=supervisor,
-            config=OwnerApplicationConfig(
-                scenario=args.scenario,
-                interval_seconds=args.interval_seconds,
-                accelerated_clock=args.accelerated_clock,
-                max_rss_mb=args.max_rss_mb,
-            ),
-            stop_requested=stop_event,
+        from advisorai.session.application import OwnerApplicationConfig
+        from advisorai.session.testnet_launch import (
+            SandboxLaunchRequest,
+            build_testnet_owner_application,
+            read_testnet_baseline,
         )
+
+        owner_config = OwnerApplicationConfig(
+            scenario=args.scenario,
+            interval_seconds=args.interval_seconds,
+            accelerated_clock=args.accelerated_clock,
+            max_rss_mb=args.max_rss_mb,
+            max_runtime_seconds=getattr(args, "max_runtime_seconds", None),
+        )
+        venue_profile = getattr(args, "venue_profile", "local-simulator") or "local-simulator"
+        if venue_profile == "local-simulator":
+            from advisorai.session.application import PaperOwnerApplication
+
+            app = PaperOwnerApplication(
+                ledgers=ledgers,
+                state_dir=state_dir,
+                lock_identity=args.lock_identity,
+                code_hash=code_hash,
+                config_hash=config_hash,
+                supervisor=supervisor,
+                config=owner_config,
+                stop_requested=stop_event,
+                venue_profile="local-simulator",
+            )
+        else:
+            from advisorai.config import CredentialResolver
+
+            secrets_path = Path(
+                getattr(args, "secrets", None)
+                or os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")
+            )
+            resolver = CredentialResolver.from_env_file(secrets_path)
+            default_instrument = (
+                "BTCUSDT" if venue_profile == "binance_spot_testnet" else "BTC-USD"
+            )
+            default_quote = "USDT" if venue_profile == "binance_spot_testnet" else "USD"
+            launch = SandboxLaunchRequest(
+                provider=venue_profile,
+                provider_instrument_id=getattr(args, "venue_instrument", None)
+                or default_instrument,
+                quote_currency=getattr(args, "venue_quote", None) or default_quote,
+                max_submissions=getattr(args, "max_submissions", None),
+            )
+            _transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
+            print(
+                f"testnet_baseline cash={baseline.cash} "
+                f"as_of={baseline.as_of.isoformat()}",
+                flush=True,
+            )
+            app = build_testnet_owner_application(
+                ledgers=ledgers,
+                state_dir=state_dir,
+                lock_identity=args.lock_identity,
+                code_hash=code_hash,
+                config_hash=config_hash,
+                config=owner_config,
+                resolver=resolver,
+                launch=launch,
+                baseline=baseline,
+            )
     except BaseException:
         supervisor._release_lock()
         raise
@@ -350,6 +398,15 @@ def main(argv: list[str] | None = None) -> int:
         default="quiet",
         help="local paper data profile; qualification uses deterministic evidence and fills",
     )
+    p_start.add_argument(
+        "--venue-profile",
+        choices=("local-simulator", "binance_spot_testnet", "coinbase_exchange_sandbox"),
+        default="local-simulator",
+        help="paper venue: local simulator (default) or reviewed sandbox testnet profile",
+    )
+    p_start.add_argument("--venue-instrument", default=None)
+    p_start.add_argument("--venue-quote", default=None)
+    p_start.add_argument("--secrets", default=None)
     p_start.add_argument("--interval-seconds", type=float, default=3600.0)
     p_start.add_argument(
         "--accelerated-clock",
@@ -357,6 +414,18 @@ def main(argv: list[str] | None = None) -> int:
         help="advance local paper cutoffs by one hour each cycle for integration qualification",
     )
     p_start.add_argument("--max-rss-mb", type=int, default=2048)
+    p_start.add_argument(
+        "--max-runtime-seconds",
+        type=float,
+        default=None,
+        help="enforced wall-clock deadline for the owner session; stops clean when reached",
+    )
+    p_start.add_argument(
+        "--max-submissions",
+        type=int,
+        default=None,
+        help="cap on venue order submissions through testnet profiles; refuses beyond the cap",
+    )
     p_start.set_defaults(func=cmd_start)
     p_stop = sub.add_parser("stop", help="request a graceful stop of the active owner process")
     p_stop.add_argument("--outcome", default="clean", choices=["clean", "emergency", "unclean"])

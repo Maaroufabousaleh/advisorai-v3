@@ -53,6 +53,7 @@ class ProviderProfileRequest:
     provider: str
     provider_instrument_id: str
     quote_currency: str
+    max_submissions: int | None = None
 
     def __post_init__(self) -> None:
         provider = self.provider.strip().lower()
@@ -60,6 +61,8 @@ class ProviderProfileRequest:
         quote_currency = self.quote_currency.strip().upper()
         if not provider or not provider_instrument_id or not quote_currency:
             raise ValueError("provider profile needs provider, instrument, and quote identities")
+        if self.max_submissions is not None and self.max_submissions < 0:
+            raise ValueError("provider submission cap cannot be negative")
         object.__setattr__(self, "provider", provider)
         object.__setattr__(self, "provider_instrument_id", provider_instrument_id)
         object.__setattr__(self, "quote_currency", quote_currency)
@@ -217,6 +220,7 @@ def _compose(
         venue=request.provider,
         environment="paper_testnet",
         transport=transport,
+        max_submissions=request.max_submissions,
     )
     if request.provider == "binance_spot_testnet":
         venue = BinanceSpotTestnetOwnerAdapter(

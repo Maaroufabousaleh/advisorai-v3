@@ -14,6 +14,21 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q tests/session tests/decision
 ADVISORAI_STATE_DIR=var/advisorai uv run python -m advisorai.app start --reason "owner session"
 ```
 
+To use a reviewed sandbox venue instead of the local simulator, pass the
+supervised venue profile with enforced bounds. Owner shell only (reads the
+operator inventory, snapshots the read-only testnet baseline, then starts
+under the same lock). The deadline and submission cap are required for any
+testnet run: the session stops clean at the deadline and the venue boundary
+refuses submissions beyond the cap.
+
+```bash
+ADVISORAI_STATE_DIR=var/advisorai-testnet uv run python -m advisorai.app start \
+  --reason "owner testnet canary" \
+  --venue-profile binance_spot_testnet \
+  --scenario qualification --interval-seconds 10 \
+  --max-runtime-seconds 120 --max-submissions 1
+```
+
 `start` stays in the foreground for the whole owner session. It holds the
 durable single-owner lock while one bounded scheduler runs paper cycles. The
 default `quiet` profile is a local, no-network reference fixture that abstains
