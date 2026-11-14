@@ -113,6 +113,38 @@ def test_baseline_preserves_exact_verified_btc_quantity(monkeypatch) -> None:
     assert baseline.margin_available == Decimal("1000")
     assert expected_key == "crypto:BTCUSDT:binance_spot_testnet:spot"
 
+def test_baseline_verifies_instrument_on_same_transport_before_account_read(
+    monkeypatch,
+) -> None:
+    """P02: verification (exchangeInfo) precedes the account read, same transport."""
+    calls: list = []
+    account = _account()
+    real_builder = build_binance_spot_testnet_transport
+    seen: dict = {}
+
+    def seeded_builder(resolver, **kwargs):
+        transport = real_builder(
+            resolver, requester=_requester(account, calls), **kwargs
+        )
+        seen["transport"] = transport
+        return transport
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    transport, baseline = read_testnet_baseline(
+        resolver=_resolver(), launch=_launch()
+    )
+    assert seen["transport"] is transport
+    assert transport.verified_symbol_ids == ("BTCUSDT",)
+    assert baseline.positions == {"BTC": Decimal("0.010")}
+    kinds = [
+        "exchangeInfo" if "/api/v3/exchangeInfo" in url else "account"
+        for _, url in calls
+        if "/api/v3/exchangeInfo" in url or "/api/v3/account" in url
+    ]
+    assert kinds[:2] == ["exchangeInfo", "account"]
+
 
 def test_zero_submission_session_reaches_ready_and_reconciles_clean(
     tmp_path, monkeypatch, capsys
