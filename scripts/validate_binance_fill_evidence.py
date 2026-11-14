@@ -148,27 +148,49 @@ def validate_run(run_dir: Path) -> ValidationReport:
         f"signed_submission_count={result.get('signed_submission_count')}",
     )
     fill_ingestion = result.get("fill_ingestion")
-    if not isinstance(fill_ingestion, dict):
-        report.add("fill_ingestion_present", False, "missing fill_ingestion block")
-        return report
-    report.add("fill_ingestion_present", True)
-    real_fills = fill_ingestion.get("real_fill_count", 0)
-    oms_fills = fill_ingestion.get("oms_fill_count", 0)
-    report.fill_pass = (
-        fill_ingestion.get("status") != "no_fill_observed"
-        and isinstance(real_fills, int)
-        and real_fills >= 1
-    )
-    report.add(
-        "fill_observed",
-        report.fill_pass,
-        f"status={fill_ingestion.get('status')} real={real_fills} oms={oms_fills}",
-    )
-    report.add(
-        "fill_counts_agree",
-        real_fills == oms_fills,
-        f"real={real_fills} oms={oms_fills}",
-    )
+    ledger_fill_count: int | None = None
+    if isinstance(fill_ingestion, dict):
+        report.add("fill_ingestion_present", True)
+        real_fills = fill_ingestion.get("real_fill_count", 0)
+        oms_fills = fill_ingestion.get("oms_fill_count", 0)
+        report.fill_pass = (
+            fill_ingestion.get("status") != "no_fill_observed"
+            and isinstance(real_fills, int)
+            and real_fills >= 1
+        )
+        report.add(
+            "fill_observed",
+            report.fill_pass,
+            f"source=manifest status={fill_ingestion.get('status')} "
+            f"real={real_fills} oms={oms_fills}",
+        )
+        report.add(
+            "fill_counts_agree",
+            real_fills == oms_fills,
+            f"real={real_fills} oms={oms_fills}",
+        )
+    else:
+        # Runs that raised before writing the full payload (e.g. the
+        # pre-fix fill run) have no ingestion block. Classify from the
+        # ledger instead of misreporting them as cancellation-only.
+        report.add(
+            "fill_ingestion_present",
+            False,
+            "missing fill_ingestion block; classifying from ledger",
+        )
+        with tempfile.TemporaryDirectory(prefix="p03-classify-") as workdir:
+            ledger = _copy_ledger(run_dir, Path(workdir))
+            ledger_fill_count = len(
+                [event for event, _ in _order_events(ledger) if event == "fill_recorded"]
+            )
+        oms_fills = ledger_fill_count
+        real_fills = ledger_fill_count
+        report.fill_pass = ledger_fill_count >= 1
+        report.add(
+            "fill_observed",
+            report.fill_pass,
+            f"source=ledger fill_recorded={ledger_fill_count}",
+        )
     if not report.fill_pass:
         report.add(
             "p03_requires_fill",
@@ -176,7 +198,6 @@ def validate_run(run_dir: Path) -> ValidationReport:
             "cancellation-only pass cannot certify P03",
         )
         return report
-    report.add("p03_requires_fill", True)
 
     with tempfile.TemporaryDirectory(prefix="p03-validate-") as workdir:
         ledger = _copy_ledger(run_dir, Path(workdir))

@@ -215,3 +215,33 @@ def test_validator_reports_cancellation_only_without_certifying(tmp_path) -> Non
     report = validate_run(run_dir)
     assert report.fill_pass is False
     assert report.p03_certified is False
+
+def test_validator_classifies_fill_from_ledger_without_ingestion_block(
+    tmp_path,
+) -> None:
+    """Runs that raised before writing fill_ingestion still classify by ledger.
+
+    Mirrors the pre-fix failed fill run: no ingestion block in the
+    manifest, but a real fill linkage in oms.sqlite. The validator must
+    report a fill pass (not cancellation-only) while refusing to certify
+    because the lifecycle itself did not pass.
+    """
+    run_dir = _fill_run(tmp_path)
+    manifest_path = run_dir / "binance-spot-testnet-paper-lifecycle.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["result"]["status"] = "failed"
+    manifest["result"]["reason"] = "lifecycle_blocked"
+    del manifest["result"]["fill_ingestion"]
+    del manifest["result"]["reconciliation"]
+    del manifest["result"]["restart_recovery"]
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    observed = next(
+        check for check in report.checks if check.name == "fill_observed"
+    )
+    assert observed.passed is True
+    assert "source=ledger" in observed.detail
