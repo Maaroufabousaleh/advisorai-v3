@@ -32,7 +32,7 @@ from advisorai.models.forecasting import (  # noqa: E402
 from advisorai.research import ResearchRegistry  # noqa: E402
 from advisorai.research.shadow import run_shadow  # noqa: E402
 
-MODELS = {"linear": LinearForecaster, "naive": NaiveForecaster}
+MODELS = {"linear": LinearForecaster, "naive": NaiveForecaster, "lightgbm": None}
 
 
 def _git_head(root: Path) -> str:
@@ -51,6 +51,22 @@ def _environment_hash(command: str) -> str:
         "command": command,
     }
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def _build_model(args, snapshot_root: Path):
+    """Return (model, identity, factory); LightGBM builds per exposure."""
+    if args.model in ("linear", "naive"):
+        return MODELS[args.model](), None, None
+    if args.model != "lightgbm":
+        raise ValueError(f"unknown shadow model {args.model}")
+
+    def factory(symbol, bars):
+        from advisorai.research.lightgbm_runner import build_lightgbm_adapter
+
+        closes = tuple(bar["adj_close"] for bar in bars)
+        return build_lightgbm_adapter(closes)
+
+    return None, None, factory
 
 
 def main() -> int:
@@ -88,11 +104,14 @@ def main() -> int:
     policy = (
         AbstentionPolicy(max_scale=Decimal("0"), min_history=10**9) if args.force_abstain else None
     )
+    model, model_identity, factory = _build_model(args, snapshot_root)
     report = run_shadow(
         registry=registry,
         snapshot_root=snapshot_root,
         symbols=tuple(args.symbols),
-        model=MODELS[args.model](),
+        model=model,
+        model_identity=model_identity,
+        model_factory=factory,
         environment_hash=_environment_hash("scripts/run_research_shadow.py"),
         abstention_policy=policy,
         require_checkpoint=args.require_checkpoint,
