@@ -148,6 +148,8 @@ unmasks a second latent fault (outcome quality requires per-cycle HTTP
 samples the fixture path never makes). Both must be fixed together before
 the canary can exercise the decision path; see the P02 tracker line.
 The launcher verifies the instrument and quote on the same transport before
+hydrating the funded baseline, and fails closed on any out-of-profile
+balance. Never start the loop without both bounds.
 
 ## Fill-evidence validation (P03 prep)
 
