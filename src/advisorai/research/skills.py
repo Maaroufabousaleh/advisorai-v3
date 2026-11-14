@@ -69,7 +69,7 @@ SKILL_SPECS: tuple[SkillSpec, ...] = (
     SkillSpec(
         name="multi_asset_data_and_features",
         when_to_call="building PIT features for any asset class",
-        inputs=("symbol", "bars_path", "feature_spec"),
+        inputs=("symbol", "snapshot_root", "bars_path", "feature_spec"),
         outputs=("pit_ok", "feature_hash", "calendar_notes"),
         test_reference="tests/research/test_skills.py::test_data_skill_rejects_future_inputs",
         role=ResearchRole.FACTOR_MINER,
@@ -101,6 +101,26 @@ SKILL_SPECS: tuple[SkillSpec, ...] = (
 )
 
 SKILL_NAMES = tuple(spec.name for spec in SKILL_SPECS)
+
+
+def _snapshot_scoped_bars_path(payload: dict[str, Any]) -> Path:
+    """Resolve the skill's bars file strictly inside its declared snapshot root.
+
+    The payload must name a ``snapshot_root`` directory plus a relative
+    ``bars_path`` inside it. Absolute paths, parent traversal, and any
+    resolved path escaping the root are rejected before any read.
+    """
+
+    root = Path(str(payload["snapshot_root"])).resolve()
+    candidate = Path(str(payload["bars_path"]))
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError("data skill: bars_path must be relative without parent traversal")
+    resolved = (root / candidate).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("data skill: bars_path escapes its snapshot root") from exc
+    return resolved
 
 
 def skill_spec(name: str) -> SkillSpec:
@@ -232,7 +252,7 @@ class SkillRunner:
     def _data_features(self, payload: dict[str, Any]) -> dict[str, Any]:
         import hashlib
 
-        bars_path = Path(str(payload["bars_path"]))
+        bars_path = _snapshot_scoped_bars_path(payload)
         rows = json.loads(bars_path.read_text())
         symbol = str(payload["symbol"])
         if symbol not in rows:
