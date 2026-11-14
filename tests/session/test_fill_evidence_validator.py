@@ -16,7 +16,7 @@ from uuid import uuid4
 
 sys.path.insert(0, "scripts")
 
-from validate_binance_fill_evidence import validate_run
+from validate_binance_fill_evidence import main, validate_run
 
 from advisorai.contracts import ExecutionPlan, Fill, InstrumentIdentity, Order, OrderState
 from advisorai.execution import (
@@ -245,3 +245,37 @@ def test_validator_classifies_fill_from_ledger_without_ingestion_block(
     )
     assert observed.passed is True
     assert "source=ledger" in observed.detail
+
+
+def test_cli_exit_codes_distinguish_input_fill_and_failure(tmp_path, capsys) -> None:
+    """CLI: 2 on missing evidence dir, 3 on cancel-only, 0 on fill pass."""
+    assert main(["--evidence-dir", str(tmp_path / "absent")]) == 2
+
+    cancel_dir = tmp_path / "synthetic-cancel-run"
+    ledgers = SqliteLedgers(cancel_dir / "oms.sqlite")
+    _write_run(
+        cancel_dir,
+        ledgers=ledgers,
+        fill_ingestion={"status": "no_fill_observed", "real_fill_count": 0, "oms_fill_count": 0},
+        terminal_state="reconciled",
+        reconciled=True,
+        restart={
+            "status": "passed",
+            "hydrated_terminal_state": "reconciled",
+            "venue_query_succeeded": True,
+            "signed_submissions_after_restart": 0,
+            "duplicate_submission": False,
+        },
+        sequence=[
+            "order_created",
+            "order_risk_approved",
+            "order_routed",
+            "order_acknowledged",
+            "order_cancel_pending",
+            "order_cancelled",
+            "order_reconciled",
+            "reconciliation_recorded",
+        ],
+    )
+    assert main(["--evidence-dir", str(cancel_dir)]) == 3
+    assert main(["--evidence-dir", str(_fill_run(tmp_path))]) == 0
