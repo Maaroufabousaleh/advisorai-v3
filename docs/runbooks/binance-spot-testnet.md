@@ -141,9 +141,13 @@ reconciliation, and lease release with zero venue writes. Expect
 `stop_reason=runtime_deadline_reached` followed by `outcome=clean`,
 `reconciliation=reconciled`, and `leases_released=True`. Record the actual
 submission count from the run output; zero is valid for the first canary.
+Known limit at `b231632`: the quiet canary proves session mechanics only.
+Cycles go FAILED before learning because the testnet reference decision
+factory builds artifacts with short non-digest hashes, and fixing it alone
+unmasks a second latent fault (outcome quality requires per-cycle HTTP
+samples the fixture path never makes). Both must be fixed together before
+the canary can exercise the decision path; see the P02 tracker line.
 The launcher verifies the instrument and quote on the same transport before
-hydrating the funded baseline, and fails closed on any out-of-profile
-balance. Never start the loop without both bounds.
 
 ## Fill-evidence validation (P03 prep)
 
