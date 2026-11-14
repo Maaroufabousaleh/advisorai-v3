@@ -427,22 +427,26 @@ def run_exposure(
     exposure_factor_id = uuid.uuid5(
         uuid.NAMESPACE_URL, f"research-replay:{factor_hash}:{exposure.symbol}"
     )
-    stored_factor = registry.store(
-        research_cards.CandidateFactorArtifact(
-            artifact_id=exposure_factor_id,
-            dsl_ast_hash=factor_hash,
-            dsl_source=momentum_dsl_source(),
-            lineage=(
-                "sourced:crossref:10.1016/j.jfineco.2011.11.003",
-                f"factor-family:{factor_id}",
+    stored_factor = registry.get(exposure_factor_id)
+    if stored_factor is None:
+        stored_factor = registry.store(
+            research_cards.CandidateFactorArtifact(
+                artifact_id=exposure_factor_id,
+                dsl_ast_hash=factor_hash,
+                dsl_source=momentum_dsl_source(),
+                lineage=(
+                    "sourced:crossref:10.1016/j.jfineco.2011.11.003",
+                    f"factor-family:{factor_id}",
+                ),
+                feature_versions=("adj_close-vendor-adjusted-v1",),
+                lookbacks=(FORMATION_BARS,),
+                universe=exposure.symbol,
+                hypothesis_card_id=hypothesis_id,
             ),
-            feature_versions=("adj_close-vendor-adjusted-v1",),
-            lookbacks=(FORMATION_BARS,),
-            universe=exposure.symbol,
-            hypothesis_card_id=hypothesis_id,
-        ),
-        record_type="factor",
-    )
+            record_type="factor",
+        )
+    elif not isinstance(stored_factor, research_cards.CandidateFactorArtifact):
+        raise ValueError(f"factor identity {exposure_factor_id} holds a non-factor record")
     experiment = research_cards.ExperimentArtifact(
         candidate_id=stored_factor.artifact_id,
         code_hash=code_hash,
