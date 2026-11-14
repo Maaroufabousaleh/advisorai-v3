@@ -126,3 +126,14 @@ def test_validator_rejects_unclean_stop(tmp_path, monkeypatch, capsys) -> None:
     names = [check.name for check in report.failed]
     assert "outcome_clean" in names
     assert "no_unfinished_work" in names
+
+
+def test_validator_rejects_missing_ledger_and_run_log(tmp_path) -> None:
+    """Validator inputs fail closed: no ledger or log, no certification."""
+    empty_dir = tmp_path / "empty-state"
+    empty_dir.mkdir()
+    report = validate_canary(
+        state_dir=empty_dir, run_log=tmp_path / "absent.log"
+    )
+    assert report.p02_certified is False
+    assert report.failed[0].name == "ledger_present"
