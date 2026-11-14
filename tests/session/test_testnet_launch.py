@@ -273,3 +273,41 @@ def test_testnet_fixture_marks_are_deterministic_and_timezone_safe() -> None:
     late = adapter.snapshot_at(dt(2026, 1, 2, 15, 0, 0, tzinfo=UTC))
     assert adapter.market_at(early).marks["BTC"] == adapter.market_at(early).marks["BTC"]
     assert adapter.market_at(late).marks["BTC"] > adapter.market_at(early).marks["BTC"]
+
+
+def test_observation_from_testnet_bar_pins_pit_and_hash() -> None:
+    """P05 prep: PIT helper refuses naive times, hashes content deterministically."""
+    from datetime import datetime as dt
+    from datetime import timezone
+
+    from advisorai.session.testnet_launch import observation_from_testnet_bar
+
+    with pytest.raises(ValueError, match="must include a timezone"):
+        observation_from_testnet_bar(
+            provider="binance_spot_testnet",
+            series_id="BTCUSDT-1h",
+            period_start=dt(2026, 1, 2, 12, 0, 0),
+            value="50000.00",
+            retrieved_at=dt(2026, 1, 2, 13, 0, 0, tzinfo=UTC),
+        )
+
+    plus5 = timezone(timedelta(hours=5))
+    first = observation_from_testnet_bar(
+        provider="binance_spot_testnet",
+        series_id="BTCUSDT-1h",
+        period_start=dt(2026, 1, 2, 12, 0, 0, tzinfo=plus5),
+        value="50000.00",
+        retrieved_at=dt(2026, 1, 2, 13, 0, 0, tzinfo=UTC),
+    )
+    second = observation_from_testnet_bar(
+        provider="binance_spot_testnet",
+        series_id="BTCUSDT-1h",
+        period_start=dt(2026, 1, 2, 7, 0, 0, tzinfo=UTC),
+        value="50000.00",
+        retrieved_at=dt(2026, 1, 2, 13, 0, 0, tzinfo=UTC),
+    )
+    assert first.event_time == second.event_time
+    assert first.event_time.utcoffset() == timedelta(0)
+    assert first.first_available_at <= first.ingested_at
+    assert first.raw_artifact_hash == second.raw_artifact_hash
+    assert len(first.raw_artifact_hash) == 64
