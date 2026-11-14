@@ -165,6 +165,7 @@ def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
         (200, json.dumps(_account()).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000005000}).encode(), ()),
     ]
     transport, calls = _transport(responses)
     transport.server_time()
@@ -177,9 +178,10 @@ def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
     snapshot = transport.fetch_account_snapshot()
     assert snapshot.cash == Decimal("1000")
     assert snapshot.positions == {"crypto:BTCUSDT:binance_spot_testnet:spot": Decimal("0.010")}
-    assert len(calls) == 5
+    assert len(calls) == 6
     assert "X-MBX-APIKEY" not in calls[0][2]
     assert all("X-MBX-APIKEY" in calls[index][2] for index in (2, 3, 4))
+    assert "X-MBX-APIKEY" not in calls[5][2]
 
 
 def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
@@ -188,6 +190,7 @@ def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
     responses = [
         (200, json.dumps({"serverTime": 1700000000000}).encode(), ()),
         (200, json.dumps(account).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000005000}).encode(), ()),
     ]
     transport, _calls = _transport(responses)
     transport.server_time()

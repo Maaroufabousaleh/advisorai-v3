@@ -191,6 +191,7 @@ def test_coinbase_read_schema_maps_accounts_to_balances_positions_and_snapshot()
         (200, json.dumps(_accounts()).encode(), ()),
         (200, json.dumps(_accounts()).encode(), ()),
         (200, json.dumps(_accounts()).encode(), ()),
+        (200, json.dumps({"iso": "2026-08-09T18:01:00Z", "epoch": 1786298460}).encode(), ()),
     ]
     transport, calls = _transport(responses)
     server = transport.server_time()
@@ -203,9 +204,9 @@ def test_coinbase_read_schema_maps_accounts_to_balances_positions_and_snapshot()
     snapshot = transport.fetch_account_snapshot()
     assert snapshot.cash == Decimal("1000")
     assert snapshot.positions == {}
-    assert len(calls) == 6
-    assert all("CB-ACCESS-KEY" not in calls[index][2] for index in (0, 1))
-    assert all("CB-ACCESS-KEY" in calls[index][2] for index in (2, 3, 4))
+    assert len(calls) == 7
+    assert all("CB-ACCESS-KEY" not in calls[index][2] for index in (0, 1, 6))
+    assert all("CB-ACCESS-KEY" in calls[index][2] for index in (2, 3, 4, 5))
 
 
 def test_coinbase_fills_use_product_filter_and_signature_path_excludes_query():

@@ -447,12 +447,16 @@ class CoinbaseExchangeSandboxTransport(NativeTransport):
                     f"Coinbase account contains non-zero unmapped asset {currency}"
                 )
             positions[self.canonical_instrument_id(product.product_id)] = quantity
+        # Same staleness contract as the Binance adapter: the accounts read
+        # carries no timestamp, so take a fresh server time at read time with
+        # a monotonic guard against clock steps backwards.
+        prior = self._last_server_time
+        server = self.server_time()
         as_of = self._last_server_time
-        if as_of is None:
-            server = self.server_time()
-            as_of = self._last_server_time
-            assert as_of is not None
-            del server
+        assert as_of is not None
+        del server
+        if prior is not None and as_of < prior:
+            as_of = prior
         return VenueAccountSnapshot(
             as_of=as_of,
             cash=cash,
