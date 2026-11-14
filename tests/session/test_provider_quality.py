@@ -112,7 +112,7 @@ def test_provider_quality_uses_http_attempt_latency_failures_and_current_snapsho
     assert next_measured.measurement_hash != measured.measurement_hash
 
 
-def test_provider_quality_requires_samples_and_rejects_snapshot_cutoff_mismatch():
+def test_provider_quality_reports_no_traffic_explicitly_and_rejects_cutoff_mismatch():
     client = SafeHttpClient(
         HttpClientConfig(allowed_hosts=("sandbox.example.test",)),
         base_url="https://sandbox.example.test",
@@ -128,8 +128,16 @@ def test_provider_quality_requires_samples_and_rejects_snapshot_cutoff_mismatch(
         "market": RiskMarketState(marks={"BTC": Decimal("50000")}),
         "fills": (),
     }
-    with pytest.raises(ValueError, match="requires current measured request samples"):
-        provider(**context)
+    quality = provider(**context)
+    assert quality.source == "provider-no-requests/coinbase_exchange_sandbox/v1"
+    assert quality.sample_count is None
+    assert quality.failed_count is None
+    assert quality.measurement_hash is None
+    assert quality.latency_ms == 0
+    assert quality.failure_rate == Decimal("0")
+    assert quality.snapshot_id == snapshot.artifact_id
+    assert quality.as_of == cutoff
+    assert provider(**context) == quality
     with pytest.raises(ValueError, match="differs from the outcome cutoff"):
         provider(**{**context, "as_of": datetime(2026, 11, 12, 17, tzinfo=UTC)})
 
@@ -234,4 +242,68 @@ def test_measured_provider_quality_flows_into_durable_outcome(tmp_path):
     assert restored_outcome["quality_sample_count"] == 1
     assert restored_outcome["quality_failed_count"] == 0
     assert restored_outcome["quality_measurement_hash"] == outcome.quality_measurement_hash
-    assert restarted.record_outcome(outcome).scorecard_id == first.record_outcome(outcome).scorecard_id
+    assert (
+        restarted.record_outcome(outcome).scorecard_id == first.record_outcome(outcome).scorecard_id
+    )
+
+
+def test_no_traffic_quality_flows_into_durable_outcome(tmp_path):
+    client = SafeHttpClient(
+        HttpClientConfig(allowed_hosts=("sandbox.example.test",), max_retries=0),
+        base_url="https://sandbox.example.test",
+        requester=lambda *_args: (200, b"{}", ()),
+    )
+    quality_provider = ProviderOutcomeQualityProvider("coinbase_exchange_sandbox", client)
+    cutoff = datetime(2026, 11, 12, 16, tzinfo=UTC)
+    snapshot = Snapshot(
+        as_of=cutoff, purpose="provider-quality-no-traffic", data_quality_state="gold"
+    )
+    decision = PaperDecisionRecord(
+        mission_id=uuid4(),
+        snapshot_id=snapshot.artifact_id,
+        subject="provider-quality-no-traffic",
+        subject_version="provider-quality-v1",
+        asset="BTC",
+        horizon="1h",
+        cutoff=cutoff - timedelta(hours=1),
+        horizon_end=cutoff,
+    )
+    adapter = QuoteAwarePaperOutcomeAdapter(
+        quote_currency="USD",
+        fx_rate_provider=lambda current: QuoteToUsdRate(
+            quote_currency="USD",
+            usd_per_quote=Decimal("1"),
+            as_of=current.as_of,
+            snapshot_id=current.artifact_id,
+            evidence_id=uuid4(),
+            source="currency-identity/USD",
+        ),
+        quality_provider=quality_provider,
+    )
+    outcome = adapter.build_outcome(
+        decision=decision,
+        as_of=cutoff,
+        snapshot=snapshot,
+        market=RiskMarketState(marks={"BTC": Decimal("50000")}),
+        fills=(),
+        orders={},
+        initial_marks={},
+    )
+    assert outcome.quality_sample_count is None
+    assert outcome.quality_failed_count is None
+    assert outcome.quality_measurement_hash is None
+    assert outcome.quality_source == "provider-no-requests/coinbase_exchange_sandbox/v1"
+    assert outcome.failure_rate == Decimal("0")
+    assert outcome.latency_ms == 0
+    ledgers = SqliteLedgers(tmp_path / "provider-no-traffic.sqlite3")
+    loop = PaperLearningLoop(ledgers)
+    loop.record_decision(decision)
+    loop.record_outcome(outcome)
+    restored = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MODEL)
+        if event.event_type == "paper_scorecard_recorded"
+    )
+    restored_outcome = restored.payload["outcome"]
+    assert restored_outcome["quality_sample_count"] is None
+    assert restored_outcome["quality_measurement_hash"] is None

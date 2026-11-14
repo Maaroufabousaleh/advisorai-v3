@@ -409,3 +409,36 @@ def test_fixture_council_roles_emit_deterministic_labelled_evidence() -> None:
         "testnet-fixture-c",
         "testnet-fixture-d",
     }
+
+
+def test_reference_factory_maps_scenario_to_stance() -> None:
+    """Factory: qualification proposes LONG, quiet proposes FLAT on pass."""
+    from uuid import uuid4
+
+    from advisorai.contracts import Snapshot
+    from advisorai.decision import DecisionModelInput, DecisionStance
+    from advisorai.session.testnet_launch import _reference_factory
+
+    snapshot = Snapshot(as_of=datetime(2026, 1, 2, tzinfo=UTC), purpose="stance-fixture")
+    request = DecisionModelInput(
+        mission_id=uuid4(),
+        snapshot_id=snapshot.artifact_id,
+        evidence_ids=(uuid4(),),
+        consensus="fixture",
+        gate_passed=True,
+    )
+    long_adapter = _reference_factory("qualification")(snapshot)
+    assert long_adapter.artifact.adapter_name == "owner-testnet-reference-v1"
+    assert long_adapter.artifact.snapshot_id == snapshot.artifact_id
+    assert len(long_adapter.artifact.code_hash) == 64
+    assert len(long_adapter.artifact.config_hash) == 64
+    assert (
+        long_adapter.propose(request, now=datetime(2026, 1, 2, tzinfo=UTC)).stance
+        is DecisionStance.LONG
+    )
+
+    quiet_adapter = _reference_factory("quiet")(snapshot)
+    assert (
+        quiet_adapter.propose(request, now=datetime(2026, 1, 2, tzinfo=UTC)).stance
+        is DecisionStance.FLAT
+    )
