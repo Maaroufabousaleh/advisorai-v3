@@ -237,3 +237,25 @@ def test_testnet_fixture_verification_fails_closed(tmp_path) -> None:
     assert adapter.verify_gap_coverage(ledgers, gap, short) is False
     foreign = resolution.model_copy(update={"source": "binance_spot_public_market_data"})
     assert adapter.verify_gap_coverage(ledgers, gap, foreign) is False
+
+
+def test_launcher_rejects_out_of_bounds_before_any_venue_touch(capsys) -> None:
+    """P02: invalid bounds exit 2 before credentials, baseline, or network."""
+    import sys
+
+    sys.path.insert(0, "scripts")
+    from launch_testnet_paper import main
+
+    for argv in (
+        ["--max-runtime-seconds", "0"],
+        ["--max-runtime-seconds", "86401"],
+        ["--max-submissions", "-1"],
+        ["--max-submissions", "101"],
+        ["--instrument", "ETHUSDT"],
+        ["--quote", "USDC"],
+    ):
+        with pytest.raises(SystemExit) as exc:
+            main(argv)
+        assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert "testnet_baseline" not in captured.out
