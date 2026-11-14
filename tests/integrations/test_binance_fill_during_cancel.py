@@ -21,13 +21,22 @@ from __future__ import annotations
 
 import inspect
 import json
+import urllib.error
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
-from advisorai.contracts import Fill, InstrumentIdentity
-from advisorai.execution import AccountLedger, AccountState, ReconciliationService
+import pytest
+
+from advisorai.contracts import Fill, InstrumentIdentity, Order, OrderState
+from advisorai.execution import (
+    AccountLedger,
+    AccountState,
+    OrderManager,
+    OrderStateError,
+    ReconciliationService,
+)
 from advisorai.execution.reconciliation import VenueAccountSnapshot
 from advisorai.ledger import SqliteLedgers
 from tests.integrations.test_binance_spot import _account, _symbols, _transport
@@ -171,6 +180,7 @@ def test_full_reconciliation_is_clean_after_fill_during_cancel(tmp_path) -> None
         venue_snapshot=venue_view,
     )
     assert result.reconciled, result.discrepancies
+
 
 def _post_fill_account(*, usdt_free: str, btc_total: str):
     """Independent venue ledger view after the supervised fill settled."""
@@ -327,6 +337,7 @@ def test_fill_during_cancel_reproduces_both_discrepancies_then_reconciles_exactl
     assert result.reconciled, result.discrepancies
     assert result.discrepancies == ()
 
+
 def test_stale_venue_balances_block_on_values_not_on_timestamp(tmp_path) -> None:
     """A fresh completion stamp must not launder stale balance data.
 
@@ -413,7 +424,9 @@ def test_spot_free_balance_semantics_are_pinned_to_spot_profiles() -> None:
     """
     from advisorai.integrations import binance_spot, coinbase_exchange
 
-    binance_source = inspect.getsource(binance_spot.BinanceSpotTestnetTransport.fetch_account_snapshot)
+    binance_source = inspect.getsource(
+        binance_spot.BinanceSpotTestnetTransport.fetch_account_snapshot
+    )
     assert 'quote_record.get("free"' in binance_source
     coinbase_source = inspect.getsource(
         coinbase_exchange.CoinbaseExchangeSandboxTransport.fetch_account_snapshot
@@ -432,3 +445,82 @@ def test_spot_free_balance_semantics_are_pinned_to_spot_profiles() -> None:
     # a no-op there: the simulator never opts in.
     simulator_source = Path("src/advisorai/session/application.py").read_text()
     assert "margin_available" not in simulator_source
+
+
+def test_lost_binance_ack_resolves_by_query_without_resubmission(tmp_path) -> None:
+    """Ambiguous submit on the real adapter resolves by query, never retry.
+
+    A signed POST whose response is lost raises through the transport while
+    the order may have reached the venue. OMS must leave the order ROUTED,
+    refuse a blind retry, then settle via ``query_order`` on reconnect —
+    exactly one POST is ever sent.
+    """
+    from advisorai.execution.native import NativeVenueAdapter
+    from advisorai.integrations import VenueTransportError
+
+    local_key = "ambiguous-fixture-1"
+    ack = {
+        "symbol": "BTCUSDT",
+        "orderId": 4242,
+        "clientOrderId": local_key,
+        "status": "NEW",
+    }
+    responses = [
+        # verify_symbol_mappings takes symbols directly; first HTTP call is the POST.
+        urllib.error.URLError("fixture: response lost after venue received POST"),
+        (200, json.dumps(ack).encode(), ()),
+    ]
+
+    def _raising_requester(method, url, headers, body, timeout):
+        item = responses.pop(0)
+        calls.append((method, url, dict(headers), body))
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    transport, calls = _transport([])
+    transport.client._requester = _raising_requester  # fixture: fail the POST once
+    transport.verify_symbol_mappings(_symbols())
+
+    ledgers = SqliteLedgers(tmp_path / "ambiguous.sqlite3")
+    native = NativeVenueAdapter(
+        venue="binance_spot_testnet",
+        environment="paper_testnet",
+        transport=transport,
+        strict_venue=True,
+    )
+    oms = OrderManager(ledgers, native)
+    order = Order(
+        parent_intent_id=uuid4(),
+        execution_plan_id=uuid4(),
+        instrument=InstrumentIdentity(
+            canonical_id="crypto:BTCUSDT:binance_spot_testnet:spot",
+            asset_class="crypto",
+            venue="binance_spot_testnet",
+            venue_symbol="BTCUSDT",
+        ),
+        side="buy",
+        quantity=Decimal("0.001"),
+        order_type="passive_limit",
+        price=Decimal("10000.00"),
+        time_in_force="GTC",
+        idempotency_key=local_key,
+    )
+    oms.create(order)
+    oms.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    with pytest.raises(VenueTransportError, match="request failed"):
+        oms.route(order.artifact_id)
+
+    # Lost ack: the order stays ROUTED and refuses a blind retry.
+    assert oms.orders[order.artifact_id].state.value == "routed"
+    with pytest.raises(OrderStateError, match="reconciliation before retry"):
+        oms.route(order.artifact_id)
+
+    # Reconnect resolves via the venue query; the POST is never re-sent.
+    resolved = oms.reconcile_routed(order.artifact_id)
+    assert resolved.accepted is True
+    assert resolved.venue_order_id == "4242"
+    assert oms.orders[order.artifact_id].state.value == "acknowledged"
+    posts = [call for call in calls if call[0] == "POST"]
+    assert len(posts) == 1
+    assert "origClientOrderId" in calls[-1][1]
