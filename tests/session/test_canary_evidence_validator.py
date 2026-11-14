@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, "scripts")
 
-from validate_testnet_canary_evidence import validate_canary
+from validate_testnet_canary_evidence import main, validate_canary
 
 from advisorai.config import CredentialResolver
 from advisorai.integrations import BINANCE_SPOT_TESTNET_BASE_URL
@@ -137,3 +137,34 @@ def test_validator_rejects_missing_ledger_and_run_log(tmp_path) -> None:
     )
     assert report.p02_certified is False
     assert report.failed[0].name == "ledger_present"
+
+def test_cli_exit_codes_distinguish_input_and_clean(tmp_path, monkeypatch, capsys) -> None:
+    """CLI: 2 on missing state dir, 0 on clean canary."""
+    assert main(["--state-dir", str(tmp_path / "absent")]) == 2
+
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="cli-clean"
+    )
+    assert main(["--state-dir", str(state_dir), "--run-log", str(run_log)]) == 0
+
+
+def test_cli_returns_1_on_unclean_stop(tmp_path, monkeypatch, capsys) -> None:
+    """CLI: 1 when the canary stopped unclean."""
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="cli-dirty"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        payload["end"]["outcome"] = "unclean"
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    assert main(["--state-dir", str(state_dir), "--run-log", str(run_log)]) == 1
