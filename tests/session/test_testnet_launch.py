@@ -331,3 +331,49 @@ def test_snapshot_bound_fx_labels_peg_and_refuses_other_quotes() -> None:
 
     with pytest.raises(ValueError, match="no FX provider"):
         _snapshot_bound_fx("EUR")(snapshot)
+
+
+def test_launch_request_validation_normalizes_and_refuses() -> None:
+    """P02: request validation normalizes case/space, refuses bad profiles."""
+    from advisorai.session.testnet_launch import (
+        SandboxLaunchRequest,
+        _validate_request,
+    )
+
+    normalized = _validate_request(
+        SandboxLaunchRequest(
+            provider="  BINANCE_SPOT_TESTNET ",
+            provider_instrument_id="btcusdt",
+            quote_currency=" usdt ",
+            max_submissions=0,
+        )
+    )
+    assert normalized.provider == "binance_spot_testnet"
+    assert normalized.provider_instrument_id == "BTCUSDT"
+    assert normalized.quote_currency == "USDT"
+
+    bad = [
+        ("unknown venue", {"provider": "kraken_demo"}),
+        ("wrong instrument", {"provider_instrument_id": "ETHUSDT"}),
+        ("wrong binance quote", {"quote_currency": "USD"}),
+        ("negative cap", {"max_submissions": -1}),
+        ("non-positive mark", {"initial_mark": Decimal("0")}),
+    ]
+    for _label, overrides in bad:
+        kwargs = {
+            "provider": "binance_spot_testnet",
+            "provider_instrument_id": "BTCUSDT",
+            "quote_currency": "USDT",
+        }
+        kwargs.update(overrides)
+        with pytest.raises(ValueError):
+            _validate_request(SandboxLaunchRequest(**kwargs))
+
+    with pytest.raises(ValueError, match="USD quote"):
+        _validate_request(
+            SandboxLaunchRequest(
+                provider="coinbase_exchange_sandbox",
+                provider_instrument_id="BTC-USD",
+                quote_currency="USDT",
+            )
+        )
