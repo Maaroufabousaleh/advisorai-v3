@@ -311,3 +311,23 @@ def test_observation_from_testnet_bar_pins_pit_and_hash() -> None:
     assert first.first_available_at <= first.ingested_at
     assert first.raw_artifact_hash == second.raw_artifact_hash
     assert len(first.raw_artifact_hash) == 64
+
+
+def test_snapshot_bound_fx_labels_peg_and_refuses_other_quotes() -> None:
+    """FX: USD identity, labelled USDT 1.0 peg, anything else refused."""
+    from advisorai.contracts import Snapshot
+    from advisorai.session.testnet_launch import _snapshot_bound_fx
+
+    snapshot = Snapshot(as_of=datetime(2026, 1, 2, tzinfo=UTC), purpose="fx-fixture")
+
+    usd = _snapshot_bound_fx("USD")(snapshot)
+    assert usd.usd_per_quote == Decimal("1")
+    assert usd.source == "currency-identity/USD"
+    assert usd.snapshot_id == snapshot.artifact_id
+
+    peg = _snapshot_bound_fx("USDT")(snapshot)
+    assert peg.usd_per_quote == Decimal("1")
+    assert peg.source == "testnet-fixture/USDT-peg-1.0"
+
+    with pytest.raises(ValueError, match="no FX provider"):
+        _snapshot_bound_fx("EUR")(snapshot)
