@@ -152,7 +152,12 @@ def test_data_skill_rejects_future_inputs(tmp_path):
     )
     result = runner.run_skill(
         "multi_asset_data_and_features",
-        {"symbol": "SPY", "bars_path": str(bars_path), "feature_spec": "adj_close"},
+        {
+            "symbol": "SPY",
+            "snapshot_root": str(tmp_path),
+            "bars_path": "bars.json",
+            "feature_spec": "adj_close",
+        },
     )
     # The job records interruption; a passing skill returns pit_ok instead.
     assert result.output.get("pit_ok") is not True
@@ -168,10 +173,40 @@ def test_data_skill_rejects_future_inputs(tmp_path):
     )
     good = runner.run_skill(
         "multi_asset_data_and_features",
-        {"symbol": "SPY", "bars_path": str(bars_path), "feature_spec": "adj_close"},
+        {
+            "symbol": "SPY",
+            "snapshot_root": str(tmp_path),
+            "bars_path": "bars.json",
+            "feature_spec": "adj_close",
+        },
     )
     assert good.output["pit_ok"] is True
     assert len(good.output["feature_hash"]) == 64
+
+
+def test_data_skill_rejects_unscoped_paths(tmp_path):
+    runner = _runner(tmp_path)
+    root = tmp_path / "snap"
+    root.mkdir()
+    (root / "bars.json").write_text(json.dumps({"SPY": []}))
+    outside = tmp_path / "outside.json"
+    outside.write_text(json.dumps({"SPY": []}))
+    for bad in (
+        {"symbol": "SPY", "bars_path": "bars.json"},
+        {
+            "symbol": "SPY",
+            "snapshot_root": str(root),
+            "bars_path": str(outside),
+        },
+        {
+            "symbol": "SPY",
+            "snapshot_root": str(root),
+            "bars_path": "../outside.json",
+        },
+    ):
+        result = runner.run_skill("multi_asset_data_and_features", bad)
+        assert result.output.get("pit_ok") is not True
+        assert "error" in result.output
 
 
 def _experiment(runner: SkillRunner, net: str, trades: str, drawdown: str) -> str:
