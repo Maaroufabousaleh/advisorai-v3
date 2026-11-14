@@ -20,6 +20,7 @@ from advisorai.research.cards import (
     CandidateFactorArtifact,
     ExperimentArtifact,
     HypothesisCard,
+    ImplementationRecord,
     PaperCard,
     PromotionDecision,
     ValidationReport,
@@ -33,6 +34,7 @@ _RECORD_TYPES = {
     "experiment": ExperimentArtifact,
     "validation": ValidationReport,
     "promotion": PromotionDecision,
+    "implementation": ImplementationRecord,
 }
 
 
