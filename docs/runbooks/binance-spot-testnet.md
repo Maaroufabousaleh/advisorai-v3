@@ -163,6 +163,23 @@ fill pass; exit 3 reports a cancellation-only pass, which can never
 certify P03. Ledger reads go through a temporary copy, so evidence
 directories are never modified.
 
+## Canary-evidence validation (P02 prep)
+
+Validate a stopped bounded-canary state directory offline. The validator
+is read-only, credential-free, and network-free:
+
+```bash
+uv run python scripts/validate_testnet_canary_evidence.py \
+  --state-dir var/advisorai-testnet --run-log canary.log
+```
+
+It checks the testnet session profile, a single clean `session_ended`
+record, reconciled state, zero open orders, released leases, no
+unfinished work, a recorded submission count from durable order events,
+and the run-log markers (`SESSION READY`, deadline stop, clean outcome).
+Exit 0 certifies the canary; any failure names the check. Ledger reads
+go through a temporary copy, so state directories are never modified.
+
 No model, LLM, Hermes task, research agent, browser task, dashboard, or venue
 provider can bypass `RiskKernel` or mutate OMS truth. Transfers, withdrawals,
 and production endpoints are prohibited.
