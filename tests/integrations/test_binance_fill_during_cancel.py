@@ -19,9 +19,11 @@ keep exact-equality checks.
 
 from __future__ import annotations
 
+import inspect
 import json
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 from advisorai.contracts import Fill, InstrumentIdentity
@@ -324,3 +326,105 @@ def test_fill_during_cancel_reproduces_both_discrepancies_then_reconciles_exactl
     )
     assert result.reconciled, result.discrepancies
     assert result.discrepancies == ()
+
+def test_stale_venue_balances_block_on_values_not_on_timestamp(tmp_path) -> None:
+    """A fresh completion stamp must not launder stale balance data.
+
+    The post-fix snapshot timestamp bounds when the read completed, not
+    when the balance data was produced. If the venue serves pre-fill
+    balances under a fresh timestamp, reconciliation must still block —
+    through the exact cash/position/margin value checks, without relying
+    on the staleness timestamp check.
+    """
+    from advisorai.execution import OrderManager
+    from advisorai.execution.native import NativeVenueAdapter
+
+    instrument_id = "crypto:BTCUSDT:binance_spot_testnet:spot"
+    fill_time = datetime(2023, 11, 14, 22, 14, 20, tzinfo=UTC)
+    fresh_completion = datetime(2023, 11, 14, 22, 15, 10, tzinfo=UTC)
+    assert fill_time < fresh_completion
+
+    transport, _calls = _transport([])
+    transport.verify_symbol_mappings(_symbols())
+    ledgers = SqliteLedgers(tmp_path / "stale.sqlite3")
+    native = NativeVenueAdapter(
+        venue="binance_spot_testnet",
+        environment="paper_testnet",
+        transport=transport,
+        strict_venue=True,
+    )
+    orders = OrderManager(ledgers, native)
+    local = AccountState(
+        cash=Decimal("1000"),
+        positions={instrument_id: Decimal("0.010")},
+        marks={instrument_id: Decimal("100.05")},
+        margin_used=Decimal("0"),
+        margin_available=Decimal("1000"),
+        as_of=datetime(2023, 11, 14, 22, 13, 20, tzinfo=UTC),
+    )
+    account_ledger = AccountLedger(ledgers, local)
+    account_ledger.apply_fill(
+        Fill(
+            artifact_id=uuid4(),
+            order_id=uuid4(),
+            venue_fill_id="BTCUSDT:fixture-stale",
+            quantity=Decimal("0.001"),
+            price=Decimal("100.00"),
+            fee=Decimal("0.01"),
+            fee_currency="USDT",
+            occurred_at=fill_time,
+        ),
+        "buy",
+        instrument_id,
+    )
+    # Venue serves the pre-fill balances stamped with a fresh completion
+    # time: the local ledger has moved on but the venue data has not.
+    stale_venue_view = VenueAccountSnapshot(
+        as_of=fresh_completion,
+        cash=Decimal("1000"),
+        positions={instrument_id: Decimal("0.010")},
+        margin_used=Decimal("0"),
+        margin_available=Decimal("1000"),
+        venue_open_order_ids=frozenset(),
+    )
+    result = ReconciliationService(ledgers).run(
+        account=local,
+        orders=orders,
+        account_ledger=account_ledger,
+        venue_snapshot=stale_venue_view,
+    )
+    assert result.reconciled is False
+    categories = [item.split(":")[0] for item in result.discrepancies]
+    assert "venue_account_snapshot_predates_local_state" not in categories
+    assert "venue_cash_mismatch" in categories
+    assert "venue_margin_available_mismatch" in categories
+    assert any(item.startswith("venue_position_mismatch") for item in categories)
+
+
+def test_spot_free_balance_semantics_are_pinned_to_spot_profiles() -> None:
+    """Only spot free-balance seeders may populate margin_available.
+
+    ``apply_fill`` treats a populated ``margin_available`` as a spot
+    free-balance projection (settled in the quote asset). This pins the
+    supported seeders to the two spot sandbox adapters plus the supervised
+    lifecycle's local seeding from the same venue field, so a future
+    margin-profile seeder cannot silently inherit spot settlement math.
+    """
+    from advisorai.integrations import binance_spot, coinbase_exchange
+
+    binance_source = inspect.getsource(binance_spot.BinanceSpotTestnetTransport.fetch_account_snapshot)
+    assert 'quote_record.get("free"' in binance_source
+    coinbase_source = inspect.getsource(
+        coinbase_exchange.CoinbaseExchangeSandboxTransport.fetch_account_snapshot
+    )
+    assert 'cash_account.get("available")' in coinbase_source
+
+    lifecycle_source = Path("scripts/qualify_binance_spot_testnet_lifecycle.py").read_text()
+    assert "margin_available=account_snapshot.margin_available" in lifecycle_source
+
+    # Unseeded profiles leave the field None, so apply_fill's projection is
+    # a no-op there: the simulator and launch baseline never opt in.
+    simulator_source = Path("src/advisorai/session/application.py").read_text()
+    baseline_source = Path("src/advisorai/session/testnet_launch.py").read_text()
+    assert "margin_available" not in simulator_source
+    assert "margin_available" not in baseline_source
