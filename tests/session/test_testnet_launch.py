@@ -6,7 +6,7 @@ network call and no real ``secrets.env`` value is used here.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 
@@ -182,3 +182,58 @@ def test_testnet_fixture_adapter_marks_explicit_fixture_identity(tmp_path) -> No
     )
     market = adapter.market_at(snapshot)
     assert market.marks["BTC"] > 0
+
+
+def test_testnet_fixture_verification_fails_closed(tmp_path) -> None:
+    """Fixture PIT/gap verifiers accept exact coverage, reject anything else."""
+    from uuid import uuid4
+
+    from advisorai.session.records import (
+        DataGapRecord,
+        DataGapResolutionRecord,
+        PITSnapshotVerification,
+    )
+
+    ledgers = SqliteLedgers(tmp_path / "testnet-verify.sqlite3")
+    adapter = SandboxFixtureDataAdapter("USDT")
+    cutoff = datetime(2026, 1, 2, tzinfo=UTC)
+    snapshot = adapter.snapshot_at(cutoff)
+    watermark = SandboxFixtureDataAdapter.watermark_value(snapshot)
+
+    pit = PITSnapshotVerification(
+        session_id=uuid4(),
+        snapshot_id=snapshot.artifact_id,
+        snapshot_hash="a" * 64,
+        source="testnet-fixture",
+        cutoff=cutoff,
+        first_available_at=cutoff,
+        watermarks={adapter.watermark_key: watermark},
+    )
+    assert adapter.verify_current_pit(ledgers, pit) is True
+    wrong_source = pit.model_copy(update={"source": "binance_spot_public_market_data"})
+    assert adapter.verify_current_pit(ledgers, wrong_source) is False
+    wrong_mark = pit.model_copy(
+        update={"watermarks": {adapter.watermark_key: "2099-01-01T00:00:00+00:00"}}
+    )
+    assert adapter.verify_current_pit(ledgers, wrong_mark) is False
+
+    gap = DataGapRecord(
+        source="testnet-fixture",
+        instrument="BTC",
+        gap_start=cutoff - timedelta(hours=2),
+        gap_end=cutoff,
+        last_valid_watermark=(cutoff - timedelta(hours=3)).isoformat(),
+    )
+    resolution = DataGapResolutionRecord(
+        gap_id=gap.artifact_id,
+        source="testnet-fixture",
+        instrument="BTC",
+        covered_through=cutoff,
+        watermark=watermark,
+        evidence_id=uuid4(),
+    )
+    assert adapter.verify_gap_coverage(ledgers, gap, resolution) is True
+    short = resolution.model_copy(update={"covered_through": cutoff - timedelta(hours=1)})
+    assert adapter.verify_gap_coverage(ledgers, gap, short) is False
+    foreign = resolution.model_copy(update={"source": "binance_spot_public_market_data"})
+    assert adapter.verify_gap_coverage(ledgers, gap, foreign) is False

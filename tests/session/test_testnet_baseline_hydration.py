@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
+import pytest
+
 from advisorai.config import CredentialResolver
 from advisorai.integrations import (
     BINANCE_SPOT_TESTNET_BASE_URL,
@@ -144,6 +146,28 @@ def test_baseline_verifies_instrument_on_same_transport_before_account_read(
         if "/api/v3/exchangeInfo" in url or "/api/v3/account" in url
     ]
     assert kinds[:2] == ["exchangeInfo", "account"]
+
+
+def test_baseline_refuses_out_of_profile_balances(monkeypatch) -> None:
+    """P02: nonzero balances outside BTCUSDT fail closed before hydration."""
+    calls: list = []
+    account = _account()
+    account["balances"] = [
+        balance if balance["asset"] != "ETH" else {"asset": "ETH", "free": "1.5", "locked": "0"}
+        for balance in account["balances"]
+    ]
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester(account, calls), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    with pytest.raises(ValueError, match="clear it first|clear them first"):
+        read_testnet_baseline(resolver=_resolver(), launch=_launch())
 
 
 def test_zero_submission_session_reaches_ready_and_reconciles_clean(
