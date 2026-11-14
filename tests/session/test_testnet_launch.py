@@ -377,3 +377,35 @@ def test_launch_request_validation_normalizes_and_refuses() -> None:
                 quote_currency="USDT",
             )
         )
+
+
+def test_fixture_council_roles_emit_deterministic_labelled_evidence() -> None:
+    """Council: 4 roles, distinct origins, deterministic ids, 1h expiry."""
+    from advisorai.contracts import Snapshot
+    from advisorai.session.testnet_launch import _fixture_council
+
+    council = _fixture_council()
+    assert sorted(council.role_functions) == [
+        "data_verifier",
+        "news_event",
+        "skeptic_base_rate",
+        "technical_flow",
+    ]
+    snapshot = Snapshot(as_of=datetime(2026, 1, 2, tzinfo=UTC), purpose="council-fixture")
+    origins = set()
+    for role, run in council.role_functions.items():
+        first = run(snapshot)
+        second = run(snapshot)
+        assert first.role == role
+        assert len(first.evidence) == 1
+        evidence = first.evidence[0]
+        assert evidence.artifact_id == second.evidence[0].artifact_id
+        assert evidence.observed_at == snapshot.as_of
+        assert evidence.expires_at == snapshot.as_of + timedelta(hours=1)
+        origins.add(evidence.origin)
+    assert origins == {
+        "testnet-fixture-a",
+        "testnet-fixture-b",
+        "testnet-fixture-c",
+        "testnet-fixture-d",
+    }
