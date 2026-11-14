@@ -182,6 +182,15 @@ def test_bars_path_must_be_configured(monkeypatch):
         hermes_bars_path()
 
 
+def test_setter_rejects_non_snapshot_files_and_missing_paths(tmp_path):
+    other = tmp_path / "other.json"
+    other.write_text("{}")
+    with pytest.raises(ValueError, match="snapshot bars.json"):
+        set_hermes_bars_path(other)
+    with pytest.raises((ValueError, OSError), match="bars.json|No such file"):
+        set_hermes_bars_path(tmp_path / "missing-bars.json")
+
+
 def test_sandbox_blocks_network_write_spawn_and_secrets(tmp_path, monkeypatch):
     monkeypatch.setenv("BROKER_API_KEY", "must-not-cross-boundary")
     runner = HermesIsolationRunner(POLICY)

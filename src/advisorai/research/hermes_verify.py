@@ -50,8 +50,13 @@ _BARS_PATH: str | None = None
 
 
 def set_hermes_bars_path(path: Path) -> None:
+    """Fix the frozen bars file; only ``<snapshot_root>/bars.json`` is admitted."""
+
+    resolved = path.resolve(strict=True)
+    if resolved.name != "bars.json" or not resolved.is_file():
+        raise ValueError("Hermes bars path must be a snapshot bars.json file")
     global _BARS_PATH
-    _BARS_PATH = str(path.resolve())
+    _BARS_PATH = str(resolved)
 
 
 def hermes_bars_path() -> Path:
