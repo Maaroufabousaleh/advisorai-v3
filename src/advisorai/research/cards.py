@@ -57,6 +57,19 @@ class ResearchMetadataProvider(StrEnum):
     FRED_API = "fred_api"
 
 
+class ImplementationRelationship(StrEnum):
+    AUTHOR_IMPLEMENTATION = "author_implementation"
+    INDEPENDENT_REPRODUCTION = "independent_reproduction"
+    UNVERIFIED_LEAD = "unverified_lead"
+
+
+class ImplementationDisposition(StrEnum):
+    REUSE_COMPONENT = "reuse_small_reviewed_component"
+    ADAPT_IN_ISOLATION = "adapt_in_isolation"
+    REIMPLEMENT_FROM_SPEC = "reimplement_from_spec_without_copying"
+    REFERENCE_ONLY = "reference_only"
+
+
 class ResearchLicenseEvidenceSource(StrEnum):
     ARXIV_METADATA = "arxiv_metadata"
     ARXIV_FIRST_PARTY_VERSION_PAGE = "arxiv_first_party_version_page"
@@ -249,6 +262,51 @@ class PromotionDecision(ArtifactModel):
         return self
 
 
+class ImplementationRecord(ArtifactModel):
+    """A pinned, reviewable code finding linked to a paper or standing alone.
+
+    A linked repository, a license check, and a reproduced headline result are
+    three different things: this record keeps them separate. Nothing here
+    claims the strategy works on AdvisorAI data — that verdict belongs to an
+    independent replay recorded as an ExperimentArtifact + ValidationReport.
+    """
+
+    repository_url: str = Field(min_length=1, max_length=2048)
+    revision: str = Field(min_length=1, max_length=256)
+    source_hash: str = Field(min_length=64, max_length=64)
+    license: str = Field(min_length=1, max_length=512)
+    relationship: ImplementationRelationship
+    paper_card_id: UUID | None = None
+    dependencies: tuple[str, ...] = ()
+    data_assumptions: tuple[str, ...] = ()
+    entry_point: str = Field(min_length=1, max_length=1024)
+    replication_evidence: str = Field(default="none", min_length=1, max_length=2048)
+    disposition: ImplementationDisposition
+    disposition_rationale: str = Field(min_length=1, max_length=2048)
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    _observed = field_validator("observed_at")(_aware)
+
+    @model_validator(mode="after")
+    def validate_implementation(self) -> ImplementationRecord:
+        if len(self.source_hash) != 64 or any(
+            character not in "0123456789abcdef" for character in self.source_hash
+        ):
+            raise ValueError("implementation source_hash must be a lowercase SHA-256 digest")
+        if self.relationship is ImplementationRelationship.AUTHOR_IMPLEMENTATION and (
+            self.paper_card_id is None
+        ):
+            raise ValueError("an author implementation must link its paper card")
+        if (
+            self.disposition is ImplementationDisposition.REUSE_COMPONENT
+            and self.relationship is ImplementationRelationship.UNVERIFIED_LEAD
+        ):
+            raise ValueError("an unverified lead cannot be reused without verification")
+        if not self.repository_url.startswith("https://"):
+            raise ValueError("implementation repository must be an HTTPS URL")
+        return self
+
+
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -258,6 +316,9 @@ __all__ = [
     "CandidateFactorArtifact",
     "ExperimentArtifact",
     "HypothesisCard",
+    "ImplementationDisposition",
+    "ImplementationRecord",
+    "ImplementationRelationship",
     "PaperCard",
     "PromotionDecision",
     "ResearchSourceFamily",
