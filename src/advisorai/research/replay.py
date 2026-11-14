@@ -37,6 +37,7 @@ from advisorai.phase4.signal_policy import (
 )
 from advisorai.research import cards as research_cards
 from advisorai.research import factors as dsl
+from advisorai.research.costs import costs_for
 from advisorai.research.registry import ResearchRegistry
 from advisorai.research.validity import PurgedWalkForward
 
@@ -44,28 +45,105 @@ REPLAY_SCHEMA_VERSION = "advisorai.research.multi-asset-replay.v1"
 CODE_ID = "advisorai.research.replay"
 SOURCE_ID = "yahoo-finance-chart-v8"
 SOURCE_ENDPOINT = "https://query1.finance.yahoo.com/v8/finance/chart"
-
-# Preregistered before seeing results: 252d momentum formation, 21d holding,
-# sign-only policy, 2015-2019 screen / 2020-2022 validation / 2023-2025 holdout.
+# Preregistered before seeing results: 252-bar momentum formation including
+# the cutoff bar (a 12-0 span, not the paper's 12-1 skip-month variant),
+# 21-bar holding, sign-only policy. Windows below are enforced by
+# assign_window/require_window_embargo, not just documented.
 FORMATION_BARS = 252
 HOLDING_BARS = 21
+MODEL_NAME = "tsmom-252b-sign-v1"
+
+# Preregistered evaluation windows (cutoff calendar year). Screen is the only
+# window the design may use; validation and holdout are reported separately.
+SCREEN_YEARS = (2015, 2019)
+VALIDATION_YEARS = (2020, 2022)
+HOLDOUT_YEARS = (2023, 2025)
+WINDOW_EMBARGO_DAYS = 21
+
+
+def assign_window(cutoff_year: int) -> str:
+    """Map a cutoff year to its preregistered window; unknown years fail closed."""
+    if SCREEN_YEARS[0] <= cutoff_year <= SCREEN_YEARS[1]:
+        return "screen"
+    if VALIDATION_YEARS[0] <= cutoff_year <= VALIDATION_YEARS[1]:
+        return "validation"
+    if HOLDOUT_YEARS[0] <= cutoff_year <= HOLDOUT_YEARS[1]:
+        return "holdout"
+    raise ValueError(f"cutoff year {cutoff_year} is outside all preregistered windows")
+
+
+def require_window_embargo(
+    observations: tuple[Phase4MarketObservation, ...],
+    *,
+    require_all_windows: bool = True,
+) -> dict[str, tuple[str, str, int]]:
+    """Prove window boundaries and the 21-day embargo from actual cutoffs.
+
+    Returns per-window (first_cutoff, last_cutoff, count). Every cutoff must
+    fall inside a preregistered window, and consecutive non-empty windows must
+    be separated by at least WINDOW_EMBARGO_DAYS. Full replays require all
+    three windows; unit-sized inputs may cover a subset.
+    """
+    by_window: dict[str, list[str]] = {"screen": [], "validation": [], "holdout": []}
+    for obs in observations:
+        by_window[assign_window(obs.cutoff.year)].append(obs.cutoff.date().isoformat())
+    if require_all_windows:
+        for name, dates in by_window.items():
+            if not dates:
+                raise ValueError(f"preregistered window {name} has no cutoffs")
+    for dates in by_window.values():
+        dates.sort()
+    present = [name for name in ("screen", "validation", "holdout") if by_window[name]]
+    for earlier, later in zip(present, present[1:], strict=False):
+        gap = (
+            datetime.fromisoformat(by_window[later][0])
+            - datetime.fromisoformat(by_window[earlier][-1])
+        ).days
+        if gap < WINDOW_EMBARGO_DAYS:
+            raise ValueError(
+                f"window embargo violated: {earlier}->{later} gap is {gap}d, "
+                f"need {WINDOW_EMBARGO_DAYS}d"
+            )
+    return {name: (dates[0], dates[-1], len(dates)) for name, dates in by_window.items() if dates}
 
 
 @dataclass(frozen=True, slots=True)
 class ExposureSpec:
     symbol: str
     bars: tuple[dict[str, Any], ...] = ()
-    fee_bps: Decimal = Decimal("1")
-    spread_bps: Decimal = Decimal("1")
-    slippage_bps: Decimal = Decimal("2")
+    fee_bps: Decimal | None = None
+    spread_bps: Decimal | None = None
+    slippage_bps: Decimal | None = None
+
+    def resolved_costs(self) -> tuple[Decimal, Decimal, Decimal]:
+        """Explicit per-exposure overrides win; otherwise the pinned config."""
+        if (
+            self.fee_bps is not None
+            and self.spread_bps is not None
+            and self.slippage_bps is not None
+        ):
+            return (self.fee_bps, self.spread_bps, self.slippage_bps)
+        if self.fee_bps is None and self.spread_bps is None and self.slippage_bps is None:
+            return costs_for(self.symbol)
+        raise ValueError(f"{self.symbol}: partial cost overrides are not allowed")
 
     def cost_scenario(self) -> SignalCostScenario:
+        fee, spread, slippage = self.resolved_costs()
         return SignalCostScenario(
             scenario_id=f"{self.symbol.lower()}-etf-conservative-v1",
-            fee_bps=self.fee_bps,
-            spread_bps=self.spread_bps,
-            slippage_bps=self.slippage_bps,
+            fee_bps=fee,
+            spread_bps=spread,
+            slippage_bps=slippage,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class WindowResult:
+    name: str
+    observations: int
+    trade_count: int
+    net_bps: Decimal
+    baseline_net_bps: Decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +159,7 @@ class ExposureResult:
     max_drawdown_bps: Decimal
     experiment_id: UUID
     regime_slices: tuple[tuple[str, int, str], ...]
+    windows: tuple[WindowResult, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,7 +325,7 @@ def build_observations(
         predictions.append(
             Phase4Prediction(
                 observation_id=observation_id,
-                model_name="tsmom-12m-sign-v1",
+                model_name=MODEL_NAME,
                 predicted_return_bps=momentum[index] * Decimal("10000"),
                 confidence=Decimal("0.5"),
                 model_code_hash=model_code_hash,
@@ -342,6 +421,7 @@ def _run_path(
         "drawdown": Decimal("0"),
         "running": Decimal("0"),
         "regime": {},
+        "window": {},
         "seen": 0,
     }
 
@@ -368,6 +448,10 @@ def _run_path(
         bucket = state["regime"].setdefault(obs.regime, [0, Decimal("0")])
         bucket[0] += 1
         bucket[1] += pnl - cost
+        wbucket = state["window"].setdefault(assign_window(obs.cutoff.year), [0, 0, Decimal("0")])
+        wbucket[0] += 1
+        wbucket[1] += 1 if change else 0
+        wbucket[2] += pnl - cost
         state["seen"] += 1
 
     replayed = ReplayEngine().replay(events, handler)
@@ -387,6 +471,10 @@ def _run_path(
             (name, count, f"{value:.2f}")
             for name, (count, value) in sorted(state["regime"].items())
         ),
+        "window": tuple(
+            (name, count, trades, value)
+            for name, (count, trades, value) in sorted(state["window"].items())
+        ),
     }
 
 
@@ -401,6 +489,7 @@ def run_exposure(
     code_hash: str,
     environment_hash: str,
     hypothesis_id: UUID | None = None,
+    require_all_windows: bool = True,
 ) -> ExposureResult:
     """Replay one exposure; record factor, experiment, and validation artifacts."""
     momentum = evaluate_momentum(exposure.bars)
@@ -411,6 +500,7 @@ def run_exposure(
         factor_hash=factor_hash,
         snapshot_hash=snapshot_hash,
     )
+    window_proof = require_window_embargo(observations, require_all_windows=require_all_windows)
     candidate = _run_path(exposure, observations, predictions, spec)
     baseline = _run_path(
         exposure,
@@ -447,19 +537,31 @@ def run_exposure(
         )
     elif not isinstance(stored_factor, research_cards.CandidateFactorArtifact):
         raise ValueError(f"factor identity {exposure_factor_id} holds a non-factor record")
+    fee, spread, slippage = exposure.resolved_costs()
+    baseline_window = {name: value for name, _, _, value in baseline["window"]}
+    window_results = tuple(
+        WindowResult(
+            name=name,
+            observations=count,
+            trade_count=trades,
+            net_bps=value,
+            baseline_net_bps=baseline_window[name],
+        )
+        for name, count, trades, value in candidate["window"]
+    )
     experiment = research_cards.ExperimentArtifact(
         candidate_id=stored_factor.artifact_id,
         code_hash=code_hash,
         data_snapshot_hash=snapshot_hash,
         environment_hash=environment_hash,
         seeds=(20261114,),
-        windows=(
-            f"{exposure.symbol}:screen=2015-2019",
-            f"{exposure.symbol}:validation=2020-2022",
-            f"{exposure.symbol}:holdout=2023-2025",
+        windows=tuple(
+            f"{exposure.symbol}:{name}={first}..{last} ({count} obs)"
+            for name, (first, last, count) in sorted(window_proof.items())
         ),
         metrics={
             "observations": str(candidate["observations"]),
+            "units": "bps of notional; 100bps=1pct; net=sum(position*realized)-sum(change*all_in)",
             "net_bps": f"{candidate['net_bps']:.2f}",
             "baseline_net_bps": f"{baseline['net_bps']:.2f}",
             "gross_bps": f"{candidate['gross_bps']:.2f}",
@@ -469,11 +571,17 @@ def run_exposure(
             ),
             "max_drawdown_bps": f"{candidate['drawdown_bps']:.2f}",
             "trade_count": str(candidate["trades"]),
+            **{f"{item.name}_net_bps": f"{item.net_bps:.2f}" for item in window_results},
+            **{
+                f"{item.name}_baseline_net_bps": f"{item.baseline_net_bps:.2f}"
+                for item in window_results
+            },
+            **{f"{item.name}_obs": str(item.observations) for item in window_results},
         },
         costs={
-            "fee_bps": str(exposure.fee_bps),
-            "spread_bps": str(exposure.spread_bps),
-            "slippage_bps": str(exposure.slippage_bps),
+            "fee_bps": str(fee),
+            "spread_bps": str(spread),
+            "slippage_bps": str(slippage),
             "scenario": exposure.cost_scenario().scenario_id,
         },
         exposures={exposure.symbol: "1.0"},
@@ -489,17 +597,26 @@ def run_exposure(
         validation_end=datetime(2026, 1, 1, tzinfo=UTC),
         embargo_seconds=21 * 86400,
     )
+    window_lines = "; ".join(
+        f"{item.name}={item.observations}obs net={item.net_bps:.2f}bps "
+        f"baseline={item.baseline_net_bps:.2f}bps"
+        for item in window_results
+    )
     stored_report = registry.store(
         research_cards.ValidationReport(
             experiment_id=stored.artifact_id,
             leakage_check="snapshot-builder PIT proof plus past-only formation; no future bars read",
             temporal_validation=(
-                f"purged walk-forward passed={split.passed}; embargo=21d; "
+                f"purged walk-forward passed={split.passed}; windows enforced "
+                f"{window_proof}; embargo=21d gaps proven from actual cutoffs; "
                 "holdout 2023-2025 untouched during design"
             ),
             multiple_testing=f"trial_count=1; single preregistered policy {spec.policy_id}",
             independent_replay="deterministic ReplayEngine ordering with conflict detection",
-            stability="regime slices: " + ",".join(name for name, _, _ in candidate["regime"]),
+            stability="regime: "
+            + ",".join(name for name, _, _ in candidate["regime"])
+            + "; windows: "
+            + window_lines,
             portfolio_incrementality=(
                 f"candidate_net={candidate['net_bps']:.2f}bps vs "
                 f"baseline_net={baseline['net_bps']:.2f}bps"
@@ -522,6 +639,7 @@ def run_exposure(
         max_drawdown_bps=candidate["drawdown_bps"],
         experiment_id=stored.artifact_id,
         regime_slices=candidate["regime"],
+        windows=window_results,
     )
 
 
@@ -533,6 +651,7 @@ def run_replay(
     spec: SignalPolicySpec,
     hypothesis_id: UUID | None = None,
     environment_hash: str | None = None,
+    require_all_windows: bool = True,
 ) -> ReplayReport:
     """Run every exposure independently; one failure never masks another."""
     bars, snapshot_hash = load_snapshot_bars(snapshot_root)
@@ -565,6 +684,7 @@ def run_replay(
                     code_hash=code_hash,
                     environment_hash=environment,
                     hypothesis_id=hypothesis_id,
+                    require_all_windows=require_all_windows,
                 )
             )
         except Exception as exc:  # noqa: BLE001 - per-exposure failure is evidence
@@ -584,14 +704,22 @@ __all__ = [
     "CODE_ID",
     "FORMATION_BARS",
     "HOLDING_BARS",
+    "HOLDOUT_YEARS",
+    "MODEL_NAME",
     "REPLAY_SCHEMA_VERSION",
+    "SCREEN_YEARS",
+    "VALIDATION_YEARS",
+    "WINDOW_EMBARGO_DAYS",
     "ExposureResult",
     "ExposureSpec",
     "ReplayReport",
+    "WindowResult",
+    "assign_window",
     "build_observations",
     "evaluate_momentum",
     "load_snapshot_bars",
     "momentum_dsl_source",
+    "require_window_embargo",
     "run_exposure",
     "run_replay",
 ]

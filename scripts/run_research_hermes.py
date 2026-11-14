@@ -18,7 +18,6 @@ import json
 import subprocess
 import sys
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +27,7 @@ from advisorai.gates import PhaseGateRegistry  # noqa: E402
 from advisorai.ledger import SqliteLedgers  # noqa: E402
 from advisorai.phase4.signal_policy import SignalPolicyFamily, SignalPolicySpec  # noqa: E402
 from advisorai.research import ResearchRegistry  # noqa: E402
+from advisorai.research.costs import COSTS_BY_SYMBOL  # noqa: E402
 from advisorai.research.hermes_verify import (  # noqa: E402
     HERMES_SCHEMA_VERSION,
     run_hermes_verification,
@@ -36,10 +36,6 @@ from advisorai.research.openbb_gap import evaluate_fred_gap, gap_manifest  # noq
 from advisorai.research.replay import ExposureSpec, run_replay  # noqa: E402
 
 POLICY_ID = "tsmom-sign-only-v1"
-CLI_COSTS = {
-    "SPY": (Decimal("1"), Decimal("1"), Decimal("2")),
-    "TLT": (Decimal("1"), Decimal("2"), Decimal("2")),
-}
 
 
 def _git_head(root: Path) -> str:
@@ -62,7 +58,7 @@ def _state_dir(raw: str) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--snapshot", default="data/research-replay/snapshots/etf-daily-2015-2025-v1"
+        "--snapshot", default="data/research-replay/snapshots/synthetic-daily-2015-2025-v1"
     )
     parser.add_argument("--state-dir", default="var/research-replay")
     parser.add_argument("--label", default=None)
@@ -80,10 +76,7 @@ def main() -> int:
     replay = run_replay(
         registry=registry,
         snapshot_root=snapshot_root,
-        exposures=tuple(
-            ExposureSpec(symbol=symbol, fee_bps=fee, spread_bps=spread, slippage_bps=slip)
-            for symbol, (fee, spread, slip) in CLI_COSTS.items()
-        ),
+        exposures=tuple(ExposureSpec(symbol=symbol) for symbol in sorted(COSTS_BY_SYMBOL)),
         spec=SignalPolicySpec(policy_id=POLICY_ID, family=SignalPolicyFamily.SIGN_ONLY),
     )
     hermes_exposures = (verification.output or {}).get("exposures", {})

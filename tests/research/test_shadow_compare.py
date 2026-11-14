@@ -74,7 +74,13 @@ def test_forced_abstention_is_recorded_not_silent(tmp_path):
     registry = ResearchRegistry(tmp_path / "shadow.sqlite3")
     result = run_shadow_exposure(
         registry,
-        ExposureSpec(symbol="FIX", bars=bars),
+        ExposureSpec(
+            symbol="FIX",
+            bars=bars,
+            fee_bps=Decimal("1"),
+            spread_bps=Decimal("1"),
+            slippage_bps=Decimal("2"),
+        ),
         model=LinearForecaster(),
         model_identity=dict(SHADOW_MODEL_IDENTITY),
         factor_id=__import__("uuid").uuid4(),
@@ -123,13 +129,18 @@ def test_reference_adapter_is_untouched_naive():
     assert isinstance(reference_baseline_model(), NaiveForecaster)
 
 
-def test_shadow_reproduces_on_frozen_snapshot(tmp_path):
-    root = Path(__file__).resolve().parents[2]
-    snapshot_root = root / "data" / "research-replay" / "snapshots" / "etf-daily-2015-2025-v1"
+def test_shadow_reproduces_on_fixture_snapshot(tmp_path):
+    snapshot_root = (
+        Path(__file__).resolve().parents[2]
+        / "data"
+        / "research-replay"
+        / "snapshots"
+        / "synthetic-daily-2015-2025-v1"
+    )
     if not (snapshot_root / "bars.json").exists():
         import pytest
 
-        pytest.skip("frozen ETF snapshot not present")
+        pytest.skip("synthetic fixture snapshot not present")
     _, snapshot_hash = load_snapshot_bars(snapshot_root)
     first = run_shadow(
         registry=ResearchRegistry(tmp_path / "a.sqlite3"),

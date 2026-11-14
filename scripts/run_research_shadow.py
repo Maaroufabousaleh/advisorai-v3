@@ -56,7 +56,7 @@ def _environment_hash(command: str) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--snapshot", default="data/research-replay/snapshots/etf-daily-2015-2025-v1"
+        "--snapshot", default="data/research-replay/snapshots/synthetic-daily-2015-2025-v1"
     )
     parser.add_argument("--state-dir", default="var/research-replay")
     parser.add_argument("--label", default=None)

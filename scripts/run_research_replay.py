@@ -20,7 +20,6 @@ import os
 import subprocess
 import sys
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -36,6 +35,7 @@ from advisorai.research import (  # noqa: E402
     ResearchRegistry,
     ResearchSourceUse,
 )
+from advisorai.research.costs import COSTS_BY_SYMBOL  # noqa: E402
 from advisorai.research.replay import (  # noqa: E402
     ExposureSpec,
     run_replay,
@@ -44,11 +44,7 @@ from advisorai.research.replay import (  # noqa: E402
 PAPER_SOURCE_URL = "https://doi.org/10.1016/j.jfineco.2011.11.003"
 HYPOTHESIS_OWNER = "omp-research-replay-v1"
 
-DEFAULT_EXPOSURES = (
-    # (symbol, fee_bps, spread_bps, slippage_bps): liquid-ETF conservative costs.
-    ("SPY", Decimal("1"), Decimal("1"), Decimal("2")),
-    ("TLT", Decimal("1"), Decimal("2"), Decimal("2")),
-)
+DEFAULT_EXPOSURES = tuple(sorted(COSTS_BY_SYMBOL))
 
 
 def _git_head(root: Path) -> str:
@@ -83,12 +79,10 @@ def _write_new(path: Path, payload: object) -> str:
 def _exposures(args: argparse.Namespace) -> tuple[ExposureSpec, ...]:
     wanted = {item.upper() for item in args.exposures} if args.exposures else None
     specs = []
-    for symbol, fee, spread, slippage in DEFAULT_EXPOSURES:
+    for symbol in DEFAULT_EXPOSURES:
         if wanted is not None and symbol not in wanted:
             continue
-        specs.append(
-            ExposureSpec(symbol=symbol, fee_bps=fee, spread_bps=spread, slippage_bps=slippage)
-        )
+        specs.append(ExposureSpec(symbol=symbol))
     if wanted:
         unknown = wanted - {item.symbol for item in specs}
         if unknown:
@@ -100,7 +94,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--snapshot",
-        default="data/research-replay/snapshots/etf-daily-2015-2025-v1",
+        default="data/research-replay/snapshots/synthetic-daily-2015-2025-v1",
         help="Frozen snapshot directory (bars.json + manifest.json).",
     )
     parser.add_argument(
@@ -217,6 +211,8 @@ def main() -> int:
                 "costs_bps": f"{item.costs_bps:.2f}",
                 "net_bps": f"{item.net_bps:.2f}",
                 "baseline_net_bps": f"{item.baseline_net_bps:.2f}",
+                "units": "bps of notional; 100bps=1pct",
+                "aggregation": "net=sum(position*realized)-sum(change*all_in) over month-end cutoffs",
                 "directional_accuracy": (
                     f"{item.directional_accuracy:.4f}"
                     if item.directional_accuracy is not None
@@ -227,6 +223,16 @@ def main() -> int:
                 "regime_slices": [
                     {"regime": name, "observations": count, "net_bps": value}
                     for name, count, value in item.regime_slices
+                ],
+                "windows": [
+                    {
+                        "window": window.name,
+                        "observations": window.observations,
+                        "trade_count": window.trade_count,
+                        "net_bps": f"{window.net_bps:.2f}",
+                        "baseline_net_bps": f"{window.baseline_net_bps:.2f}",
+                    }
+                    for window in item.windows
                 ],
             }
             for item in report.exposures
@@ -246,6 +252,11 @@ def main() -> int:
             f"net={item.net_bps:.2f}bps baseline={item.baseline_net_bps:.2f}bps "
             f"experiment={item.experiment_id}"
         )
+        for window in item.windows:
+            print(
+                f"  {window.name}: obs={window.observations} trades={window.trade_count} "
+                f"net={window.net_bps:.2f}bps baseline={window.baseline_net_bps:.2f}bps"
+            )
     for failure in report.failed:
         print(f"FAILED {failure}")
     if "PYTEST_CURRENT_TEST" not in os.environ:

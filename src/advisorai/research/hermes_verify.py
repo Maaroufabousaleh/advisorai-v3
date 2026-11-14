@@ -29,14 +29,14 @@ from advisorai.capabilities.foundry import (
     HermesTaskResult,
 )
 from advisorai.gates import PhaseGateRegistry
+from advisorai.research.costs import ALL_IN_BPS_BY_SYMBOL, all_in_for
 
-# Contract shared with the replay: formation/holding windows and per-symbol
-# all-in costs (fee+spread+slippage per unit position change) as published
-# by the replay CLI's DEFAULT_EXPOSURES. Any change there must update this
-# mapping and its tests, or verification fails loudly on the net comparison.
+# Contract shared with the replay: formation/holding windows from replay, and
+# per-symbol all-in costs from the single recorded cost configuration. The
+# mirror still reimplements the cutoff/signal/accounting algebra; only the
+# frozen inputs and the pinned costs are shared.
 FORMATION_BARS = 252
 HOLDING_BARS = 21
-ALL_IN_BPS_BY_SYMBOL = {"SPY": Decimal("4"), "TLT": Decimal("5")}
 
 HERMES_SCHEMA_VERSION = "advisorai.research.hermes-verify.v1"
 HERMES_TASK_NAME = "research-replay-verify"
@@ -81,9 +81,7 @@ def verify_replay_task() -> dict[str, Any]:
                 cutoffs.append(index)
         net = Decimal("0")
         baseline_net = Decimal("0")
-        all_in = ALL_IN_BPS_BY_SYMBOL.get(symbol)
-        if all_in is None:
-            raise ValueError(f"{symbol}: no pinned all-in cost in the verification contract")
+        all_in = all_in_for(symbol)
         previous = 0
         trades = 0
         for index in cutoffs:

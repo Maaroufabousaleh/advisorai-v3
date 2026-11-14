@@ -1,0 +1,16 @@
+{
+ "source": "synthetic-deterministic-v1",
+ "generator": "seed=20261114 geometric-walk; NOT market data",
+ "license_note": "synthetic fixture, free to redistribute; for CI and contract tests only",
+ "interval": "1d",
+ "currency": "USD",
+ "symbols": [
+  "SPY",
+  "TLT"
+ ],
+ "bars_sha256": "4d30faa638c62190e91beca29a0ffac1ff664ed273ddae09d50ccd15dec35dad",
+ "counts": {
+  "SPY": 2869,
+  "TLT": 2869
+ }
+}

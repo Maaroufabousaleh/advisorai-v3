@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 from advisorai.integrations import HttpClientConfig, SafeHttpClient
@@ -123,9 +124,23 @@ def test_scout_librarian_experiment_chain_with_duplicate_intake(tmp_path):
 
     experiment_job, outcomes = workflow.run_experiments(
         hypothesis=hypothesis,
-        exposures=(ExposureSpec(symbol="FIXA"), ExposureSpec(symbol="FIXB")),
+        exposures=(
+            ExposureSpec(
+                symbol="FIXA",
+                fee_bps=Decimal("1"),
+                spread_bps=Decimal("1"),
+                slippage_bps=Decimal("2"),
+            ),
+            ExposureSpec(
+                symbol="FIXB",
+                fee_bps=Decimal("1"),
+                spread_bps=Decimal("1"),
+                slippage_bps=Decimal("2"),
+            ),
+        ),
         policy_id="workflow-test-v1",
         environment_hash="ab" * 32,
+        require_all_windows=False,
     )
     assert experiment_job.state is JobState.COMPLETED
     assert {item.symbol for item in outcomes} == {"FIXA", "FIXB"}

@@ -28,8 +28,8 @@ from advisorai.gates import (
 from advisorai.ledger import SqliteLedgers
 from advisorai.phase4.signal_policy import SignalPolicyFamily, SignalPolicySpec
 from advisorai.research import ResearchRegistry
+from advisorai.research.costs import ALL_IN_BPS_BY_SYMBOL
 from advisorai.research.hermes_verify import (
-    ALL_IN_BPS_BY_SYMBOL,
     POLICY,
     hermes_bars_path,
     require_openbb_gap_scope,
@@ -49,7 +49,7 @@ SNAPSHOT = (
     / "data"
     / "research-replay"
     / "snapshots"
-    / "etf-daily-2015-2025-v1"
+    / "synthetic-daily-2015-2025-v1"
 )
 
 
@@ -141,9 +141,9 @@ def test_verification_refuses_without_phase8_admission(tmp_path):
         run_hermes_verification(snapshot_root=_write_snapshot(tmp_path), gate_registry=gates)
 
 
-def test_verification_recomputes_frozen_replay_exactly(tmp_path):
+def test_verification_recomputes_fixture_replay_exactly(tmp_path):
     if not (SNAPSHOT / "bars.json").exists():
-        pytest.skip("frozen ETF snapshot not present")
+        pytest.skip("synthetic fixture snapshot not present")
     gates = _admitted_gates(tmp_path)
     verification = run_hermes_verification(snapshot_root=SNAPSHOT, gate_registry=gates)
     assert verification.passed
@@ -152,10 +152,7 @@ def test_verification_recomputes_frozen_replay_exactly(tmp_path):
     replay = run_replay(
         registry=ResearchRegistry(tmp_path / "r.sqlite3"),
         snapshot_root=SNAPSHOT,
-        exposures=(
-            ExposureSpec(symbol="SPY"),
-            ExposureSpec(symbol="TLT", spread_bps=Decimal("2"), slippage_bps=Decimal("2")),
-        ),
+        exposures=(ExposureSpec(symbol="SPY"), ExposureSpec(symbol="TLT")),
         spec=SignalPolicySpec(policy_id="slice4", family=SignalPolicyFamily.SIGN_ONLY),
     )
     assert verification.output is not None

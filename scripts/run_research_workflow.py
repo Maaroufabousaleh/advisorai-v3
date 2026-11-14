@@ -17,13 +17,13 @@ import platform
 import subprocess
 import sys
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 
 from advisorai.research import ResearchMetadataScout  # noqa: E402
+from advisorai.research.costs import COSTS_BY_SYMBOL as COSTS  # noqa: E402
 from advisorai.research.replay import ExposureSpec  # noqa: E402
 from advisorai.research.workflow import (  # noqa: E402
     ResearchWorkflow,
@@ -31,11 +31,6 @@ from advisorai.research.workflow import (  # noqa: E402
 )
 
 SOURCE_URL = "https://doi.org/10.1016/j.jfineco.2011.11.003"
-
-COSTS = {
-    "SPY": (Decimal("1"), Decimal("1"), Decimal("2")),
-    "TLT": (Decimal("1"), Decimal("2"), Decimal("2")),
-}
 
 
 def _git_head(root: Path) -> str:
@@ -60,7 +55,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--snapshot",
-        default="data/research-replay/snapshots/etf-daily-2015-2025-v1",
+        default="data/research-replay/snapshots/synthetic-daily-2015-2025-v1",
         help="Frozen snapshot directory.",
     )
     parser.add_argument(

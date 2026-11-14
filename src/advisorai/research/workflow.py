@@ -13,7 +13,6 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -178,6 +177,7 @@ class ResearchWorkflow:
         exposures: tuple[ExposureSpec, ...],
         policy_id: str,
         environment_hash: str,
+        require_all_windows: bool = True,
     ) -> tuple[ResearchJob, tuple[ExperimentOutcome, ...]]:
         """Replay each exposure; duplicates reuse stored experiments."""
         fingerprint = _outcome_key(
@@ -203,6 +203,7 @@ class ResearchWorkflow:
                 spec=spec,
                 hypothesis_id=hypothesis.artifact_id,
                 environment_hash=environment_hash,
+                require_all_windows=require_all_windows,
             )
             results: list[ExperimentOutcome] = []
             for item in report.exposures:
@@ -329,24 +330,11 @@ def open_workflow_state(
     return registry, ledgers, coordinator
 
 
-def experiment_cost_bps(symbols: tuple[str, ...]) -> dict[str, Decimal]:
-    """Per-exposure conservative costs; crypto uses wider spreads when added."""
-    costs = {
-        "SPY": (Decimal("1"), Decimal("1"), Decimal("2")),
-        "TLT": (Decimal("1"), Decimal("2"), Decimal("2")),
-    }
-    return {
-        symbol: costs.get(symbol, (Decimal("10"), Decimal("5"), Decimal("5")))[0]
-        for symbol in symbols
-    }
-
-
 __all__ = [
     "WORKFLOW_VERSION",
     "ExperimentOutcome",
     "ResearchWorkflow",
     "WorkflowReport",
     "WorkflowStep",
-    "experiment_cost_bps",
     "open_workflow_state",
 ]
