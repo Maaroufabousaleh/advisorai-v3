@@ -22,7 +22,7 @@ from advisorai.integrations import (
     BINANCE_SPOT_TESTNET_HOST,
 )
 from advisorai.integrations.http import HttpClientConfig, SafeHttpClient
-from advisorai.ledger import SqliteLedgers
+from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
 from advisorai.session.testnet_launch import (
     SandboxLaunchRequest,
@@ -238,3 +238,109 @@ def test_bounded_testnet_run_stops_clean_with_reconciliation(
     assert exit_code == 0
     assert transport.submit_calls <= 1
     assert app.supervisor.active_session_id() is None
+
+
+def test_startup_abstains_on_diverged_account_before_session_ready(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: startup abstains on unreconciled account state.
+
+    Startup runs recovery checks inside ``supervisor.start()`` before
+    the scheduler lease, before the worker thread, and before SESSION
+    READY. If local cash diverges from the venue snapshot, the
+    ``account_order_reconciliation`` check fails, startup records
+    ABSTAIN with an unclean stop, returns exit 2, and never reaches
+    SESSION READY. Offline only; the venue is the synthetic counting
+    transport, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "startup-diverged.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "startup-diverged-state",
+        lock_identity="startup-diverged-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    # Venue snapshot reports cash 100000; diverge local cash so the real
+    # reconciler refuses at the startup recovery gate.
+    app.account.cash = Decimal("1")
+    exit_code = app.run(reason="diverged startup test")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "recovery_mode=abstain" in output
+    assert "decision=failed_check:account_order_reconciliation" in output
+    assert "RECOVERY INCOMPLETE" in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "recovery_checks_failed" in end.payload["end"]["unfinished_work"]
+    assert "SESSION READY" not in output
+    assert app._lease_id is None
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0
+
+
+def test_prepare_current_state_raises_on_late_divergence(tmp_path, monkeypatch) -> None:
+    """P02/P09 prep: the inner startup gate raises on late divergence.
+
+    ``_prepare_current_state`` is defense-in-depth behind the recovery
+    checks: if reconciliation passes at ``supervisor.start()`` but the
+    account diverges before state preparation, startup raises
+    ``RuntimeError`` and the runtime trips its kill switch with
+    ``paper_reconciliation_mismatch``. Offline only; synthetic
+    venue, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "late-diverged.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "late-diverged-state",
+        lock_identity="late-diverged-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    assert app.runtime.risk_kernel.kill_switch.tripped is False
+    # Venue snapshot reports cash 100000; diverge local cash after the
+    # passing check, as if state changed between the two gates.
+    app.account.cash = Decimal("1")
+    with pytest.raises(RuntimeError, match="current paper account/order reconciliation failed"):
+        app._prepare_current_state()
+    assert app.runtime.risk_kernel.kill_switch.tripped is True
+    assert app.runtime.risk_kernel.kill_switch.reason == "paper_reconciliation_mismatch"
