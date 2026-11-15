@@ -259,3 +259,36 @@ def test_validator_rejects_wrong_venue_profile(tmp_path, monkeypatch, capsys) ->
     assert report.p02_certified is False
     names = [check.name for check in report.failed]
     assert "testnet_profile" in names
+
+
+def test_validator_rejects_dirty_reconciliation_state(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a verification-failed reconciliation state refuses certification.
+
+    P02 acceptance requires ``reconciliation_state=reconciled``; a
+    session end whose reconciliation state reads ``verification_failed``
+    must fail certification naming ``reconciliation_clean`` even
+    though the outcome field still claims clean. Offline only; edits a
+    real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="dirty-reconciliation-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["end"]["reconciliation_state"] == "reconciled"
+        payload["end"]["reconciliation_state"] = "verification_failed"
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "reconciliation_clean" in names
