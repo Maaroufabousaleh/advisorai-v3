@@ -548,3 +548,137 @@ def test_profile_builder_refuses_misscoped_credentials(tmp_path) -> None:
         build(resolver_with(ADVISORAI_VENUE_BASE_URL="https://api.binance.com"))
     with pytest.raises(ValueError, match="unadmitted WebSocket endpoint"):
         build(resolver_with(ADVISORAI_VENUE_WS_URL="wss://stream.binance.com:9443"))
+
+
+def test_verifier_refuses_transport_identity_or_environment_drift(tmp_path) -> None:
+    """P02/P09 prep: the verifier refuses transports outside the profile.
+
+    A transport naming another venue or running outside paper/testnet
+    is refused before any product read. Uses the profile double with
+    mutated identity fields; no network, no credentials.
+    """
+    context, _app = _context(tmp_path)
+
+    foreign = ProfileTransport("binance_spot_testnet", "BTCUSD", "USD")
+    foreign.venue_name = "coinbase_exchange_sandbox"
+    with pytest.raises(ValueError, match="transport identity differs"):
+        build_binance_spot_testnet_profile(
+            _components(context, "binance_spot_testnet", "BTCUSD", "USD"),
+            _resolver("binance_spot_testnet"),
+            transport=foreign,
+        )
+    assert foreign.product_reads == 0
+
+    live = ProfileTransport("binance_spot_testnet", "BTCUSD", "USD")
+    live.environment = "live"
+    with pytest.raises(ValueError, match="accepts sandbox transports only"):
+        build_binance_spot_testnet_profile(
+            _components(context, "binance_spot_testnet", "BTCUSD", "USD"),
+            _resolver("binance_spot_testnet"),
+            transport=live,
+        )
+    assert live.product_reads == 0
+
+
+def test_verifier_refuses_admission_and_metadata_drift(tmp_path) -> None:
+    """P02/P09 prep: the verifier pins admission and metadata exactly.
+
+    A transport admitting extra symbols, exchange metadata quoting a
+    different currency (already pinned for Binance; here the Coinbase
+    leg), and base-asset metadata disagreeing with the canonical
+    owner instrument are all refused. No network, no credentials.
+    """
+    context, _app = _context(tmp_path)
+
+    class _GreedyTransport(ProfileTransport):
+        def verify_symbol_mappings(self, _products, *, required):
+            super().verify_symbol_mappings(_products, required=required)
+            self.verified_symbol_ids = ("BTCUSD", "ETHUSD")
+
+    greedy = _GreedyTransport("binance_spot_testnet", "BTCUSD", "USD")
+    with pytest.raises(ValueError, match="admit exactly the requested"):
+        build_binance_spot_testnet_profile(
+            _components(context, "binance_spot_testnet", "BTCUSD", "USD"),
+            _resolver("binance_spot_testnet"),
+            transport=greedy,
+        )
+
+    eth_basis = ProfileTransport("coinbase_exchange_sandbox", "BTC-USD", "USD")
+    eth_basis.verified_product_spec = lambda product_id: SimpleNamespace(  # type: ignore[method-assign]
+        base_currency="ETH", quote_currency="USD"
+    )
+    with pytest.raises(ValueError, match="differs from the canonical owner"):
+        build_coinbase_exchange_sandbox_profile(
+            _components(context, "coinbase_exchange_sandbox", "BTC-USD", "USD"),
+            _resolver("coinbase_exchange_sandbox"),
+            transport=eth_basis,
+        )
+
+
+def test_builder_refuses_coinbase_non_usd_and_bare_instruments(tmp_path) -> None:
+    """P02/P09 prep: Coinbase USD-only and instrument-identity gates.
+
+    A USDT Coinbase request is refused even with a consistent USDT
+    context; instruments without base/quote assets and data adapters
+    whose quote drifts after construction are refused before any
+    credential or transport use.
+    """
+    context, _app = _context(tmp_path)
+
+    context.data.quote_currency = "USDT"
+    usdt_instrument = context.instrument.model_copy(update={"quote_asset": "USDT"})
+    usdt_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=usdt_instrument,
+        account_quote_currency="USDT",
+        fx_rate_provider=context.fx_rate_provider,
+    )
+    with pytest.raises(ValueError, match="admits USD quote products only"):
+        build_coinbase_exchange_sandbox_profile(
+            ProviderProfileComponents(
+                context=usdt_context,
+                request=ProviderProfileRequest(
+                    provider="coinbase_exchange_sandbox",
+                    provider_instrument_id="BTC-USD",
+                    quote_currency="USDT",
+                ),
+            ),
+            _resolver("coinbase_exchange_sandbox"),
+            transport=ProfileTransport("coinbase_exchange_sandbox", "BTC-USD", "USDT"),
+        )
+    context.data.quote_currency = "USD"
+
+    bare_instrument = context.instrument.model_copy(update={"base_asset": ""})
+    bare_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=bare_instrument,
+        account_quote_currency=context.account_quote_currency,
+        fx_rate_provider=context.fx_rate_provider,
+    )
+    with pytest.raises(
+        ValueError, match="requires explicit base and quote assets"
+    ):
+        build_binance_spot_testnet_profile(
+            _components(bare_context, "binance_spot_testnet", "BTCUSD", "USD"),
+            _resolver("binance_spot_testnet"),
+            transport=ProfileTransport("binance_spot_testnet", "BTCUSD", "USD"),
+        )
+
+    context.data.quote_currency = "EUR"
+    try:
+        with pytest.raises(ValueError, match="differs from the data adapter"):
+            build_binance_spot_testnet_profile(
+                _components(context, "binance_spot_testnet", "BTCUSD", "USD"),
+                _resolver("binance_spot_testnet"),
+                transport=ProfileTransport("binance_spot_testnet", "BTCUSD", "USD"),
+            )
+    finally:
+        context.data.quote_currency = "USD"
