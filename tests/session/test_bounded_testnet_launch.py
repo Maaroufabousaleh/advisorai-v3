@@ -539,3 +539,65 @@ def test_run_reports_startup_error_on_fill_arriving_after_recovery(
     assert app._lease_id is None
     assert app.supervisor.active_session_id() is None
     assert len(accesses) == 2
+
+
+def test_run_records_worker_error_when_data_snapshot_fails(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: a scheduler fault ends the session unclean, not hung.
+
+    If the data adapter raises inside the scheduler thread, the
+    worker records ``_scheduler_error``, wakes the stop loop, and
+    ``_wait_and_stop`` records an unclean stop naming
+    ``worker_error`` with exit 2 — the session neither hangs nor
+    reports clean. Offline only; the venue is the synthetic
+    counting transport, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "worker-error.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "worker-error-state",
+        lock_identity="worker-error-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.1,
+            max_runtime_seconds=30,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+
+    def failing_snapshot_at(_cutoff):
+        raise RuntimeError("synthetic data outage")
+
+    monkeypatch.setattr(app.adapters.data, "snapshot_at", failing_snapshot_at)
+    started = datetime.now(UTC)
+    exit_code = app.run(reason="worker error shutdown test")
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert elapsed < 30
+    assert "SESSION READY" in output
+    assert "outcome=unclean" in output
+    assert isinstance(app._scheduler_error, RuntimeError)
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "worker_error:RuntimeError" in end.payload["end"]["unfinished_work"]
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0
