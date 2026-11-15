@@ -263,3 +263,60 @@ def test_owner_composition_rejects_non_paper_venue_identity(tmp_path):
             outcome_adapter=fixture.adapters.outcome_adapter,
             initial_account=fixture.account,
         )
+
+
+def test_owner_config_rejects_out_of_bounds_session_envelope() -> None:
+    """P02/P09 prep: the session envelope refuses invalid bounds.
+
+    ``OwnerApplicationConfig`` is the supervised session boundary:
+    only the quiet/qualification scenarios, a sub-day scheduler
+    interval, a bounded RSS envelope, and a sub-day runtime
+    deadline are admissible. Anything else raises at construction
+    instead of starting a misshapen session. Pure unit coverage;
+    no threads, no network, no credentials.
+    """
+    with pytest.raises(ValueError, match="only quiet or qualification"):
+        OwnerApplicationConfig(scenario="live")
+    with pytest.raises(ValueError, match="between 0.1 seconds and one day"):
+        OwnerApplicationConfig(interval_seconds=0.05)
+    with pytest.raises(ValueError, match="between 0.1 seconds and one day"):
+        OwnerApplicationConfig(interval_seconds=86_401)
+    with pytest.raises(ValueError, match="between 256 and 8192 MiB"):
+        OwnerApplicationConfig(max_rss_mb=128)
+    with pytest.raises(ValueError, match="between 256 and 8192 MiB"):
+        OwnerApplicationConfig(max_rss_mb=16_384)
+    with pytest.raises(ValueError, match="between 1 second and one day"):
+        OwnerApplicationConfig(max_runtime_seconds=0.5)
+    with pytest.raises(ValueError, match="between 1 second and one day"):
+        OwnerApplicationConfig(max_runtime_seconds=86_401)
+    assert OwnerApplicationConfig(
+        scenario="qualification",
+        interval_seconds=0.1,
+        max_rss_mb=256,
+        max_runtime_seconds=1,
+    ).scenario == "qualification"
+
+
+def test_owner_rejects_unknown_venue_profile_and_naive_cutoff(tmp_path) -> None:
+    """P02/P09 prep: unknown profiles and naive cutoffs fail closed.
+
+    Only the reviewed paper venue aliases are admissible, and paper
+    cutoffs must carry a timezone. Both gates raise instead of
+    starting a session against an unreviewed venue or an ambiguous
+    clock. Pure unit coverage; no threads, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "ledgers.sqlite3")
+    with pytest.raises(ValueError, match="unknown owner venue profile"):
+        PaperOwnerApplication(
+            ledgers=ledgers,
+            state_dir=tmp_path / "bad-profile",
+            lock_identity="bad-profile-test",
+            code_hash="a" * 64,
+            config_hash="b" * 64,
+            config=OwnerApplicationConfig(scenario="quiet"),
+            venue_profile="live-exchange",
+        )
+    owner = _owner(tmp_path, ledgers, lock_identity="fixture")
+    with pytest.raises(ValueError, match="must include a timezone"):
+        owner._snapshot_at(datetime(2026, 11, 15, 12, 0))
