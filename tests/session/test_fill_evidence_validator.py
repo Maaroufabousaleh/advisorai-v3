@@ -127,9 +127,7 @@ def _fill_run(tmp_path: Path, *, fee_mismatch: bool = False) -> Path:
     )
     account_ledger = AccountLedger(ledgers, account)
     applied_fee = Decimal("0.06") if fee_mismatch else Decimal("0.05")
-    account_ledger.apply_fill(
-        fill.model_copy(update={"fee": applied_fee}), order.side, "BTC"
-    )
+    account_ledger.apply_fill(fill.model_copy(update={"fee": applied_fee}), order.side, "BTC")
     oms.reconcile(order.artifact_id)
     venue = VenueAccountSnapshot(
         as_of=_NOW,
@@ -216,6 +214,7 @@ def test_validator_reports_cancellation_only_without_certifying(tmp_path) -> Non
     assert report.fill_pass is False
     assert report.p03_certified is False
 
+
 def test_validator_classifies_fill_from_ledger_without_ingestion_block(
     tmp_path,
 ) -> None:
@@ -240,9 +239,7 @@ def test_validator_classifies_fill_from_ledger_without_ingestion_block(
     report = validate_run(run_dir)
     assert report.fill_pass is True
     assert report.p03_certified is False
-    observed = next(
-        check for check in report.checks if check.name == "fill_observed"
-    )
+    observed = next(check for check in report.checks if check.name == "fill_observed")
     assert observed.passed is True
     assert "source=ledger" in observed.detail
 
@@ -279,3 +276,33 @@ def test_cli_exit_codes_distinguish_input_fill_and_failure(tmp_path, capsys) -> 
     )
     assert main(["--evidence-dir", str(cancel_dir)]) == 3
     assert main(["--evidence-dir", str(_fill_run(tmp_path))]) == 0
+
+
+def test_preserved_failed_run_shows_venue_fill_during_cancel_race() -> None:
+    """P03 race label: the venue reproduced fill-during-cancel in 005138.
+
+    Reads the preserved failed paper-lifecycle run (manifest + oms.sqlite
+    copy semantics via validate_run) and pins the venue race label:
+    `order_cancel_pending` precedes `fill_recorded`, the terminal OMS
+    state is `filled` with zero cancel-ack events, and final
+    reconciliation failed closed. The validator must report a fill
+    pass (source=ledger, no ingestion block) while refusing P03
+    certification. Read-only; no network, no credentials, no venue writes.
+    """
+    from pathlib import Path
+
+    run_dir = Path("artifacts/phase2/binance-spot-testnet/paper-lifecycle/20261114T005138.117654Z")
+    assert (run_dir / "binance-spot-testnet-paper-lifecycle.json").exists()
+    assert (run_dir / "oms.sqlite").exists()
+    report = validate_run(run_dir)
+    observed = next(check for check in report.checks if check.name == "fill_observed")
+    assert report.fill_pass is True
+    assert observed.passed is True
+    assert "source=ledger" in observed.detail
+    assert report.p03_certified is False
+    terminal = next(check for check in report.checks if check.name == "terminal_fill_chain")
+    assert terminal.passed is True
+    sequence = next(check for check in report.checks if check.name == "event_sequence_consistent")
+    assert "order_cancel_pending" in sequence.detail
+    assert "fill_recorded" in sequence.detail
+    assert sequence.detail.index("order_cancel_pending") < sequence.detail.index("fill_recorded")

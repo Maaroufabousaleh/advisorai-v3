@@ -115,11 +115,17 @@ ADVISORAI_RUN_PAPER_LIFECYCLE=1 \
 The runner validates the immutable read-only pointer and performs exactly one
 signed submission and, if the passive order remains open, one signed
 cancellation. It never retries a signed write after an ambiguous result; it
-queries venue truth first. The first measured run passed the no-fill/cancel
-path, restart recovery, TCA, attribution, duplicate protection, ambiguous-ack
-handling, cancel-race, divergence, interruption, and kill-switch drills. It
-did not observe a real fill, so fill ingestion remains fixture evidence rather
-than an externally measured fill claim.
+queries venue truth first. The passing lifecycle run
+(`20261114T014319.347437Z`, 1 submission, 1 cancellation, 0 fills) passed
+restart recovery, TCA, attribution, duplicate protection, ambiguous-ack
+handling, cancel-race, divergence, interruption, and kill-switch drills, but
+it observed no fill itself. A real venue fill WAS observed in the earlier
+failed run `20261114T005138.117654Z`, where the venue reproduced the
+fill-during-cancel race (`order_cancel_pending` → `fill_recorded` → terminal
+`filled`, zero cancel-ack events) and final reconciliation failed closed.
+That failure is preserved evidence for the P03 race label, not a pass: a
+post-fix fill match is still required, so certified fill ingestion remains
+an open claim, not fixture evidence alone.
 
 ## Bounded testnet canary
 
