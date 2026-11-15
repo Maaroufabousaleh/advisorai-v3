@@ -472,3 +472,41 @@ def test_validator_rejects_fill_quantity_mismatch(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "fill_quantity_matches_order" in names
+
+
+def test_validator_rejects_fill_pointing_at_other_order(tmp_path) -> None:
+    """P03: a fill linked to a foreign order refuses certification.
+
+    A ``fill_recorded`` event whose ``order_id`` names an order other
+    than the created one is an OMS linkage defect the validator must
+    see as a fill (fill pass) while refusing P03 certification naming
+    ``fills_link_to_order``. Built through the real OMS, then ledger
+    surgery on the fill's order reference; no network, no credentials,
+    no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    ledger_path = run_dir / "oms.sqlite"
+    connection = sqlite3.connect(ledger_path)
+    try:
+        order_row = connection.execute(
+            "SELECT payload_json FROM order_events WHERE event_type='order_created'"
+        ).fetchone()
+        created_id = json.loads(order_row[0])["artifact"]["artifact_id"]
+        row = connection.execute(
+            "SELECT payload_json FROM order_events WHERE event_type='fill_recorded'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["artifact"]["order_id"] == created_id
+        payload["artifact"]["order_id"] = str(uuid4())
+        connection.execute(
+            "UPDATE order_events SET payload_json=? WHERE event_type='fill_recorded'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "fills_link_to_order" in names
