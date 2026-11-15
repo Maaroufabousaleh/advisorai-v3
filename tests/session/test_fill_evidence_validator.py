@@ -580,3 +580,35 @@ def test_validator_rejects_duplicate_order_created(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "single_order_created" in names
+
+
+def test_validator_rejects_missing_reconciled_terminal_event(tmp_path) -> None:
+    """P03: a fill stopping at FILLED refuses certification.
+
+    A ledger whose terminal OMS states read ``['filled']`` instead of
+    ``['filled', 'reconciled']`` (the ``order_reconciled`` transition
+    never persisted) is an unfinished-reconciliation defect. The
+    validator must still see the fill (fill pass) while refusing P03
+    certification naming ``terminal_fill_chain``. Built through the
+    real OMS, then ledger surgery deleting the reconciled row; no
+    network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    ledger_path = run_dir / "oms.sqlite"
+    connection = sqlite3.connect(ledger_path)
+    try:
+        row = connection.execute(
+            "SELECT COUNT(*) FROM order_events WHERE event_type='order_reconciled'"
+        ).fetchone()
+        assert row[0] == 1
+        connection.execute(
+            "DELETE FROM order_events WHERE event_type='order_reconciled'"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "terminal_fill_chain" in names
