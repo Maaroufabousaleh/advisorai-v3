@@ -326,3 +326,34 @@ def test_validator_rejects_duplicate_session_end(tmp_path, monkeypatch, capsys) 
     assert report.p02_certified is False
     names = [check.name for check in report.failed]
     assert "single_session_end" in names
+
+
+def test_validator_rejects_missing_order_events_table(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a ledger without order events refuses certification.
+
+    P02 acceptance requires a recorded submission count; a ledger
+    whose ``order_events`` table is absent (submission history
+    unrecoverable) must fail certification naming
+    ``submission_count_recorded`` even though the stop record itself
+    is clean. Offline only; drops the table from a real
+    stopped-session ledger, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="missing-order-events-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master"
+            " WHERE type='table' AND name='order_events'"
+        ).fetchone()
+        assert row[0] == 1
+        connection.execute("DROP TABLE order_events")
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.submission_count is None
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "submission_count_recorded" in names
