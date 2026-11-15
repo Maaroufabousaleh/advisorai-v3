@@ -14,7 +14,7 @@ from uuid import uuid4
 import pytest
 
 from advisorai.config import CredentialResolver
-from advisorai.contracts import ExecutionPlan, InstrumentIdentity, Order, OrderState
+from advisorai.contracts import ExecutionPlan, Fill, InstrumentIdentity, Order, OrderState
 from advisorai.execution import NativeVenueAdapter, NativeVenueProjectionError, OrderManager
 from advisorai.execution.reconciliation import VenueAccountSnapshot
 from advisorai.integrations import (
@@ -344,3 +344,198 @@ def test_prepare_current_state_raises_on_late_divergence(tmp_path, monkeypatch) 
         app._prepare_current_state()
     assert app.runtime.risk_kernel.kill_switch.tripped is True
     assert app.runtime.risk_kernel.kill_switch.reason == "paper_reconciliation_mismatch"
+
+
+def test_startup_abstains_on_venue_fill_for_unknown_local_order(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: startup abstains on an orphan venue fill.
+
+    Recovery checks run ``_prepare_current_state`` inside
+    ``supervisor.start()`` before the scheduler lease and SESSION
+    READY: a venue fill whose order is absent from the local OMS
+    (hydration mismatch) fails the ``account_order_reconciliation``
+    check, startup records ABSTAIN with an unclean stop, returns
+    exit 2, and never reaches SESSION READY. Offline only; the
+    venue is the synthetic counting transport, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "unknown-fill.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "unknown-fill-state",
+        lock_identity="unknown-fill-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    orphan = Fill(
+        order_id=uuid4(),
+        venue_fill_id="orphan-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0"),
+        occurred_at=_NOW,
+    )
+    monkeypatch.setattr(type(app.venue), "fills", property(lambda _self: (orphan,)))
+    exit_code = app.run(reason="unknown fill startup test")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "recovery_mode=abstain" in output
+    assert "decision=failed_check:account_order_reconciliation" in output
+    assert "RECOVERY INCOMPLETE" in output
+    assert "SESSION READY" not in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "recovery_checks_failed" in end.payload["end"]["unfinished_work"]
+    assert app._lease_id is None
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0
+
+
+def test_settle_venue_fills_raises_on_late_orphan_fill(tmp_path, monkeypatch) -> None:
+    """P02/P09 prep: fill settlement raises on a late orphan fill.
+
+    ``_settle_venue_fills`` names the exact fault: a venue fill
+    appearing after a passing reconciliation — whose order is absent
+    from the local OMS — raises ``RuntimeError`` instead of
+    applying an unattributable fill. Offline only; synthetic
+    venue, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "late-orphan.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "late-orphan-state",
+        lock_identity="late-orphan-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    app._prepare_current_state()
+    orphan = Fill(
+        order_id=uuid4(),
+        venue_fill_id="late-orphan-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0"),
+        occurred_at=_NOW,
+    )
+    monkeypatch.setattr(type(app.venue), "fills", property(lambda _self: (orphan,)))
+    with pytest.raises(
+        RuntimeError, match="paper venue contains a fill for an unknown local order"
+    ):
+        app._prepare_current_state()
+
+
+def test_run_reports_startup_error_on_fill_arriving_after_recovery(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: the run exception path pins a post-recovery orphan.
+
+    If a venue fill for an unknown local order appears after
+    ``supervisor.start()`` recorded NORMAL recovery, the real
+    ``_prepare_current_state`` raises, the ``run`` exception path
+    records an unclean stop naming ``startup_or_runtime_error``,
+    prints ``outcome=unclean``, and re-raises. Offline only;
+    the venue is the synthetic counting transport, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "post-recovery-orphan.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "post-recovery-orphan-state",
+        lock_identity="post-recovery-orphan-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    orphan = Fill(
+        order_id=uuid4(),
+        venue_fill_id="post-recovery-orphan-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0"),
+        occurred_at=_NOW,
+    )
+    accesses: list[str] = []
+
+    def evolving_fills(_self):
+        accesses.append("fills")
+        if len(accesses) == 1:
+            return ()
+        return (orphan,)
+
+    monkeypatch.setattr(type(app.venue), "fills", property(evolving_fills))
+    with pytest.raises(
+        RuntimeError, match="paper venue contains a fill for an unknown local order"
+    ):
+        app.run(reason="post-recovery orphan test")
+    output = capsys.readouterr().out
+    assert "recovery_mode=normal" in output
+    assert "outcome=unclean" in output
+    assert "SESSION READY" not in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "startup_or_runtime_error:RuntimeError" in end.payload["end"][
+        "unfinished_work"
+    ]
+    assert app._lease_id is None
+    assert app.supervisor.active_session_id() is None
+    assert len(accesses) == 2
