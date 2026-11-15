@@ -545,3 +545,38 @@ def test_validator_rejects_blank_venue_fill_id(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "venue_fill_ids_present" in names
+
+
+def test_validator_rejects_duplicate_order_created(tmp_path) -> None:
+    """P03: two order_created events refuse certification.
+
+    A ledger with a duplicated ``order_created`` event is a
+    double-create defect: the OMS recorded two orders where the
+    single-submission gate allows one. The validator must still see
+    the fill (fill pass) while refusing P03 certification naming
+    ``single_order_created``. Built through the real OMS, then
+    ledger surgery duplicating the created row with fresh IDs; no
+    network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    ledger_path = run_dir / "oms.sqlite"
+    connection = sqlite3.connect(ledger_path)
+    try:
+        row = connection.execute(
+            "SELECT event_id, idempotency_key, event_type, occurred_at, payload_json"
+            " FROM order_events WHERE event_type='order_created'"
+        ).fetchone()
+        connection.execute(
+            "INSERT INTO order_events"
+            " (event_id, idempotency_key, event_type, occurred_at, payload_json)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (str(uuid4()), f"order:{uuid4()}", row[2], row[3], row[4]),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "single_order_created" in names
