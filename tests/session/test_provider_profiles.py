@@ -330,3 +330,221 @@ def test_non_usd_profile_requires_explicit_snapshot_bound_fx(tmp_path):
     )
     assert isinstance(profile.outcome_adapter, QuoteAwarePaperOutcomeAdapter)
     assert profile.outcome_adapter.quote_currency == "USDT"
+
+
+def test_profile_request_refuses_blank_identities_and_negative_cap() -> None:
+    """P02/P09 prep: profile requests validate at construction.
+
+    Blank provider/instrument/quote identities and negative
+    submission caps are refused before any context, credential, or
+    transport work. Pure unit coverage; no network, no credentials.
+    """
+    with pytest.raises(ValueError, match="needs provider, instrument, and quote"):
+        ProviderProfileRequest(
+            provider="  ", provider_instrument_id="BTCUSDT", quote_currency="USD"
+        )
+    with pytest.raises(ValueError, match="needs provider, instrument, and quote"):
+        ProviderProfileRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="",
+            quote_currency="USD",
+        )
+    with pytest.raises(ValueError, match="submission cap cannot be negative"):
+        ProviderProfileRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USD",
+            max_submissions=-1,
+        )
+
+
+def test_profile_context_refuses_misshapen_owner_boundaries(tmp_path) -> None:
+    """P02/P09 prep: profile contexts validate owner boundaries.
+
+    A blank baseline quote, an unquoted data adapter, a data/baseline
+    quote split, an uncallable decision factory, and an uncallable FX
+    provider are all refused at construction. Uses the quiet owner
+    harness; no network, no credentials.
+    """
+    context, _app = _context(tmp_path)
+
+    def rebuild(**overrides):
+        kwargs = {
+            "data": context.data,
+            "evidence_council": context.evidence_council,
+            "decision_model_factory": context.decision_model_factory,
+            "initial_account": context.initial_account,
+            "ledgers": context.ledgers,
+            "instrument": context.instrument,
+            "account_quote_currency": context.account_quote_currency,
+            "fx_rate_provider": context.fx_rate_provider,
+        }
+        kwargs.update(overrides)
+        return ProviderProfileContext(**kwargs)
+
+    with pytest.raises(ValueError, match="baseline requires a quote currency"):
+        rebuild(account_quote_currency="  ")
+    unquoted_data = SimpleNamespace(quote_currency="  ")
+    with pytest.raises(ValueError, match="explicitly quoted data adapter"):
+        rebuild(data=unquoted_data)
+    split_data = SimpleNamespace(quote_currency="EUR")
+    with pytest.raises(ValueError, match="quote currencies differ"):
+        rebuild(data=split_data)
+    with pytest.raises(ValueError, match="requires a decision model factory"):
+        rebuild(decision_model_factory=None)
+    with pytest.raises(ValueError, match="FX rate provider must be callable"):
+        rebuild(fx_rate_provider="not-callable")
+
+
+def test_profile_builder_refuses_mismatched_context(tmp_path) -> None:
+    """P02/P09 prep: builders refuse contexts that drift from the request.
+
+    A request selecting another provider, a non-paper instrument, a
+    non-crypto asset class, an unmarked baseline, and quotes that
+    disagree with the baseline/instrument/data are all refused before
+    any credential or transport use.
+    """
+    context, _app = _context(tmp_path)
+
+    def build(request_context, request=None, **request_overrides):
+        req = request or _components(
+            request_context, "binance_spot_testnet", "BTCUSD", "USD"
+        ).request
+        if request_overrides:
+            req = ProviderProfileRequest(
+                provider=req.provider,
+                provider_instrument_id=req.provider_instrument_id,
+                quote_currency=req.quote_currency,
+                max_submissions=req.max_submissions,
+                **request_overrides,
+            )
+        return build_binance_spot_testnet_profile(
+            ProviderProfileComponents(context=request_context, request=req),
+            _resolver("binance_spot_testnet"),
+            transport=ProfileTransport("binance_spot_testnet", "BTCUSD", "USD"),
+        )
+
+    foreign_request = _components(
+        context, "coinbase_exchange_sandbox", "BTC-USD", "USD"
+    ).request
+    with pytest.raises(ValueError, match="must select binance_spot_testnet"):
+        build(context, request=foreign_request)
+
+    live_instrument = context.instrument.model_copy(update={"venue": "live"})
+    live_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=live_instrument,
+        account_quote_currency=context.account_quote_currency,
+        fx_rate_provider=context.fx_rate_provider,
+    )
+    with pytest.raises(ValueError, match="supervised paper venue alias"):
+        build(live_context)
+
+    equity_instrument = context.instrument.model_copy(
+        update={"asset_class": "equity"}
+    )
+    equity_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=equity_instrument,
+        account_quote_currency=context.account_quote_currency,
+        fx_rate_provider=context.fx_rate_provider,
+    )
+    with pytest.raises(ValueError, match="crypto spot instruments only"):
+        build(equity_context)
+
+    unmarked_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=context.instrument.model_copy(update={"canonical_id": "ETH"}),
+        account_quote_currency=context.account_quote_currency,
+        fx_rate_provider=context.fx_rate_provider,
+    )
+    with pytest.raises(ValueError, match="must mark the configured instrument"):
+        build(unmarked_context)
+
+    eur_context = ProviderProfileContext(
+        data=SimpleNamespace(quote_currency="EUR"),
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=context.instrument,
+        account_quote_currency="EUR",
+        fx_rate_provider=context.fx_rate_provider,
+    )
+    with pytest.raises(
+        ValueError, match="differs from the durable account baseline"
+    ):
+        build(eur_context)
+
+    jpy_instrument = context.instrument.model_copy(update={"quote_asset": "JPY"})
+    jpy_context = ProviderProfileContext(
+        data=context.data,
+        evidence_council=context.evidence_council,
+        decision_model_factory=context.decision_model_factory,
+        initial_account=context.initial_account,
+        ledgers=context.ledgers,
+        instrument=jpy_instrument,
+        account_quote_currency=context.account_quote_currency,
+        fx_rate_provider=context.fx_rate_provider,
+    )
+    with pytest.raises(ValueError, match="differs from the owner instrument"):
+        build(jpy_context)
+
+
+def test_profile_builder_refuses_misscoped_credentials(tmp_path) -> None:
+    """P02/P09 prep: builders refuse credentials outside the profile scope.
+
+    Missing venue secrets, a credential identity naming another
+    profile, a live environment, an unadmitted base URL, and an
+    unadmitted WebSocket URL are all refused before any transport
+    or product read.
+    """
+    context, _app = _context(tmp_path)
+
+    def resolver_with(**overrides):
+        values = {
+            "ADVISORAI_VENUE_API_KEY": "profile-test-key",
+            "ADVISORAI_VENUE_API_SECRET": "profile-test-secret",
+            "ADVISORAI_VENUE_NAME": "binance_spot_testnet",
+            "ADVISORAI_VENUE_ENVIRONMENT": "testnet",
+            "ADVISORAI_VENUE_BASE_URL": BINANCE_SPOT_TESTNET_BASE_URL,
+        }
+        values.update(overrides)
+        pruned = {key: value for key, value in values.items() if value is not None}
+        return CredentialResolver.from_mapping(pruned)
+
+    def build(resolver):
+        transport = ProfileTransport("binance_spot_testnet", "BTCUSD", "USD")
+        profile = None
+        try:
+            profile = build_binance_spot_testnet_profile(
+                _components(context, "binance_spot_testnet", "BTCUSD", "USD"),
+                resolver,
+                transport=transport,
+            )
+        finally:
+            assert transport.product_reads == 0
+        return profile
+
+    with pytest.raises(ValueError, match="scoped PAPER_VENUE credentials"):
+        build(resolver_with(ADVISORAI_VENUE_API_SECRET=None))
+    with pytest.raises(ValueError, match="identity does not match"):
+        build(resolver_with(ADVISORAI_VENUE_NAME="coinbase_exchange_sandbox"))
+    with pytest.raises(ValueError, match="paper/testnet environment"):
+        build(resolver_with(ADVISORAI_VENUE_ENVIRONMENT="live"))
+    with pytest.raises(ValueError, match="unadmitted provider endpoint"):
+        build(resolver_with(ADVISORAI_VENUE_BASE_URL="https://api.binance.com"))
+    with pytest.raises(ValueError, match="unadmitted WebSocket endpoint"):
+        build(resolver_with(ADVISORAI_VENUE_WS_URL="wss://stream.binance.com:9443"))
