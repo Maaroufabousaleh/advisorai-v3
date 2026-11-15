@@ -647,3 +647,43 @@ def test_validator_rejects_ledger_ingestion_count_divergence(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "fill_count_matches_ingestion" in names
+
+
+def test_validator_rejects_dirty_ledger_reconciliation(tmp_path) -> None:
+    """P03: a dirty ledger reconciliation record refuses certification.
+
+    The ledger's ``reconciliation_recorded`` artifact reports
+    ``reconciled=false`` with a discrepancy while the manifest's
+    reconciliation block still claims clean — a ledger/manifest
+    divergence the validator must catch on the ledger side. The run
+    must still see the fill (fill pass) while refusing P03
+    certification naming ``reconciliation_clean`` (not the manifest
+    check). Built through the real OMS, then ledger surgery on the
+    reconciliation record; no network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    ledger_path = run_dir / "oms.sqlite"
+    connection = sqlite3.connect(ledger_path)
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM order_events"
+            " WHERE event_type='reconciliation_recorded'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["artifact"]["reconciled"] is True
+        payload["artifact"]["reconciled"] = False
+        payload["artifact"]["discrepancies"] = ["synthetic_divergence_probe"]
+        connection.execute(
+            "UPDATE order_events SET payload_json=?"
+            " WHERE event_type='reconciliation_recorded'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "reconciliation_clean" in names
+    assert "manifest_reconciliation_clean" not in names
