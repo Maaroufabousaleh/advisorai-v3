@@ -14,6 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+
 sys.path.insert(0, "scripts")
 
 from validate_binance_fill_evidence import main, validate_run
@@ -278,6 +280,17 @@ def test_cli_exit_codes_distinguish_input_fill_and_failure(tmp_path, capsys) -> 
     assert main(["--evidence-dir", str(_fill_run(tmp_path))]) == 0
 
 
+_PRESERVED_FAILED_RUN = Path(
+    "artifacts/phase2/binance-spot-testnet/paper-lifecycle/20261114T005138.117654Z"
+)
+requires_preserved_failed_run = pytest.mark.skipif(
+    not (_PRESERVED_FAILED_RUN / "binance-spot-testnet-paper-lifecycle.json").is_file()
+    or not (_PRESERVED_FAILED_RUN / "oms.sqlite").is_file(),
+    reason="phase-2 venue evidence is generated locally and not committed",
+)
+
+
+@requires_preserved_failed_run
 def test_preserved_failed_run_shows_venue_fill_during_cancel_race() -> None:
     """P03 race label: the venue reproduced fill-during-cancel in 005138.
 
@@ -289,11 +302,7 @@ def test_preserved_failed_run_shows_venue_fill_during_cancel_race() -> None:
     pass (source=ledger, no ingestion block) while refusing P03
     certification. Read-only; no network, no credentials, no venue writes.
     """
-    from pathlib import Path
-
-    run_dir = Path("artifacts/phase2/binance-spot-testnet/paper-lifecycle/20261114T005138.117654Z")
-    assert (run_dir / "binance-spot-testnet-paper-lifecycle.json").exists()
-    assert (run_dir / "oms.sqlite").exists()
+    run_dir = _PRESERVED_FAILED_RUN
     report = validate_run(run_dir)
     observed = next(check for check in report.checks if check.name == "fill_observed")
     assert report.fill_pass is True
