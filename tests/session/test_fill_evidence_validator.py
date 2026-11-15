@@ -612,3 +612,38 @@ def test_validator_rejects_missing_reconciled_terminal_event(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "terminal_fill_chain" in names
+
+
+def test_validator_rejects_ledger_ingestion_count_divergence(tmp_path) -> None:
+    """P03: ledger fills diverging from the manifest refuse certification.
+
+    The manifest claims one OMS fill but the ledger holds two
+    ``fill_recorded`` rows — a ledger/ingestion divergence defect
+    (double-ingest). The validator must still see the fill (fill
+    pass) while refusing P03 certification naming
+    ``fill_count_matches_ingestion``. Built through the real OMS,
+    then ledger surgery duplicating the fill row with fresh event
+    IDs; no network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    ledger_path = run_dir / "oms.sqlite"
+    connection = sqlite3.connect(ledger_path)
+    try:
+        row = connection.execute(
+            "SELECT event_id, idempotency_key, event_type, occurred_at, payload_json"
+            " FROM order_events WHERE event_type='fill_recorded'"
+        ).fetchone()
+        connection.execute(
+            "INSERT INTO order_events"
+            " (event_id, idempotency_key, event_type, occurred_at, payload_json)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (str(uuid4()), f"fill:{uuid4()}", row[2], row[3], row[4]),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "fill_count_matches_ingestion" in names
