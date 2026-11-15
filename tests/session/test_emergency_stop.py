@@ -17,10 +17,11 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
+from advisorai.session.records import SessionOutcome
 
 
 def _write_emergency_request(state_dir: Path, session_id: UUID) -> None:
@@ -101,3 +102,58 @@ def test_emergency_stop_ends_unclean_without_new_orders(
     finally:
         app.stop_requested.set()
         thread.join(timeout=30)
+
+
+def test_consume_stop_request_fails_closed_on_bad_input(tmp_path, monkeypatch) -> None:
+    """P09 prep: stop-request parsing fails closed, never crashes.
+
+    ``_consume_stop_request`` is the supervised stop input boundary:
+    a missing file means no request, but an unreadable file,
+    malformed JSON, a mismatched session ID, or an unknown outcome
+    all resolve to UNCLEAN instead of raising or stopping clean.
+    A valid request returns its outcome and consumes the file.
+    Pure unit coverage; no threads, no network, no credentials.
+    """
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    state_dir = tmp_path / "stop-parse-state"
+    ledgers = SqliteLedgers(state_dir / "ledgers.sqlite3")
+    app = PaperOwnerApplication(
+        ledgers=ledgers,
+        state_dir=state_dir,
+        lock_identity="stop-parse-test",
+        code_hash="a" * 64,
+        config_hash="b" * 64,
+        config=OwnerApplicationConfig(scenario="quiet", interval_seconds=60),
+    )
+    session_id = uuid4()
+    path = app.stop_request_path(session_id)
+    # Missing file: no request pending.
+    assert app._consume_stop_request(session_id) is None
+    # Malformed JSON fails closed to UNCLEAN and keeps the file.
+    path.write_text("{not-json", encoding="utf-8")
+    assert app._consume_stop_request(session_id) is SessionOutcome.UNCLEAN
+    assert path.exists()
+    # Session-ID mismatch fails closed to UNCLEAN and keeps the file.
+    path.write_text(
+        json.dumps({"session_id": str(uuid4()), "outcome": "clean"}),
+        encoding="utf-8",
+    )
+    assert app._consume_stop_request(session_id) is SessionOutcome.UNCLEAN
+    assert path.exists()
+    # Unknown outcome fails closed to UNCLEAN and keeps the file.
+    path.write_text(
+        json.dumps({"session_id": str(session_id), "outcome": "self-approve"}),
+        encoding="utf-8",
+    )
+    assert app._consume_stop_request(session_id) is SessionOutcome.UNCLEAN
+    assert path.exists()
+    # Valid request returns its outcome and consumes the file.
+    path.write_text(
+        json.dumps({"session_id": str(session_id), "outcome": "emergency"}),
+        encoding="utf-8",
+    )
+    assert app._consume_stop_request(session_id) is SessionOutcome.EMERGENCY
+    assert not path.exists()
+    assert app._consume_stop_request(session_id) is None
