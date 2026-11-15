@@ -601,3 +601,75 @@ def test_run_records_worker_error_when_data_snapshot_fails(
     assert "worker_error:RuntimeError" in end.payload["end"]["unfinished_work"]
     assert app.supervisor.active_session_id() is None
     assert transport.submit_calls == 0
+
+
+def test_run_names_open_orders_remaining_at_deadline_stop(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: an order still open at stop ends the session unclean.
+
+    A synthetic order submitted before the run stays acknowledged at
+    the venue through the deadline stop. ``_wait_and_stop`` records
+    an unclean stop naming ``paper_open_orders_remain`` with exit 2
+    instead of reporting a clean bounded session. Offline only; the
+    venue is the synthetic counting transport, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "open-orders.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "open-orders-state",
+        lock_identity="open-orders-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.1,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=1,
+        ),
+        transport=transport,
+    )
+    order = _order()
+    app.orders.create(order)
+    app.orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    acknowledgement = app.orders.route(order.artifact_id)
+    assert acknowledgement is not None and acknowledgement.accepted
+    assert transport.submit_calls == 1
+    # The venue projection is authoritative for the open set: the double
+    # keeps reporting the submitted order as open so the local ack
+    # survives reconciliation and is still open at the deadline stop.
+    transport.list_open_orders = lambda: (
+        {
+            "client_order_id": order.idempotency_key,
+            "venue_order_id": acknowledgement.venue_order_id,
+            "accepted": True,
+        },
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    exit_code = app.run(reason="open orders shutdown test")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "stop_reason=runtime_deadline_reached" in output
+    assert "outcome=unclean" in output
+    assert "SESSION READY" in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "paper_open_orders_remain" in end.payload["end"]["unfinished_work"]
+    assert str(order.artifact_id) in end.payload["end"]["open_orders"]
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 1
