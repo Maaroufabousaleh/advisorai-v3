@@ -410,3 +410,31 @@ def test_validator_rejects_unclean_manifest_reconciliation(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "manifest_reconciliation_clean" in names
+
+
+def test_validator_rejects_sequence_missing_fill_transition(tmp_path) -> None:
+    """P03: a sequence missing the fill transition refuses certification.
+
+    The ledger-side fill linkage may be exact while the manifest's
+    ``oms_event_sequence`` omits ``order_filled`` — a manifest/ledger
+    consistency defect. The validator must still see the fill (fill
+    pass) but refuse P03 certification naming
+    ``event_sequence_consistent``. Synthetic only; no network, no
+    credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    manifest_path = run_dir / "binance-spot-testnet-paper-lifecycle.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    sequence = manifest["result"]["oms_event_sequence"]
+    assert "order_filled" in sequence
+    manifest["result"]["oms_event_sequence"] = [
+        event for event in sequence if event != "order_filled"
+    ]
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "event_sequence_consistent" in names
