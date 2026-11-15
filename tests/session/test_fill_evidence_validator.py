@@ -337,3 +337,26 @@ def test_validator_rejects_ingestion_count_mismatch(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "fill_counts_agree" in names
+
+
+def test_validator_rejects_multiple_submissions(tmp_path) -> None:
+    """P03: a run with two signed submissions refuses certification.
+
+    The single-order lifecycle admits exactly one signed submission; a
+    manifest recording two is a resubmission/no-duplicate defect. The
+    validator must still see the fill (fill pass) but refuse P03
+    certification naming ``single_submission``. Synthetic only; no
+    network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    manifest_path = run_dir / "binance-spot-testnet-paper-lifecycle.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["result"]["signed_submission_count"] = 2
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "single_submission" in names
