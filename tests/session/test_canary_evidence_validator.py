@@ -168,3 +168,38 @@ def test_cli_returns_1_on_unclean_stop(tmp_path, monkeypatch, capsys) -> None:
     finally:
         connection.close()
     assert main(["--state-dir", str(state_dir), "--run-log", str(run_log)]) == 1
+
+
+def test_validator_rejects_open_orders_and_unreleased_leases(tmp_path, monkeypatch, capsys) -> None:
+    """P02: open orders or held leases at stop refuse certification.
+
+    P02 acceptance requires "no unexplained open orders" and "released
+    leases" as independent checks: a session end that claims
+    ``outcome=clean`` while orders remain open or leases stay held must
+    still fail certification, naming the exact check. Offline only;
+    corrupts a real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="open-orders-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["end"]["outcome"] == "clean"
+        payload["end"]["open_orders"] = ["00000000-0000-0000-0000-000000000001"]
+        payload["end"]["leases_released"] = False
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "no_open_orders" in names
+    assert "leases_released" in names
