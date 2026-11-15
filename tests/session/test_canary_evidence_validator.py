@@ -292,3 +292,37 @@ def test_validator_rejects_dirty_reconciliation_state(tmp_path, monkeypatch, cap
     assert report.p02_certified is False
     names = [check.name for check in report.failed]
     assert "reconciliation_clean" in names
+
+
+def test_validator_rejects_duplicate_session_end(tmp_path, monkeypatch, capsys) -> None:
+    """P02: two session_ended events refuse certification.
+
+    P02 acceptance requires exactly one stop record; a ledger with a
+    duplicated ``session_ended`` event (double-stop defect) must fail
+    certification naming ``single_session_end`` even though each stop
+    is individually clean. Offline only; duplicates a real
+    stopped-session row, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="duplicate-stop-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT event_id, idempotency_key, occurred_at, payload_json"
+            " FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        event_id, key, occurred_at, payload_json = row
+        connection.execute(
+            "INSERT INTO mission_events"
+            " (event_id, idempotency_key, event_type, occurred_at, payload_json)"
+            " VALUES (?, ?, 'session_ended', ?, ?)",
+            (event_id + "-dup", key + "-dup", occurred_at, payload_json),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "single_session_end" in names
