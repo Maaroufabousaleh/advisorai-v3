@@ -315,3 +315,25 @@ def test_preserved_failed_run_shows_venue_fill_during_cancel_race() -> None:
     assert "order_cancel_pending" in sequence.detail
     assert "fill_recorded" in sequence.detail
     assert sequence.detail.index("order_cancel_pending") < sequence.detail.index("fill_recorded")
+
+
+def test_validator_rejects_ingestion_count_mismatch(tmp_path) -> None:
+    """P03: manifest fill counts that disagree refuse certification.
+
+    The manifest claims one real fill but two OMS fills — an ingestion
+    accounting defect. The validator must still see the fill (fill pass)
+    but refuse P03 certification naming ``fill_counts_agree``.
+    Synthetic only; no network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    manifest_path = run_dir / "binance-spot-testnet-paper-lifecycle.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["result"]["fill_ingestion"]["oms_fill_count"] = 2
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "fill_counts_agree" in names
