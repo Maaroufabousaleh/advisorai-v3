@@ -712,3 +712,28 @@ def test_validator_rejects_failed_lifecycle_status(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "lifecycle_passed" in names
+
+
+def test_validator_rejects_wrong_manifest_schema(tmp_path) -> None:
+    """P03: a manifest with the wrong schema refuses certification.
+
+    The manifest's ``schema`` field names a non-lifecycle schema even
+    though the fill ingestion block reports an observed fill with
+    agreeing counts — a provenance defect (evidence from the wrong
+    pipeline). The validator must still see the fill (fill pass)
+    while refusing P03 certification naming ``manifest_schema``.
+    Synthetic only; no network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    manifest_path = run_dir / "binance-spot-testnet-paper-lifecycle.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema"].startswith("advisorai.phase2.")
+    manifest["schema"] = "advisorai.phase2.binance-spot-testnet.read-only-smoke.v1"
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "manifest_schema" in names
