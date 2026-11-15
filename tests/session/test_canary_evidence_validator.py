@@ -226,3 +226,36 @@ def test_validator_rejects_truncated_run_log(tmp_path, monkeypatch, capsys) -> N
     assert report.p02_certified is False
     names = [check.name for check in report.failed]
     assert "run_log_markers" in names
+
+
+def test_validator_rejects_wrong_venue_profile(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a non-testnet venue profile refuses certification.
+
+    P02 acceptance requires the session to have run on a testnet
+    profile; a ledger whose ``session_profile`` records
+    ``local-simulator`` must fail certification naming
+    ``testnet_profile`` even though the stop itself is clean. Offline
+    only; edits a real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="wrong-profile-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_profile'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["profile"]["venue_profile"] == "binance_spot_testnet"
+        payload["profile"]["venue_profile"] = "local-simulator"
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_profile'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "testnet_profile" in names
