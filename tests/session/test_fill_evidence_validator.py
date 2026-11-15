@@ -510,3 +510,38 @@ def test_validator_rejects_fill_pointing_at_other_order(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "fills_link_to_order" in names
+
+
+def test_validator_rejects_blank_venue_fill_id(tmp_path) -> None:
+    """P03: a fill missing its venue fill ID refuses certification.
+
+    A ``fill_recorded`` event with a blank ``venue_fill_id`` is a
+    venue-attribution defect: the fill cannot be matched to any
+    venue-side execution record. The validator must still see the
+    fill (fill pass) while refusing P03 certification naming
+    ``venue_fill_ids_present``. Built through the real OMS, then
+    ledger surgery blanking the venue ID; no network, no credentials,
+    no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    ledger_path = run_dir / "oms.sqlite"
+    connection = sqlite3.connect(ledger_path)
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM order_events WHERE event_type='fill_recorded'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["artifact"]["venue_fill_id"] == "BTCUSDT:synthetic-1"
+        payload["artifact"]["venue_fill_id"] = ""
+        connection.execute(
+            "UPDATE order_events SET payload_json=? WHERE event_type='fill_recorded'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "venue_fill_ids_present" in names
