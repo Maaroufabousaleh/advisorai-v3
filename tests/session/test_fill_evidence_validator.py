@@ -8,6 +8,7 @@ synthetic fills only. No network, no credentials, no venue writes.
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -438,3 +439,36 @@ def test_validator_rejects_sequence_missing_fill_transition(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "event_sequence_consistent" in names
+
+
+def test_validator_rejects_fill_quantity_mismatch(tmp_path) -> None:
+    """P03: fills totaling less than the order refuse certification.
+
+    A partial fill (``fill_recorded`` quantity below the order quantity)
+    is a genuine fill path the validator must see (fill pass) while
+    refusing P03 certification naming ``fill_quantity_matches_order``.
+    Built through the real OMS + account ledger with a synthetic
+    half-quantity fill; no network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    ledger_path = run_dir / "oms.sqlite"
+    connection = sqlite3.connect(ledger_path)
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM order_events WHERE event_type='fill_recorded'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert str(payload["artifact"]["quantity"]) == "0.01"
+        payload["artifact"]["quantity"] = "0.005"
+        connection.execute(
+            "UPDATE order_events SET payload_json=? WHERE event_type='fill_recorded'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "fill_quantity_matches_order" in names
