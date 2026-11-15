@@ -203,3 +203,26 @@ def test_validator_rejects_open_orders_and_unreleased_leases(tmp_path, monkeypat
     names = [check.name for check in report.failed]
     assert "no_open_orders" in names
     assert "leases_released" in names
+
+
+def test_validator_rejects_truncated_run_log(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a run log missing stop markers refuses certification.
+
+    P02 acceptance requires the run log to show the clean-stop marker
+    trail; a log truncated before ``leases_released=True`` must fail
+    certification naming ``run_log_markers`` even though the ledger
+    itself is clean. Offline only; edits a real captured log, no venue
+    writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="truncated-log-canary"
+    )
+    text = run_log.read_text(encoding="utf-8")
+    assert "leases_released=True" in text
+    truncated = text.replace("leases_released=True", "leases_released=<truncated>")
+    truncated_log = tmp_path / "truncated.log"
+    truncated_log.write_text(truncated, encoding="utf-8")
+    report = validate_canary(state_dir=state_dir, run_log=truncated_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "run_log_markers" in names
