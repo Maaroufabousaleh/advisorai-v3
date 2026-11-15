@@ -385,3 +385,28 @@ def test_validator_rejects_restart_resubmission(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "restart_no_duplicate" in names
+
+
+def test_validator_rejects_unclean_manifest_reconciliation(tmp_path) -> None:
+    """P03: a manifest reporting dirty reconciliation refuses certification.
+
+    The ledger-side fill linkage may be exact while the manifest's own
+    reconciliation block reports ``reconciled=False`` with a nonzero
+    discrepancy count — a manifest/ledger consistency defect. The
+    validator must still see the fill (fill pass) but refuse P03
+    certification naming ``manifest_reconciliation_clean``. Synthetic
+    only; no network, no credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    manifest_path = run_dir / "binance-spot-testnet-paper-lifecycle.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["result"]["reconciliation"]["reconciled"] = False
+    manifest["result"]["reconciliation"]["discrepancy_count"] = 1
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "manifest_reconciliation_clean" in names
