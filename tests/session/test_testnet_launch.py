@@ -409,3 +409,58 @@ def test_fixture_council_roles_emit_deterministic_labelled_evidence() -> None:
         "testnet-fixture-c",
         "testnet-fixture-d",
     }
+
+
+def test_launch_request_validation_refuses_out_of_profile_inputs() -> None:
+    """P02 prep: launch-request construction refuses misshapen inputs.
+
+    The supervised launch path admits exactly one venue profile per
+    provider plus a positive fake-funds baseline and a non-negative
+    submission cap. Unknown venue profiles, wrong quotes, zero
+    baselines, and negative caps are refused before any transport is
+    built. Pure unit coverage; no network, no credentials.
+    """
+    from advisorai.session.testnet_launch import (
+        TestnetFixtureDataAdapter,
+        TestnetLaunchRequest,
+        _validate_request,
+        observation_from_testnet_bar,
+    )
+
+    def request(**overrides):
+        kwargs = {
+            "provider": "binance_spot_testnet",
+            "provider_instrument_id": "BTCUSDT",
+            "quote_currency": "USDT",
+        }
+        kwargs.update(overrides)
+        return TestnetLaunchRequest(**kwargs)
+
+    with pytest.raises(ValueError, match="unknown testnet venue profile"):
+        _validate_request(request(provider="live-exchange"))
+    with pytest.raises(ValueError, match="requires the USDT quote"):
+        _validate_request(request(quote_currency="USD"))
+    with pytest.raises(ValueError, match="requires the USD quote"):
+        _validate_request(
+            request(
+                provider="coinbase_exchange_sandbox",
+                provider_instrument_id="BTC-USD",
+                quote_currency="USDT",
+            )
+        )
+    with pytest.raises(ValueError, match="positive fake-funds baseline"):
+        _validate_request(request(initial_cash=Decimal("0")))
+    with pytest.raises(ValueError, match="positive fake-funds baseline"):
+        _validate_request(request(initial_mark=Decimal("-1")))
+    with pytest.raises(ValueError, match="cannot be negative"):
+        _validate_request(request(max_submissions=-1))
+    with pytest.raises(ValueError, match="requires a quote currency"):
+        TestnetFixtureDataAdapter("  ")
+    with pytest.raises(ValueError, match="observation times must include a timezone"):
+        observation_from_testnet_bar(
+            provider="binance_spot_testnet",
+            series_id="BTCUSDT",
+            period_start=datetime(2026, 11, 15, 12, 0),
+            value="50000",
+            retrieved_at=datetime.now(UTC),
+        )

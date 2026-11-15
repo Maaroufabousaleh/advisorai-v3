@@ -8,6 +8,7 @@ predicate via the real transport with mocked HTTP.
 
 from __future__ import annotations
 
+import base64
 import json
 import sys
 from decimal import Decimal
@@ -140,3 +141,60 @@ def test_diagnostic_verdict_matches_launcher_predicate(monkeypatch) -> None:
     ]
     assert clean_calls and dirty_calls
     assert all(method == "GET" for method, _ in clean_calls + dirty_calls)
+
+
+def test_coinbase_snapshot_rejects_unmapped_nonzero_asset() -> None:
+    """P02 prep: the sibling adapter refuses unmapped nonzero assets.
+
+    Coinbase raises (rather than preserving ``asset:`` markers) when a
+    nonzero currency has no verified product, so no foreign position
+    can silently reach the baseline. Synthetic transport double + a
+    stub ``_accounts`` payload; no network, no credentials.
+    """
+    from advisorai.integrations import (
+        COINBASE_EXCHANGE_SANDBOX_BASE_URL,
+        build_coinbase_exchange_sandbox_transport,
+    )
+    from advisorai.integrations.venue import VenueTransportError
+
+    coinbase_resolver = CredentialResolver.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "coinbase_exchange_sandbox",
+            "ADVISORAI_VENUE_ENVIRONMENT": "paper_testnet",
+            "ADVISORAI_VENUE_BASE_URL": COINBASE_EXCHANGE_SANDBOX_BASE_URL,
+            "ADVISORAI_VENUE_API_KEY": "synthetic-testnet-key",
+            "ADVISORAI_VENUE_API_SECRET": base64.b64encode(
+                b"synthetic-testnet-secret"
+            ).decode("ascii"),
+            "ADVISORAI_VENUE_PASSPHRASE": "synthetic-testnet-passphrase",
+        }
+    )
+    transport = build_coinbase_exchange_sandbox_transport(coinbase_resolver)
+    transport.verify_product_mappings(
+        [
+            {
+                "id": "BTC-USD",
+                "base_currency": "BTC",
+                "quote_currency": "USD",
+                "base_increment": "0.00000001",
+                "quote_increment": "0.01",
+                "status": "online",
+            }
+        ],
+        required=("BTC-USD",),
+    )
+    transport._accounts = lambda: [  # type: ignore[method-assign]
+        {"currency": "USD", "balance": "10000", "available": "10000"},
+        {"currency": "BTC", "balance": "0.01", "available": "0.01"},
+        {"currency": "ETH", "balance": "0.50", "available": "0.50"},
+    ]
+    with pytest.raises(VenueTransportError, match="non-zero unmapped asset ETH"):
+        transport.fetch_account_snapshot()
+
+
+def test_diagnostic_rejects_misshapen_payloads() -> None:
+    """P02 prep: the diagnostic fails closed on misshapen payloads."""
+    with pytest.raises(ValueError, match="must be a list"):
+        classify_balances({"asset": "ETH"})
+    with pytest.raises(ValueError, match="must be an object"):
+        classify_balances([("ETH", "0.5", "0.0")])
