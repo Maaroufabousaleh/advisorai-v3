@@ -502,3 +502,89 @@ def test_coinbase_diagnostic_entry_point_reports_rejected_assets(
     assert "synthetic-diagnostic-secret" not in out + err
     assert "1.5" not in out + err
     assert "1000" not in out + err
+
+def test_recovery_check_lists_fills_orders_and_legs_without_economics(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 canary: --recovery-check distinguishes fill vs order vs balance.
+
+    Runs ``main(['--recovery-check'])`` end to end through the real
+    transport factory with mocked HTTP: one historical fill, one open
+    order, BTC/USDT legs. Output names fill/order identities and leg
+    flags only — no quantities, prices, fees, amounts, or secrets —
+    and all calls are GET reads.
+    """
+    import json as json_module
+
+    import diagnose_testnet_baseline as diagnostic_module
+
+    balances = _balances(("BTC", "0.010", "0.000"), ("USDT", "9994.50", "0.000"))
+    account = _account_payload(balances)
+    fills = [
+        {
+            "symbol": "BTCUSDT",
+            "id": 777001,
+            "orderId": 424242,
+            "price": "50000.00",
+            "qty": "0.001",
+            "commission": "0.05",
+            "commissionAsset": "USDT",
+            "time": 1700000000000,
+            "isBuyer": True,
+        }
+    ]
+    orders = [
+        {
+            "symbol": "BTCUSDT",
+            "orderId": 424243,
+            "clientOrderId": "probe-local",
+            "price": "49000.00",
+            "origQty": "0.001",
+            "status": "NEW",
+        }
+    ]
+    symbols = [_symbol("BTCUSDT", "BTC", "USDT"), _symbol("ETHUSDT", "ETH", "USDT")]
+    calls: list = []
+
+    def request(method, url, headers, body, timeout):
+        calls.append((method, url))
+        if "/api/v3/exchangeInfo" in url:
+            return (200, json_module.dumps({"symbols": symbols}).encode(), ())
+        if "/api/v3/account" in url:
+            return (200, json_module.dumps(account).encode(), ())
+        if "/api/v3/myTrades" in url:
+            if "BTCUSDT" in url:
+                return (200, json_module.dumps(fills).encode(), ())
+            return (200, b"[]", ())
+        if "/api/v3/openOrders" in url:
+            if "symbol=" in url and "BTCUSDT" not in url:
+                return (200, b"[]", ())
+            return (200, json_module.dumps(orders).encode(), ())
+        if "/api/v3/time" in url:
+            return (200, json_module.dumps({"serverTime": 1700000070000}).encode(), ())
+        raise AssertionError(f"unexpected mocked call {method} {url}")
+
+    monkeypatch.setattr(
+        diagnostic_module,
+        "build_binance_spot_testnet_transport",
+        lambda resolver: build_binance_spot_testnet_transport(
+            resolver, requester=request
+        ),
+    )
+    code = diagnostic_main(
+        ["--secrets", str(_synthetic_secrets_file(tmp_path)), "--recovery-check"]
+    )
+    out, err = capsys.readouterr()
+    assert code == 0
+    assert "venue_fills=1" in out
+    assert "venue_fill_id=" in out
+    assert "occurred_at=" in out
+    assert "venue_open_orders=1" in out
+    assert "venue_order_id=" in out
+    assert "balance BTC" in out
+    assert "balance USDT" in out
+    assert calls and all(method == "GET" for method, _ in calls)
+    assert "synthetic-diagnostic-key" not in out + err
+    assert "synthetic-diagnostic-secret" not in out + err
+    for secret_value in ("50000.00", "49000.00", "0.001", "0.05", "9994.50", "0.010"):
+        assert secret_value not in out + err

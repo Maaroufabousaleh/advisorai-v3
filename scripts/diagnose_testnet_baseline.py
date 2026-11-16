@@ -115,6 +115,51 @@ def classify_coinbase_accounts(
     return flagged
 
 
+def diagnose_recovery_fill_open_orders_and_balance(
+    transport, *, symbol: str
+) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, object]]:
+    """Read-only recovery distinguisher: fills vs open orders vs balances.
+
+    Verifies BTCUSDT/ETHUSDT product mappings from provider truth first
+    (the launcher's own precondition), then returns
+    ``(fills, open_orders, balances)`` where fills carry only
+    ``venue_fill_id`` + ISO ``occurred_at`` (no qty/price/fee), open orders
+    carry only ``venue_order_id`` + symbol, and balances carry only the
+    BTC/USDT leg-nonzero flags. Prints nothing; the caller formats.
+    """
+    from datetime import UTC, datetime
+
+    transport.verify_symbol_mappings(transport.list_products())
+    fills: list[dict[str, object]] = []
+    for record in transport.list_fills():
+        occurred = record.get("occurred_at", record.get("time", ""))
+        if isinstance(occurred, (int, float)):
+            occurred = datetime.fromtimestamp(occurred / 1000, tz=UTC).isoformat()
+        fills.append(
+            {
+                "venue_fill_id": str(record.get("venue_fill_id", record.get("id", ""))),
+                "occurred_at": str(occurred),
+            }
+        )
+    open_orders: list[dict[str, object]] = []
+    for record in transport.list_open_orders():
+        open_orders.append(
+            {
+                "venue_order_id": str(record.get("venue_order_id", "")),
+                "symbol": str(record.get("symbol", "")),
+            }
+        )
+    balances: dict[str, object] = {}
+    for record in transport.list_balances():
+        asset = str(record.get("asset", "")).strip().upper()
+        if asset in {"BTC", "USDT"}:
+            balances[asset] = {
+                "free_nonzero": _nonzero(record.get("free", "0")),
+                "locked_nonzero": _nonzero(record.get("locked", "0")),
+            }
+    return fills, open_orders, balances
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--secrets", type=Path, default=Path("secrets.env"))
@@ -125,6 +170,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--instrument", default=None)
     parser.add_argument("--quote", default=None)
+    parser.add_argument(
+        "--recovery-check",
+        action="store_true",
+        help=(
+            "Read-only recovery distinguisher: list venue fills "
+            "(id + time only), open orders (id + symbol only), and "
+            "BTC/USDT leg flags. No amounts, prices, or fees printed."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.provider == "binance_spot_testnet":
@@ -147,8 +201,35 @@ def main(argv: list[str] | None = None) -> int:
         resolver = CredentialResolver.from_env_file(args.secrets)
         if args.provider == "binance_spot_testnet":
             transport = build_binance_spot_testnet_transport(resolver)
+            if args.recovery_check:
+                fills, open_orders, balances = diagnose_recovery_fill_open_orders_and_balance(
+                    transport, symbol=instrument
+                )
+                print(f"venue_fills={len(fills)}")
+                for fill in fills:
+                    print(
+                        f"  fill venue_fill_id={fill['venue_fill_id']} "
+                        f"occurred_at={fill['occurred_at']}"
+                    )
+                print(f"venue_open_orders={len(open_orders)}")
+                for order in open_orders:
+                    print(
+                        f"  order venue_order_id={order['venue_order_id']} "
+                        f"symbol={order['symbol']}"
+                    )
+                for asset in ("BTC", "USDT"):
+                    legs = balances.get(asset, {})
+                    print(
+                        f"  balance {asset} "
+                        f"free_nonzero={legs.get('free_nonzero')} "
+                        f"locked_nonzero={legs.get('locked_nonzero')}"
+                    )
+                return 0
             flagged = classify_balances(transport.list_balances())
         else:
+            if args.recovery_check:
+                print("recovery-check supports only binance_spot_testnet", file=sys.stderr)
+                return 2
             transport = build_coinbase_exchange_sandbox_transport(resolver)
             flagged = classify_coinbase_accounts(transport.list_balances())
     except (OSError, ValueError, VenueTransportError, HttpTransportError) as exc:
