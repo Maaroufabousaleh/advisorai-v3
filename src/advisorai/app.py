@@ -188,6 +188,25 @@ def cmd_start(args: argparse.Namespace) -> int:
                     flush=True,
                 )
                 return 2
+            expected_instrument = (
+                "BTCUSDT" if venue_profile == "binance_spot_testnet" else "BTC-USD"
+            )
+            expected_quote = "USDT" if venue_profile == "binance_spot_testnet" else "USD"
+            requested_instrument = (
+                getattr(args, "venue_instrument", None) or expected_instrument
+            )
+            requested_quote = getattr(args, "venue_quote", None) or expected_quote
+            if (
+                requested_instrument.strip().upper() != expected_instrument
+                or requested_quote.strip().upper() != expected_quote
+            ):
+                supervisor._release_lock()
+                print(
+                    f"SESSION START REFUSED: {venue_profile} admits exactly "
+                    f"{expected_instrument}/{expected_quote} in this path",
+                    flush=True,
+                )
+                return 2
             secrets_path = Path(
                 getattr(args, "secrets", None)
                 or os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")

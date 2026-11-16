@@ -32,7 +32,10 @@ ADVISORAI_STATE_DIR=var/advisorai-testnet uv run python -m advisorai.app start \
 ```
 
 The baseline cash and timestamp stay out of stdout by default; pass
-`--print-baseline` for explicit one-shot inspection.
+`--print-baseline` for explicit one-shot inspection. `--venue-instrument` /
+`--venue-quote` default per profile (`BTCUSDT`/`USDT`,
+`BTC-USD`/`USD`); anything else refuses with `SESSION START REFUSED`
+before the secrets file is read.
 
 `start` stays in the foreground for the whole owner session. It holds the
 durable single-owner lock while one bounded scheduler runs paper cycles. The

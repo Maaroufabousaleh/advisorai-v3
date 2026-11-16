@@ -828,3 +828,49 @@ def test_subprocess_backup_on_corrupt_ledger_refuses_cleanly(tmp_path) -> None:
     assert "BACKUP REFUSED" in run.stdout
     assert "Traceback" not in run.stdout + run.stderr
     assert not (state_dir / "backups").exists()
+
+
+def test_subprocess_testnet_start_with_wrong_instrument_refuses_cleanly(
+    tmp_path,
+) -> None:
+    """P02 owner-flow: out-of-profile instrument refuses before secrets.
+
+    Black-box: a real child with a wrong ``--venue-instrument`` must
+    exit 2 with SESSION START REFUSED — no traceback — without
+    touching the secrets file or the venue. The secrets path points
+    at a missing file to prove the bounds check runs first; the
+    refusal must name the instrument bound, not the missing file.
+    """
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "instrument-refusal-probe",
+            "start",
+            "--venue-profile",
+            "binance_spot_testnet",
+            "--venue-instrument",
+            "ETHUSDT",
+            "--max-submissions",
+            "0",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert (
+        "SESSION START REFUSED: binance_spot_testnet admits exactly BTCUSDT/USDT"
+        in run.stdout
+    )
+    assert "cannot read secrets file" not in run.stdout
+    assert "testnet_baseline" not in run.stdout
+    assert "SESSION READY" not in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
