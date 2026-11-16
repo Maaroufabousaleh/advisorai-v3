@@ -667,6 +667,9 @@ class PaperOwnerApplication:
             raise RuntimeError("current paper account/order reconciliation failed")
 
     def _settle_venue_fills(self) -> None:
+        unresolved = getattr(self.venue, "unresolved_venue_fills", None)
+        if callable(unresolved):
+            self._absorb_baseline_settled_fills(tuple(unresolved()))
         for fill in self.venue.fills:
             order = self.orders.orders.get(fill.order_id)
             if order is None:
@@ -677,6 +680,78 @@ class PaperOwnerApplication:
             if order.state.value in {"acknowledged", "partially_filled", "cancel_pending"}:
                 self.orders.record_fill(fill, order.side)
             self.account_ledger.apply_fill(fill, order.side, order.instrument.canonical_id)
+
+    def _absorb_baseline_settled_fills(self, unresolved: tuple[dict[str, object], ...]) -> None:
+        """Absorb venue fills already settled inside the opening baseline.
+
+        First start seeds its balances from a live venue snapshot that
+        already reflects settled lifecycle history (e.g. fill
+        ``BTCUSDT:2697483`` from run ``20261114T005138.117654Z``). The
+        venue keeps reporting that fill in trade history, but no local
+        order claims it and re-applying it would double-count.
+
+        Absorption is per-fill and accounting-proven, never a timestamp
+        filter: reverse the fill's exact economics off a copy of the
+        durable baseline. If any leg underflows (the baseline cannot
+        contain the fill), the fill is not baseline-settled and recovery
+        fails closed. Otherwise record the fill's identity durably so it
+        is recognized without re-proof on restart, and never applied.
+        """
+        from decimal import Decimal
+
+        from advisorai.ledger import LedgerEvent, LedgerNamespace
+
+        for entry in unresolved:
+            venue_fill_id = str(entry["venue_fill_id"])
+            key = f"baseline-settled-fill:{venue_fill_id}"
+            if any(
+                event.idempotency_key == key for event in self.ledgers.events(LedgerNamespace.VENUE)
+            ):
+                continue
+            side = str(entry["side"])
+            quantity = entry["quantity"]
+            price = entry["price"]
+            fee = entry["fee"]
+            assert isinstance(quantity, Decimal)
+            assert isinstance(price, Decimal)
+            assert isinstance(fee, Decimal)
+            notional = price * quantity
+            baseline = self.adapters.initial_account
+            baseline_cash = baseline.cash
+            baseline_btc = baseline.positions.get("BTC", Decimal("0"))
+            baseline_fees = baseline.fees_paid
+            if side == "buy":
+                # Reversing a buy credits notional+fee and removes BTC; the
+                # BTC and fee legs must cover the fill or it is not contained.
+                if baseline_btc < quantity or baseline_fees < fee:
+                    raise RuntimeError(
+                        f"paper venue fill {venue_fill_id} is not settled in the baseline"
+                    )
+            elif side == "sell":
+                # Reversing a sell re-adds BTC and removes net proceeds; the
+                # cash leg must cover the notional or the fill is not contained.
+                if baseline_cash < notional - fee:
+                    raise RuntimeError(
+                        f"paper venue fill {venue_fill_id} is not settled in the baseline"
+                    )
+            else:
+                raise RuntimeError(f"paper venue fill {venue_fill_id} has an unmodeled side")
+            self.ledgers.append(
+                LedgerEvent(
+                    namespace=LedgerNamespace.VENUE,
+                    event_type="baseline_settled_fill_absorbed",
+                    idempotency_key=key,
+                    payload={
+                        "venue_fill_id": venue_fill_id,
+                        "provider_order_id": str(entry["provider_order_id"]),
+                        "side": side,
+                        "quantity": str(quantity),
+                        "price": str(price),
+                        "fee": str(fee),
+                        "occurred_at": str(entry["occurred_at"]),
+                    },
+                )
+            )
 
     def _recovery_checks(self) -> SessionRecoveryChecks:
         return SessionRecoveryChecks(

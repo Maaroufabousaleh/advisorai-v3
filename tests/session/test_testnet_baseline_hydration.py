@@ -70,6 +70,45 @@ def _requester(account: dict, calls: list):
     return request
 
 
+def _historical_fill(symbol: str = "BTCUSDT") -> dict:
+    """Sanitized shape of preserved venue fill BTCUSDT:2697483.
+
+    Mirrors the real ``myTrades`` record from lifecycle
+    ``20261114T005138.117654Z`` (venue ``occurred_at``
+    2026-11-14T00:51:51.787Z, buy 0.00008 BTC, zero fee): economics
+    preserved exactly because the accounting proof depends on them.
+    """
+    return {
+        "symbol": symbol,
+        "id": 2697483,
+        "orderId": 424242,
+        "price": "68384.74",
+        "qty": "0.00008",
+        "quoteQty": "5.47078",
+        "commission": "0",
+        "commissionAsset": "USDT",
+        "time": 1794617511787,
+        "isBuyer": True,
+        "isMaker": False,
+        "isBestMatch": True,
+    }
+
+
+def _requester_with_fills(account: dict, calls: list, fills: list[dict]):
+    """Seeded requester that also serves venue trade history per symbol."""
+    base = _requester(account, calls)
+
+    def request(method, url, headers, body, timeout):
+        if "/api/v3/myTrades" in url:
+            calls.append((method, url))
+            symbol = "BTCUSDT" if "BTCUSDT" in url else "ETHUSDT"
+            matching = [fill for fill in fills if fill["symbol"] == symbol]
+            return (200, json.dumps(matching).encode(), ())
+        return base(method, url, headers, body, timeout)
+
+    return request
+
+
 def _resolver() -> CredentialResolver:
     return CredentialResolver.from_mapping(
         {
@@ -728,3 +767,248 @@ def test_multi_asset_session_fails_closed_on_faucet_drift(
     assert "outcome=clean" not in output
     assert "reconciliation=reconciled" not in output
     assert all("/api/v3/order" not in url for _, url in calls)
+
+def test_first_start_with_historical_venue_fill_in_opening_balances(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 canary repro: session c069585e blocked on fill BTCUSDT:2697483.
+
+    First start with an empty local OMS against a funded multi-asset
+    account whose opening BTC balance already reflects the historical
+    lifecycle fill (buy 0.00008 BTC at 68384.74, zero fee, venue time
+    2026-11-14T00:51:51.787Z). No open orders, nothing locked.
+    Pre-fix this abstains on ``account_order_reconciliation`` before
+    SESSION READY; post-fix the baseline-absorbed fill must not block
+    recovery and must never be applied twice.
+    """
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    account = _multi_asset_account()
+    fills = [_historical_fill()]
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester_with_fills(account, calls, fills), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-historical.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "p02-historical-state",
+        lock_identity="p02-historical-fill",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+    )
+    exit_code = app.run(reason="p02 historical-fill repro")
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "SESSION READY" in output
+    assert "stop_reason=runtime_deadline_reached" in output
+    assert "outcome=clean" in output
+    assert "reconciliation=reconciled" in output
+    assert "leases_released=True" in output
+    assert all("/api/v3/order" not in url for _, url in calls)
+    assert app.supervisor.active_session_id() is None
+    # The historical fill was never applied to the local account: the
+    # session ends holding exactly the opening baseline quantities.
+    assert app.account.positions.get("BTC") == baseline.positions["BTC"]
+    assert app.account.cash == baseline.cash
+    order_events = ledgers.events(LedgerNamespace.ORDER)
+    assert all(
+        event.event_type != "fill_recorded" for event in order_events
+    )
+    account_events = ledgers.events(LedgerNamespace.ACCOUNT)
+    assert all(
+        event.event_type != "fill_applied" for event in account_events
+    )
+
+def _run_zero_submission_session(tmp_path, monkeypatch, account, fills, open_orders=()):
+    """Drive the real launcher path with seeded venue history; return app + output."""
+
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    real_builder = build_binance_spot_testnet_transport
+    base_requester = _requester_with_fills(account, calls, fills)
+
+    def request(method, url, headers, body, timeout):
+        if "/api/v3/openOrders" in url:
+            calls.append((method, url))
+            return (200, json.dumps(list(open_orders)).encode(), ())
+        return base_requester(method, url, headers, body, timeout)
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(resolver, requester=request, **kwargs)
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-failclosed.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "p02-failclosed-state",
+        lock_identity="p02-failclosed",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+    )
+    return app, calls
+
+
+def test_unknown_fill_exceeding_baseline_still_blocks_recovery(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: a fill the baseline cannot contain still blocks recovery.
+
+    Same first start, but the venue reports a NEW unknown fill buying
+    more BTC than the opening balance holds. Reversal underflows, so
+    absorption refuses and the session abstains before READY — the
+    historical-fill fix must not become a blanket timestamp filter.
+    """
+    account = _multi_asset_account()
+    oversized = _historical_fill()
+    oversized["id"] = 9990001
+    oversized["qty"] = "5.0"
+    app, calls = _run_zero_submission_session(
+        tmp_path, monkeypatch, account, [oversized]
+    )
+    exit_code = app.run(reason="p02 unknown-fill negative")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "SESSION READY" not in output
+    assert "RECOVERY INCOMPLETE" in output
+    assert "outcome=clean" not in output
+    assert "reconciliation=reconciled" not in output
+    assert all("/api/v3/order" not in url for _, url in calls)
+
+
+def test_unexplained_open_order_still_blocks_recovery_with_absorbed_fill(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: an open order nobody owns still blocks, even with history absorbed.
+
+    The historical fill absorbs, but the venue also reports an open
+    BTCUSDT order with a foreign client identity. The open-order sweep
+    must still fail closed before READY.
+    """
+    account = _multi_asset_account()
+    foreign_order = {
+        "symbol": "BTCUSDT",
+        "orderId": 888001,
+        "clientOrderId": "foreign-operator-order",
+        "price": "60000.00",
+        "origQty": "0.001",
+        "executedQty": "0",
+        "status": "NEW",
+        "type": "LIMIT",
+        "side": "BUY",
+        "time": 1794617600000,
+    }
+    app, calls = _run_zero_submission_session(
+        tmp_path, monkeypatch, account, [_historical_fill()], [foreign_order]
+    )
+    exit_code = app.run(reason="p02 open-order negative")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "SESSION READY" not in output
+    assert "outcome=clean" not in output
+    assert all("/api/v3/order" not in url for _, url in calls)
+
+
+def test_absorbed_fill_survives_restart_without_reapply_or_block(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: restart reuses the durable absorption record, still reconciles.
+
+    After a clean absorbed-fill session, a second app instance over the
+    same ledgers (restart) must recognize the recorded fill without
+    re-proving it, must not apply it, and must still reach READY and
+    reconcile clean. Asserts exactly one absorption record exists.
+    """
+    from advisorai.ledger import LedgerNamespace
+
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    account = _multi_asset_account()
+    fills = [_historical_fill()]
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester_with_fills(account, calls, fills), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-restart.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+
+    def build(tag):
+        return build_testnet_owner_application(
+            ledgers=ledgers,
+            state_dir=tmp_path / "p02-restart-state",
+            lock_identity=f"p02-restart-{tag}",
+            code_hash="c" * 64,
+            config_hash="d" * 64,
+            config=OwnerApplicationConfig(
+                scenario="quiet",
+                interval_seconds=0.5,
+                max_runtime_seconds=2,
+            ),
+            resolver=_resolver(),
+            launch=launch,
+            transport=transport,
+            baseline=baseline,
+        )
+
+    first = build("first")
+    assert first.run(reason="p02 restart first") == 0
+    capsys.readouterr()
+    second = build("second")
+    exit_code = second.run(reason="p02 restart second")
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "SESSION READY" in output
+    assert "outcome=clean" in output
+    assert "reconciliation=reconciled" in output
+    absorptions = [
+        event
+        for event in ledgers.events(LedgerNamespace.VENUE)
+        if event.event_type == "baseline_settled_fill_absorbed"
+    ]
+    assert len(absorptions) == 1
+    assert absorptions[0].payload["venue_fill_id"] == "BTCUSDT:2697483"
+    assert second.account.positions.get("BTC") == baseline.positions["BTC"]
+    assert second.account.cash == baseline.cash
