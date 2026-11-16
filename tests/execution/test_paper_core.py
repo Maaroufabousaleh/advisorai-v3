@@ -1891,3 +1891,105 @@ def test_tca_records_market_impact_and_venue_performance(btc_usdt, timestamp):
     assert report.venue == "approved-paper-venue"
     assert report.venue_performance == Decimal("0.98")
     assert report.implementation_shortfall >= Decimal("1.35")
+
+
+def test_account_state_refuses_misshapen_construction(timestamp):
+    """P02/P09 prep: account state validates at construction.
+
+    Non-finite monetary values, blank identifiers, non-finite
+    positions/marks, non-positive marks, negative average costs,
+    negative fee/funding/margin ledgers, negative cash, and naive
+    timestamps are all refused. Pure unit coverage; no network, no
+    credentials.
+    """
+    with pytest.raises(ValueError, match="monetary values must be finite"):
+        AccountState(cash=Decimal("NaN"), as_of=timestamp)
+    with pytest.raises(ValueError, match="identifiers cannot be blank"):
+        AccountState(cash=Decimal("100"), positions={"  ": Decimal("1")}, as_of=timestamp)
+    with pytest.raises(ValueError, match="positions and marks must be finite"):
+        AccountState(
+            cash=Decimal("100"),
+            positions={"BTC": Decimal("Infinity")},
+            as_of=timestamp,
+        )
+    with pytest.raises(ValueError, match="marks must be positive"):
+        AccountState(cash=Decimal("100"), marks={"BTC": Decimal("0")}, as_of=timestamp)
+    with pytest.raises(ValueError, match="average costs cannot be negative"):
+        AccountState(
+            cash=Decimal("100"), average_cost={"BTC": Decimal("-1")}, as_of=timestamp
+        )
+    with pytest.raises(ValueError, match="fees, funding, and margin cannot be negative"):
+        AccountState(cash=Decimal("100"), fees_paid=Decimal("-1"), as_of=timestamp)
+    with pytest.raises(ValueError, match="cash cannot start negative"):
+        AccountState(cash=Decimal("-1"), as_of=timestamp)
+    with pytest.raises(ValueError, match="peak equity cannot be negative"):
+        AccountState(
+            cash=Decimal("100"), peak_equity=Decimal("-1"), as_of=timestamp
+        )
+    with pytest.raises(ValueError, match="timestamp must include a timezone"):
+        AccountState(cash=Decimal("100"), as_of=timestamp.replace(tzinfo=None))
+
+
+def test_account_mutations_refuse_misshapen_adjustments(timestamp):
+    """P02/P09 prep: account mutations validate their adjustments.
+
+    Negative funding, zero cash transfers, negative borrows, zero FX
+    and corporate-action adjustments, blank split/dividend
+    instruments, non-positive split ratios, negative dividend rates,
+    negative margin values, blank mark instruments, and non-positive
+    mark prices are all refused without mutating state. Pure unit
+    coverage; no network, no credentials.
+    """
+    account = AccountState(cash=Decimal("100"), as_of=timestamp)
+    before = account.snapshot()
+    with pytest.raises(ValueError, match="funding amount must be finite"):
+        account.apply_funding(Decimal("-1"), timestamp)
+    with pytest.raises(ValueError, match="transfer amount cannot be zero"):
+        account.apply_cash_transfer(Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="borrow amount must be finite"):
+        account.apply_borrow(Decimal("-1"), timestamp)
+    with pytest.raises(ValueError, match="FX adjustment must be finite"):
+        account.apply_fx_adjustment(Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="corporate action adjustment must be finite"):
+        account.apply_corporate_action(Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="split instrument identifier cannot be blank"):
+        account.apply_split("  ", Decimal("2"), timestamp)
+    with pytest.raises(ValueError, match="split ratio must be finite and positive"):
+        account.apply_split("BTC", Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="dividend instrument identifier cannot be blank"):
+        account.apply_dividend("  ", Decimal("1"), timestamp)
+    with pytest.raises(ValueError, match="dividend cash per unit must be finite"):
+        account.apply_dividend("BTC", Decimal("-1"), timestamp)
+    with pytest.raises(ValueError, match="margin values cannot be negative"):
+        account.update_margin(
+            margin_used=Decimal("-1"), margin_available=Decimal("10"), as_of=timestamp
+        )
+    with pytest.raises(ValueError, match="mark instrument identifier cannot be blank"):
+        account.mark("  ", Decimal("100"), timestamp)
+    with pytest.raises(ValueError, match="mark price must be positive"):
+        account.mark("BTC", Decimal("0"), timestamp)
+    assert account.snapshot() == before
+
+
+def test_account_fill_refuses_blank_instrument_or_side(timestamp):
+    """P02/P09 prep: fill ingestion validates instrument and side.
+
+    A blank instrument identifier and an unknown side are refused
+    before any position moves. Pure unit coverage; no network, no
+    credentials.
+    """
+    account = AccountState(cash=Decimal("100"), as_of=timestamp)
+    fill = Fill(
+        order_id=uuid4(),
+        venue_fill_id="venue-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0.1"),
+        fee_currency="USDT",
+        occurred_at=timestamp,
+    )
+    with pytest.raises(ValueError, match="fill instrument identifier cannot be blank"):
+        account.apply_fill(fill, "buy", "  ")
+    with pytest.raises(ValueError, match="side must be buy or sell"):
+        account.apply_fill(fill, "hold", "BTC")
+    assert account.positions == {}
