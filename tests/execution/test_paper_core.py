@@ -2278,3 +2278,194 @@ def test_account_ledger_hydrate_refuses_corrupt_or_diverged_history(timestamp, t
             diverged_ledgers,
             AccountState(cash=Decimal("1000"), as_of=timestamp),
         )
+
+
+def test_oms_cancel_fails_closed_on_venue_refusals(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: cancellation validates the venue acknowledgement.
+
+    A venue adapter without cancellation, a transport fault, a
+    non-boolean acknowledgement, and a rejected cancellation are
+    all refused with the order left in durable CANCEL_PENDING for
+    recovery through reconciliation. Pure unit coverage over
+    throwaway SQLite ledgers; no network, no credentials.
+    """
+
+    class StubAdapter:
+        def __init__(self, cancel_behavior):
+            self.cancel_behavior = cancel_behavior
+
+        def submit(self, order):
+            return VenueAcknowledgement(
+                order_id=order.artifact_id,
+                venue_order_id=f"stub-{order.artifact_id}",
+                accepted=True,
+            )
+
+        def open_orders(self):
+            return ()
+
+        def cancel(self, order):
+            if isinstance(self.cancel_behavior, Exception):
+                raise self.cancel_behavior
+            return self.cancel_behavior
+
+    class NoCancelAdapter(StubAdapter):
+        cancel = None
+
+    def _routed(tmp_name, adapter):
+        ledgers = SqliteLedgers(tmp_path / tmp_name)
+        orders = OrderManager(ledgers, adapter)
+        order = _order(btc_usdt, timestamp)
+        orders.create(order)
+        orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+        assert orders.route(order.artifact_id).accepted
+        return orders, order
+
+    orders, order = _routed("cancel-no-adapter.sqlite", NoCancelAdapter(True))
+    with pytest.raises(OrderStateError, match="does not expose cancellation"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+    orders, order = _routed(
+        "cancel-ambiguous.sqlite", StubAdapter(RuntimeError("transport lost"))
+    )
+    with pytest.raises(OrderStateError, match="acknowledgement is ambiguous"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+    orders, order = _routed("cancel-nonbool.sqlite", StubAdapter("yes"))
+    with pytest.raises(OrderStateError, match="must be boolean"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+    orders, order = _routed("cancel-rejected.sqlite", StubAdapter(False))
+    with pytest.raises(OrderStateError, match="venue rejected cancellation"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+
+def test_oms_record_fill_validates_side_quantity_and_state(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: fill recording validates side, quantity, and state.
+
+    An unknown side, a side mismatch against the canonical order,
+    an overfill beyond order quantity, a fill on a non-fillable
+    order, and a venue fill ID reused for different content are
+    all refused. Pure unit coverage over throwaway SQLite ledgers;
+    no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "fill-guards.sqlite")
+    orders = OrderManager(ledgers, PaperVenueAdapter())
+    order = _order(btc_usdt, timestamp)
+    orders.create(order)
+    orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    assert orders.route(order.artifact_id).accepted
+
+    def _fill(venue_fill_id, quantity):
+        return Fill(
+            order_id=order.artifact_id,
+            venue_fill_id=venue_fill_id,
+            quantity=quantity,
+            price=Decimal("100"),
+            fee=Decimal("0.10"),
+            occurred_at=timestamp,
+        )
+
+    with pytest.raises(OrderStateError, match="fill side must be buy or sell"):
+        orders.record_fill(_fill("fill-bad-side", Decimal("1")), "hold")
+    with pytest.raises(OrderStateError, match="does not match the canonical order"):
+        orders.record_fill(_fill("fill-wrong-side", Decimal("1")), "sell")
+    with pytest.raises(OrderStateError, match="fills exceed order quantity"):
+        orders.record_fill(_fill("fill-overfill", Decimal("2")), "buy")
+    orders.record_fill(_fill("fill-ok", Decimal("1")), "buy")
+    with pytest.raises(OrderStateError, match="reused for different fill content"):
+        orders.record_fill(_fill("fill-ok", Decimal("0.5")), "buy")
+
+    created = _order(btc_usdt, timestamp)
+    orders.create(created)
+    early = Fill(
+        order_id=created.artifact_id,
+        venue_fill_id="fill-early",
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        fee=Decimal("0.10"),
+        occurred_at=timestamp,
+    )
+    with pytest.raises(OrderStateError, match="cannot fill order in state"):
+        orders.record_fill(early, "buy")
+
+
+def test_oms_reconcile_routed_rejects_misshapen_query_responses(
+    tmp_path, btc_usdt, timestamp
+):
+    """P02/P09 prep: routed reconciliation validates venue queries.
+
+    Reconciling a non-routed order, a non-object query response, a
+    query missing the venue order identity, a query with no
+    admitted order state, and a routed order with no matching
+    venue record are all refused without resubmission. Pure unit
+    coverage over throwaway SQLite ledgers; no network, no
+    credentials.
+    """
+
+    class QueryAdapter:
+        def __init__(self, response):
+            self.response = response
+            self.submits = 0
+
+        def submit(self, order):
+            self.submits += 1
+            return VenueAcknowledgement(
+                order_id=order.artifact_id,
+                venue_order_id=f"query-{order.artifact_id}",
+                accepted=True,
+            )
+
+        def open_orders(self):
+            return ()
+
+        def reconcile(self, order):
+            return self.response
+
+    def _routed(tmp_name, response):
+        adapter = QueryAdapter(response)
+        ledgers = SqliteLedgers(tmp_path / tmp_name)
+        orders = OrderManager(ledgers, adapter)
+        order = _order(btc_usdt, timestamp)
+        orders.create(order)
+        orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+        orders.transition(order.artifact_id, OrderState.ROUTED)
+        return orders, order, adapter
+
+    orders, order, adapter = _routed("query-nonobject.sqlite", ["not-a-mapping"])
+    with pytest.raises(OrderStateError, match="non-object response"):
+        orders.reconcile_routed(order.artifact_id)
+    assert adapter.submits == 0
+    assert orders.orders[order.artifact_id].state is OrderState.ROUTED
+
+    orders, order, adapter = _routed("query-no-identity.sqlite", {"state": "open"})
+    with pytest.raises(OrderStateError, match="missing a venue order identity"):
+        orders.reconcile_routed(order.artifact_id)
+    assert adapter.submits == 0
+
+    orders, order, adapter = _routed(
+        "query-no-state.sqlite", {"venue_order_id": "venue-1", "state": "mysterious"}
+    )
+    with pytest.raises(OrderStateError, match="no admitted order state"):
+        orders.reconcile_routed(order.artifact_id)
+    assert adapter.submits == 0
+
+    ledgers = SqliteLedgers(tmp_path / "query-no-match.sqlite")
+    orphan_orders = OrderManager(ledgers, PaperVenueAdapter())
+    orphan = _order(btc_usdt, timestamp)
+    orphan_orders.create(orphan)
+    orphan_orders.transition(orphan.artifact_id, OrderState.RISK_APPROVED)
+    orphan_orders.transition(orphan.artifact_id, OrderState.ROUTED)
+    with pytest.raises(OrderStateError, match="no matching routed order"):
+        orphan_orders.reconcile_routed(orphan.artifact_id)
+
+    ledgers = SqliteLedgers(tmp_path / "query-wrong-state.sqlite")
+    settled_orders = OrderManager(ledgers, PaperVenueAdapter())
+    settled = _order(btc_usdt, timestamp)
+    settled_orders.create(settled)
+    with pytest.raises(OrderStateError, match="only routed orders require"):
+        settled_orders.reconcile_routed(settled.artifact_id)
