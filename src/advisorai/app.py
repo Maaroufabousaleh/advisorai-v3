@@ -175,6 +175,14 @@ def cmd_start(args: argparse.Namespace) -> int:
                     flush=True,
                 )
                 return 2
+            if not 0 <= args.max_submissions <= 100:
+                supervisor._release_lock()
+                print(
+                    "SESSION START REFUSED: --max-submissions must be "
+                    "between 0 and 100",
+                    flush=True,
+                )
+                return 2
             secrets_path = Path(
                 getattr(args, "secrets", None)
                 or os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")

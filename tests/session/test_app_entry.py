@@ -498,3 +498,43 @@ def test_subprocess_testnet_start_without_cap_refuses_before_secrets(tmp_path):
         if retry.poll() is None:
             retry.terminate()
         retry.wait(timeout=10)
+
+
+def test_subprocess_testnet_start_with_out_of_bounds_cap_refuses_before_secrets(
+    tmp_path,
+) -> None:
+    """P02 owner-flow: out-of-bounds --max-submissions refuses fast.
+
+    Black-box: a real child with ``--max-submissions -1`` or ``101``
+    must exit 2 naming the bounds — before reading secrets or
+    touching the venue. Mirrors the canary launcher's 0–100 bound
+    so both owner entry points enforce the same contract.
+    """
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    for cap in ("-1", "101"):
+        run = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "cap-bounds-probe",
+                "start",
+                "--venue-profile",
+                "binance_spot_testnet",
+                "--max-submissions",
+                cap,
+            ],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert run.returncode == 2, cap
+        assert "--max-submissions must be between 0 and 100" in run.stdout, cap
+        assert "testnet_baseline" not in run.stdout, cap
+        assert "SESSION READY" not in run.stdout, cap
+        assert "Traceback" not in run.stdout + run.stderr, cap
