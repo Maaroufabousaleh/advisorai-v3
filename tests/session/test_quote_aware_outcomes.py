@@ -484,3 +484,77 @@ def test_quote_aware_outcome_refuses_foreign_asset_orders() -> None:
             orders={order.artifact_id: order, eth_order.artifact_id: eth_order},
             initial_marks={"BTC": Decimal("49000")},
         )
+
+
+def test_fx_rate_refuses_misshapen_values() -> None:
+    """P02/P09 prep: FX rates validate at construction.
+
+    A blank currency/source, a non-positive or non-Decimal rate, and
+    a naive timestamp are all refused. Pure unit coverage; no
+    network, no credentials.
+    """
+    good = {
+        "quote_currency": "USDT",
+        "usd_per_quote": Decimal("0.999"),
+        "as_of": _CUTOFF,
+        "snapshot_id": uuid4(),
+        "evidence_id": uuid4(),
+        "source": "fx-observation",
+    }
+    with pytest.raises(ValueError, match="requires a currency and source"):
+        QuoteToUsdRate(**{**good, "quote_currency": "  "})
+    with pytest.raises(ValueError, match="requires a currency and source"):
+        QuoteToUsdRate(**{**good, "source": "  "})
+    with pytest.raises(ValueError, match="positive finite Decimal"):
+        QuoteToUsdRate(**{**good, "usd_per_quote": Decimal("0")})
+    with pytest.raises(ValueError, match="positive finite Decimal"):
+        QuoteToUsdRate(**{**good, "usd_per_quote": 0.999})
+    with pytest.raises(ValueError, match="must include a timezone"):
+        QuoteToUsdRate(
+            **{**good, "as_of": datetime(2026, 11, 12, 16, 0)}
+        )
+
+
+def test_outcome_quality_refuses_misshapen_measurements() -> None:
+    """P02/P09 prep: quality evidence validates at construction.
+
+    Out-of-range rates, non-integer or negative latency, a blank
+    source, partial measurement details, invalid counts, a failure
+    rate inconsistent with its counts, a non-digest hash, and a
+    naive timestamp are all refused. Pure unit coverage; no network,
+    no credentials.
+    """
+    good = {
+        "data_reliability": Decimal("0.98"),
+        "latency_ms": 72,
+        "failure_rate": Decimal("0.01"),
+        "evidence_id": uuid4(),
+        "source": "owner-quality-measurement",
+        "snapshot_id": uuid4(),
+        "as_of": _CUTOFF,
+        "sample_count": 100,
+        "failed_count": 1,
+        "measurement_hash": "a" * 64,
+    }
+    with pytest.raises(ValueError, match=r"finite values in \[0, 1\]"):
+        PaperOutcomeQuality(**{**good, "data_reliability": Decimal("1.5")})
+    with pytest.raises(ValueError, match=r"finite values in \[0, 1\]"):
+        PaperOutcomeQuality(**{**good, "failure_rate": "0.01"})
+    with pytest.raises(ValueError, match="integer number of milliseconds"):
+        PaperOutcomeQuality(**{**good, "latency_ms": True})
+    with pytest.raises(ValueError, match="latency cannot be negative"):
+        PaperOutcomeQuality(**{**good, "latency_ms": -1})
+    with pytest.raises(ValueError, match="requires an evidence source"):
+        PaperOutcomeQuality(**{**good, "source": "  "})
+    with pytest.raises(ValueError, match="details must be complete"):
+        PaperOutcomeQuality(**{**good, "measurement_hash": None})
+    with pytest.raises(ValueError, match="sample counts are invalid"):
+        PaperOutcomeQuality(**{**good, "failed_count": 101})
+    with pytest.raises(ValueError, match="differs from its measured counts"):
+        PaperOutcomeQuality(**{**good, "failure_rate": Decimal("0.02")})
+    with pytest.raises(ValueError, match="must be a SHA-256 digest"):
+        PaperOutcomeQuality(**{**good, "measurement_hash": "z" * 64})
+    with pytest.raises(ValueError, match="must include a timezone"):
+        PaperOutcomeQuality(
+            **{**good, "as_of": datetime(2026, 11, 12, 16, 0)}
+        )
