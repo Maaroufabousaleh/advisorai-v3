@@ -28,8 +28,15 @@ ADVISORAI_STATE_DIR=var/advisorai-testnet uv run python -m advisorai.app start \
   --reason "owner testnet canary" \
   --venue-profile binance_spot_testnet \
   --scenario qualification --interval-seconds 10 \
-  --max-runtime-seconds 120 --max-submissions 1
+  --max-runtime-seconds 120 --max-submissions 0
 ```
+
+`--max-submissions 0` hard-refuses any submission at the venue boundary and
+is the correct first canary: it proves SESSION READY, deadline stop, clean
+reconciliation, and lease release with zero venue writes (same prescription
+as the bounded-canary block in `binance-spot-testnet.md`). Raise the cap
+only after the zero-submission canary certifies and the single-order
+lifecycle gate passes.
 
 The baseline cash and timestamp stay out of stdout by default; pass
 `--print-baseline` for explicit one-shot inspection. `--venue-instrument` /
