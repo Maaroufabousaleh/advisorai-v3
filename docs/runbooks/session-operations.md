@@ -17,9 +17,11 @@ ADVISORAI_STATE_DIR=var/advisorai uv run python -m advisorai.app start --reason 
 To use a reviewed sandbox venue instead of the local simulator, pass the
 supervised venue profile with enforced bounds. Owner shell only (reads the
 operator inventory, snapshots the read-only testnet baseline, then starts
-under the same lock). The deadline and submission cap are required for any
-testnet run: the session stops clean at the deadline and the venue boundary
-refuses submissions beyond the cap.
+under the same lock). Run from the pinned commit named in the current
+handoff on `review/testnet-launch-path`, never a moving branch tip. The
+deadline and submission cap are required for any testnet run: the session
+stops clean at the deadline and the venue boundary refuses submissions
+beyond the cap.
 
 ```bash
 ADVISORAI_STATE_DIR=var/advisorai-testnet uv run python -m advisorai.app start \
