@@ -186,11 +186,6 @@ def main(argv: list[str] | None = None) -> int:
     except BaseException:
         supervisor._release_lock()
         raise
-    try:
-        from advisorai.app import _read_owner_record  # noqa: E402
-    except ImportError:  # pragma: no cover - import seam for tests
-        _read_owner_record = None  # type: ignore[assignment]
-    del _read_owner_record
     stop_event = threading.Event()
 
     def request_stop(_signum, _frame) -> None:
