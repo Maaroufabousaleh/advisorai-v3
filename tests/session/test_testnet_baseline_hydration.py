@@ -16,7 +16,9 @@ import pytest
 from advisorai.config import CredentialResolver
 from advisorai.integrations import (
     BINANCE_SPOT_TESTNET_BASE_URL,
+    COINBASE_EXCHANGE_SANDBOX_BASE_URL,
     build_binance_spot_testnet_transport,
+    build_coinbase_exchange_sandbox_transport,
 )
 from advisorai.ledger import LedgerNamespace, SqliteLedgers
 from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
@@ -84,6 +86,90 @@ def _launch(**overrides) -> SandboxLaunchRequest:
         "provider": "binance_spot_testnet",
         "provider_instrument_id": "BTCUSDT",
         "quote_currency": "USDT",
+        "max_submissions": 0,
+    }
+    values.update(overrides)
+    return SandboxLaunchRequest(**values)
+
+
+def _coinbase_products() -> list[dict]:
+    return [
+        {
+            "id": "BTC-USD",
+            "base_currency": "BTC",
+            "quote_currency": "USD",
+            "base_increment": "0.00000001",
+            "quote_increment": "0.01",
+            "base_min_size": "0.00001",
+            "base_max_size": "1000",
+            "min_market_funds": "1",
+            "status": "online",
+        },
+        {
+            "id": "ETH-USD",
+            "base_currency": "ETH",
+            "quote_currency": "USD",
+            "base_increment": "0.000001",
+            "quote_increment": "0.01",
+            "base_min_size": "0.001",
+            "base_max_size": "10000",
+            "min_market_funds": "1",
+            "status": "online",
+        },
+    ]
+
+
+def _coinbase_accounts(btc_balance: str = "0.010") -> list[dict]:
+    return [
+        {
+            "id": "usd-account",
+            "currency": "USD",
+            "balance": "1000",
+            "available": "1000",
+            "hold": "0",
+        },
+        {
+            "id": "btc-account",
+            "currency": "BTC",
+            "balance": btc_balance,
+            "available": btc_balance,
+            "hold": "0",
+        },
+    ]
+
+
+def _coinbase_requester(accounts: list[dict], calls: list):
+    def request(method, url, headers, body, timeout):
+        calls.append((method, url))
+        if url.rstrip("/").endswith("/products"):
+            return (200, json.dumps(_coinbase_products()).encode(), ())
+        if url.rstrip("/").endswith("/accounts"):
+            return (200, json.dumps(accounts).encode(), ())
+        if url.rstrip("/").endswith("/time"):
+            return (200, json.dumps({"epoch": 1700000000.0}).encode(), ())
+        raise AssertionError(f"unexpected mocked call {method} {url}")
+
+    return request
+
+
+def _coinbase_resolver() -> CredentialResolver:
+    return CredentialResolver.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "coinbase_exchange_sandbox",
+            "ADVISORAI_VENUE_ENVIRONMENT": "paper_testnet",
+            "ADVISORAI_VENUE_BASE_URL": COINBASE_EXCHANGE_SANDBOX_BASE_URL,
+            "ADVISORAI_VENUE_API_KEY": "synthetic-testnet-key",
+            "ADVISORAI_VENUE_API_SECRET": "c2ludGhldGljLXRlc3RuZXQtc2VjcmV0",
+            "ADVISORAI_VENUE_PASSPHRASE": "synthetic-testnet-passphrase",
+        }
+    )
+
+
+def _coinbase_launch(**overrides) -> SandboxLaunchRequest:
+    values = {
+        "provider": "coinbase_exchange_sandbox",
+        "provider_instrument_id": "BTC-USD",
+        "quote_currency": "USD",
         "max_submissions": 0,
     }
     values.update(overrides)
@@ -226,3 +312,66 @@ def test_zero_submission_session_reaches_ready_and_reconciles_clean(
         and event.payload.get("end", {}).get("outcome") == "clean"
         for event in mission
     )
+
+
+def test_baseline_preserves_exact_verified_btc_quantity_on_coinbase(monkeypatch) -> None:
+    """P02 parity: Coinbase BTC-USD hydrates with the exact nonzero quantity."""
+    calls: list = []
+    accounts = _coinbase_accounts("0.010")
+    real_builder = build_coinbase_exchange_sandbox_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(resolver, requester=_coinbase_requester(accounts, calls), **kwargs)
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_coinbase_exchange_sandbox_transport",
+        seeded_builder,
+    )
+    transport, baseline = read_testnet_baseline(
+        resolver=_coinbase_resolver(), launch=_coinbase_launch()
+    )
+    expected_key = transport.canonical_instrument_id("BTC-USD")
+    assert transport.verified_product_ids == ("BTC-USD",)
+    assert baseline.cash == Decimal("1000")
+    assert baseline.positions == {"BTC": Decimal("0.010")}
+    assert baseline.margin_used == Decimal("0")
+    assert baseline.margin_available == Decimal("1000")
+    assert expected_key == "crypto:BTC-USD:coinbase_exchange_sandbox:spot"
+    kinds = [
+        "products" if url.rstrip("/").endswith("/products") else "accounts"
+        for _, url in calls
+        if url.rstrip("/").endswith("/products") or url.rstrip("/").endswith("/accounts")
+    ]
+    assert kinds[:2] == ["products", "accounts"]
+
+
+def test_baseline_refuses_unmapped_coinbase_balances(monkeypatch) -> None:
+    """P02 parity: nonzero unmapped Coinbase assets fail closed, never hydrate.
+
+    Only BTC-USD is admitted for the launch, so the real adapter raises on
+    the unmapped ETH balance during the snapshot read (layer below the
+    launcher's own off-instrument guard); either way nothing hydrates.
+    """
+    calls: list = []
+    accounts = _coinbase_accounts("0.010") + [
+        {
+            "id": "eth-account",
+            "currency": "ETH",
+            "balance": "1.5",
+            "available": "1.5",
+            "hold": "0",
+        },
+    ]
+    real_builder = build_coinbase_exchange_sandbox_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(resolver, requester=_coinbase_requester(accounts, calls), **kwargs)
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_coinbase_exchange_sandbox_transport",
+        seeded_builder,
+    )
+    from advisorai.integrations import VenueTransportError
+
+    with pytest.raises(VenueTransportError, match="non-zero unmapped asset ETH"):
+        read_testnet_baseline(resolver=_coinbase_resolver(), launch=_coinbase_launch())
