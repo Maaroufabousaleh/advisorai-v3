@@ -828,7 +828,12 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
         for event in sorted(all_events, key=lambda item: item.occurred_at, reverse=True)[:12]
     )
     cycle_state = latest_cycle.stage.value if latest_cycle else "waiting"
-    cycle_detail = f"latest cycle: {cycle_state}" if latest_cycle else "no paper cycle recorded"
+    if latest_cycle is None:
+        cycle_detail = "no paper cycle recorded"
+    elif latest_cycle.reasons:
+        cycle_detail = f"latest cycle: {cycle_state} ({', '.join(latest_cycle.reasons)})"
+    else:
+        cycle_detail = f"latest cycle: {cycle_state}"
     orders_count = sum(1 for event in order_events if event.event_type == "order_created")
 
     def decimal_value(value: object) -> Decimal | None:
