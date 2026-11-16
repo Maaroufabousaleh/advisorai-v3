@@ -20,6 +20,7 @@ from advisorai.contracts import (
 from advisorai.execution import (
     AccountLedger,
     AccountState,
+    AccountStateSnapshot,
     AmbiguousAcknowledgement,
     DeterministicExecutionPolicy,
     ExecutionPolicyKind,
@@ -1993,3 +1994,121 @@ def test_account_fill_refuses_blank_instrument_or_side(timestamp):
     with pytest.raises(ValueError, match="side must be buy or sell"):
         account.apply_fill(fill, "hold", "BTC")
     assert account.positions == {}
+
+
+def test_account_state_snapshot_refuses_misshapen_projection(timestamp):
+    """P02/P09 prep: the frozen snapshot validates at construction.
+
+    Non-finite values, blank position/mark/average-cost identifiers,
+    negative average costs, duplicate identifiers, naive timestamps,
+    and non-digest state hashes are all refused. Pure unit coverage;
+    no network, no credentials.
+    """
+    digest = "ab" * 32
+    base = {
+        "cash": Decimal("100"),
+        "positions": (("BTC", Decimal("0.01")),),
+        "marks": (("BTC", Decimal("50000")),),
+        "fees_paid": Decimal("0"),
+        "funding_paid": Decimal("0"),
+        "realized_pnl": Decimal("0"),
+        "unrealized_pnl": Decimal("0"),
+        "margin_used": Decimal("0"),
+        "margin_available": None,
+        "as_of": timestamp,
+        "state_hash": digest,
+    }
+    with pytest.raises(ValueError, match="snapshot values must be finite"):
+        AccountStateSnapshot(**{**base, "cash": Decimal("NaN")})
+    with pytest.raises(ValueError, match="position identifiers cannot be blank"):
+        AccountStateSnapshot(
+            **{**base, "positions": (("  ", Decimal("0.01")),)}
+        )
+    with pytest.raises(ValueError, match="mark identifiers cannot be blank"):
+        AccountStateSnapshot(**{**base, "marks": (("  ", Decimal("50000")),)})
+    with pytest.raises(ValueError, match="average-cost identifiers cannot be blank"):
+        AccountStateSnapshot(
+            **{**base, "average_cost": (("  ", Decimal("1")),)}
+        )
+    with pytest.raises(ValueError, match="average costs must be finite"):
+        AccountStateSnapshot(
+            **{**base, "average_cost": (("BTC", Decimal("-1")),)}
+        )
+    with pytest.raises(ValueError, match="positions must be unique"):
+        AccountStateSnapshot(
+            **{
+                **base,
+                "positions": (("BTC", Decimal("1")), ("BTC", Decimal("2"))),
+            }
+        )
+    with pytest.raises(ValueError, match="marks must be unique"):
+        AccountStateSnapshot(
+            **{**base, "marks": (("BTC", Decimal("1")), ("BTC", Decimal("2")))}
+        )
+    with pytest.raises(ValueError, match="average costs must be unique"):
+        AccountStateSnapshot(
+            **{
+                **base,
+                "average_cost": (("BTC", Decimal("1")), ("BTC", Decimal("2"))),
+            }
+        )
+    with pytest.raises(ValueError, match="snapshot timestamp must include a timezone"):
+        AccountStateSnapshot(**{**base, "as_of": timestamp.replace(tzinfo=None)})
+    with pytest.raises(ValueError, match="state_hash must be a lowercase"):
+        AccountStateSnapshot(**{**base, "state_hash": "NOT-A-DIGEST"})
+
+
+def test_venue_account_snapshot_refuses_misshapen_projection(timestamp):
+    """P02/P09 prep: the venue projection validates at construction.
+
+    Naive timestamps, non-Decimal values, non-string or blank
+    position identifiers, non-finite values, misshapen margins, and
+    non-UUID open-order identifiers are all refused before any
+    reconciliation comparison. Pure unit coverage; no network, no
+    credentials.
+    """
+    with pytest.raises(ValueError, match="snapshot timestamp must include a timezone"):
+        VenueAccountSnapshot(
+            as_of=timestamp.replace(tzinfo=None),
+            cash=Decimal("100"),
+            positions={},
+        )
+    with pytest.raises(ValueError, match="account values must be Decimal instances"):
+        VenueAccountSnapshot(as_of=timestamp, cash=100.0, positions={})
+    with pytest.raises(ValueError, match="position identifiers must be strings"):
+        VenueAccountSnapshot(
+            as_of=timestamp, cash=Decimal("100"), positions={123: Decimal("1")}
+        )
+    with pytest.raises(ValueError, match="account values must be finite"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={"BTC": Decimal("NaN")},
+        )
+    with pytest.raises(ValueError, match="position identifiers cannot be blank"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={"  ": Decimal("1")},
+        )
+    with pytest.raises(ValueError, match="margin used must be"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={},
+            margin_used=Decimal("-1"),
+        )
+    with pytest.raises(ValueError, match="margin available must be"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={},
+            margin_available=Decimal("-1"),
+        )
+    with pytest.raises(ValueError, match="open order identifiers must be UUIDs"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={},
+            venue_open_order_ids=frozenset({"not-a-uuid"}),
+        )
