@@ -585,3 +585,31 @@ def test_launcher_refuses_corrupt_ledger_without_traceback(
     assert "SESSION START REFUSED" in captured.out
     assert "Traceback" not in captured.out + captured.err
     assert not (state_dir / "owner.json").exists()
+
+
+def test_reference_factory_builds_digest_pinned_artifact() -> None:
+    """P02: the testnet reference factory satisfies the artifact contract.
+
+    ``DecisionModelArtifact`` requires 64-hex ``code_hash`` /
+    ``config_hash``; the factory previously passed short labels, so
+    every qualification cycle failed with ValidationError before
+    reaching the decision path. Both scenarios must build an
+    adapter whose artifact carries lowercase SHA-256 digests, and
+    the config digest must differ per scenario.
+    """
+    import re
+
+    from advisorai.contracts import Snapshot
+    from advisorai.session.testnet_launch import _reference_factory
+
+    snapshot = Snapshot(as_of=datetime(2026, 11, 16, 14, 0, tzinfo=UTC), purpose="factory-fixture")
+    digest = re.compile(r"^[0-9a-f]{64}$")
+    artifacts = {}
+    for scenario in ("quiet", "qualification"):
+        adapter = _reference_factory(scenario)(snapshot)
+        artifact = adapter.artifact
+        assert digest.match(artifact.code_hash), artifact.code_hash
+        assert digest.match(artifact.config_hash), artifact.config_hash
+        artifacts[scenario] = artifact
+    assert artifacts["quiet"].config_hash != artifacts["qualification"].config_hash
+    assert artifacts["quiet"].code_hash == artifacts["qualification"].code_hash
