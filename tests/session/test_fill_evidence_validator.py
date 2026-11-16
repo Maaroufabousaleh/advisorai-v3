@@ -601,9 +601,7 @@ def test_validator_rejects_missing_reconciled_terminal_event(tmp_path) -> None:
             "SELECT COUNT(*) FROM order_events WHERE event_type='order_reconciled'"
         ).fetchone()
         assert row[0] == 1
-        connection.execute(
-            "DELETE FROM order_events WHERE event_type='order_reconciled'"
-        )
+        connection.execute("DELETE FROM order_events WHERE event_type='order_reconciled'")
         connection.commit()
     finally:
         connection.close()
@@ -666,16 +664,14 @@ def test_validator_rejects_dirty_ledger_reconciliation(tmp_path) -> None:
     connection = sqlite3.connect(ledger_path)
     try:
         row = connection.execute(
-            "SELECT payload_json FROM order_events"
-            " WHERE event_type='reconciliation_recorded'"
+            "SELECT payload_json FROM order_events WHERE event_type='reconciliation_recorded'"
         ).fetchone()
         payload = json.loads(row[0])
         assert payload["artifact"]["reconciled"] is True
         payload["artifact"]["reconciled"] = False
         payload["artifact"]["discrepancies"] = ["synthetic_divergence_probe"]
         connection.execute(
-            "UPDATE order_events SET payload_json=?"
-            " WHERE event_type='reconciliation_recorded'",
+            "UPDATE order_events SET payload_json=? WHERE event_type='reconciliation_recorded'",
             (json.dumps(payload),),
         )
         connection.commit()
@@ -737,3 +733,27 @@ def test_validator_rejects_wrong_manifest_schema(tmp_path) -> None:
     assert report.p03_certified is False
     names = [check.name for check in report.failed]
     assert "manifest_schema" in names
+
+
+def test_validator_rejects_missing_fill_in_account_ledger(tmp_path) -> None:
+    """P03: a fill absent from the account ledger refuses certification.
+
+    The OMS ledger records a real fill but the account ledger never
+    applied it — an application defect (fill booked but cash/position
+    untouched). The validator must still see the fill (fill pass)
+    while refusing P03 certification naming
+    ``account_ledger_matches_fills``. Synthetic only; no network, no
+    credentials, no venue writes.
+    """
+    run_dir = _fill_run(tmp_path)
+    connection = sqlite3.connect(run_dir / "oms.sqlite")
+    try:
+        connection.execute("DELETE FROM account_events WHERE event_type = 'fill_applied'")
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_run(run_dir)
+    assert report.fill_pass is True
+    assert report.p03_certified is False
+    names = [check.name for check in report.failed]
+    assert "account_ledger_matches_fills" in names
