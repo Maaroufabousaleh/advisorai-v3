@@ -538,3 +538,60 @@ def test_subprocess_testnet_start_with_out_of_bounds_cap_refuses_before_secrets(
         assert "testnet_baseline" not in run.stdout, cap
         assert "SESSION READY" not in run.stdout, cap
         assert "Traceback" not in run.stdout + run.stderr, cap
+
+
+def test_subprocess_start_with_out_of_bounds_flags_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: out-of-bounds start flags refuse at argparse.
+
+    Black-box: a real child with an invalid --interval-seconds,
+    --max-rss-mb, or --max-runtime-seconds must exit 2 naming the
+    bound — before lock acquisition, so no SESSION START REFUSED
+    and no traceback. Mirrors the canary launcher's exact bounds.
+    """
+    environment = _environment(tmp_path)
+    cases = (
+        (["--interval-seconds", "0.05"], "--interval-seconds must be between 0.1 and 86400"),
+        (["--interval-seconds", "86401"], "--interval-seconds must be between 0.1 and 86400"),
+        (["--max-rss-mb", "255"], "--max-rss-mb must be between 256 and 8192"),
+        (["--max-rss-mb", "8193"], "--max-rss-mb must be between 256 and 8192"),
+        (["--max-runtime-seconds", "0"], "--max-runtime-seconds must be between 1 and 86400"),
+        (["--max-runtime-seconds", "86401"], "--max-runtime-seconds must be between 1 and 86400"),
+    )
+    for extra, message in cases:
+        run = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "flag-bounds-probe",
+                "start",
+                "--scenario",
+                "quiet",
+                "--interval-seconds",
+                "3600",
+                *extra,
+            ]
+            if extra[0] != "--interval-seconds"
+            else [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "flag-bounds-probe",
+                "start",
+                "--scenario",
+                "quiet",
+                *extra,
+            ],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert run.returncode == 2, extra
+        assert message in run.stderr, extra
+        assert "SESSION READY" not in run.stdout, extra
+        assert "Traceback" not in run.stdout + run.stderr, extra

@@ -468,6 +468,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "stop" and not 0.1 <= args.timeout_seconds <= 600:
         parser.error("--timeout-seconds must be between 0.1 and 600")
+    if args.command == "start":
+        if not 0.1 <= args.interval_seconds <= 86_400:
+            parser.error("--interval-seconds must be between 0.1 and 86400")
+        if not 256 <= args.max_rss_mb <= 8192:
+            parser.error("--max-rss-mb must be between 256 and 8192")
+        if args.max_runtime_seconds is not None and not (
+            1 <= args.max_runtime_seconds <= 86_400
+        ):
+            parser.error("--max-runtime-seconds must be between 1 and 86400")
     return int(args.func(args))
 
 
