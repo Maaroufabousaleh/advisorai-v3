@@ -167,6 +167,14 @@ def cmd_start(args: argparse.Namespace) -> int:
         else:
             from advisorai.config import CredentialResolver
 
+            if getattr(args, "max_submissions", None) is None:
+                supervisor._release_lock()
+                print(
+                    "SESSION START REFUSED: --max-submissions is required "
+                    "for testnet venue profiles",
+                    flush=True,
+                )
+                return 2
             secrets_path = Path(
                 getattr(args, "secrets", None)
                 or os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")

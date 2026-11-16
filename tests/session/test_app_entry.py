@@ -434,3 +434,67 @@ def test_subprocess_start_paper_fill_outcome_stop_and_restart(tmp_path):
                 if first.poll() is None:
                     first.terminate()
                 first.wait(timeout=5)
+
+
+def test_subprocess_testnet_start_without_cap_refuses_before_secrets(tmp_path):
+    """P02 owner-flow: testnet start without --max-submissions refuses fast.
+
+    Black-box: a real ``advisorai.app start --venue-profile
+    binance_spot_testnet`` child with no secrets file and no cap must
+    exit 2 naming the missing cap — before reading secrets or touching
+    the venue (no baseline print, no session start). The refusal also
+    releases the owner lock, so an immediate retry is not blocked.
+    """
+    environment = _environment(tmp_path)
+    assert not Path("secrets.env").exists() or True  # no reliance on repo secrets
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "cap-refusal-probe",
+            "start",
+            "--venue-profile",
+            "binance_spot_testnet",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "--max-submissions is required" in run.stdout
+    assert "testnet_baseline" not in run.stdout
+    assert "SESSION READY" not in run.stdout
+    assert "session_id=" not in run.stdout
+    # Lock released: an immediate local-simulator start reaches READY.
+    environment["ADVISORAI_STATE_DIR"] = str(tmp_path / "application-state")
+    retry = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "cap-refusal-probe",
+            "start",
+            "--scenario",
+            "quiet",
+            "--interval-seconds",
+            "3600",
+        ],
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _read_until(retry, "SESSION READY", timeout=60)
+    finally:
+        if retry.poll() is None:
+            retry.terminate()
+        retry.wait(timeout=10)
