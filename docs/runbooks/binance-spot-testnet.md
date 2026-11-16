@@ -131,6 +131,9 @@ an open claim, not fixture evidence alone.
 
 After the lifecycle gate passes, the owner may run a bounded canary session
 under an enforced wall-clock deadline and venue-boundary submission cap.
+Run from a pinned commit on `review/testnet-launch-path` (check out the
+exact SHA, never a moving branch tip, so the evidence maps to reviewed
+code): fetch, check out the SHA named in the current handoff, then run.
 Both bounds are explicit and required for any testnet run:
 
 ```bash
