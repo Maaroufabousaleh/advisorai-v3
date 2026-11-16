@@ -18,6 +18,7 @@ import pytest
 sys.path.insert(0, "scripts")
 
 from diagnose_testnet_baseline import classify_balances
+from diagnose_testnet_baseline import main as diagnostic_main
 
 from advisorai.config import CredentialResolver
 from advisorai.integrations import (
@@ -194,7 +195,155 @@ def test_coinbase_snapshot_rejects_unmapped_nonzero_asset() -> None:
 
 def test_diagnostic_rejects_misshapen_payloads() -> None:
     """P02 prep: the diagnostic fails closed on misshapen payloads."""
-    with pytest.raises(ValueError, match="must be a list"):
+    with pytest.raises(ValueError, match="must be a sequence of balance records"):
         classify_balances({"asset": "ETH"})
+    with pytest.raises(ValueError, match="must be a sequence of balance records"):
+        classify_balances("ETH")
     with pytest.raises(ValueError, match="must be an object"):
         classify_balances([("ETH", "0.5", "0.0")])
+
+
+def _synthetic_secrets_file(tmp_path) -> object:
+    path = tmp_path / "synthetic-diagnostic.env"
+    path.write_text(
+        "\n".join(
+            [
+                "ADVISORAI_VENUE_NAME=binance_spot_testnet",
+                "ADVISORAI_VENUE_ENVIRONMENT=paper_testnet",
+                f"ADVISORAI_VENUE_BASE_URL={BINANCE_SPOT_TESTNET_BASE_URL}",
+                "ADVISORAI_VENUE_API_KEY=synthetic-diagnostic-key",
+                "ADVISORAI_VENUE_API_SECRET=synthetic-diagnostic-secret",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_diagnostic_entry_point_accepts_real_adapter_tuple(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 unblock: the CLI entry point consumes the real adapter's tuple.
+
+    Runs ``main()`` end to end through the real transport factory
+    with mocked HTTP: a synthetic secrets file, one ``GET
+    /api/v3/account``, and the tuple ``list_balances()`` returns.
+    Compatible balances exit 0; the output names no amounts and no
+    secrets. Previously crashed with ``balances payload must be a
+    list``.
+    """
+    import diagnose_testnet_baseline as diagnostic_module
+
+    balances = _balances(("BTC", "0.010", "0.000"), ("USDT", "9994.50", "0.000"))
+    calls: list = []
+    monkeypatch.setattr(
+        diagnostic_module,
+        "build_binance_spot_testnet_transport",
+        lambda resolver: build_binance_spot_testnet_transport(
+            resolver, requester=_requester(_account_payload(balances), calls)
+        ),
+    )
+    code = diagnostic_main(["--secrets", str(_synthetic_secrets_file(tmp_path))])
+    out, err = capsys.readouterr()
+    assert code == 0
+    assert "PASS" in out
+    assert calls and all(method == "GET" for method, _ in calls)
+    assert "synthetic-diagnostic-key" not in out + err
+    assert "synthetic-diagnostic-secret" not in out + err
+    assert "9994.50" not in out + err
+    assert "0.010" not in out + err
+
+
+def test_diagnostic_entry_point_reports_rejected_assets(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 unblock: the CLI entry point exits 1 on foreign balances.
+
+    Same end-to-end path with an out-of-profile asset: exit 1,
+    names the symbol and the nonzero leg only. No amounts, no
+    secrets; GET reads only.
+    """
+    import diagnose_testnet_baseline as diagnostic_module
+
+    balances = _balances(
+        ("BTC", "0.010", "0.000"),
+        ("USDT", "9994.50", "0.000"),
+        ("ETH", "0.500", "0.000"),
+    )
+    calls: list = []
+    monkeypatch.setattr(
+        diagnostic_module,
+        "build_binance_spot_testnet_transport",
+        lambda resolver: build_binance_spot_testnet_transport(
+            resolver, requester=_requester(_account_payload(balances), calls)
+        ),
+    )
+    code = diagnostic_main(["--secrets", str(_synthetic_secrets_file(tmp_path))])
+    out, err = capsys.readouterr()
+    assert code == 1
+    assert "REJECT" in out
+    assert "asset=ETH" in out
+    assert "nonzero=free" in out
+    assert calls and all(method == "GET" for method, _ in calls)
+    assert "synthetic-diagnostic-key" not in out + err
+    assert "synthetic-diagnostic-secret" not in out + err
+    assert "0.500" not in out + err
+    assert "9994.50" not in out + err
+
+
+def test_diagnostic_entry_point_fails_closed_on_transport_error(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 unblock: malformed data and transport faults exit 2.
+
+    A non-object account payload and a network failure both reach
+    the documented input/transport-error exit instead of raising.
+    The stderr line names only the exception type.
+    """
+    import diagnose_testnet_baseline as diagnostic_module
+
+    def _requester_for(payload_calls: list, item: object):
+        def request(method, url, headers, body, timeout):
+            payload_calls.append((method, url))
+            return item
+
+        return request
+
+    malformed_calls: list = []
+    monkeypatch.setattr(
+        diagnostic_module,
+        "build_binance_spot_testnet_transport",
+        lambda resolver: build_binance_spot_testnet_transport(
+            resolver,
+            requester=_requester_for(
+                malformed_calls, (200, json.dumps(["not-an-object"]).encode(), ())
+            ),
+        ),
+    )
+    code = diagnostic_main(["--secrets", str(_synthetic_secrets_file(tmp_path))])
+    _out, err = capsys.readouterr()
+    assert code == 2
+    assert err.strip() == "diagnostic failed: VenueTransportError"
+    assert all(method == "GET" for method, _ in malformed_calls)
+
+    import urllib.error
+
+    failing_calls: list = []
+
+    def _raising_requester(method, url, headers, body, timeout):
+        failing_calls.append((method, url))
+        raise urllib.error.URLError("synthetic network fault")
+
+    monkeypatch.setattr(
+        diagnostic_module,
+        "build_binance_spot_testnet_transport",
+        lambda resolver: build_binance_spot_testnet_transport(
+            resolver, requester=_raising_requester
+        ),
+    )
+    code = diagnostic_main(["--secrets", str(_synthetic_secrets_file(tmp_path))])
+    _out, err = capsys.readouterr()
+    assert code == 2
+    assert err.strip() == "diagnostic failed: VenueTransportError"
+    assert all(method == "GET" for method, _ in failing_calls)

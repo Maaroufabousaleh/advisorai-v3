@@ -19,12 +19,16 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from advisorai.config import CredentialResolver
-from advisorai.integrations import build_binance_spot_testnet_transport
+from advisorai.integrations import (
+    HttpTransportError,
+    VenueTransportError,
+    build_binance_spot_testnet_transport,
+)
 
 
 def _nonzero(value: object) -> bool:
@@ -44,10 +48,12 @@ def classify_balances(
     Mirrors the launcher predicate exactly: profile assets are BTC (base)
     and USDT (quote); any other asset with nonzero free+locked trips the
     ``asset:`` guard in ``read_testnet_baseline()``. Pure function over an
-    already-fetched ``balances`` list; performs no I/O.
+    already-fetched ``balances`` sequence; performs no I/O. Accepts the
+    sequence the real adapter returns (``list_balances()`` is a tuple)
+    as well as plain lists.
     """
-    if not isinstance(balances, list):
-        raise ValueError("balances payload must be a list")
+    if isinstance(balances, (str, bytes)) or not isinstance(balances, Sequence):
+        raise ValueError("balances payload must be a sequence of balance records")
     profile = {base_asset.strip().upper(), quote_asset.strip().upper()}
     flagged: list[dict[str, object]] = []
     for item in balances:
@@ -79,10 +85,10 @@ def main(argv: list[str] | None = None) -> int:
         resolver = CredentialResolver.from_env_file(args.secrets)
         transport = build_binance_spot_testnet_transport(resolver)
         balances = transport.list_balances()
-    except (OSError, ValueError) as exc:
+        flagged = classify_balances(balances)
+    except (OSError, ValueError, VenueTransportError, HttpTransportError) as exc:
         print(f"diagnostic failed: {type(exc).__name__}", file=sys.stderr)
         return 2
-    flagged = classify_balances(balances)
     if not flagged:
         print("baseline guard: PASS (no out-of-profile balances)")
         return 0
