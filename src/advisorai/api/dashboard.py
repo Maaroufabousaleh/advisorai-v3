@@ -752,6 +752,23 @@ def build_demo_overview(now: datetime | None = None) -> DashboardOverview:
     )
 
 
+def _redact_cycle_reason(reason: str) -> str:
+    """Drop compared values from a cycle reason, keeping code + context.
+
+    Reconciliation discrepancies carry exact compared amounts
+    (``venue_cash_mismatch:9994.52...!=10000...``). The dashboard keeps
+    balance state out of the rendered surface by default (same policy as
+    the ``--print-baseline`` stdout gate): for reasons containing a
+    ``!=`` comparison, strip the ``:<venue>!=<local>`` suffix so only
+    the code and non-value context (e.g. instrument) render. Reasons
+    without a comparison render whole.
+    """
+    head, separator, _compared = reason.partition("!=")
+    if not separator:
+        return reason
+    return head.rsplit(":", 1)[0] if ":" in head else head
+
+
 def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -> DashboardOverview:
     """Project local ledgers without inventing account or market values."""
 
@@ -831,7 +848,8 @@ def build_ledger_overview(ledgers: SqliteLedgers, now: datetime | None = None) -
     if latest_cycle is None:
         cycle_detail = "no paper cycle recorded"
     elif latest_cycle.reasons:
-        cycle_detail = f"latest cycle: {cycle_state} ({', '.join(latest_cycle.reasons)})"
+        redacted = tuple(_redact_cycle_reason(reason) for reason in latest_cycle.reasons)
+        cycle_detail = f"latest cycle: {cycle_state} ({', '.join(redacted)})"
     else:
         cycle_detail = f"latest cycle: {cycle_state}"
     orders_count = sum(1 for event in order_events if event.event_type == "order_created")
