@@ -2469,3 +2469,117 @@ def test_oms_reconcile_routed_rejects_misshapen_query_responses(
     settled_orders.create(settled)
     with pytest.raises(OrderStateError, match="only routed orders require"):
         settled_orders.reconcile_routed(settled.artifact_id)
+
+
+def test_oms_create_and_transition_validate_lifecycle(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: order creation and transitions validate lifecycle.
+
+    An idempotency key reused for a different order, a direct
+    invalid transition, a transition on an unknown order, and a
+    reconciliation request on a non-terminal order are all
+    refused. Pure unit coverage over a throwaway SQLite ledger; no
+    network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "lifecycle.sqlite")
+    orders = OrderManager(ledgers, PaperVenueAdapter())
+    order = _order(btc_usdt, timestamp)
+    orders.create(order)
+    divergent = _order(btc_usdt, timestamp).model_copy(
+        update={"idempotency_key": order.idempotency_key}
+    )
+    with pytest.raises(OrderStateError, match="reused for different order"):
+        orders.create(divergent)
+    with pytest.raises(OrderStateError, match="invalid order transition"):
+        orders.transition(order.artifact_id, OrderState.FILLED)
+    assert orders.orders[order.artifact_id].state is OrderState.CREATED
+    with pytest.raises(OrderStateError, match="unknown order"):
+        orders.transition(uuid4(), OrderState.CANCELLED)
+    with pytest.raises(OrderStateError, match="must be terminal before reconciliation"):
+        orders.reconcile(order.artifact_id)
+
+
+def test_oms_record_rejects_non_artifacts(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: the order ledger only records Order or Fill artifacts.
+
+    Recording any other object type raises TypeError before any
+    ledger write. Pure unit coverage over a throwaway SQLite
+    ledger; no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "record-type.sqlite")
+    orders = OrderManager(ledgers, PaperVenueAdapter())
+    with pytest.raises(TypeError, match="can only ledger Order or Fill"):
+        orders._record({"not": "an-artifact"}, "order_created")
+    assert ledgers.events(LedgerNamespace.ORDER) == ()
+
+
+def test_oms_hydrate_refuses_corrupt_order_history(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: restart hydration validates the order ledger.
+
+    A transition recorded before order creation, a creation entry
+    with a non-created state, an invalid recorded transition, and
+    a fill recorded before its order all refuse hydration with
+    the underlying fault chained. Pure unit coverage over
+    throwaway SQLite ledgers; no network, no credentials.
+    """
+
+    def _append(ledgers, event_type, artifact, key):
+        ledgers.append(
+            LedgerEvent(
+                namespace=LedgerNamespace.ORDER,
+                event_type=event_type,
+                idempotency_key=key,
+                payload={
+                    "artifact_id": str(artifact.artifact_id),
+                    "artifact": artifact.model_dump(mode="json", round_trip=True),
+                },
+            )
+        )
+
+    order = _order(btc_usdt, timestamp)
+    early_ledgers = SqliteLedgers(tmp_path / "early-transition.sqlite")
+    _append(
+        early_ledgers,
+        "order_routed",
+        order.model_copy(update={"state": OrderState.ROUTED}),
+        "order:early:order_routed",
+    )
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(early_ledgers, PaperVenueAdapter())
+    assert "transition before order creation" in str(excinfo.value.__cause__)
+
+    state_ledgers = SqliteLedgers(tmp_path / "bad-creation-state.sqlite")
+    _append(
+        state_ledgers,
+        "order_created",
+        order.model_copy(update={"state": OrderState.ROUTED}),
+        "order:badstate:order_created",
+    )
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(state_ledgers, PaperVenueAdapter())
+    assert "non-created state" in str(excinfo.value.__cause__)
+
+    skip_ledgers = SqliteLedgers(tmp_path / "skipped-transition.sqlite")
+    _append(skip_ledgers, "order_created", order, "order:skip:order_created")
+    _append(
+        skip_ledgers,
+        "order_filled",
+        order.model_copy(update={"state": OrderState.FILLED}),
+        "order:skip:order_filled",
+    )
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(skip_ledgers, PaperVenueAdapter())
+    assert "invalid transition" in str(excinfo.value.__cause__)
+
+    orphan_ledgers = SqliteLedgers(tmp_path / "orphan-fill.sqlite")
+    orphan_fill = Fill(
+        order_id=uuid4(),
+        venue_fill_id="orphan-fill-1",
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        fee=Decimal("0.10"),
+        occurred_at=timestamp,
+    )
+    _append(orphan_ledgers, "fill_recorded", orphan_fill, "fill:orphan-fill-1")
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(orphan_ledgers, PaperVenueAdapter())
+    assert "precedes its order" in str(excinfo.value.__cause__)
