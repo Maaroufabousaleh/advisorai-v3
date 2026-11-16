@@ -126,6 +126,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--max-runtime-seconds must be between 1 and 86400")
     if not 0 <= args.max_submissions <= 100:
         parser.error("--max-submissions must be between 0 and 100")
+    if not 0.1 <= args.interval_seconds <= 86_400:
+        parser.error("--interval-seconds must be between 0.1 and 86400")
+    if not 256 <= args.max_rss_mb <= 8192:
+        parser.error("--max-rss-mb must be between 256 and 8192")
 
     resolver = CredentialResolver.from_env_file(args.secrets)
     launch = TestnetLaunchRequest(

@@ -251,6 +251,10 @@ def test_launcher_rejects_out_of_bounds_before_any_venue_touch(capsys) -> None:
         ["--max-runtime-seconds", "86401"],
         ["--max-submissions", "-1"],
         ["--max-submissions", "101"],
+        ["--interval-seconds", "0.05"],
+        ["--interval-seconds", "86401"],
+        ["--max-rss-mb", "255"],
+        ["--max-rss-mb", "8193"],
         ["--instrument", "ETHUSDT"],
         ["--quote", "USDC"],
     ):
