@@ -53,7 +53,10 @@ def main() -> int:
         help="operator-reviewed paper/testnet hostname; repeat for an explicit allowlist",
     )
     args = parser.parse_args()
-    values = load_env_file(args.secrets)
+    try:
+        values = load_env_file(args.secrets)
+    except (OSError, ValueError) as exc:
+        parser.error(f"cannot read secrets file: {type(exc).__name__}")
     settings = SecretSettings.from_mapping(values)
     reviewed_hosts = _reviewed_hosts(tuple(args.venue_allowed_host))
     print(f"environment={settings.environment}")

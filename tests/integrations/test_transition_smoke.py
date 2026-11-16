@@ -199,3 +199,23 @@ def test_transition_smoke_reports_unreadable_secrets_as_not_ready(tmp_path):
     assert evidence["reason"] == "secrets_file_unreadable"
     assert evidence["network_calls"] == 0
     assert "Traceback" not in completed.stderr
+
+
+def test_transition_config_refuses_unreadable_secrets_without_traceback(tmp_path):
+    """Missing secrets exit 2 naming the failure, no traceback."""
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/check_transition_config.py",
+            "--secrets",
+            str(tmp_path / "no-such.env"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+        timeout=60,
+    )
+    assert completed.returncode == 2
+    assert "cannot read secrets file" in completed.stderr
+    assert "Traceback" not in completed.stderr
