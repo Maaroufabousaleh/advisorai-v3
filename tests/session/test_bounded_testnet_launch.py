@@ -730,3 +730,76 @@ def test_reconcile_once_trips_venue_error_and_fails_closed_on_snapshot_outage(
     assert app._verify_current_order_account() is False
     assert app._prepare_current_state_result() is False
     assert transport.submit_calls == 0
+
+
+def test_run_stops_unclean_on_rss_envelope_breach_without_new_orders(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P09 prep: an RSS-envelope breach ends the session UNCLEAN, fast.
+
+    The ``_wait_and_stop`` resource monitor polls the owner RSS each
+    0.25s; a reading above ``max_rss_mb`` records a ``MemoryError``
+    scheduler error, stops the scheduler, and ends UNCLEAN with
+    ``worker_error:MemoryError`` and exit 2 — no hang until the
+    runtime deadline, no new submissions. Offline only; synthetic
+    venue, stubbed RSS reading, no network, no credentials.
+    """
+    import psutil
+
+    ledgers = SqliteLedgers(tmp_path / "rss-breach.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "rss-breach-state",
+        lock_identity="rss-breach-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=30,
+            max_rss_mb=256,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    real_process = psutil.Process
+
+    class _BreachedMemory:
+        rss = 300 * 1024 * 1024
+
+    class _BreachedProcess:
+        def memory_info(self):
+            return _BreachedMemory()
+
+        def create_time(self):
+            return real_process().create_time()
+
+    monkeypatch.setattr(psutil, "Process", lambda *args, **kwargs: _BreachedProcess())
+    started = datetime.now(UTC)
+    exit_code = app.run(reason="rss breach shutdown test")
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert elapsed < 30
+    assert "SESSION READY" in output
+    assert "outcome=unclean" in output
+    assert isinstance(app._scheduler_error, MemoryError)
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "worker_error:MemoryError" in end.payload["end"]["unfinished_work"]
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0
