@@ -17,7 +17,11 @@ Usage (from the owner shell, after reviewing the zero-network check)::
         uv run python scripts/launch_testnet_paper.py \\
         --provider binance_spot_testnet --instrument BTCUSDT --quote USDT \\
         --reason "owner testnet canary" --interval-seconds 10 \\
-        --max-runtime-seconds 120 --max-submissions 1
+        --max-runtime-seconds 120 --max-submissions 0
+
+``--max-submissions 0`` hard-refuses any submission at the venue boundary and
+is the correct first canary. Raise the cap only after the zero-submission
+canary certifies and the single-order lifecycle gate passes.
 
 Stop from a second owner shell::
 
