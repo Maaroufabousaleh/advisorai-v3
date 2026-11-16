@@ -174,3 +174,28 @@ def test_venue_smokes_refuse_unreadable_secrets_without_traceback(tmp_path):
         assert completed.returncode == 2, script
         assert "cannot read secrets file" in completed.stderr, script
         assert "Traceback" not in completed.stderr, script
+
+
+def test_transition_smoke_reports_unreadable_secrets_as_not_ready(tmp_path):
+    """Missing secrets yield a structured not_ready verdict, no traceback."""
+    environment = os.environ.copy()
+    environment["ADVISORAI_RUN_NETWORK_SMOKE"] = "1"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/smoke_transition_connectors.py",
+            "--secrets",
+            str(tmp_path / "no-such.env"),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=60,
+    )
+    assert completed.returncode == 0
+    evidence = json.loads(completed.stdout)
+    assert evidence["status"] == "not_ready"
+    assert evidence["reason"] == "secrets_file_unreadable"
+    assert evidence["network_calls"] == 0
+    assert "Traceback" not in completed.stderr
