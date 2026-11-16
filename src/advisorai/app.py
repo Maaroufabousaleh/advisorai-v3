@@ -114,7 +114,11 @@ def _repo_identity() -> tuple[str, str]:
 
 def cmd_start(args: argparse.Namespace) -> int:
     state_dir = _state_dir()
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
+    try:
+        ledgers = SqliteLedgers(_ledger_path(state_dir))
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"SESSION START REFUSED: cannot read session ledger ({type(exc).__name__})", flush=True)
+        return 2
     supervisor = SessionSupervisor(
         ledgers,
         state_dir=state_dir,
@@ -372,7 +376,11 @@ def cmd_backup(_args: argparse.Namespace) -> int:
     if not ledger_path.is_file() or not scorecards_path.is_file():
         print("BACKUP REFUSED: both owner databases must already exist", flush=True)
         return 2
-    ledgers = SqliteLedgers(ledger_path)
+    try:
+        ledgers = SqliteLedgers(ledger_path)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"BACKUP REFUSED: cannot read owner database ({type(exc).__name__})", flush=True)
+        return 2
     code_hash, config_hash = _repo_identity()
     supervisor = SessionSupervisor(
         ledgers,

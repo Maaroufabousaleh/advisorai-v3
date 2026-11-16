@@ -750,3 +750,81 @@ def test_subprocess_stop_on_corrupt_ledger_is_unverified_not_traceback(tmp_path)
     assert "STOP UNVERIFIED" in run.stdout
     assert "Traceback" not in run.stdout + run.stderr
     assert (state_dir / f"stop-request-{session_id}.json").exists()
+
+
+def test_subprocess_start_on_corrupt_ledger_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: start on a damaged ledger refuses without traceback.
+
+    Black-box: a real ``start`` child against a state dir whose
+    ledger file is not a database must exit 2 with SESSION START
+    REFUSED — no traceback, and no owner record written (the
+    ledger open sits before lock acquisition, so nothing to
+    release).
+    """
+    state_dir = tmp_path / "start-corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "start-corruption-probe",
+            "start",
+            "--reason",
+            "corruption-probe",
+            "--venue-profile",
+            "local-simulator",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "SESSION START REFUSED" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    assert not (state_dir / "owner.json").exists()
+
+
+def test_subprocess_backup_on_corrupt_ledger_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: backup on a damaged ledger refuses without traceback.
+
+    Black-box: both database files exist (so the missing-file
+    refusal does not trigger) but the ledger is not a database.
+    Backup must exit 2 with BACKUP REFUSED — no traceback, and
+    no backup directory created.
+    """
+    state_dir = tmp_path / "backup-corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    (state_dir / "scorecards.sqlite3").write_bytes(b"also-garbage")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "backup-corruption-probe",
+            "backup",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "BACKUP REFUSED" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    assert not (state_dir / "backups").exists()
