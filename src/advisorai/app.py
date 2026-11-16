@@ -200,6 +200,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 launch=launch,
                 baseline=baseline,
                 supervisor=supervisor,
+                stop_requested=stop_event,
             )
     except BaseException:
         supervisor._release_lock()

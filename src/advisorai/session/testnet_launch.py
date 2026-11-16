@@ -16,6 +16,7 @@ consulted here and are not exchange credentials.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -356,6 +357,7 @@ def build_testnet_owner_application(
     transport: object | None = None,
     baseline: AccountState | None = None,
     supervisor: SessionSupervisor | None = None,
+    stop_requested: threading.Event | None = None,
 ) -> PaperOwnerApplication:
     """Compose the reviewed sandbox profile under the supervised owner.
 
@@ -369,6 +371,9 @@ def build_testnet_owner_application(
     the pre-acquired owner lock; omitting it builds one (synthetic/test
     use only — owner entry points must pass theirs, since a second
     supervisor on the same lock path refuses in the same process).
+    ``stop_requested`` carries the caller-owned signal event so SIGINT /
+    SIGTERM reaches the app loop; omitting it builds one (synthetic/test
+    use only — owner entry points must pass theirs).
     """
     validated = _validate_request(launch)
     data = TestnetFixtureDataAdapter(validated.quote_currency)
@@ -414,6 +419,8 @@ def build_testnet_owner_application(
     kwargs_app: dict[str, object] = {}
     if supervisor is not None:
         kwargs_app["supervisor"] = supervisor
+    if stop_requested is not None:
+        kwargs_app["stop_requested"] = stop_requested
     return PaperOwnerApplication(
         ledgers=ledgers,
         state_dir=state_dir,

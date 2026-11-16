@@ -382,18 +382,23 @@ def test_baseline_refuses_unmapped_coinbase_balances(monkeypatch) -> None:
         read_testnet_baseline(resolver=_coinbase_resolver(), launch=_coinbase_launch())
 
 
-def test_builder_reuses_owner_supervisor_lock_instead_of_second_acquire(
+def test_builder_reuses_owner_supervisor_and_stop_event(
     tmp_path, monkeypatch, capsys
 ) -> None:
-    """P02 owner-flow: the app runs on the caller's pre-acquired lock.
+    """P02 owner-flow: the app runs on the caller's lock and signal event.
 
     Mirrors the owner launcher sequence exactly: ``read_testnet_baseline``
     first, then a ``SessionSupervisor`` that acquires the owner lock,
-    then ``build_testnet_owner_application`` with that supervisor. The
-    zero-submission run must reach SESSION READY and stop clean — a
-    builder that constructed its own second supervisor would refuse
-    with SESSION START REFUSED (same-process flock) before READY.
+    then ``build_testnet_owner_application`` with that supervisor and
+    the caller-owned stop event. The zero-submission run must reach
+    SESSION READY and stop clean — a builder that constructed its own
+    second supervisor would refuse with SESSION START REFUSED
+    (same-process flock) before READY, and a builder that dropped the
+    caller's stop event would leave SIGINT/SIGTERM unable to reach
+    the app loop.
     """
+    import threading
+
     from advisorai.session.supervisor import SessionSupervisor
 
     monkeypatch.setattr(
@@ -420,6 +425,7 @@ def test_builder_reuses_owner_supervisor_lock_instead_of_second_acquire(
         config_hash="d" * 64,
     )
     supervisor._acquire_lock()
+    stop_event = threading.Event()
     try:
         app = build_testnet_owner_application(
             ledgers=ledgers,
@@ -437,8 +443,10 @@ def test_builder_reuses_owner_supervisor_lock_instead_of_second_acquire(
             transport=transport,
             baseline=baseline,
             supervisor=supervisor,
+            stop_requested=stop_event,
         )
         assert app.supervisor is supervisor
+        assert app.stop_requested is stop_event
         exit_code = app.run(reason="p02 lock-handoff test")
     finally:
         supervisor._release_lock()

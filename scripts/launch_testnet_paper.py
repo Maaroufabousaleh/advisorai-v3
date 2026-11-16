@@ -195,8 +195,8 @@ def main(argv: list[str] | None = None) -> int:
             launch=launch,
             baseline=baseline,
             supervisor=supervisor,
+            stop_requested=stop_event,
         )
-        app.stop_requested = stop_event
         print(
             f"testnet_bounds max_runtime_seconds={args.max_runtime_seconds} "
             f"max_submissions={args.max_submissions}",
