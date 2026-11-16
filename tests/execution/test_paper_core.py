@@ -1164,6 +1164,216 @@ def test_native_open_order_projection_rehydrates_client_id_bindings_after_restar
     assert restarted_adapter.open_orders()[0].order_id == order.artifact_id
 
 
+def test_native_adapter_refuses_blank_venue_or_negative_cap(btc_usdt, timestamp):
+    """P02/P09 prep: the native adapter validates at construction.
+
+    A blank venue name and a negative submission cap are refused
+    (the live-environment refusal is pinned by the client-id test).
+    Pure unit coverage; no network, no credentials.
+    """
+
+    class Transport:
+        def submit_order(self, payload):
+            raise AssertionError("refused before any transport use")
+
+        def query_order(self, *, client_order_id):
+            raise AssertionError("refused before any transport use")
+
+    with pytest.raises(ValueError, match="venue name is required"):
+        NativeVenueAdapter(venue="  ", environment="testnet", transport=Transport())
+    with pytest.raises(ValueError, match="cap cannot be negative"):
+        NativeVenueAdapter(
+            venue="venue",
+            environment="testnet",
+            transport=Transport(),
+            max_submissions=-1,
+        )
+
+
+def test_native_adapter_refuses_venue_drift_and_rebound_keys(btc_usdt, timestamp):
+    """P02/P09 prep: strict venue and idempotency-key binding hold.
+
+    A strict adapter refuses an order whose instrument venue differs;
+    a rebound idempotency key onto a different local order is refused
+    before any transport submission. No network, no credentials.
+    """
+
+    class Transport:
+        def __init__(self):
+            self.submissions = 0
+
+        def submit_order(self, payload):
+            self.submissions += 1
+            return {"accepted": True, "venue_order_id": "native-strict"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    transport = Transport()
+    strict = NativeVenueAdapter(
+        venue="venue", environment="testnet", transport=transport, strict_venue=True
+    )
+    foreign = _order(btc_usdt, timestamp).model_copy(
+        update={"instrument": btc_usdt.model_copy(update={"venue": "live"})}
+    )
+    with pytest.raises(ValueError, match="does not match native venue"):
+        strict.submit(foreign)
+    assert transport.submissions == 0
+
+    order = _order(btc_usdt, timestamp)
+    rebound = order.model_copy(update={"artifact_id": uuid4()})
+    assert rebound.idempotency_key == order.idempotency_key
+    loose = NativeVenueAdapter(venue="venue", environment="testnet", transport=transport)
+    loose.submit(order)
+    assert transport.submissions == 1
+    with pytest.raises(NativeVenueProjectionError, match="already bound to a different"):
+        loose.submit(rebound)
+    assert transport.submissions == 1
+
+
+def test_native_adapter_refuses_misshapen_acknowledgements(btc_usdt, timestamp):
+    """P02/P09 prep: misshapen venue acks fail closed.
+
+    A non-mapping ack, an ack without a venue order id, and an ack
+    with a non-boolean acceptance are all refused. No network, no
+    credentials.
+    """
+
+    class ScriptedTransport:
+        def __init__(self, response):
+            self.response = response
+
+        def submit_order(self, payload):
+            return self.response
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    def submit(response):
+        adapter = NativeVenueAdapter(
+            venue="venue", environment="testnet", transport=ScriptedTransport(response)
+        )
+        return adapter.submit(_order(btc_usdt, timestamp))
+
+    with pytest.raises(RuntimeError, match="non-mapping acknowledgement"):
+        submit(["native-1"])
+    with pytest.raises(RuntimeError, match="rejected order"):
+        submit({"accepted": True, "venue_order_id": "  "})
+    with pytest.raises(RuntimeError, match="rejected order"):
+        submit({"accepted": "yes", "venue_order_id": "native-1"})
+
+
+def test_native_adapter_cancel_requires_an_explicit_typed_endpoint(btc_usdt, timestamp):
+    """P02/P09 prep: cancellation without a typed endpoint fails closed.
+
+    A transport without ``cancel_order``, a non-mapping cancellation,
+    and a cancellation with a non-boolean result are all refused
+    instead of pretending the local transition cancelled the venue
+    order. No network, no credentials.
+    """
+    order = _order(btc_usdt, timestamp)
+
+    class NoCancelTransport:
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-cancel"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    bare = NativeVenueAdapter(
+        venue="venue", environment="testnet", transport=NoCancelTransport()
+    )
+    with pytest.raises(NativeVenueProjectionError, match="does not expose cancellation"):
+        bare.cancel(order)
+
+    class ScriptedTransport:
+        def __init__(self, response):
+            self.response = response
+
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-cancel"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+        def cancel_order(self, *, client_order_id):
+            return self.response
+
+    def cancel(response):
+        adapter = NativeVenueAdapter(
+            venue="venue", environment="testnet", transport=ScriptedTransport(response)
+        )
+        return adapter.cancel(order)
+
+    with pytest.raises(NativeVenueProjectionError, match="non-mapping cancellation"):
+        cancel(["cancelled"])
+    with pytest.raises(NativeVenueProjectionError, match="invalid cancellation result"):
+        cancel({"cancelled": "eventually"})
+    assert cancel({"cancelled": True}) is True
+
+
+def test_native_open_order_projection_validates_record_shape(btc_usdt, timestamp):
+    """P02/P09 prep: misshapen open-order projections fail closed.
+
+    A non-sequence projection, a non-object record, a record without
+    a venue identity, an unknown client order, and an invalid local
+    identity are all refused. No network, no credentials.
+    """
+    order = _order(btc_usdt, timestamp)
+
+    class ScriptedTransport:
+        def __init__(self, records):
+            self.records = records
+
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-known"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+        def list_open_orders(self):
+            return self.records
+
+    def project(records):
+        adapter = NativeVenueAdapter(
+            venue="venue", environment="testnet", transport=ScriptedTransport(records)
+        )
+        adapter.submit(order)
+        return adapter.open_orders()
+
+    with pytest.raises(NativeVenueProjectionError, match="must be a sequence"):
+        project({"id": "native-known"})
+    with pytest.raises(NativeVenueProjectionError, match="non-object record"):
+        project(["native-known"])
+    with pytest.raises(NativeVenueProjectionError, match="missing a venue order identity"):
+        project([{"client_order_id": order.idempotency_key, "accepted": True}])
+    with pytest.raises(NativeVenueProjectionError, match="unknown client order"):
+        project([{"client_order_id": "ghost-key", "id": "native-ghost"}])
+    with pytest.raises(NativeVenueProjectionError, match="invalid local order identity"):
+        project([{"local_order_id": "not-a-uuid", "id": "native-bad"}])
+
+
+def test_native_account_snapshot_requires_an_explicit_endpoint(btc_usdt, timestamp):
+    """P02/P09 prep: account reads without an endpoint fail closed.
+
+    A transport without ``fetch_account_snapshot`` is refused instead
+    of returning a fabricated balance. No network, no credentials.
+    """
+
+    class NoAccountTransport:
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-account"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    bare = NativeVenueAdapter(
+        venue="venue", environment="testnet", transport=NoAccountTransport()
+    )
+    with pytest.raises(RuntimeError, match="does not expose account snapshots"):
+        bare.account_snapshot()
+
+
 def test_oms_reconnect_queries_completed_order_before_open_order_projection(
     tmp_path, btc_usdt, timestamp
 ):
