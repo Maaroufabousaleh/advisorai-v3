@@ -874,3 +874,73 @@ def test_subprocess_testnet_start_with_wrong_instrument_refuses_cleanly(
     assert "testnet_baseline" not in run.stdout
     assert "SESSION READY" not in run.stdout
     assert "Traceback" not in run.stdout + run.stderr
+
+
+def test_app_start_refuses_out_of_profile_baseline_without_traceback(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 owner-flow: baseline-guard rejection refuses cleanly in-process.
+
+    In-process (the black-box children cannot reach the baseline
+    read without venue network): valid synthetic secrets, then the
+    baseline read raises the exact guard ValueError. ``cmd_start``
+    must exit 2 with SESSION START REFUSED surfacing the guard
+    message — no traceback — and release the owner lock.
+    """
+    import argparse
+
+    import advisorai.app as app_module
+
+    secrets = tmp_path / "synthetic.env"
+    secrets.write_text(
+        "ADVISORAI_VENUE_API_KEY=synthetic-testnet-key\n"
+        "ADVISORAI_VENUE_API_SECRET=synthetic-testnet-secret\n"
+        "ADVISORAI_VENUE_NAME=binance_spot_testnet\n"
+        "ADVISORAI_VENUE_ENVIRONMENT=testnet\n",
+        encoding="utf-8",
+    )
+    state_dir = tmp_path / "guard-state"
+    monkeypatch.setenv("ADVISORAI_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("ADVISORAI_LEDGER_PATH", str(state_dir / "ledgers.sqlite3"))
+
+    def _refuse(*args, **kwargs):
+        raise ValueError(
+            "testnet account holds out-of-profile balances; clear them first"
+        )
+
+    import advisorai.session.testnet_launch as launch_module
+
+    monkeypatch.setattr(launch_module, "read_testnet_baseline", _refuse)
+    argv = argparse.Namespace(
+        lock_identity="guard-refusal-probe",
+        scenario="quiet",
+        interval_seconds=10.0,
+        accelerated_clock=False,
+        max_rss_mb=1024,
+        max_runtime_seconds=120.0,
+        venue_profile="binance_spot_testnet",
+        max_submissions=0,
+        secrets=secrets,
+        venue_instrument=None,
+        venue_quote=None,
+        print_baseline=False,
+        reason="guard-probe",
+    )
+    assert app_module.cmd_start(argv) == 2
+    captured = capsys.readouterr()
+    assert "SESSION START REFUSED: testnet baseline refused" in captured.out
+    assert "clear them first" in captured.out
+    assert "Traceback" not in captured.out + captured.err
+    assert not (state_dir / "owner.json").exists()
+    # Lock released: the supervisor lock path is not held.
+    from advisorai.session.supervisor import SessionSupervisor
+
+    probe = SessionSupervisor(
+        app_module.SqliteLedgers(app_module._ledger_path(state_dir)),
+        state_dir=state_dir,
+        lock_identity="guard-release-check",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+    )
+    probe._acquire_lock()
+    probe._release_lock()

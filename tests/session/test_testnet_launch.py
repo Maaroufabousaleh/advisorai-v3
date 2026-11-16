@@ -587,3 +587,43 @@ def test_launcher_refuses_corrupt_ledger_without_traceback(
     assert "SESSION START REFUSED" in captured.out
     assert "Traceback" not in captured.out + captured.err
     assert not (state_dir / "owner.json").exists()
+
+
+def test_launcher_refuses_out_of_profile_baseline_without_traceback(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: baseline-guard rejection exits 2 naming the guard.
+
+    Offline: stub the resolver, then raise the exact guard
+    ValueError from the baseline read (no venue touch). The
+    launcher must refuse with SESSION START REFUSED surfacing the
+    actionable guard message — no traceback — and acquire no lock.
+    """
+    import sys
+    from types import SimpleNamespace
+
+    sys.path.insert(0, "scripts")
+    import launch_testnet_paper
+    from launch_testnet_paper import main
+
+    state_dir = tmp_path / "guard-state"
+
+    def _refuse(resolver, launch):
+        raise ValueError(
+            "testnet account holds out-of-profile balances; clear them first"
+        )
+
+    monkeypatch.setattr(
+        launch_testnet_paper.CredentialResolver,
+        "from_env_file",
+        classmethod(lambda cls, path: SimpleNamespace()),
+    )
+    monkeypatch.setattr(launch_testnet_paper, "read_testnet_baseline", _refuse)
+    monkeypatch.setenv("ADVISORAI_STATE_DIR", str(state_dir))
+    monkeypatch.delenv("ADVISORAI_LEDGER_PATH", raising=False)
+    assert main(["--max-submissions", "0"]) == 2
+    captured = capsys.readouterr()
+    assert "SESSION START REFUSED: testnet baseline refused" in captured.out
+    assert "clear them first" in captured.out
+    assert "Traceback" not in captured.out + captured.err
+    assert not (state_dir / "owner.json").exists()

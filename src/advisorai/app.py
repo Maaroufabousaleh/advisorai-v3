@@ -231,7 +231,12 @@ def cmd_start(args: argparse.Namespace) -> int:
                 quote_currency=getattr(args, "venue_quote", None) or default_quote,
                 max_submissions=getattr(args, "max_submissions", None),
             )
-            _transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
+            try:
+                _transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
+            except ValueError as exc:
+                supervisor._release_lock()
+                print(f"SESSION START REFUSED: testnet baseline refused: {exc}", flush=True)
+                return 2
             if getattr(args, "print_baseline", False):
                 print(
                     f"testnet_baseline cash={baseline.cash} "

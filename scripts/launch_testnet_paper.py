@@ -148,7 +148,11 @@ def main(argv: list[str] | None = None) -> int:
         initial_mark=args.initial_mark,
         max_submissions=args.max_submissions,
     )
-    transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
+    try:
+        transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
+    except ValueError as exc:
+        print(f"SESSION START REFUSED: testnet baseline refused: {exc}", flush=True)
+        return 2
     if args.print_baseline:
         print(
             f"testnet_baseline cash={baseline.cash} positions={dict(baseline.positions)} "
