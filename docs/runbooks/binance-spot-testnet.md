@@ -47,7 +47,7 @@ The bounded public qualifier performs no authenticated operation and never
 writes an order:
 
 ```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+ADVISORAI_RUN_NETWORK_SMOKE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
   scripts/qualify_binance_spot_testnet_public.py \
   --evidence-dir artifacts/phase2/binance-spot-testnet/public-truth
 ```
