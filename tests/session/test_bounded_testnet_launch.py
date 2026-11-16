@@ -673,3 +673,60 @@ def test_run_names_open_orders_remaining_at_deadline_stop(
     assert str(order.artifact_id) in end.payload["end"]["open_orders"]
     assert app.supervisor.active_session_id() is None
     assert transport.submit_calls == 1
+
+
+def test_reconcile_once_trips_venue_error_and_fails_closed_on_snapshot_outage(
+    tmp_path, monkeypatch
+) -> None:
+    """P09 prep: a mid-session venue-read outage fails closed, distinctly.
+
+    If ``fetch_account_snapshot`` raises during ``reconcile_once`` (venue
+    or network interruption mid-session), the runtime trips its kill
+    switch with ``paper_venue_reconciliation_error`` — distinct from the
+    ``paper_reconciliation_mismatch`` value-divergence reason — and
+    re-raises instead of reporting reconciled. The startup/recovery
+    boolean gates (``_verify_current_order_account``,
+    ``_prepare_current_state_result``) both resolve to ``False`` so the
+    supervisor refuses to start or recover. Offline only; synthetic
+    venue, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "venue-outage.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "venue-outage-state",
+        lock_identity="venue-outage-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    assert app.runtime.risk_kernel.kill_switch.tripped is False
+
+    def failing_snapshot():
+        raise RuntimeError("synthetic venue outage")
+
+    monkeypatch.setattr(transport, "fetch_account_snapshot", failing_snapshot)
+    with pytest.raises(RuntimeError, match="synthetic venue outage"):
+        app.runtime.reconcile_once()
+    assert app.runtime.risk_kernel.kill_switch.tripped is True
+    assert app.runtime.risk_kernel.kill_switch.reason == "paper_venue_reconciliation_error"
+    assert app.runtime.risk_kernel.kill_switch.reason != "paper_reconciliation_mismatch"
+    assert app._verify_current_order_account() is False
+    assert app._prepare_current_state_result() is False
+    assert transport.submit_calls == 0
