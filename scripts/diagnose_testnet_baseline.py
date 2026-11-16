@@ -32,12 +32,14 @@ from advisorai.integrations import (
 
 
 def _nonzero(value: object) -> bool:
-    """True only for a finite nonzero decimal; malformed values fail closed."""
+    """True for a finite nonzero decimal; malformed values fail closed."""
     try:
         parsed = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return True
-    return parsed.is_finite() and parsed != 0
+    if not parsed.is_finite():
+        return True
+    return parsed != 0
 
 
 def classify_balances(

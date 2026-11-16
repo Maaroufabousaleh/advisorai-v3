@@ -347,3 +347,28 @@ def test_diagnostic_entry_point_fails_closed_on_transport_error(
     assert code == 2
     assert err.strip() == "diagnostic failed: VenueTransportError"
     assert all(method == "GET" for method, _ in failing_calls)
+
+
+def test_diagnostic_fails_closed_on_malformed_and_nonnumeric_values() -> None:
+    """P02: malformed/non-finite legs flag; symbols normalize to upper.
+
+    A foreign asset with a garbage ``free`` leg, a ``NaN`` leg, or an
+    ``Infinity`` leg must all flag (fail closed toward REJECT), never
+    silently pass; lowercase symbols normalize before comparison.
+    Pure classifier over synthetic payloads; no network, no secrets.
+    """
+    flagged = classify_balances(
+        _balances(
+            ("eth", "not-a-number", "0.000"),
+            ("bnb", "NaN", "0.000"),
+            ("xrp", "0.000", "Infinity"),
+            ("doge", "-Infinity", "-Infinity"),
+        )
+    )
+    assert flagged == [
+        {"asset": "ETH", "free_nonzero": True, "locked_nonzero": False},
+        {"asset": "BNB", "free_nonzero": True, "locked_nonzero": False},
+        {"asset": "XRP", "free_nonzero": False, "locked_nonzero": True},
+        {"asset": "DOGE", "free_nonzero": True, "locked_nonzero": True},
+    ]
+    assert classify_balances(_balances(("btc", "0.010", "0.000"))) == []
