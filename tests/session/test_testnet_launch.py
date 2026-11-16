@@ -468,3 +468,55 @@ def test_launch_request_validation_refuses_out_of_profile_inputs() -> None:
             value="50000",
             retrieved_at=datetime.now(UTC),
         )
+
+
+def test_launcher_prints_baseline_only_with_explicit_flag(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 disclosure: baseline cash stays out of stdout unless flagged.
+
+    Offline: stub the resolver + baseline read, then run launcher
+    ``main`` to the lock-acquisition failure (no session starts).
+    Default argv prints no baseline; ``--print-baseline`` prints it.
+    """
+    import sys
+    from types import SimpleNamespace
+
+    sys.path.insert(0, "scripts")
+    import launch_testnet_paper
+    from launch_testnet_paper import main
+
+    from advisorai.execution.account import AccountState
+
+    baseline = AccountState(
+        cash=Decimal("1234.56"),
+        marks={"BTC": Decimal("50000")},
+        as_of=datetime(2026, 11, 16, tzinfo=UTC),
+    )
+    monkeypatch.setattr(
+        launch_testnet_paper.CredentialResolver,
+        "from_env_file",
+        classmethod(lambda cls, path: SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        launch_testnet_paper,
+        "read_testnet_baseline",
+        lambda resolver, launch: (SimpleNamespace(), baseline),
+    )
+    lock_calls: list = []
+
+    class _RefusingSupervisor:
+        def __init__(self, *args, **kwargs) -> None:
+            lock_calls.append(True)
+
+        def __getattr__(self, name):  # pragma: no cover - fail fast
+            raise RuntimeError("owner lock is held elsewhere")
+
+    monkeypatch.setattr(launch_testnet_paper, "SessionSupervisor", _RefusingSupervisor)
+    monkeypatch.setenv("ADVISORAI_STATE_DIR", str(tmp_path / "state"))
+    assert main([]) == 2
+    assert "testnet_baseline" not in capsys.readouterr().out
+    assert main(["--print-baseline"]) == 2
+    out = capsys.readouterr().out
+    assert "testnet_baseline cash=1234.56" in out
+    assert lock_calls

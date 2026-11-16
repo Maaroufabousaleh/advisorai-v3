@@ -200,11 +200,12 @@ def cmd_start(args: argparse.Namespace) -> int:
                 max_submissions=getattr(args, "max_submissions", None),
             )
             _transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
-            print(
-                f"testnet_baseline cash={baseline.cash} "
-                f"as_of={baseline.as_of.isoformat()}",
-                flush=True,
-            )
+            if getattr(args, "print_baseline", False):
+                print(
+                    f"testnet_baseline cash={baseline.cash} "
+                    f"as_of={baseline.as_of.isoformat()}",
+                    flush=True,
+                )
             app = build_testnet_owner_application(
                 ledgers=ledgers,
                 state_dir=state_dir,
@@ -443,6 +444,11 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=None,
         help="cap on venue order submissions through testnet profiles (0-100); required for testnet profiles, refuses beyond the cap",
+    )
+    p_start.add_argument(
+        "--print-baseline",
+        action="store_true",
+        help="print the testnet baseline cash and timestamp to stdout; off by default to keep balance state out of shared logs",
     )
     p_start.set_defaults(func=cmd_start)
     p_stop = sub.add_parser("stop", help="request a graceful stop of the active owner process")

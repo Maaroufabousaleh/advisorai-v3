@@ -111,6 +111,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-runtime-seconds", type=float, default=120.0)
     parser.add_argument("--max-submissions", type=int, default=1)
     parser.add_argument("--max-rss-mb", type=int, default=1024)
+    parser.add_argument(
+        "--print-baseline",
+        action="store_true",
+        help="print the testnet baseline cash/positions to stdout; off by default to keep balance state out of shared logs",
+    )
     parser.add_argument("--lock-identity", default="owner-workstation")
     args = parser.parse_args(argv)
 
@@ -140,11 +145,12 @@ def main(argv: list[str] | None = None) -> int:
         max_submissions=args.max_submissions,
     )
     transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
-    print(
-        f"testnet_baseline cash={baseline.cash} positions={dict(baseline.positions)} "
-        f"as_of={baseline.as_of.isoformat()}",
-        flush=True,
-    )
+    if args.print_baseline:
+        print(
+            f"testnet_baseline cash={baseline.cash} positions={dict(baseline.positions)} "
+            f"as_of={baseline.as_of.isoformat()}",
+            flush=True,
+        )
     del transport
 
     state_dir = _state_dir()
