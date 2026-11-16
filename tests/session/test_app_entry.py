@@ -660,3 +660,93 @@ def test_subprocess_testnet_start_with_missing_secrets_refuses_cleanly(
         if retry.poll() is None:
             retry.terminate()
         retry.wait(timeout=10)
+
+
+def test_subprocess_status_on_corrupt_ledger_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: status on a damaged ledger refuses without traceback.
+
+    Black-box: a real ``status`` child against a state dir whose
+    ledger file is not a database must exit 2 with STATUS
+    UNAVAILABLE — no traceback. Status is the first diagnostic an
+    owner runs when something is wrong, so it must fail clean.
+    """
+    state_dir = tmp_path / "corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "status-corruption-probe",
+            "status",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "STATUS UNAVAILABLE" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+
+
+def test_subprocess_stop_on_corrupt_ledger_is_unverified_not_traceback(tmp_path) -> None:
+    """P02 owner-flow: stop with a live owner but damaged ledger stays clean.
+
+    Black-box: the owner record points at this live test process,
+    so stop writes its request file, then finds the ledger
+    unreadable and must exit 2 with STOP UNVERIFIED — no
+    traceback. The request file must still exist (the live owner
+    can act on it even though confirmation is impossible).
+    """
+    import json
+
+    import psutil
+
+    state_dir = tmp_path / "stop-corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    session_id = str(uuid5(NAMESPACE_URL, "stop-corruption-probe"))
+    me = psutil.Process()
+    owner = {
+        "session_id": session_id,
+        "pid": me.pid,
+        "process_create_time": me.create_time(),
+        "lock_identity": "stop-corruption-probe",
+    }
+    (state_dir / "owner.json").write_text(json.dumps(owner), encoding="utf-8")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "stop-corruption-probe",
+            "stop",
+            "--outcome",
+            "clean",
+            "--timeout-seconds",
+            "2",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert f"stop_requested={session_id}" in run.stdout
+    assert "STOP UNVERIFIED" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    assert (state_dir / f"stop-request-{session_id}.json").exists()

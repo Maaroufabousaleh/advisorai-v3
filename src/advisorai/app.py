@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import signal
+import sqlite3
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -303,7 +304,11 @@ def cmd_stop(args: argparse.Namespace) -> int:
             os.fsync(handle.fileno())
     print(f"stop_requested={session_id}", flush=True)
 
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
+    try:
+        ledgers = SqliteLedgers(_ledger_path(state_dir))
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"STOP UNVERIFIED: cannot read session ledger ({type(exc).__name__})", flush=True)
+        return 2
     deadline = time.monotonic() + args.timeout_seconds
     while time.monotonic() < deadline:
         ended = False
@@ -326,16 +331,20 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 def cmd_status(_args: argparse.Namespace) -> int:
     state_dir = _state_dir()
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
-    code_hash, config_hash = _repo_identity()
-    supervisor = SessionSupervisor(
-        ledgers,
-        state_dir=state_dir,
-        lock_identity="status-probe",
-        code_hash=code_hash,
-        config_hash=config_hash,
-    )
-    history = supervisor._session_history()
+    try:
+        ledgers = SqliteLedgers(_ledger_path(state_dir))
+        code_hash, config_hash = _repo_identity()
+        supervisor = SessionSupervisor(
+            ledgers,
+            state_dir=state_dir,
+            lock_identity="status-probe",
+            code_hash=code_hash,
+            config_hash=config_hash,
+        )
+        history = supervisor._session_history()
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"STATUS UNAVAILABLE: {type(exc).__name__}", flush=True)
+        return 2
     unmatched = [str(sid) for sid in history["starts"] if sid not in history["ends"]]
     print(f"starts={len(history['starts'])} ends={len(history['ends'])}")
     print(f"unmatched_starts={unmatched}")
