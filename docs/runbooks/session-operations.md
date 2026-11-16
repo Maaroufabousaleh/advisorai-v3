@@ -31,6 +31,9 @@ ADVISORAI_STATE_DIR=var/advisorai-testnet uv run python -m advisorai.app start \
   --max-runtime-seconds 120 --max-submissions 1
 ```
 
+The baseline cash and timestamp stay out of stdout by default; pass
+`--print-baseline` for explicit one-shot inspection.
+
 `start` stays in the foreground for the whole owner session. It holds the
 durable single-owner lock while one bounded scheduler runs paper cycles. The
 default `quiet` profile is a local, no-network reference fixture that abstains
