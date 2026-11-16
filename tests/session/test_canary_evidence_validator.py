@@ -357,3 +357,37 @@ def test_validator_rejects_missing_order_events_table(tmp_path, monkeypatch, cap
     assert report.p02_certified is False
     names = [check.name for check in report.failed]
     assert "submission_count_recorded" in names
+
+
+def test_validator_rejects_unfinished_work_on_clean_outcome(tmp_path, monkeypatch, capsys) -> None:
+    """P02: unfinished work on a clean outcome refuses certification.
+
+    P02 acceptance requires a clean stop with nothing left running: a
+    session end that claims ``outcome=clean`` while
+    ``unfinished_work`` is non-empty must still fail certification,
+    naming ``no_unfinished_work`` alone (the existing unclean-stop
+    test only triggers it alongside a dirty outcome). Offline only;
+    corrupts a real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="unfinished-work-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["end"]["outcome"] == "clean"
+        payload["end"]["unfinished_work"] = ["paper_scheduler_still_running"]
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert names == ["no_unfinished_work"]
