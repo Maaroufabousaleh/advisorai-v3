@@ -143,3 +143,34 @@ def test_venue_smokes_resolve_adapter_hash_from_foreign_cwd(tmp_path):
         assert "integrations/binance_spot.py" not in completed.stderr, script
         assert "integrations/coinbase_exchange.py" not in completed.stderr, script
         assert "Traceback" not in completed.stderr, script
+
+
+def test_venue_smokes_refuse_unreadable_secrets_without_traceback(tmp_path):
+    """P02: venue smokes refuse missing secrets at argparse, no traceback."""
+    environment = os.environ.copy()
+    environment["ADVISORAI_RUN_NETWORK_SMOKE"] = "1"
+    root = Path(__file__).resolve().parents[2]
+    for script in (
+        "scripts/smoke_binance_spot_testnet.py",
+        "scripts/smoke_coinbase_exchange_sandbox.py",
+    ):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(root / script),
+                "--secrets",
+                str(tmp_path / "no-such.env"),
+                "--configuration-hash",
+                "0" * 64,
+                "--evidence-dir",
+                str(tmp_path / "evidence"),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+            timeout=60,
+        )
+        assert completed.returncode == 2, script
+        assert "cannot read secrets file" in completed.stderr, script
+        assert "Traceback" not in completed.stderr, script

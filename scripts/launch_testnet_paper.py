@@ -136,7 +136,10 @@ def main(argv: list[str] | None = None) -> int:
     if not 256 <= args.max_rss_mb <= 8192:
         parser.error("--max-rss-mb must be between 256 and 8192")
 
-    resolver = CredentialResolver.from_env_file(args.secrets)
+    try:
+        resolver = CredentialResolver.from_env_file(args.secrets)
+    except (OSError, ValueError) as exc:
+        parser.error(f"cannot read secrets file: {type(exc).__name__}")
     launch = TestnetLaunchRequest(
         provider=args.provider,
         provider_instrument_id=args.instrument,

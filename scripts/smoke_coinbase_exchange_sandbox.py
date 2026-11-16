@@ -148,7 +148,10 @@ def main() -> int:
     if os.getenv("ADVISORAI_RUN_NETWORK_SMOKE") != "1":
         raise SystemExit("refusing network access; set ADVISORAI_RUN_NETWORK_SMOKE=1 explicitly")
 
-    resolver = CredentialResolver.from_env_file(args.secrets)
+    try:
+        resolver = CredentialResolver.from_env_file(args.secrets)
+    except (OSError, ValueError) as exc:
+        parser.error(f"cannot read secrets file: {type(exc).__name__}")
     if len(args.configuration_hash) != 64 or any(
         character not in "0123456789abcdef" for character in args.configuration_hash
     ):

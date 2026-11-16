@@ -595,3 +595,68 @@ def test_subprocess_start_with_out_of_bounds_flags_refuses_cleanly(tmp_path) -> 
         assert message in run.stderr, extra
         assert "SESSION READY" not in run.stdout, extra
         assert "Traceback" not in run.stdout + run.stderr, extra
+
+
+def test_subprocess_testnet_start_with_missing_secrets_refuses_cleanly(
+    tmp_path,
+) -> None:
+    """P02 owner-flow: unreadable secrets refuse with SESSION START REFUSED.
+
+    Black-box: a real child with valid bounds but a missing secrets
+    file must exit 2 naming the failure — no traceback — and release
+    the owner lock so an immediate retry is not blocked.
+    """
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "secrets-refusal-probe",
+            "start",
+            "--venue-profile",
+            "binance_spot_testnet",
+            "--max-submissions",
+            "0",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "SESSION START REFUSED: cannot read secrets file" in run.stdout
+    assert "testnet_baseline" not in run.stdout
+    assert "SESSION READY" not in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    # Lock released: an immediate local-simulator start reaches READY.
+    environment["ADVISORAI_STATE_DIR"] = str(tmp_path / "application-state")
+    retry = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "secrets-refusal-probe",
+            "start",
+            "--scenario",
+            "quiet",
+            "--interval-seconds",
+            "3600",
+        ],
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _read_until(retry, "SESSION READY", timeout=60)
+    finally:
+        if retry.poll() is None:
+            retry.terminate()
+        retry.wait(timeout=10)

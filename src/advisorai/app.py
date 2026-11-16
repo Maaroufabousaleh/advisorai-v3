@@ -187,7 +187,15 @@ def cmd_start(args: argparse.Namespace) -> int:
                 getattr(args, "secrets", None)
                 or os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")
             )
-            resolver = CredentialResolver.from_env_file(secrets_path)
+            try:
+                resolver = CredentialResolver.from_env_file(secrets_path)
+            except (OSError, ValueError) as exc:
+                supervisor._release_lock()
+                print(
+                    f"SESSION START REFUSED: cannot read secrets file ({type(exc).__name__})",
+                    flush=True,
+                )
+                return 2
             default_instrument = (
                 "BTCUSDT" if venue_profile == "binance_spot_testnet" else "BTC-USD"
             )

@@ -265,6 +265,24 @@ def test_launcher_rejects_out_of_bounds_before_any_venue_touch(capsys) -> None:
     assert "testnet_baseline" not in captured.out
 
 
+def test_launcher_refuses_unreadable_secrets_without_traceback(
+    tmp_path, capsys
+) -> None:
+    """P02: missing secrets exit 2 naming the failure, no traceback."""
+    import sys
+
+    sys.path.insert(0, "scripts")
+    from launch_testnet_paper import main
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--secrets", str(tmp_path / "no-such.env"), "--max-submissions", "0"])
+    assert exc.value.code == 2
+    captured = capsys.readouterr()
+    assert "cannot read secrets file" in captured.err
+    assert "Traceback" not in captured.out + captured.err
+    assert "testnet_baseline" not in captured.out
+
+
 def test_testnet_fixture_marks_are_deterministic_and_timezone_safe() -> None:
     """Fixture bars refuse naive cutoffs; marks are deterministic in time."""
     from datetime import datetime as dt

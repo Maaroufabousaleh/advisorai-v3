@@ -159,7 +159,10 @@ def main() -> int:
     ):
         raise SystemExit("--configuration-hash must be a lowercase SHA-256 digest")
 
-    resolver = CredentialResolver.from_env_file(args.secrets)
+    try:
+        resolver = CredentialResolver.from_env_file(args.secrets)
+    except (OSError, ValueError) as exc:
+        parser.error(f"cannot read secrets file: {type(exc).__name__}")
     scoped_names = resolver.available_names(CredentialScope.PAPER_VENUE)
     base: dict[str, object] = {
         "status": "failed",
