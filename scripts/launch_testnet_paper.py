@@ -30,6 +30,7 @@ from __future__ import annotations
 import argparse
 import os
 import signal
+import sqlite3
 import threading
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -157,7 +158,11 @@ def main(argv: list[str] | None = None) -> int:
     del transport
 
     state_dir = _state_dir()
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
+    try:
+        ledgers = SqliteLedgers(_ledger_path(state_dir))
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"SESSION START REFUSED: cannot read session ledger ({type(exc).__name__})", flush=True)
+        return 2
     supervisor = SessionSupervisor(
         ledgers,
         state_dir=state_dir,

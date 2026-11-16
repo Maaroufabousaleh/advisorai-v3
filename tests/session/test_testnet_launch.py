@@ -538,3 +538,50 @@ def test_launcher_prints_baseline_only_with_explicit_flag(
     out = capsys.readouterr().out
     assert "testnet_baseline cash=1234.56" in out
     assert lock_calls
+
+
+def test_launcher_refuses_corrupt_ledger_without_traceback(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: damaged session ledger exits 2 cleanly from the launcher.
+
+    Offline: stub the resolver + baseline read (no venue touch),
+    point the state dir at a ledger file that is not a database.
+    The launcher must refuse with SESSION START REFUSED — no
+    traceback — before lock acquisition, so no owner record is
+    written.
+    """
+    import sys
+    from types import SimpleNamespace
+
+    sys.path.insert(0, "scripts")
+    import launch_testnet_paper
+    from launch_testnet_paper import main
+
+    from advisorai.execution.account import AccountState
+
+    state_dir = tmp_path / "corrupt-launcher-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    baseline = AccountState(
+        cash=Decimal("1000"),
+        marks={"BTC": Decimal("50000")},
+        as_of=datetime(2026, 11, 16, tzinfo=UTC),
+    )
+    monkeypatch.setattr(
+        launch_testnet_paper.CredentialResolver,
+        "from_env_file",
+        classmethod(lambda cls, path: SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        launch_testnet_paper,
+        "read_testnet_baseline",
+        lambda resolver, launch: (SimpleNamespace(), baseline),
+    )
+    monkeypatch.setenv("ADVISORAI_STATE_DIR", str(state_dir))
+    monkeypatch.delenv("ADVISORAI_LEDGER_PATH", raising=False)
+    assert main(["--max-submissions", "0"]) == 2
+    captured = capsys.readouterr()
+    assert "SESSION START REFUSED" in captured.out
+    assert "Traceback" not in captured.out + captured.err
+    assert not (state_dir / "owner.json").exists()
