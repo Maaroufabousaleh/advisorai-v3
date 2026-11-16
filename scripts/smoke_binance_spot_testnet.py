@@ -169,7 +169,10 @@ def main() -> int:
         "reviewed_host": BINANCE_SPOT_TESTNET_HOST,
         "adapter": BINANCE_SPOT_TESTNET_ADAPTER_VERSION,
         "adapter_source_sha256": sha256(
-            Path("src/advisorai/integrations/binance_spot.py").read_bytes()
+            (
+                Path(__file__).resolve().parents[1]
+                / "src/advisorai/integrations/binance_spot.py"
+            ).read_bytes()
         ).hexdigest(),
         "credential_refs": tuple(name for name in _CREDENTIAL_REFS if name in scoped_names),
         "config_hash": args.configuration_hash,

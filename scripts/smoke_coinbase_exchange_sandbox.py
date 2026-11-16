@@ -162,7 +162,10 @@ def main() -> int:
         "reviewed_host": COINBASE_EXCHANGE_SANDBOX_HOST,
         "adapter": COINBASE_EXCHANGE_SANDBOX_ADAPTER_VERSION,
         "adapter_source_sha256": sha256(
-            Path("src/advisorai/integrations/coinbase_exchange.py").read_bytes()
+            (
+                Path(__file__).resolve().parents[1]
+                / "src/advisorai/integrations/coinbase_exchange.py"
+            ).read_bytes()
         ).hexdigest(),
         "credential_refs": tuple(
             name

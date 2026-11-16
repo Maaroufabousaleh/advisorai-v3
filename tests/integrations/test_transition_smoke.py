@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 
 def _run_config_check(secrets, *extra):
@@ -95,3 +96,50 @@ def test_transition_config_rejects_a_non_hostname_allowlist(tmp_path):
     )
     assert completed.returncode != 0
     assert "bare hostnames" in completed.stderr
+
+
+def test_venue_smokes_resolve_adapter_hash_from_foreign_cwd(tmp_path):
+    """P02 robustness: venue smokes hash the adapter from any cwd.
+
+    Black-box: run both read-only smokes with cwd set to an empty
+    dir and synthetic dummy credentials. The runs fail closed on
+    the dummy credentials (structured verdict), but must never
+    traceback on the adapter source path. Pre-fix both raised
+    FileNotFoundError on the cwd-relative ``src/...`` read.
+    """
+    secrets = tmp_path / "secrets.env"
+    secrets.write_text(
+        'export ADVISORAI_VENUE_API_KEY="dummy"\n'
+        'export ADVISORAI_VENUE_API_SECRET="ZHVtbXk="\n',
+        encoding="utf-8",
+    )
+    workdir = tmp_path / "workdir"
+    workdir.mkdir()
+    environment = os.environ.copy()
+    environment["ADVISORAI_RUN_NETWORK_SMOKE"] = "1"
+    root = Path(__file__).resolve().parents[2]
+    for script in (
+        "scripts/smoke_binance_spot_testnet.py",
+        "scripts/smoke_coinbase_exchange_sandbox.py",
+    ):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(root / script),
+                "--secrets",
+                str(secrets),
+                "--configuration-hash",
+                "0" * 64,
+                "--evidence-dir",
+                str(tmp_path / "evidence"),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            env=environment,
+            cwd=workdir,
+            timeout=60,
+        )
+        assert "integrations/binance_spot.py" not in completed.stderr, script
+        assert "integrations/coinbase_exchange.py" not in completed.stderr, script
+        assert "Traceback" not in completed.stderr, script
