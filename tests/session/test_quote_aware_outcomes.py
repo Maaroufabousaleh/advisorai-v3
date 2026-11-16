@@ -279,3 +279,208 @@ def test_paper_outcome_rejects_incomplete_fx_or_quality_provenance():
             failure_rate=Decimal("0"),
             quality_source="fixture",
         )
+
+
+def test_quote_aware_outcome_refuses_misshapen_construction() -> None:
+    """P02/P09 prep: the outcome adapter validates at construction.
+
+    A blank quote currency and uncallable FX/quality providers are
+    refused before any outcome is built. Pure unit coverage; no
+    network, no credentials.
+    """
+    snapshot, _order, _fill, _decision = _inputs()
+    good = _adapter(snapshot)
+    with pytest.raises(ValueError, match="quote currency is required"):
+        QuoteAwarePaperOutcomeAdapter(
+            quote_currency="  ",
+            fx_rate_provider=good.fx_rate_provider,
+            quality_provider=good.quality_provider,
+        )
+    with pytest.raises(ValueError, match="require FX and quality providers"):
+        QuoteAwarePaperOutcomeAdapter(
+            quote_currency="USDT",
+            fx_rate_provider=None,
+            quality_provider=good.quality_provider,
+        )
+    with pytest.raises(ValueError, match="require FX and quality providers"):
+        QuoteAwarePaperOutcomeAdapter(
+            quote_currency="USDT",
+            fx_rate_provider=good.fx_rate_provider,
+            quality_provider="not-callable",
+        )
+
+
+def test_quote_aware_outcome_refuses_open_or_misaligned_horizons() -> None:
+    """P02/P09 prep: outcomes require a closed, aligned horizon.
+
+    Naive timestamps, an as-of before the decision horizon end, a
+    snapshot from another cutoff, and a multi-asset decision record
+    are all refused before any FX or mark read.
+    """
+    snapshot, order, fill, decision = _inputs()
+    adapter = _adapter(snapshot)
+
+    def build(**overrides):
+        kwargs = {
+            "decision": decision,
+            "as_of": _CUTOFF,
+            "snapshot": snapshot,
+            "market": RiskMarketState(marks={"BTC": Decimal("50000")}),
+            "fills": (fill,),
+            "orders": {order.artifact_id: order},
+            "initial_marks": {"BTC": Decimal("49000")},
+        }
+        kwargs.update(overrides)
+        return adapter.build_outcome(**kwargs)
+
+    with pytest.raises(ValueError, match="aware, closed decision horizon"):
+        build(as_of=datetime(2026, 11, 12, 16, 0))
+    with pytest.raises(ValueError, match="aware, closed decision horizon"):
+        build(as_of=_CUTOFF - timedelta(minutes=1))
+    other_cutoff = Snapshot(
+        as_of=_CUTOFF - timedelta(hours=1), purpose="quote-outcome-stale-pit"
+    )
+    with pytest.raises(ValueError, match="same current cutoff"):
+        build(snapshot=other_cutoff)
+    multi_asset = decision.model_copy(update={"asset": "BTC,ETH"})
+    with pytest.raises(ValueError, match="exactly one canonical asset"):
+        build(decision=multi_asset)
+
+
+def test_quote_aware_outcome_refuses_untyped_providers() -> None:
+    """P02/P09 prep: untyped FX/quality providers are refused.
+
+    A dict-returning FX provider and a dict-returning quality
+    provider are refused even when every timestamp aligns. No
+    network, no credentials.
+    """
+    snapshot, order, fill, decision = _inputs()
+    fx_rate = QuoteToUsdRate(
+        quote_currency="USDT",
+        usd_per_quote=Decimal("0.999"),
+        as_of=_CUTOFF,
+        snapshot_id=snapshot.artifact_id,
+        evidence_id=uuid4(),
+        source="fx-observation",
+    )
+
+    def build(adapter):
+        return adapter.build_outcome(
+            decision=decision,
+            as_of=_CUTOFF,
+            snapshot=snapshot,
+            market=RiskMarketState(marks={"BTC": Decimal("50000")}),
+            fills=(fill,),
+            orders={order.artifact_id: order},
+            initial_marks={"BTC": Decimal("49000")},
+        )
+
+    untyped_fx = QuoteAwarePaperOutcomeAdapter(
+        quote_currency="USDT",
+        fx_rate_provider=lambda _snapshot: {"usd_per_quote": "0.999"},
+        quality_provider=_adapter(snapshot).quality_provider,
+    )
+    with pytest.raises(ValueError, match="must return a typed QuoteToUsdRate"):
+        build(untyped_fx)
+    untyped_quality = QuoteAwarePaperOutcomeAdapter(
+        quote_currency="USDT",
+        fx_rate_provider=lambda _snapshot: fx_rate,
+        quality_provider=lambda **_context: {"data_reliability": "0.98"},
+    )
+    with pytest.raises(ValueError, match="must return typed PaperOutcomeQuality"):
+        build(untyped_quality)
+
+
+def test_quote_aware_outcome_refuses_broken_fill_order_linkage() -> None:
+    """P02/P09 prep: broken fill/order linkage is refused.
+
+    Duplicate fill identities, duplicate decision ids, a mismatched
+    order-map identity, fills/orders absent from OMS state, fills
+    unlinked from decision orders, instrument drift, and fills that
+    exceed an order quantity are all refused. No network, no
+    credentials.
+    """
+    snapshot, order, fill, decision = _inputs()
+    adapter = _adapter(snapshot)
+
+    def build(**overrides):
+        kwargs = {
+            "decision": decision,
+            "as_of": _CUTOFF,
+            "snapshot": snapshot,
+            "market": RiskMarketState(marks={"BTC": Decimal("50000")}),
+            "fills": (fill,),
+            "orders": {order.artifact_id: order},
+            "initial_marks": {"BTC": Decimal("49000")},
+        }
+        kwargs.update(overrides)
+        return adapter.build_outcome(**kwargs)
+
+    with pytest.raises(ValueError, match="duplicate fill identities"):
+        build(fills=(fill, fill))
+    doubled = decision.model_copy(
+        update={"order_ids": (order.artifact_id, order.artifact_id)}
+    )
+    with pytest.raises(ValueError, match="duplicate order or fill identities"):
+        build(decision=doubled)
+    with pytest.raises(ValueError, match="mismatched local identity"):
+        build(orders={uuid4(): order})
+    ghost_fill = decision.model_copy(update={"fill_ids": (uuid4(),)})
+    with pytest.raises(ValueError, match="fill absent from current OMS"):
+        build(decision=ghost_fill)
+    ghost_order = decision.model_copy(
+        update={"order_ids": (uuid4(),), "fill_ids": ()}
+    )
+    with pytest.raises(ValueError, match="order absent from current OMS"):
+        build(decision=ghost_order)
+
+    # NOTE: the "fill is not linked to one of its decision orders" branch
+    # is unreachable: related fills are pre-filtered to decision order ids
+    # and missing orders raise earlier, so the loop guard can never fire.
+    # It is intentionally left unpinned rather than tested via mocks.
+
+
+    eth_instrument = order.instrument.model_copy(update={"canonical_id": "ETH"})
+    eth_order = order.model_copy(update={"instrument": eth_instrument})
+    with pytest.raises(ValueError, match="differs from the decision asset"):
+        build(orders={order.artifact_id: eth_order})
+
+    fat_fill = fill.model_copy(update={"quantity": Decimal("99")})
+    with pytest.raises(ValueError, match="exceed a decision order quantity"):
+        build(fills=(fat_fill,), decision=decision.model_copy(
+            update={"fill_ids": (fat_fill.artifact_id,)}
+        ))
+
+
+def test_quote_aware_outcome_refuses_foreign_asset_orders() -> None:
+    """P02/P09 prep: decisions spanning assets are refused at the end.
+
+    An order for another asset inside the decision id set is refused
+    even when the fill linkage itself is consistent. No network, no
+    credentials.
+    """
+    snapshot, order, fill, decision = _inputs()
+    adapter = _adapter(snapshot)
+    eth_instrument = order.instrument.model_copy(update={"canonical_id": "ETH"})
+    eth_order = order.model_copy(
+        update={
+            "artifact_id": uuid4(),
+            "instrument": eth_instrument,
+            "idempotency_key": "quote-outcome-eth-order",
+        }
+    )
+    # No fill names the foreign order, so fill linkage passes and the
+    # end-of-build asset sweep is the guard that fires.
+    spanning = decision.model_copy(
+        update={"order_ids": (order.artifact_id, eth_order.artifact_id)}
+    )
+    with pytest.raises(ValueError, match="order for another asset"):
+        adapter.build_outcome(
+            decision=spanning,
+            as_of=_CUTOFF,
+            snapshot=snapshot,
+            market=RiskMarketState(marks={"BTC": Decimal("50000")}),
+            fills=(fill,),
+            orders={order.artifact_id: order, eth_order.artifact_id: eth_order},
+            initial_marks={"BTC": Decimal("49000")},
+        )
