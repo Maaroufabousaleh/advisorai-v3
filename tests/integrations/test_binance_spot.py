@@ -380,3 +380,72 @@ def test_public_truth_qualify_refuses_network_without_explicit_opt_in(
     with pytest.raises(SystemExit) as exc:
         public_truth.main()
     assert "refusing network access" in str(exc.value.code)
+
+
+def test_public_truth_main_passes_from_foreign_cwd_with_stubbed_venue(
+    tmp_path, monkeypatch
+) -> None:
+    """P02 robustness: the runner passes from any cwd, not just repo root.
+
+    Behavioral: chdir to an empty dir, stub the venue client, run
+    ``main()`` end to end. Pre-fix this raised FileNotFoundError on
+    the cwd-relative adapter path; post-fix the script-anchored path
+    resolves and the run passes with a 64-char adapter SHA.
+    """
+    import sys
+    from types import SimpleNamespace
+
+    sys.path.insert(0, "scripts")
+    import qualify_binance_spot_testnet_public as public_truth
+
+    def _symbol(symbol: str, base: str) -> dict[str, object]:
+        return {
+            "symbol": symbol,
+            "baseAsset": base,
+            "quoteAsset": "USDT",
+            "status": "TRADING",
+            "filters": [
+                {"filterType": "LOT_SIZE", "stepSize": "0.00001000", "minQty": "0.00001000"},
+                {"filterType": "PRICE_FILTER", "tickSize": "0.01000000"},
+            ],
+        }
+
+    bodies = {
+        "time": b'{"serverTime": 1790000000000}',
+        "exchangeInfo": json.dumps(
+            {"symbols": [_symbol("BTCUSDT", "BTC"), _symbol("ETHUSDT", "ETH")]}
+        ).encode(),
+    }
+
+    class _StubClient:
+        request_count = 0
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.base_url = BINANCE_SPOT_TESTNET_BASE_URL
+            self.config = SimpleNamespace(allowed_hosts=(BINANCE_SPOT_TESTNET_HOST,))
+
+        def request(self, method, url, **kwargs):
+            type(self).request_count += 1
+            key = "exchangeInfo" if "exchangeInfo" in url else "time"
+            return SimpleNamespace(body=bodies[key])
+
+    _StubClient.request_count = 0
+    monkeypatch.setattr(public_truth, "SafeHttpClient", _StubClient)
+    monkeypatch.setenv("ADVISORAI_RUN_NETWORK_SMOKE", "1")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "qualify_binance_spot_testnet_public.py",
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+        ],
+    )
+    assert public_truth.main() == 0
+    run_dirs = [p for p in (tmp_path / "evidence").iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    manifest = json.loads((run_dirs[0] / "binance-spot-testnet-public-truth.json").read_text())
+    assert manifest["result"]["status"] == "passed"
+    assert len(manifest["result"]["adapter_source_sha256"]) == 64
+    assert manifest["result"]["network_calls"] == 2

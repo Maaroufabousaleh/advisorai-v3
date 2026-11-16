@@ -90,7 +90,10 @@ def main() -> int:
         "reviewed_host": BINANCE_SPOT_TESTNET_HOST,
         "adapter_version": BINANCE_SPOT_TESTNET_ADAPTER_VERSION,
         "adapter_source_sha256": sha256(
-            Path("src/advisorai/integrations/binance_spot.py").read_bytes()
+            (
+                Path(__file__).resolve().parents[1]
+                / "src/advisorai/integrations/binance_spot.py"
+            ).read_bytes()
         ).hexdigest(),
         "operations": [],
         "network_calls": 0,
