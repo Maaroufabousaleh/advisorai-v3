@@ -944,3 +944,88 @@ def test_app_start_refuses_out_of_profile_baseline_without_traceback(
     )
     probe._acquire_lock()
     probe._release_lock()
+
+
+def test_app_start_prints_baseline_only_with_explicit_flag(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 disclosure gate: ``cmd_start`` prints baseline cash only on opt-in.
+
+    Positive + negative control for the ``--print-baseline`` gate on the
+    github-advanced-security inline finding (PR 216): with
+    ``print_baseline=False`` the cash line stays out of stdout; with
+    ``print_baseline=True`` it appears. Both legs run in-process with a
+    synthetic baseline and a stubbed application so no venue network or
+    session lifecycle is involved.
+    """
+    import argparse
+    from decimal import Decimal
+
+    import advisorai.app as app_module
+    import advisorai.session.testnet_launch as launch_module
+    from advisorai.execution import AccountState
+
+    secrets = tmp_path / "synthetic.env"
+    secrets.write_text(
+        "ADVISORAI_VENUE_API_KEY=synthetic-testnet-key\n"
+        "ADVISORAI_VENUE_API_SECRET=synthetic-testnet-secret\n"
+        "ADVISORAI_VENUE_NAME=binance_spot_testnet\n"
+        "ADVISORAI_VENUE_ENVIRONMENT=testnet\n",
+        encoding="utf-8",
+    )
+    sentinel_cash = Decimal("9876.54")
+    baseline = AccountState(
+        cash=sentinel_cash,
+        marks={"BTC": Decimal("50000")},
+        margin_used=Decimal("0"),
+        margin_available=sentinel_cash,
+        as_of=datetime(2026, 11, 16, tzinfo=UTC),
+    )
+
+    class _StubApp:
+        def run(self, reason: str) -> int:
+            assert reason == "gate-probe"
+            return 0
+
+    def _baseline(*args, **kwargs):
+        return object(), baseline
+
+    def _build(**kwargs):
+        assert kwargs["baseline"] is baseline
+        return _StubApp()
+
+    monkeypatch.setattr(launch_module, "read_testnet_baseline", _baseline)
+    monkeypatch.setattr(app_module, "_repo_identity", lambda: ("c" * 64, "d" * 64))
+
+    def _run_case(print_baseline: bool) -> str:
+        state_dir = tmp_path / ("gate-off" if not print_baseline else "gate-on")
+        monkeypatch.setenv("ADVISORAI_STATE_DIR", str(state_dir))
+        monkeypatch.setenv(
+            "ADVISORAI_LEDGER_PATH", str(state_dir / "ledgers.sqlite3")
+        )
+        monkeypatch.setattr(
+            launch_module, "build_testnet_owner_application", _build
+        )
+        argv = argparse.Namespace(
+            lock_identity=f"gate-probe-{print_baseline}",
+            scenario="quiet",
+            interval_seconds=10.0,
+            accelerated_clock=False,
+            max_rss_mb=1024,
+            max_runtime_seconds=120.0,
+            venue_profile="binance_spot_testnet",
+            max_submissions=0,
+            secrets=secrets,
+            venue_instrument=None,
+            venue_quote=None,
+            print_baseline=print_baseline,
+            reason="gate-probe",
+        )
+        assert app_module.cmd_start(argv) == 0
+        return capsys.readouterr().out
+
+    out_off = _run_case(False)
+    assert "testnet_baseline cash=" not in out_off
+    assert str(sentinel_cash) not in out_off
+    out_on = _run_case(True)
+    assert f"testnet_baseline cash={sentinel_cash}" in out_on
