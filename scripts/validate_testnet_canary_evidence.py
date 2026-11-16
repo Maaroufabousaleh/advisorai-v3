@@ -13,6 +13,10 @@ Usage::
 
     uv run python scripts/validate_testnet_canary_evidence.py \\
         --state-dir var/advisorai-testnet --run-log canary.log
+
+Exit codes: 0 = P02 certified (all checks pass); 1 = a P02 check
+failed (the failing check names are printed); 2 = input/validation
+error (missing state dir, unreadable ledger, corrupt payload).
 """
 
 from __future__ import annotations

@@ -12,6 +12,12 @@ Usage::
 
     uv run python scripts/validate_binance_fill_evidence.py \\
         --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle/<run_id>
+
+Exit codes: 0 = P03 certified (a post-fix fill matches on every
+check); 1 = a P03 check failed (the failing check names are
+printed); 2 = input/validation error (missing dir, unreadable
+manifest/ledger, corrupt payload); 3 = cancellation-only pass,
+which can never certify P03.
 """
 
 from __future__ import annotations
