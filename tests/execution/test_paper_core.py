@@ -2583,3 +2583,76 @@ def test_oms_hydrate_refuses_corrupt_order_history(tmp_path, btc_usdt, timestamp
     with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
         OrderManager(orphan_ledgers, PaperVenueAdapter())
     assert "precedes its order" in str(excinfo.value.__cause__)
+
+
+def test_risk_market_state_refuses_misshapen_construction(btc_usdt):
+    """P02/P09 prep: the risk market snapshot validates at construction.
+
+    Non-integer clock drift and order counts, non-Decimal
+    scalars, non-digest and mismatched state hashes, blank
+    identifiers, non-Decimal/non-finite numerics, non-boolean
+    venue health, non-positive marks and liquidity, negative
+    staleness/volatility/costs/drift/counters, and non-finite
+    collateral are all refused. Pure unit coverage; no network, no
+    credentials.
+    """
+    marks = {btc_usdt.canonical_id: Decimal("100")}
+    with pytest.raises(ValueError, match="clock drift must be an integer"):
+        RiskMarketState(marks=marks, clock_drift_seconds=1.5)
+    with pytest.raises(ValueError, match="order count must be an integer"):
+        RiskMarketState(marks=marks, order_count=True)
+    with pytest.raises(ValueError, match="scalar values must be Decimal"):
+        RiskMarketState(marks=marks, funding_cost_bps=1.5)
+    with pytest.raises(ValueError, match="must be a lowercase SHA-256 digest"):
+        RiskMarketState(marks=marks, market_state_hash="NOT-A-DIGEST")
+    with pytest.raises(ValueError, match="identifiers cannot be blank"):
+        RiskMarketState(marks={"  ": Decimal("100")})
+    with pytest.raises(ValueError, match="numeric values must be Decimal instances"):
+        RiskMarketState(marks=marks, volatility={btc_usdt.canonical_id: 0.5})
+    with pytest.raises(ValueError, match="health values must be booleans"):
+        RiskMarketState(marks=marks, venue_healthy={"venue": "yes"})
+    with pytest.raises(ValueError, match="numeric values must be finite"):
+        RiskMarketState(marks={btc_usdt.canonical_id: Decimal("NaN")})
+    with pytest.raises(ValueError, match="counters must be finite"):
+        RiskMarketState(marks=marks, funding_cost_bps=Decimal("Infinity"))
+    with pytest.raises(ValueError, match="marks must be positive"):
+        RiskMarketState(marks={btc_usdt.canonical_id: Decimal("0")})
+    with pytest.raises(ValueError, match="stale durations cannot be negative"):
+        RiskMarketState(marks=marks, stale_seconds={btc_usdt.canonical_id: -1})
+    with pytest.raises(ValueError, match="volatility values cannot be negative"):
+        RiskMarketState(
+            marks=marks, volatility={btc_usdt.canonical_id: Decimal("-1")}
+        )
+    with pytest.raises(ValueError, match="liquidity notionals must be positive"):
+        RiskMarketState(
+            marks=marks, liquidity_notional={btc_usdt.canonical_id: Decimal("0")}
+        )
+    with pytest.raises(ValueError, match="cost estimates cannot be negative"):
+        RiskMarketState(
+            marks=marks, spread_bps={btc_usdt.canonical_id: Decimal("-1")}
+        )
+    with pytest.raises(ValueError, match="clock drift cannot be negative"):
+        RiskMarketState(marks=marks, clock_drift_seconds=-1)
+    with pytest.raises(ValueError, match="counters/costs cannot be negative"):
+        RiskMarketState(marks=marks, order_count=-1)
+    with pytest.raises(ValueError, match="collateral availability must be finite"):
+        RiskMarketState(marks=marks, collateral_available=Decimal("NaN"))
+    with pytest.raises(ValueError, match="does not match canonical market state"):
+        RiskMarketState(marks=marks, market_state_hash="00" * 32)
+
+
+def test_kill_switch_reset_requires_human_approver(tmp_path):
+    """P02/P09 prep: kill-switch reset requires an explicit approver.
+
+    A blank approver is refused and the switch stays tripped.
+    Pure unit coverage over a throwaway SQLite ledger; no network,
+    no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "kill-switch-reset.sqlite")
+    switch = KillSwitch(ledgers)
+    switch.trip("venue outage")
+    with pytest.raises(ValueError, match="explicit human approver"):
+        switch.reset(approved_by="  ")
+    assert switch.tripped
+    switch.reset(approved_by="human-operator")
+    assert not switch.tripped
