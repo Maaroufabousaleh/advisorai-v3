@@ -142,12 +142,17 @@ def _coinbase_accounts(btc_balance: str = "0.010") -> list[dict]:
 def _coinbase_requester(accounts: list[dict], calls: list):
     def request(method, url, headers, body, timeout):
         calls.append((method, url))
-        if url.rstrip("/").endswith("/products"):
+        path = url.split("?", 1)[0].rstrip("/")
+        if path.endswith("/products"):
             return (200, json.dumps(_coinbase_products()).encode(), ())
-        if url.rstrip("/").endswith("/accounts"):
+        if path.endswith("/accounts"):
             return (200, json.dumps(accounts).encode(), ())
-        if url.rstrip("/").endswith("/time"):
+        if path.endswith("/time"):
             return (200, json.dumps({"epoch": 1700000000.0}).encode(), ())
+        if path.endswith("/orders"):
+            return (200, b"[]", ())
+        if path.endswith("/fills"):
+            return (200, b"[]", ())
         raise AssertionError(f"unexpected mocked call {method} {url}")
 
     return request
@@ -459,3 +464,71 @@ def test_builder_reuses_owner_supervisor_and_stop_event(
     assert "reconciliation=reconciled" in output
     assert "leases_released=True" in output
     assert all("/api/v3/order" not in url for _, url in calls)
+
+
+def test_coinbase_zero_submission_session_reaches_ready_and_reconciles_clean(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 parity: coinbase sandbox runs READY, deadline stop, clean reconcile.
+
+    End-to-end through the real Coinbase sandbox adapter with mocked
+    HTTP: verified baseline hydration, SESSION READY, deadline stop,
+    clean reconciliation, released leases, and zero venue writes
+    (no POST to /orders). The binance path has this coverage; the
+    coinbase builder path previously had hydration-only tests.
+    """
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    accounts = _coinbase_accounts("0.010")
+    real_builder = build_coinbase_exchange_sandbox_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_coinbase_requester(accounts, calls), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_coinbase_exchange_sandbox_transport",
+        seeded_builder,
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-coinbase.sqlite3")
+    launch = _coinbase_launch()
+    transport, baseline = read_testnet_baseline(
+        resolver=_coinbase_resolver(), launch=launch
+    )
+    assert baseline.positions == {"BTC": Decimal("0.010")}
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "p02-coinbase-state",
+        lock_identity="p02-coinbase-zero-submission",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_coinbase_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+    )
+    assert app.adapters.paper_venue.native.max_submissions == 0
+    exit_code = app.run(reason="p02 coinbase zero-submission test")
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "SESSION READY" in output
+    assert "stop_reason=runtime_deadline_reached" in output
+    assert "outcome=clean" in output
+    assert "reconciliation=reconciled" in output
+    assert "leases_released=True" in output
+    assert all(not (method == "POST" and url.rstrip("/").endswith("/orders")) for method, url in calls)
+    assert app.supervisor.active_session_id() is None
+    mission = ledgers.events(LedgerNamespace.MISSION)
+    assert any(
+        event.event_type == "session_ended"
+        and event.payload.get("end", {}).get("outcome") == "clean"
+        for event in mission
+    )
