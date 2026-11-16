@@ -380,3 +380,74 @@ def test_baseline_refuses_unmapped_coinbase_balances(monkeypatch) -> None:
 
     with pytest.raises(VenueTransportError, match="non-zero unmapped asset ETH"):
         read_testnet_baseline(resolver=_coinbase_resolver(), launch=_coinbase_launch())
+
+
+def test_builder_reuses_owner_supervisor_lock_instead_of_second_acquire(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 owner-flow: the app runs on the caller's pre-acquired lock.
+
+    Mirrors the owner launcher sequence exactly: ``read_testnet_baseline``
+    first, then a ``SessionSupervisor`` that acquires the owner lock,
+    then ``build_testnet_owner_application`` with that supervisor. The
+    zero-submission run must reach SESSION READY and stop clean — a
+    builder that constructed its own second supervisor would refuse
+    with SESSION START REFUSED (same-process flock) before READY.
+    """
+    from advisorai.session.supervisor import SessionSupervisor
+
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(resolver, requester=_requester(_account(), calls), **kwargs)
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    state_dir = tmp_path / "p02-lock-handoff"
+    ledgers = SqliteLedgers(tmp_path / "p02-lock-handoff.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    supervisor = SessionSupervisor(
+        ledgers,
+        state_dir=state_dir,
+        lock_identity="p02-lock-handoff",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+    )
+    supervisor._acquire_lock()
+    try:
+        app = build_testnet_owner_application(
+            ledgers=ledgers,
+            state_dir=state_dir,
+            lock_identity="p02-lock-handoff",
+            code_hash="c" * 64,
+            config_hash="d" * 64,
+            config=OwnerApplicationConfig(
+                scenario="quiet",
+                interval_seconds=0.5,
+                max_runtime_seconds=2,
+            ),
+            resolver=_resolver(),
+            launch=launch,
+            transport=transport,
+            baseline=baseline,
+            supervisor=supervisor,
+        )
+        assert app.supervisor is supervisor
+        exit_code = app.run(reason="p02 lock-handoff test")
+    finally:
+        supervisor._release_lock()
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "SESSION READY" in output
+    assert "SESSION START REFUSED" not in output
+    assert "stop_reason=runtime_deadline_reached" in output
+    assert "outcome=clean" in output
+    assert "reconciliation=reconciled" in output
+    assert "leases_released=True" in output
+    assert all("/api/v3/order" not in url for _, url in calls)

@@ -194,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
             resolver=resolver,
             launch=launch,
             baseline=baseline,
+            supervisor=supervisor,
         )
         app.stop_requested = stop_event
         print(

@@ -42,6 +42,7 @@ from advisorai.session.provider_profiles import (
     build_provider_profile,
     verify_selected_instrument,
 )
+from advisorai.session.supervisor import SessionSupervisor
 
 _TESTNET_FIXTURE_SOURCE = "testnet-fixture"
 _TESTNET_FIXTURE_DATASET = "BTCUSDT-1h"
@@ -354,6 +355,7 @@ def build_testnet_owner_application(
     launch: TestnetLaunchRequest,
     transport: object | None = None,
     baseline: AccountState | None = None,
+    supervisor: SessionSupervisor | None = None,
 ) -> PaperOwnerApplication:
     """Compose the reviewed sandbox profile under the supervised owner.
 
@@ -363,6 +365,10 @@ def build_testnet_owner_application(
     use happens here either way. ``baseline`` carries the read-only venue
     snapshot from :func:`read_testnet_baseline`; omitting it falls back to
     the launch-request fake-funds baseline (synthetic/test use only).
+    ``supervisor`` carries the caller-owned ``SessionSupervisor`` holding
+    the pre-acquired owner lock; omitting it builds one (synthetic/test
+    use only — owner entry points must pass theirs, since a second
+    supervisor on the same lock path refuses in the same process).
     """
     validated = _validate_request(launch)
     data = TestnetFixtureDataAdapter(validated.quote_currency)
@@ -405,6 +411,9 @@ def build_testnet_owner_application(
     if transport is not None:
         kwargs["transport"] = transport
     adapters = build_provider_profile(components, resolver, **kwargs)
+    kwargs_app: dict[str, object] = {}
+    if supervisor is not None:
+        kwargs_app["supervisor"] = supervisor
     return PaperOwnerApplication(
         ledgers=ledgers,
         state_dir=state_dir,
@@ -414,6 +423,7 @@ def build_testnet_owner_application(
         config=config,
         adapters=adapters,
         venue_profile=validated.provider,
+        **kwargs_app,  # type: ignore[arg-type]
     )
 
 
