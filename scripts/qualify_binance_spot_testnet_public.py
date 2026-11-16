@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -70,6 +71,8 @@ def main() -> int:
         default=Path("artifacts/phase2/binance-spot-testnet/public-truth"),
     )
     args = parser.parse_args()
+    if os.getenv("ADVISORAI_RUN_NETWORK_SMOKE") != "1":
+        raise SystemExit("refusing network access; set ADVISORAI_RUN_NETWORK_SMOKE=1 explicitly")
     client = SafeHttpClient(
         HttpClientConfig(
             allowed_hosts=(BINANCE_SPOT_TESTNET_HOST,),

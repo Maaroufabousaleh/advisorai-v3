@@ -359,3 +359,24 @@ def test_binance_builder_is_scoped_and_rejects_coinbase_identity():
     )
     with pytest.raises(ValueError, match="binance_spot_testnet"):
         build_binance_spot_testnet_transport(resolver)
+
+
+def test_public_truth_qualify_refuses_network_without_explicit_opt_in(
+    monkeypatch,
+) -> None:
+    """P02 gate parity: public-truth qualify refuses without the env opt-in.
+
+    The lifecycle and recovery runners both refuse network access
+    unless ADVISORAI_RUN_NETWORK_SMOKE=1; the public-truth runner
+    must refuse identically instead of hitting the venue on import.
+    """
+    import sys
+
+    sys.path.insert(0, "scripts")
+    import qualify_binance_spot_testnet_public as public_truth
+
+    monkeypatch.delenv("ADVISORAI_RUN_NETWORK_SMOKE", raising=False)
+    monkeypatch.setattr(sys, "argv", ["qualify_binance_spot_testnet_public.py"])
+    with pytest.raises(SystemExit) as exc:
+        public_truth.main()
+    assert "refusing network access" in str(exc.value.code)
