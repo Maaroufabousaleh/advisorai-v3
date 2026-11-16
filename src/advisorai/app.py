@@ -442,7 +442,7 @@ def main(argv: list[str] | None = None) -> int:
         "--max-submissions",
         type=int,
         default=None,
-        help="cap on venue order submissions through testnet profiles; required for testnet profiles, refuses beyond the cap",
+        help="cap on venue order submissions through testnet profiles (0-100); required for testnet profiles, refuses beyond the cap",
     )
     p_start.set_defaults(func=cmd_start)
     p_stop = sub.add_parser("stop", help="request a graceful stop of the active owner process")
