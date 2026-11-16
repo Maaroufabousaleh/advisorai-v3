@@ -21,7 +21,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from hashlib import sha256
 from pathlib import Path
 from uuid import NAMESPACE_URL, uuid5
 
@@ -449,8 +448,8 @@ def _reference_factory(scenario: str) -> Callable[[Snapshot], object]:
             ),
             model_name="reference",
             adapter_name="owner-testnet-reference-v1",
-            code_hash=sha256(b"advisorai-v3/testnet-reference-model/v1").hexdigest(),
-            config_hash=sha256(f"advisorai-v3/testnet-reference-config/{scenario}".encode()).hexdigest(),
+            code_hash="testnet-reference-v1",
+            config_hash=scenario,
             snapshot_id=snapshot.artifact_id,
             created_at=snapshot.as_of,
         )
