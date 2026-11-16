@@ -17,13 +17,15 @@ import pytest
 
 sys.path.insert(0, "scripts")
 
-from diagnose_testnet_baseline import classify_balances
+from diagnose_testnet_baseline import classify_balances, classify_coinbase_accounts
 from diagnose_testnet_baseline import main as diagnostic_main
 
 from advisorai.config import CredentialResolver
 from advisorai.integrations import (
     BINANCE_SPOT_TESTNET_BASE_URL,
+    COINBASE_EXCHANGE_SANDBOX_BASE_URL,
     build_binance_spot_testnet_transport,
+    build_coinbase_exchange_sandbox_transport,
 )
 from advisorai.session.testnet_launch import TestnetLaunchRequest, read_testnet_baseline
 from tests.integrations.test_binance_spot import _symbol
@@ -372,3 +374,131 @@ def test_diagnostic_fails_closed_on_malformed_and_nonnumeric_values() -> None:
         {"asset": "DOGE", "free_nonzero": True, "locked_nonzero": True},
     ]
     assert classify_balances(_balances(("btc", "0.010", "0.000"))) == []
+
+
+def _coinbase_accounts(*records: tuple[str, str, str, str]) -> list[dict[str, str]]:
+    return [
+        {"currency": currency, "balance": balance, "available": available, "hold": hold}
+        for currency, balance, available, hold in records
+    ]
+
+
+def _coinbase_requester(accounts: list[dict[str, str]], calls: list):
+    def request(method, url, headers, body, timeout):
+        calls.append((method, url))
+        path = url.split("?", 1)[0].rstrip("/")
+        if path.endswith("/accounts"):
+            return (200, json.dumps(accounts).encode(), ())
+        if path.endswith("/time"):
+            return (200, json.dumps({"epoch": 1700000000.0}).encode(), ())
+        raise AssertionError(f"unexpected mocked call {method} {url}")
+
+    return request
+
+
+def _coinbase_secrets_file(tmp_path) -> object:
+    import base64 as _base64
+
+    path = tmp_path / "synthetic-coinbase-diagnostic.env"
+    path.write_text(
+        "\n".join(
+            [
+                "ADVISORAI_VENUE_NAME=coinbase_exchange_sandbox",
+                "ADVISORAI_VENUE_ENVIRONMENT=paper_testnet",
+                f"ADVISORAI_VENUE_BASE_URL={COINBASE_EXCHANGE_SANDBOX_BASE_URL}",
+                "ADVISORAI_VENUE_API_KEY=synthetic-diagnostic-key",
+                "ADVISORAI_VENUE_API_SECRET="
+                + _base64.b64encode(b"synthetic-diagnostic-secret").decode("ascii"),
+                "ADVISORAI_VENUE_PASSPHRASE=synthetic-diagnostic-passphrase",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_coinbase_diagnostic_flags_each_nonzero_foreign_leg() -> None:
+    """Coinbase dual: each foreign currency reports available/hold legs."""
+    accounts = _coinbase_accounts(
+        ("USD", "1000", "1000", "0"),
+        ("BTC", "0.010", "0.010", "0"),
+        ("ETH", "1.5", "1.5", "0"),
+        ("SOL", "2.0", "0", "2.0"),
+    )
+    assert classify_coinbase_accounts(accounts) == [
+        {"asset": "ETH", "available_nonzero": True, "hold_nonzero": False},
+        {"asset": "SOL", "available_nonzero": False, "hold_nonzero": True},
+    ]
+    assert (
+        classify_coinbase_accounts(
+            _coinbase_accounts(
+                ("USD", "1000", "1000", "0"),
+                ("BTC", "0.010", "0.010", "0"),
+                ("ETH", "0", "0", "0"),
+            )
+        )
+        == []
+    )
+
+
+def test_coinbase_diagnostic_fails_closed_on_malformed_values() -> None:
+    """Malformed/non-finite legs flag; symbols normalize to upper."""
+    flagged = classify_coinbase_accounts(
+        _coinbase_accounts(
+            ("eth", "junk", "junk", "0"),
+            ("sol", "NaN", "NaN", "0"),
+            ("xrp", "1.0", "0", "Infinity"),
+        )
+    )
+    assert flagged == [
+        {"asset": "ETH", "available_nonzero": True, "hold_nonzero": False},
+        {"asset": "SOL", "available_nonzero": True, "hold_nonzero": False},
+        {"asset": "XRP", "available_nonzero": False, "hold_nonzero": True},
+    ]
+    with pytest.raises(ValueError, match="sequence of account records"):
+        classify_coinbase_accounts({"currency": "ETH"})
+
+
+def test_coinbase_diagnostic_entry_point_reports_rejected_assets(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """CLI `--provider coinbase_exchange_sandbox` exits 1 on foreign legs.
+
+    End to end through the real Coinbase transport factory with mocked
+    HTTP: one GET /accounts, tuple list_balances(), exit 1 naming the
+    symbol and the nonzero leg only. No amounts, no secrets.
+    """
+    import diagnose_testnet_baseline as diagnostic_module
+
+    accounts = _coinbase_accounts(
+        ("USD", "1000", "1000", "0"),
+        ("BTC", "0.010", "0.010", "0"),
+        ("ETH", "1.5", "1.5", "0"),
+    )
+    calls: list = []
+    monkeypatch.setattr(
+        diagnostic_module,
+        "build_coinbase_exchange_sandbox_transport",
+        lambda resolver: build_coinbase_exchange_sandbox_transport(
+            resolver, requester=_coinbase_requester(accounts, calls)
+        ),
+    )
+    code = diagnostic_main(
+        [
+            "--secrets",
+            str(_coinbase_secrets_file(tmp_path)),
+            "--provider",
+            "coinbase_exchange_sandbox",
+        ]
+    )
+    out, err = capsys.readouterr()
+    assert code == 1
+    assert "REJECT" in out
+    assert "asset=ETH" in out
+    assert "nonzero=available" in out
+    assert calls and all(method == "GET" for method, _ in calls)
+    assert "synthetic-diagnostic-key" not in out + err
+    assert "synthetic-diagnostic-secret" not in out + err
+    assert "1.5" not in out + err
+    assert "1000" not in out + err
