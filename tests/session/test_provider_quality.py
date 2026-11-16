@@ -235,3 +235,118 @@ def test_measured_provider_quality_flows_into_durable_outcome(tmp_path):
     assert restored_outcome["quality_failed_count"] == 0
     assert restored_outcome["quality_measurement_hash"] == outcome.quality_measurement_hash
     assert restarted.record_outcome(outcome).scorecard_id == first.record_outcome(outcome).scorecard_id
+
+
+def test_provider_quality_refuses_unadmitted_identity_or_client() -> None:
+    """P02/P09 prep: the quality provider validates at construction.
+
+    An identity outside the admitted sandbox pair and a client that
+    is not the supervised ``SafeHttpClient`` are refused before any
+    measurement. Pure unit coverage; no network, no credentials.
+    """
+    client = SafeHttpClient(
+        HttpClientConfig(allowed_hosts=("sandbox.example.test",)),
+        base_url="https://sandbox.example.test",
+        requester=lambda *_args: (200, b"{}", ()),
+    )
+    with pytest.raises(ValueError, match="admitted sandbox identity"):
+        ProviderOutcomeQualityProvider("kraken_live", client)
+    with pytest.raises(TypeError, match="supervised SafeHttpClient"):
+        ProviderOutcomeQualityProvider("binance_spot_testnet", object())
+
+
+def test_provider_quality_refuses_naive_cutoffs_and_reused_snapshots() -> None:
+    """P02/P09 prep: cutoffs are timezone-bound and snapshots single-use.
+
+    A naive cutoff is refused; a snapshot identity cached at one
+    cutoff and re-presented at another is refused instead of
+    returning stale quality. Synthetic client with scripted
+    responses; no network, no credentials.
+    """
+    client = SafeHttpClient(
+        HttpClientConfig(
+            allowed_hosts=("sandbox.example.test",), requests_per_second=100
+        ),
+        base_url="https://sandbox.example.test",
+        requester=lambda *_args: (200, b"{}", ()),
+        clock=_Clock(),
+    )
+    provider = ProviderOutcomeQualityProvider("binance_spot_testnet", client)
+    cutoff = datetime(2026, 11, 12, 16, tzinfo=UTC)
+    snapshot = Snapshot(as_of=cutoff, purpose="provider-quality-cutoff-guard")
+    context = {
+        "decision": _decision(snapshot),
+        "snapshot": snapshot,
+        "market": RiskMarketState(marks={"BTC": Decimal("50000")}),
+        "fills": (),
+    }
+    with pytest.raises(ValueError, match="must include a timezone"):
+        provider(**context, as_of=datetime(2026, 11, 12, 16, 0))
+    client.get("https://sandbox.example.test/health")
+    measured = provider(**context, as_of=cutoff)
+    assert measured.sample_count == 1
+    assert provider(**context, as_of=cutoff) == measured
+    moved = snapshot.model_copy(update={"as_of": cutoff + timedelta(hours=1)})
+    assert moved.artifact_id == snapshot.artifact_id
+    with pytest.raises(ValueError, match="reused at another cutoff"):
+        provider(
+            **{**context, "snapshot": moved},
+            as_of=cutoff + timedelta(hours=1),
+        )
+
+
+def test_provider_quality_refuses_backwards_counters() -> None:
+    """P02/P09 prep: inconsistent HTTP counters fail closed.
+
+    A latency total that steps backwards between windows is refused
+    instead of producing a negative average. Synthetic client with
+    a scripted clock; no network, no credentials.
+    """
+    clock = _Clock()
+    laps = iter([0.012, 0.0])
+
+    def requester(_method, _url, _headers, _body, _timeout):
+        clock.now += next(laps)
+        return (200, b"{}", ())
+
+    client = SafeHttpClient(
+        HttpClientConfig(
+            allowed_hosts=("sandbox.example.test",), requests_per_second=100
+        ),
+        base_url="https://sandbox.example.test",
+        requester=requester,
+        clock=clock,
+    )
+    provider = ProviderOutcomeQualityProvider(
+        "coinbase_exchange_sandbox", client
+    )
+    cutoff = datetime(2026, 11, 12, 16, tzinfo=UTC)
+    snapshot = Snapshot(as_of=cutoff, purpose="provider-quality-first-window")
+    client.get("https://sandbox.example.test/health")
+    first = provider(
+        decision=_decision(snapshot),
+        as_of=cutoff,
+        snapshot=snapshot,
+        market=RiskMarketState(marks={"BTC": Decimal("50000")}),
+        fills=(),
+    )
+    assert first.sample_count == 1
+    assert first.latency_ms == 12
+    # Fault injection at the seam the provider reads: the cumulative
+    # latency total steps backwards while a new attempt keeps the
+    # sample count positive, so the backwards guard fires (not the
+    # no-samples guard).
+    client._metric_latency_ms_total = 0
+    client.get("https://sandbox.example.test/health")
+    regressed = Snapshot(
+        as_of=cutoff + timedelta(hours=1),
+        purpose="provider-quality-regressed-window",
+    )
+    with pytest.raises(ValueError, match="moved backwards or became inconsistent"):
+        provider(
+            decision=_decision(regressed),
+            as_of=regressed.as_of,
+            snapshot=regressed,
+            market=RiskMarketState(marks={"BTC": Decimal("50000")}),
+            fills=(),
+        )
