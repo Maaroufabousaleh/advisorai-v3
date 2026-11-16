@@ -257,6 +257,8 @@ def test_launcher_rejects_out_of_bounds_before_any_venue_touch(capsys) -> None:
         ["--max-rss-mb", "8193"],
         ["--instrument", "ETHUSDT"],
         ["--quote", "USDC"],
+        ["--provider", "coinbase_exchange_sandbox", "--instrument", "ETH-USD"],
+        ["--provider", "coinbase_exchange_sandbox", "--quote", "USDT"],
     ):
         with pytest.raises(SystemExit) as exc:
             main(argv)
