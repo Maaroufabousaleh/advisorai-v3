@@ -55,6 +55,7 @@ from advisorai.gates import (
 )
 from advisorai.ledger import (
     IdempotencyConflict,
+    LedgerEvent,
     LedgerNamespace,
     SqliteEventOutbox,
     SqliteLedgers,
@@ -2111,4 +2112,169 @@ def test_venue_account_snapshot_refuses_misshapen_projection(timestamp):
             cash=Decimal("100"),
             positions={},
             venue_open_order_ids=frozenset({"not-a-uuid"}),
+        )
+
+
+def test_account_ledger_requires_event_identifiers(timestamp, tmp_path):
+    """P02/P09 prep: ledger-coupled mutations require identifiers.
+
+    Blank funding, cash-transfer, borrow, mark, and margin
+    identifiers, blank split/dividend instrument/action pairs, and
+    split/dividend corporate-action records missing their amounts
+    are all refused before any ledger write. Pure unit coverage over
+    a throwaway SQLite ledger; no network, no credentials.
+    """
+    from types import SimpleNamespace
+
+    ledger = AccountLedger(
+        SqliteLedgers(tmp_path / "ledgers.sqlite"),
+        AccountState(cash=Decimal("1000"), as_of=timestamp),
+    )
+    with pytest.raises(ValueError, match="funding ID is required"):
+        ledger.apply_funding(Decimal("1"), timestamp, "  ")
+    with pytest.raises(ValueError, match="cash transfer ID is required"):
+        ledger.apply_cash_transfer(Decimal("1"), timestamp, "  ")
+    with pytest.raises(ValueError, match="account adjustment ID is required"):
+        ledger.apply_borrow(Decimal("1"), timestamp, "  ")
+    with pytest.raises(ValueError, match="mark and instrument IDs are required"):
+        ledger.mark("BTC", Decimal("100"), timestamp, "  ")
+    with pytest.raises(ValueError, match="mark and instrument IDs are required"):
+        ledger.mark("  ", Decimal("100"), timestamp, "mark-1")
+    with pytest.raises(ValueError, match="margin ID is required"):
+        ledger.update_margin(
+            margin_used=Decimal("0"),
+            margin_available=Decimal("100"),
+            as_of=timestamp,
+            margin_id="  ",
+        )
+    with pytest.raises(
+        ValueError, match="corporate-action instrument and action IDs are required"
+    ):
+        ledger.apply_split("  ", Decimal("2"), timestamp, "split-1")
+    with pytest.raises(
+        ValueError, match="corporate-action instrument and action IDs are required"
+    ):
+        ledger.apply_dividend("BTC", Decimal("1"), timestamp, "  ")
+    split_action = SimpleNamespace(
+        action_type=SimpleNamespace(value="split"),
+        instrument=SimpleNamespace(canonical_id="BTC"),
+        action_id="split-record-1",
+        effective_at=timestamp,
+        ratio=None,
+    )
+    with pytest.raises(ValueError, match="split corporate actions require a ratio"):
+        ledger.apply_corporate_action_record(split_action)
+    dividend_action = SimpleNamespace(
+        action_type=SimpleNamespace(value="dividend"),
+        instrument=SimpleNamespace(canonical_id="BTC"),
+        action_id="dividend-record-1",
+        effective_at=timestamp,
+        cash_amount=None,
+    )
+    with pytest.raises(
+        ValueError, match="dividend corporate actions require a cash amount"
+    ):
+        ledger.apply_corporate_action_record(dividend_action)
+    merger_action = SimpleNamespace(
+        action_type=SimpleNamespace(value="merger"),
+        instrument=SimpleNamespace(canonical_id="BTC"),
+        action_id="merger-record-1",
+        effective_at=timestamp,
+        cash_amount=Decimal("0"),
+    )
+    with pytest.raises(ValueError, match="merger/spinoff accounting requires"):
+        ledger.apply_corporate_action_record(merger_action)
+
+
+def test_account_ledger_refuses_reused_keys_for_different_events(timestamp, tmp_path):
+    """P02/P09 prep: idempotency keys bind to their first event.
+
+    Reusing a funding, cash-transfer, borrow, mark, margin, split,
+    or dividend key for changed content raises IdempotencyConflict
+    naming the event kind; identical retries still dedupe. Pure unit
+    coverage over a throwaway SQLite ledger; no network, no
+    credentials.
+    """
+    ledger = AccountLedger(
+        SqliteLedgers(tmp_path / "ledgers.sqlite"),
+        AccountState(cash=Decimal("1000"), as_of=timestamp),
+    )
+    ledger.apply_funding(Decimal("1"), timestamp, "funding-1")
+    ledger.apply_funding(Decimal("1"), timestamp, "funding-1")
+    with pytest.raises(IdempotencyConflict, match="different funding"):
+        ledger.apply_funding(Decimal("2"), timestamp, "funding-1")
+    ledger.apply_cash_transfer(Decimal("5"), timestamp, "transfer-1")
+    ledger.apply_cash_transfer(Decimal("5"), timestamp, "transfer-1")
+    with pytest.raises(IdempotencyConflict, match="different cash transfer"):
+        ledger.apply_cash_transfer(Decimal("6"), timestamp, "transfer-1")
+    ledger.apply_borrow(Decimal("1"), timestamp, "borrow-1")
+    ledger.apply_borrow(Decimal("1"), timestamp, "borrow-1")
+    with pytest.raises(IdempotencyConflict, match="different account adjustment"):
+        ledger.apply_borrow(Decimal("2"), timestamp, "borrow-1")
+    ledger.mark("BTC", Decimal("100"), timestamp, "mark-1")
+    ledger.mark("BTC", Decimal("100"), timestamp, "mark-1")
+    with pytest.raises(IdempotencyConflict, match="different mark"):
+        ledger.mark("BTC", Decimal("101"), timestamp, "mark-1")
+    margin = {"margin_used": Decimal("0"), "margin_available": Decimal("100")}
+    ledger.update_margin(**margin, as_of=timestamp, margin_id="margin-1")
+    ledger.update_margin(**margin, as_of=timestamp, margin_id="margin-1")
+    with pytest.raises(IdempotencyConflict, match="different margin"):
+        ledger.update_margin(
+            margin_used=Decimal("1"),
+            margin_available=Decimal("100"),
+            as_of=timestamp,
+            margin_id="margin-1",
+        )
+    ledger.apply_split("BTC", Decimal("2"), timestamp, "split-1")
+    ledger.apply_split("BTC", Decimal("2"), timestamp, "split-1")
+    with pytest.raises(IdempotencyConflict, match="different corporate action"):
+        ledger.apply_split("BTC", Decimal("3"), timestamp, "split-1")
+    ledger.apply_dividend("BTC", Decimal("1"), timestamp, "dividend-1")
+    ledger.apply_dividend("BTC", Decimal("1"), timestamp, "dividend-1")
+    with pytest.raises(IdempotencyConflict, match="different corporate action"):
+        ledger.apply_dividend("BTC", Decimal("2"), timestamp, "dividend-1")
+
+
+def test_account_ledger_hydrate_refuses_corrupt_or_diverged_history(timestamp, tmp_path):
+    """P02/P09 prep: restart hydration validates durable history.
+
+    A durable fill event with an invalid payload and a durable
+    event whose recorded state hash no longer matches the replayed
+    account both raise IdempotencyConflict instead of hydrating a
+    corrupt balance. Pure unit coverage over throwaway SQLite
+    ledgers; no network, no credentials.
+    """
+    bad_ledgers = SqliteLedgers(tmp_path / "bad.sqlite")
+    bad_ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.ACCOUNT,
+            event_type="fill_applied",
+            idempotency_key="account-fill:bad-fill",
+            payload={"venue_fill_id": "bad-fill"},
+        )
+    )
+    with pytest.raises(IdempotencyConflict, match="invalid fill payload"):
+        AccountLedger(
+            bad_ledgers,
+            AccountState(cash=Decimal("1000"), as_of=timestamp),
+        )
+
+    diverged_ledgers = SqliteLedgers(tmp_path / "diverged.sqlite")
+    diverged_ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.ACCOUNT,
+            event_type="funding_applied",
+            idempotency_key="funding:diverged-1",
+            payload={
+                "amount": "1",
+                "occurred_at": timestamp.isoformat(),
+                "funding_id": "diverged-1",
+                "state_hash": "00" * 32,
+            },
+        )
+    )
+    with pytest.raises(IdempotencyConflict, match="state hash mismatch"):
+        AccountLedger(
+            diverged_ledgers,
+            AccountState(cash=Decimal("1000"), as_of=timestamp),
         )
