@@ -170,6 +170,13 @@ Exit 0 means profile-compatible (compatible setup: BTC+USDT in any amounts,
 every other asset exactly `free=0` and `locked=0` — check stuck open orders
 for locked legs); exit 1 names the assets to clear first; exit 2 is an
 input/transport error. Clear the flagged assets, then re-run the canary.
+The coinbase sandbox profile has the same helper with its own legs
+(`available` / `hold` over `GET /accounts`):
+
+```bash
+uv run python scripts/diagnose_testnet_baseline.py --secrets secrets.env --provider coinbase_exchange_sandbox
+```
+
 Never start the loop without both bounds.
 
 ## Fill-evidence validation (P03 prep)
