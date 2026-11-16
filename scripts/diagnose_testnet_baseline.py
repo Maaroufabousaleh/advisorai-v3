@@ -1,18 +1,21 @@
-"""Read-only P02 baseline diagnostic: which assets trigger the out-of-profile guard.
+"""Read-only P02 baseline diagnostic: preview the accounting-baseline pin.
 
 Calls ``GET /api/v3/account`` once through the reviewed testnet transport
-(``PAPER_VENUE`` scope only) and reports ONLY the asset symbols that would
-trip ``read_testnet_baseline()``'s rejection predicate, plus whether their
-``free`` or ``locked`` leg is nonzero. Prints no credentials, no amounts,
-no prices, no full account data.
+(``PAPER_VENUE`` scope only) and reports the assets the launcher would pin
+into the durable baseline: BTC and USDT seed trading state; every other
+nonzero asset pins as a frozen, unmarked, exactly-reconciled position.
+Reports each pinned asset's symbol plus whether its ``free`` or ``locked``
+leg is nonzero. Prints no credentials, no amounts, no prices, no full
+account data.
 
 Owner-run only. The coding agent never invokes this with real secrets.
 Usage (from the owner shell)::
 
     uv run python scripts/diagnose_testnet_baseline.py --secrets secrets.env
 
-Exit codes: 0 = profile-compatible (launcher would proceed past the guard);
-1 = out-of-profile balances would be rejected; 2 = input/transport error.
+Exit codes: 0 = launcher-compatible (guard would pass; pin list shown);
+1 = launcher would refuse (nonzero canonical position outside BTC/USDT,
+off-profile open orders, or a locked BTC leg); 2 = input/transport error.
 """
 
 from __future__ import annotations
@@ -46,11 +49,12 @@ def _nonzero(value: object) -> bool:
 def classify_balances(
     balances: object, *, base_asset: str = "BTC", quote_asset: str = "USDT"
 ) -> list[dict[str, object]]:
-    """Return the reject-triggering assets: symbol + which leg is nonzero.
+    """Return the pin-preview assets: symbol + which leg is nonzero.
 
     Mirrors the launcher predicate exactly: profile assets are BTC (base)
-    and USDT (quote); any other asset with nonzero free+locked trips the
-    ``asset:`` guard in ``read_testnet_baseline()``. Pure function over an
+    and USDT (quote); any other asset with nonzero free+locked pins into
+    the baseline as a frozen ``asset:`` position (excluded from equity
+    and buying power, exactly reconciled). Pure function over an
     already-fetched ``balances`` sequence; performs no I/O. Accepts the
     sequence the real adapter returns (``list_balances()`` is a tuple)
     as well as plain lists.
@@ -150,6 +154,17 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError, VenueTransportError, HttpTransportError) as exc:
         print(f"diagnostic failed: {type(exc).__name__}", file=sys.stderr)
         return 2
+    if args.provider == "binance_spot_testnet":
+        print("baseline guard: PASS (launcher pins listed assets as frozen, reconciled)")
+        if not flagged:
+            print("  pinned=none")
+            return 0
+        for entry in flagged:
+            legs = "/".join(
+                leg for leg, key in zip(leg_names, flag_keys, strict=True) if entry[key]
+            )
+            print(f"  pinned={entry['asset']} nonzero={legs}")
+        return 0
     if not flagged:
         print("baseline guard: PASS (no out-of-profile balances)")
         return 0

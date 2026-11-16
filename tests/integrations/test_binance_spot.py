@@ -132,6 +132,40 @@ def test_binance_product_truth_requires_btc_and_eth():
         transport.verify_symbol_mappings(_symbols()[:1])
 
 
+def test_binance_open_order_sweep_refuses_off_profile_orders():
+    """P02: open orders outside the verified profile fail closed.
+
+    The per-symbol read covers strategy symbols; the unfiltered sweep
+    catches orders on any other symbol (external interference on the
+    shared multi-asset Testnet account) and refuses with the venue
+    identity, never the order economics.
+    """
+    transport, calls = _transport(
+        [
+            (200, b"[]", ()),
+            (200, b"[]", ()),
+            (
+                200,
+                json.dumps(
+                    [
+                        {
+                            "orderId": 77,
+                            "clientOrderId": "external-x",
+                            "symbol": "SOLUSDT",
+                            "status": "NEW",
+                        }
+                    ]
+                ).encode(),
+                (),
+            ),
+        ]
+    )
+    transport.verify_symbol_mappings(_symbols())
+    with pytest.raises(VenueTransportError, match="outside the verified profile"):
+        transport.list_open_orders()
+    assert len(calls) == 3
+
+
 def test_binance_book_ticker_is_public_and_bound_to_an_admitted_symbol():
     responses = [
         (

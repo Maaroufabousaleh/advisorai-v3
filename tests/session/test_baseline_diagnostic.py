@@ -102,12 +102,12 @@ def test_diagnostic_flags_each_nonzero_foreign_leg() -> None:
 
 
 def test_diagnostic_verdict_matches_launcher_predicate(monkeypatch) -> None:
-    """The real launcher rejects exactly what the diagnostic flags.
+    """The diagnostic preview matches exactly what the launcher pins.
 
-    Real transport + mocked HTTP; the flagged payload raises
-    ``out-of-profile balances`` while the clean payload seeds the
-    baseline. Asserts the diagnostic and the launcher agree on both
-    the must-pass and must-reject balances, with GET reads only.
+    Real transport + mocked HTTP; the flagged payload pins the faucet
+    asset into the baseline while the clean payload seeds the baseline
+    with BTC only. Asserts the diagnostic and the launcher agree on
+    both the must-pin and must-skip balances, with GET reads only.
     """
     import advisorai.integrations as integrations_module
 
@@ -137,8 +137,8 @@ def test_diagnostic_verdict_matches_launcher_predicate(monkeypatch) -> None:
             resolver, requester=_requester(_account_payload(dirty_balances), dirty_calls)
         ),
     )
-    with pytest.raises(ValueError, match="out-of-profile balances"):
-        read_testnet_baseline(resolver=_resolver(), launch=_launch())
+    _, pinned = read_testnet_baseline(resolver=_resolver(), launch=_launch())
+    assert pinned.positions == {"BTC": Decimal("0.010"), "asset:ETH": Decimal("0.500")}
     assert classify_balances(dirty_balances) == [
         {"asset": "ETH", "free_nonzero": True, "locked_nonzero": False}
     ]
@@ -257,14 +257,14 @@ def test_diagnostic_entry_point_accepts_real_adapter_tuple(
     assert "0.010" not in out + err
 
 
-def test_diagnostic_entry_point_reports_rejected_assets(
+def test_diagnostic_entry_point_reports_pinned_assets(
     tmp_path, monkeypatch, capsys
 ) -> None:
-    """P02 unblock: the CLI entry point exits 1 on foreign balances.
+    """P02 unblock: the CLI entry point exits 0 with the pin preview.
 
-    Same end-to-end path with an out-of-profile asset: exit 1,
-    names the symbol and the nonzero leg only. No amounts, no
-    secrets; GET reads only.
+    Same end-to-end path with a faucet asset: exit 0, names the pinned
+    symbol and the nonzero leg only. No amounts, no secrets; GET
+    reads only.
     """
     import diagnose_testnet_baseline as diagnostic_module
 
@@ -283,9 +283,9 @@ def test_diagnostic_entry_point_reports_rejected_assets(
     )
     code = diagnostic_main(["--secrets", str(_synthetic_secrets_file(tmp_path))])
     out, err = capsys.readouterr()
-    assert code == 1
-    assert "REJECT" in out
-    assert "asset=ETH" in out
+    assert code == 0
+    assert "PASS" in out
+    assert "pinned=ETH" in out
     assert "nonzero=free" in out
     assert calls and all(method == "GET" for method, _ in calls)
     assert "synthetic-diagnostic-key" not in out + err

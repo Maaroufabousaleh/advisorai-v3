@@ -507,6 +507,17 @@ class BinanceSpotTestnetTransport(NativeTransport):
             records.extend(
                 self._normalize_order(item) for item in self._records(payload, "open orders")
             )
+        # The multi-asset Testnet account may hold orders on symbols outside
+        # the verified profile. Those locks are outside strategy authority
+        # and must fail closed rather than hide. One unfiltered sweep (a
+        # supported account endpoint) detects them; any hit raises.
+        sweep = self._request("GET", "/api/v3/openOrders", authenticated=True)
+        for item in self._records(sweep, "open orders"):
+            symbol = str(item.get("symbol", "")).strip().upper()
+            if symbol and symbol not in self.verified_symbol_ids:
+                raise VenueTransportError(
+                    "Binance account holds an open order outside the verified profile"
+                )
         for record in records:
             client_order_id = str(record.get("client_order_id", "")).strip()
             if client_order_id:

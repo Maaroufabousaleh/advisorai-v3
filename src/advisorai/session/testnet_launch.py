@@ -317,14 +317,45 @@ def read_testnet_baseline(
     )
     snapshot = transport.fetch_account_snapshot()
     expected_key = transport.canonical_instrument_id(validated.provider_instrument_id)
+    # Position quantities are free+locked totals: correct for mid-session
+    # reconcile (locking is an internal venue state), but a locked
+    # in-profile leg at baseline means a stuck open order or a partially
+    # settled fill whose funds are not tradeable. Refuse before seeding.
+    if validated.provider == "binance_spot_testnet":
+        profile_assets = {validated.quote_currency.strip().upper(), "BTC"}
+        for record in transport.list_balances():
+            if str(record.get("asset", "")).strip().upper() not in profile_assets:
+                continue
+            try:
+                locked = Decimal(str(record.get("locked", "0")))
+            except (ArithmeticError, ValueError):
+                raise ValueError(
+                    "testnet baseline refused: unreadable BTC/USDT locked balance"
+                ) from None
+            if not locked.is_finite() or locked != 0:
+                raise ValueError(
+                    "testnet baseline refused: locked BTC/USDT balance; "
+                    "clear open orders first"
+                )
     positions = {
         key: value for key, value in dict(snapshot.positions).items() if value != 0
     }
+    # Binance Spot Testnet funds every account with hundreds of faucet
+    # assets by design; refusing them all makes the real account shape
+    # unlaunchable. Instead of clearing, the Binance path pins every
+    # out-of-profile balance into the durable baseline as a frozen
+    # ``asset:`` position. These keys carry no mark, so they never enter
+    # equity, notional, turnover, or buying power; reconciliation compares
+    # them exactly, so any drift fails closed. The strategy authority
+    # boundary stays BTC/USDT only. Coinbase keeps the strict refusal:
+    # its sandbox has no equivalent faucet model.
     for key in positions:
         if key.startswith("asset:"):
-            raise ValueError(
-                "testnet account holds out-of-profile balances; clear them first"
-            )
+            if validated.provider != "binance_spot_testnet":
+                raise ValueError(
+                    "testnet account holds out-of-profile balances; clear them first"
+                )
+            continue
         if key != expected_key:
             raise ValueError(
                 "testnet account holds a nonzero position outside the verified "
@@ -332,6 +363,14 @@ def read_testnet_baseline(
             )
     mapped_positions = (
         {"BTC": positions[expected_key]} if expected_key in positions else {}
+    )
+    mapped_positions.update(
+        {
+            key: value
+            for key, value in positions.items()
+            if key.startswith("asset:")
+            and validated.provider == "binance_spot_testnet"
+        }
     )
     baseline = AccountState(
         cash=snapshot.cash,

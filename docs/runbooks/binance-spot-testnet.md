@@ -157,25 +157,29 @@ unmasks a second latent fault (outcome quality requires per-cycle HTTP
 samples the fixture path never makes). Both must be fixed together before
 the canary can exercise the decision path; see the P02 tracker line.
 The launcher verifies the instrument and quote on the same transport before
-hydrating the funded baseline, and refuses cleanly on any out-of-profile
-balance (`SESSION START REFUSED: testnet baseline refused: testnet account
-holds out-of-profile balances; clear them first`). The baseline cash and
-positions stay out of stdout by default;
+hydrating the funded baseline. The real Testnet account is multi-asset by
+design (hundreds of faucet holdings): the baseline pins BTC and USDT as
+trading state and every other nonzero asset as a frozen `asset:` position
+— excluded from equity and buying power, exactly reconciled, any drift
+fails closed. A nonzero canonical position outside BTC/USDT, an off-profile
+open order (detected by the unfiltered open-order sweep), or a locked BTC
+leg still refuses cleanly (`SESSION START REFUSED: testnet baseline
+refused`). The baseline cash and positions stay out of stdout by default;
 pass `--print-baseline` for explicit one-shot inspection (same flag on
-`advisorai.app start`). If the canary stops there, run the read-only
+`advisorai.app start`). If the canary stops at the guard, run the read-only
 diagnostic before retrying — it issues one `GET /api/v3/account` through
-the `PAPER_VENUE` scope and reports only the rejected asset symbols plus
-which leg (`free` / `locked`) is nonzero. It prints no credentials,
-amounts, prices, or full account data:
+the `PAPER_VENUE` scope and reports the pin preview: which symbols would
+pin plus which leg (`free` / `locked`) is nonzero. It prints no
+credentials, amounts, prices, or full account data:
 
 ```bash
 uv run python scripts/diagnose_testnet_baseline.py --secrets secrets.env
 ```
 
-Exit 0 means profile-compatible (compatible setup: BTC+USDT in any amounts,
-every other asset exactly `free=0` and `locked=0` — check stuck open orders
-for locked legs); exit 1 names the assets to clear first; exit 2 is an
-input/transport error. Clear the flagged assets, then re-run the canary.
+Exit 0 lists the assets the launcher would pin (empty pin list = clean
+BTC/USDT-only account); exit 1 means the launcher would refuse (canonical
+position outside the profile, off-profile open orders, or a locked BTC
+leg); exit 2 is an input/transport error.
 The coinbase sandbox profile has the same helper with its own legs
 (`available` / `hold` over `GET /accounts`):
 

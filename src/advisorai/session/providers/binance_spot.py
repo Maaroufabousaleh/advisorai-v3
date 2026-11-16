@@ -165,6 +165,13 @@ class BinanceSpotTestnetOwnerAdapter:
         for provider_id, quantity in snapshot.positions.items():
             if provider_id == self.provider_account_key:
                 positions[self.canonical_instrument_id] = quantity
+            elif provider_id.startswith("asset:"):
+                # Out-of-profile Testnet faucet holdings, pinned in the
+                # durable baseline by read_testnet_baseline. Passed through
+                # verbatim so reconciliation compares them exactly; any
+                # drift fails closed there. Never mapped to strategy
+                # authority and never marked, so never buying power.
+                positions[provider_id] = quantity
             elif quantity != 0:
                 raise NativeVenueProjectionError(
                     "Binance account contains a nonzero unmapped spot position"

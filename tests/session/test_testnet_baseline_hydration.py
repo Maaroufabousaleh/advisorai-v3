@@ -244,13 +244,19 @@ def test_baseline_verifies_instrument_on_same_transport_before_account_read(
     assert kinds[:2] == ["exchangeInfo", "account"]
 
 
-def test_baseline_refuses_out_of_profile_balances(monkeypatch) -> None:
-    """P02: nonzero balances outside BTCUSDT fail closed before hydration."""
+def test_baseline_refuses_locked_in_profile_leg_before_seeding(monkeypatch) -> None:
+    """P02: a locked BTC leg refuses the baseline before any seeding.
+
+    Position quantities are free+locked totals, so a stuck open order or
+    partially settled fill would otherwise seed untradeable funds as
+    trading baseline. The guard names the locked leg, refuses seeding,
+    and performs GET reads only.
+    """
     calls: list = []
     account = _account()
     account["balances"] = [
-        balance if balance["asset"] != "ETH" else {"asset": "ETH", "free": "1.5", "locked": "0"}
-        for balance in account["balances"]
+        {"asset": "USDT", "free": "1000", "locked": "0"},
+        {"asset": "BTC", "free": "0.005", "locked": "0.005"},
     ]
     real_builder = build_binance_spot_testnet_transport
 
@@ -262,8 +268,53 @@ def test_baseline_refuses_out_of_profile_balances(monkeypatch) -> None:
     monkeypatch.setattr(
         "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
     )
-    with pytest.raises(ValueError, match="clear it first|clear them first"):
+    with pytest.raises(ValueError, match="locked BTC/USDT balance"):
         read_testnet_baseline(resolver=_resolver(), launch=_launch())
+    assert calls and all(method == "GET" for method, _ in calls)
+
+
+def test_baseline_refuses_unmapped_canonical_position_but_pins_faucet_assets(
+    monkeypatch,
+) -> None:
+    """P02: faucet assets pin into the baseline; foreign canonical keys refuse.
+
+    The real Binance Spot Testnet account carries hundreds of funded
+    faucet assets (515 observed). Refusing them all makes the account
+    unlaunchable, so ``asset:`` balances pin into the durable baseline as
+    frozen, unmarked positions: excluded from equity and buying power,
+    exactly reconciled, any drift fails closed. A nonzero canonical
+    position key outside the verified instrument still refuses.
+    """
+    calls: list = []
+    account = _account()
+    account["balances"] = [
+        {"asset": "USDT", "free": "1000", "locked": "0"},
+        {"asset": "BTC", "free": "0.010", "locked": "0"},
+        {"asset": "ETH", "free": "1.5", "locked": "0"},
+        {"asset": "BNB", "free": "2", "locked": "0.25"},
+    ]
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester(account, calls), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    transport, baseline = read_testnet_baseline(
+        resolver=_resolver(), launch=_launch()
+    )
+    assert transport.verified_symbol_ids == ("BTCUSDT",)
+    assert baseline.cash == Decimal("1000")
+    assert baseline.positions == {
+        "BTC": Decimal("0.010"),
+        "asset:ETH": Decimal("1.5"),
+        "asset:BNB": Decimal("2.25"),
+    }
+    assert baseline.marks == {"BTC": Decimal("50000")}
+    assert baseline.equity() == Decimal("1000") + Decimal("0.010") * Decimal("50000")
 
 
 def test_zero_submission_session_reaches_ready_and_reconciles_clean(
@@ -532,3 +583,148 @@ def test_coinbase_zero_submission_session_reaches_ready_and_reconciles_clean(
         and event.payload.get("end", {}).get("outcome") == "clean"
         for event in mission
     )
+
+def _multi_asset_account() -> dict:
+    """Sanitized representative Testnet shape: BTC/USDT plus faucet dust."""
+    return {
+        "accountType": "SPOT",
+        "canTrade": True,
+        "balances": [
+            {"asset": "USDT", "free": "1000", "locked": "0"},
+            {"asset": "BTC", "free": "0.010", "locked": "0"},
+            {"asset": "ETH", "free": "1.5", "locked": "0"},
+            {"asset": "BNB", "free": "2", "locked": "0.25"},
+            {"asset": "SOL", "free": "0", "locked": "0"},
+        ],
+    }
+
+
+def _seeded_binance(monkeypatch, account: dict, calls: list) -> None:
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester(account, calls), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+
+
+def test_multi_asset_zero_submission_session_reconciles_clean(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: real 515-asset account shape reaches READY and reconciles clean.
+
+    End-to-end through the real launcher path and owner adapter with
+    mocked HTTP: faucet holdings pin into the baseline, contribute
+    nothing to equity, and reconcile exactly across recovery and the
+    deadline stop. Zero venue writes.
+    """
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    _seeded_binance(monkeypatch, _multi_asset_account(), calls)
+    ledgers = SqliteLedgers(tmp_path / "p02-multi.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    assert baseline.positions == {
+        "BTC": Decimal("0.010"),
+        "asset:ETH": Decimal("1.5"),
+        "asset:BNB": Decimal("2.25"),
+    }
+    assert "asset:SOL" not in baseline.positions
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "p02-multi-state",
+        lock_identity="p02-multi-asset-zero-submission",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+    )
+    assert app.adapters.paper_venue.native.max_submissions == 0
+    exit_code = app.run(reason="p02 multi-asset zero-submission test")
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "SESSION READY" in output
+    assert "stop_reason=runtime_deadline_reached" in output
+    assert "outcome=clean" in output
+    assert "reconciliation=reconciled" in output
+    assert "leases_released=True" in output
+    assert all("/api/v3/order" not in url for _, url in calls)
+    assert app.supervisor.active_session_id() is None
+
+
+def test_multi_asset_session_fails_closed_on_faucet_drift(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 negative: an unaccounted faucet change fails, never reconciles.
+
+    Same session, but the venue's ETH balance moves mid-run (Testnet
+    faucet behavior, external interference, or a mis-scoped fee).
+    Recovery or the stop reconciliation must refuse clean: exit 2,
+    outcome unclean, no reconciled claim.
+    """
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    live = {"balances": _multi_asset_account()}
+
+    def _live_requester(method, url, headers, body, timeout):
+        return _requester(live["balances"], calls)(method, url, headers, body, timeout)
+
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(resolver, requester=_live_requester, **kwargs)
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-drift.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "p02-drift-state",
+        lock_identity="p02-multi-asset-drift",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+    )
+    live["balances"] = {
+        "accountType": "SPOT",
+        "canTrade": True,
+        "balances": [
+            {"asset": "USDT", "free": "1000", "locked": "0"},
+            {"asset": "BTC", "free": "0.010", "locked": "0"},
+            {"asset": "ETH", "free": "1.6", "locked": "0"},
+            {"asset": "BNB", "free": "2", "locked": "0.25"},
+            {"asset": "SOL", "free": "0", "locked": "0"},
+        ],
+    }
+    exit_code = app.run(reason="p02 multi-asset drift test")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "outcome=clean" not in output
+    assert "reconciliation=reconciled" not in output
+    assert all("/api/v3/order" not in url for _, url in calls)
