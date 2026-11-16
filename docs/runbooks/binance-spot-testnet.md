@@ -159,11 +159,13 @@ the canary can exercise the decision path; see the P02 tracker line.
 The launcher verifies the instrument and quote on the same transport before
 hydrating the funded baseline, and fails closed on any out-of-profile
 balance (`ValueError: testnet account holds out-of-profile balances; clear
-them first`). If the canary stops there, run the read-only diagnostic before
-retrying — it issues one `GET /api/v3/account` through the `PAPER_VENUE`
-scope and reports only the rejected asset symbols plus which leg (`free` /
-`locked`) is nonzero. It prints no credentials, amounts, prices, or full
-account data:
+them first`). The baseline cash and positions stay out of stdout by default;
+pass `--print-baseline` for explicit one-shot inspection (same flag on
+`advisorai.app start`). If the canary stops there, run the read-only
+diagnostic before retrying — it issues one `GET /api/v3/account` through
+the `PAPER_VENUE` scope and reports only the rejected asset symbols plus
+which leg (`free` / `locked`) is nonzero. It prints no credentials,
+amounts, prices, or full account data:
 
 ```bash
 uv run python scripts/diagnose_testnet_baseline.py --secrets secrets.env
