@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,18 @@ from advisorai.research.btc_spot import check_continuity
 from advisorai.research.replay import load_snapshot_bars
 
 MODEL_ID = "btc-tsmom-63d-longflat-v1"
+DAY_MS = 86_400_000
+
+
+def bar_open_ms(date: str) -> int:
+    """Market timestamp of a daily bar's open print (00:00 UTC)."""
+    moment = datetime.fromisoformat(date).replace(tzinfo=UTC)
+    return int(moment.timestamp() * 1000)
+
+
+def bar_close_ms(date: str) -> int:
+    """Market timestamp of a daily bar's close (next 00:00 UTC)."""
+    return bar_open_ms(date) + DAY_MS
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,8 +40,10 @@ class DecisionRecord:
     """Writable from received bars only: date, signal, position, the hash
     of the qualified input, the receipt frontier, and the record time. A
     bar date alone is not proof of receipt: every formation close must
-    carry a receipt at or before the record time. No fill, no future bar,
-    no venue data."""
+    carry a receipt at or before the record time, and no receipt may
+    precede its bar's market close. Missed days (bar absent after the
+    backfill window) are recorded as missed and excluded from scoring.
+    No fill, no future bar, no venue data."""
 
     date: str
     signal: int
@@ -40,14 +55,15 @@ class DecisionRecord:
     costs_bps: str
     abstained: bool
     reason: str
+    missed: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class FillRecord:
-    """Separate artifact, observable only after the decision: the fill
-    prints at the next open, so it requires the next bar received at or
-    before the fill record time, with a price timestamp strictly after
-    the recorded decision."""
+    """Separate artifact, observable only after the decision: the fill is
+    priced at the first open printing strictly after the decision was
+    actually recorded, so it requires that bar received (after its own
+    market close) at or before the fill record time."""
 
     date: str
     fill_date: str
@@ -59,12 +75,14 @@ class FillRecord:
 def verify_inputs_received(
     dates: list[str], index: int, received_at: dict[str, int], recorded_at_ms: int
 ) -> None:
-    """Prove the 64 formation closes were received by the record time."""
+    """Prove the 64 formation closes arrived after their closes and by the record time."""
     for position in range(index - FORMATION_CLOSES, index + 1):
         day = dates[position]
         receipt = received_at.get(day)
         if receipt is None:
             raise ValueError(f"decision input {day} has no receipt timestamp")
+        if receipt < bar_close_ms(day):
+            raise ValueError(f"decision input {day} received before its close")
         if receipt > recorded_at_ms:
             raise ValueError(f"decision input {day} received after the record time")
 
@@ -75,26 +93,36 @@ def observe_fill(
     *,
     received_at: dict[str, int],
     recorded_at_ms: int,
+    decision_recorded_at_ms: int,
 ) -> FillRecord:
-    """Record the simulated fill for a decision once its bar is received.
+    """Record the simulated fill at the first price printed after the decision.
 
-    The fill price timestamp must be strictly after the recorded decision,
-    and the fill bar must carry a receipt at or before the fill record
-    time. Anything else is rejected, never recorded.
+    Three timestamps stay distinct: the price's market timestamp (the fill
+    bar's open print), the input receipt timestamp (when the completed bar
+    arrived), and the decision record timestamp (when the decision was
+    actually recorded). A fill priced at or before the actual decision
+    time is rejected, as is a fill bar received before its market close.
     """
     dates = [str(row["date"]) for row in view]
     if date not in dates:
         raise ValueError(f"decision date {date} is not a received bar")
     index = dates.index(date)
-    if index + 1 >= len(view):
-        raise ValueError(f"fill for {date} is not yet observable: next bar not received")
-    fill_row = view[index + 1]
+    fill_row: dict[str, Any] | None = None
+    for candidate in view[index + 1 :]:
+        if bar_open_ms(str(candidate["date"])) > decision_recorded_at_ms:
+            fill_row = candidate
+            break
+    if fill_row is None:
+        raise ValueError(
+            f"no eligible fill for {date}: "
+            "every received price is at or before the actual decision time"
+        )
     fill_date = str(fill_row["date"])
-    if fill_date <= date:
-        raise ValueError(f"fill price timestamp {fill_date} precedes recorded decision {date}")
     receipt = received_at.get(fill_date)
     if receipt is None or receipt > recorded_at_ms:
         raise ValueError(f"fill bar {fill_date} was not received by the fill record time")
+    if receipt < bar_close_ms(fill_date):
+        raise ValueError(f"fill bar {fill_date} received before its close")
     return FillRecord(
         date=date,
         fill_date=fill_date,
@@ -141,19 +169,25 @@ def log_forward_day(
     received_at: dict[str, int],
     recorded_at_ms: int,
     costs_bps: str = "20",
-) -> DecisionRecord:
-    """Record one decision from its own completed close, or quarantine it.
+) -> DecisionRecord | None:
+    """Record one decision from its own completed close, quarantine it, or skip it.
 
     ``date`` is the decision date: the signal uses that date's completed
     close, never the prior bar. Every formation close must carry a receipt
     at or before the record time — a bar date alone is not proof of
-    receipt. The view's segments are qualified by the caller (collector +
-    session cutoff). Violations here — unknown date, insufficient history,
-    duplicate dates, late or missing receipts — are recorded as
-    abstentions, never scored.
+    receipt — and no receipt may precede its bar's market close. The
+    view's segments are qualified by the caller (collector + session
+    cutoff); re-running collection backfills gaps before this runs.
+    A requested date whose bar has not completed returns None (retry
+    later, nothing recorded). A requested date whose close passed but
+    whose bar is still absent is recorded as missed, never scored.
+    Other violations — insufficient history, duplicate dates, late or
+    missing receipts — are recorded as abstentions, never scored.
     """
+    dates = [str(row["date"]) for row in view]
+    if date not in dates and bar_close_ms(date) > recorded_at_ms:
+        return None
     try:
-        dates = [str(row["date"]) for row in view]
         if len(set(dates)) != len(dates):
             raise ValueError("shadow view has duplicate bar dates")
         if date not in dates:
@@ -186,6 +220,7 @@ def log_forward_day(
             costs_bps=costs_bps,
             abstained=True,
             reason=f"{type(exc).__name__}: {exc}",
+            missed=date not in dates,
         )
     append_decision(state_dir, record)
     return record
@@ -196,6 +231,8 @@ __all__ = [
     "DecisionRecord",
     "FillRecord",
     "append_decision",
+    "bar_close_ms",
+    "bar_open_ms",
     "decide",
     "load_view",
     "log_forward_day",

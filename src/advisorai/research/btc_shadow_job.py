@@ -64,17 +64,20 @@ def run_shadow_days(
     """Run the shadow job over decision dates in order; idempotent.
 
     Dates already present in the decisions log are skipped without
-    rewriting. Each processed date persists progress before moving on.
-    After decisions, fills are observed for scored decisions whose fill
-    bar is now received and not yet logged.
+    rewriting. Dates whose bars have not completed are left unrecorded
+    for a later run. Each processed date persists progress before moving
+    on. After decisions, fills are observed for scored decisions at the
+    first price printed after each decision's own record time.
     """
     state = _read_state(state_dir)
     entries = _read_jsonl(state_dir / "decisions.jsonl")
     recorded = {entry["date"] for entry in entries}
+    decision_time = {entry["date"]: entry["recorded_at_ms"] for entry in entries}
     scored = {entry["date"] for entry in entries if not entry.get("abstained")}
     filled = {entry["date"] for entry in _read_jsonl(state_dir / FILLS_FILENAME)}
     processed: list[str] = []
     quarantined: list[str] = []
+    skipped: list[str] = []
     for date in sorted(dates):
         if date in recorded:
             continue
@@ -87,7 +90,11 @@ def run_shadow_days(
             recorded_at_ms=recorded_at_ms,
             costs_bps=costs_bps,
         )
+        if record is None:
+            skipped.append(date)
+            continue
         recorded.add(date)
+        decision_time[date] = record.recorded_at_ms
         if not record.abstained:
             scored.add(date)
         processed.append(date)
@@ -101,7 +108,13 @@ def run_shadow_days(
         if date in filled:
             continue
         try:
-            fill = observe_fill(view, date, received_at=received_at, recorded_at_ms=recorded_at_ms)
+            fill = observe_fill(
+                view,
+                date,
+                received_at=received_at,
+                recorded_at_ms=recorded_at_ms,
+                decision_recorded_at_ms=decision_time[date],
+            )
         except ValueError:
             continue
         append_fill(state_dir, fill)
@@ -109,6 +122,7 @@ def run_shadow_days(
     return {
         "processed": processed,
         "quarantined": quarantined,
+        "skipped": skipped,
         "fills_logged": fills_logged,
         "last_completed_date": state["last_completed_date"],
     }

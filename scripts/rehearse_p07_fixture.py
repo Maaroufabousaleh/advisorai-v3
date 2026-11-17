@@ -78,7 +78,9 @@ def _open_workflow(state_dir: Path, snapshot_dir: Path) -> ResearchWorkflow:
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     bars_path = snapshot_dir / "bars.json"
     if not bars_path.is_file():
-        bars_path.write_text(json.dumps({"FIXA": list(_bars()), "FIXB": list(_bars())}))
+        bars_path.write_text(
+            json.dumps({"FIXA": list(_bars()), "FIXB": list(_bars()), "FIXC": list(_bars(5))})
+        )
     registry, _ledgers, coordinator = open_workflow_state(state_dir)
 
     def requester(method: str, url: str, headers: Any, body: Any, timeout: float) -> Any:
@@ -156,7 +158,11 @@ def run_fixture_chain(state_dir: Path, snapshot_dir: Path) -> dict[str, Any]:
         _save_progress(state_dir, progress)
 
     experiment_key = _fingerprint(
-        {"hypothesis_id": hypothesis_id, "policy": POLICY_ID, "exposures": ["FIXA", "FIXB"]}
+        {
+            "hypothesis_id": hypothesis_id,
+            "policy": POLICY_ID,
+            "exposures": ["FIXA", "FIXB", "FIXC"],
+        }
     )
     experiment_step = progress.get("experiments")
     if (
@@ -169,6 +175,7 @@ def run_fixture_chain(state_dir: Path, snapshot_dir: Path) -> dict[str, Any]:
         and experiment_step.get("experiment_ids")
     ):
         experiment_ids = experiment_step["experiment_ids"]
+        failed = experiment_step.get("failed", [])
     else:
         hypothesis = workflow.registry.get(UUID(hypothesis_id))
         assert hypothesis is not None
@@ -187,13 +194,24 @@ def run_fixture_chain(state_dir: Path, snapshot_dir: Path) -> dict[str, Any]:
                     spread_bps=Decimal("1"),
                     slippage_bps=Decimal("2"),
                 ),
+                ExposureSpec(
+                    symbol="FIXC",
+                    fee_bps=Decimal("1"),
+                    spread_bps=Decimal("1"),
+                    slippage_bps=Decimal("2"),
+                ),
             ),
             policy_id=POLICY_ID,
             environment_hash=ENVIRONMENT_HASH,
             require_all_windows=False,
         )
-        experiment_ids = [str(item.experiment_id) for item in outcomes]
-        progress["experiments"] = {"key": experiment_key, "experiment_ids": experiment_ids}
+        experiment_ids = [str(item.experiment_id) for item in outcomes if item.succeeded]
+        failed = sorted(item.symbol for item in outcomes if not item.succeeded)
+        progress["experiments"] = {
+            "key": experiment_key,
+            "experiment_ids": experiment_ids,
+            "failed": failed,
+        }
         _save_progress(state_dir, progress)
 
     prior = workflow.prior_experiments("momentum")
@@ -201,6 +219,7 @@ def run_fixture_chain(state_dir: Path, snapshot_dir: Path) -> dict[str, Any]:
         "paper_id": paper_id,
         "hypothesis_id": hypothesis_id,
         "experiment_ids": experiment_ids,
+        "failed": failed,
         "prior_count": len(prior),
         "paper_rows": workflow.registry.count("paper"),
         "experiment_rows": workflow.registry.count("experiment"),

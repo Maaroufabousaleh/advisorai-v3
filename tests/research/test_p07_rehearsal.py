@@ -24,6 +24,8 @@ def test_rerun_reuses_verified_artifacts(tmp_path):
     first = module.run_fixture_chain(state, snapshot)
     assert first["prior_count"] == 2
     assert first["paper_rows"] == 1
+    assert first["failed"] == ["FIXC"]
+    assert len(first["experiment_ids"]) == 2
     second = module.run_fixture_chain(state, snapshot)
     assert second == first
 

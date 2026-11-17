@@ -261,3 +261,31 @@ are unchanged by this amendment.
  reuse verified artifacts and resume past completed steps (pinned by
  `test_rerun_reuses_verified_artifacts` and `test_resume_after_
  dropped_step_reuses_earlier_artifacts`).
+
+## Amendment 8 (2026-11-17, before any forward scoring)
+
+Amendments 1-7 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: the March 9 decision / March 6 open case the runner
+ previously accepted is rejected. Three timestamps are now distinct:
+ the price's market timestamp (bar open print), the input receipt
+ timestamp (completed-bar arrival), and the decision record timestamp
+ (when the decision was actually recorded).
+- A completed bar received before its market close is rejected
+ (`test_bar_received_before_close_rejected`); a simulated fill priced
+ at or before the actual decision time is rejected
+ (`test_fill_priced_before_decision_time_rejected`, written red first).
+ Fills price at the first open printing strictly after the decision's
+ own record time (`test_fill_skips_stale_prices_after_late_decision`).
+- Missed days are recorded as missed (`missed=True`, never scored, never
+ filled); days whose bars have not completed are left unrecorded for a
+ later run. Backfill is re-running collection, which re-fetches the
+ full range and fails closed on any gap; re-proven gapless (47 bars
+ through 2026-11-16, QUALIFIED). The hosted workflow stays a
+ collection-only dry run.
+- P07 rehearsal now also covers rejected outcomes: a short-bar exposure
+ fails per-exposure while the healthy ones succeed, and the failure is
+ retained in the rerun-stable report (`failed == ["FIXC"]`).
