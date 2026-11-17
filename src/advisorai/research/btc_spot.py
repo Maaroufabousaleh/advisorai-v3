@@ -48,6 +48,7 @@ CUTOFF_RULES = (
 )
 
 SOURCE_ARCHIVE = "binance-public-spot-archive"
+SOURCE_FEED = "binance-public-klines-api"
 
 # A feed that has not printed a bar this far behind the decision cutoff is
 # stale rather than quiet (crypto has no close).
@@ -202,28 +203,55 @@ def build_snapshot(klines: list[list[str]], snapshot_root: Path, *, fetched_at: 
     return snapshot_root / "bars.json"
 
 
-def qualify_snapshot(snapshot_root: Path, *, as_of_ms: int) -> QualificationReport:
+def validate_manifest_values(
+    manifest: dict[str, Any], *, source: str, symbol: str, interval: str, timestamp_units: str
+) -> None:
+    """Enforce manifest values, not just keys; fail closed on mismatch."""
+    expected = {
+        "source": source,
+        "symbol": symbol,
+        "interval": interval,
+        "timestamp_units": timestamp_units,
+    }
+    for key, want in expected.items():
+        if manifest.get(key) != want:
+            raise ValueError(f"snapshot manifest {key} is {manifest.get(key)!r}, expected {want!r}")
+
+
+def check_continuity(snapshot_end_date: str, first_forward_date: str) -> None:
+    """Prove the archive-to-feed handoff is gapless at the seam."""
+    gap = (
+        datetime.fromisoformat(first_forward_date).date()
+        - datetime.fromisoformat(snapshot_end_date).date()
+    ).days
+    if gap != 1:
+        raise ValueError(f"archive-to-feed handoff gap: {snapshot_end_date}..{first_forward_date}")
+
+
+def qualify_snapshot(
+    snapshot_root: Path, *, as_of_ms: int, expect_source: str = SOURCE_ARCHIVE
+) -> QualificationReport:
     """Qualify a snapshot for decisions taken at ``as_of_ms``; fail closed.
 
-    Rejects missing/duplicate/malformed bars, date gaps, any bar completing
-    at or after the decision cutoff, and a stale feed. Returns the report;
-    the caller records it as evidence.
+    Rejects missing/duplicate/malformed bars, manifest value mismatches, date
+    gaps, any bar completing at or after the decision cutoff, and a stale
+    feed. Returns the report; the caller records it as evidence.
     """
     manifest_path = snapshot_root / "manifest.json"
     bars_path = snapshot_root / "bars.json"
     if not manifest_path.is_file() or not bars_path.is_file():
         raise ValueError("snapshot is missing bars.json or manifest.json")
     manifest = json.loads(manifest_path.read_text())
-    for key in (
-        "source",
-        "symbol",
-        "interval",
-        "timestamp_units",
-        "cutoff_rules",
-        "bars_sha256",
-    ):
+    for key in ("cutoff_rules", "bars_sha256"):
         if not manifest.get(key):
             raise ValueError(f"snapshot manifest lacks {key}")
+    validate_manifest_values(
+        manifest,
+        source=expect_source,
+        symbol=SYMBOL,
+        interval=INTERVAL,
+        timestamp_units=TIMESTAMP_UNITS,
+    )
     payload = bars_path.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     if digest != manifest["bars_sha256"]:
@@ -288,12 +316,15 @@ __all__ = [
     "INTERVAL_MS",
     "PUBLIC_KLINES_API",
     "SOURCE_ARCHIVE",
+    "SOURCE_FEED",
     "STALE_TOLERANCE_MS",
     "SYMBOL",
     "TIMESTAMP_UNITS",
     "QualificationReport",
     "build_snapshot",
+    "check_continuity",
     "fetch_month",
     "parse_kline_row",
     "qualify_snapshot",
+    "validate_manifest_values",
 ]

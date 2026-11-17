@@ -72,3 +72,32 @@ sensitivity (±10 bps grid), abstention/quarantine counts.
 - [ ] Forward shadow log started at the freeze date below.
 
 Freeze date: 2026-11-17 (input hash recorded above; forward clock starts here).
+
+## Amendment 1 (2026-11-17, before any forward results exist)
+
+Original text above is preserved; where this amendment conflicts, it governs.
+No forward window has been inspected: the only numbers seen are the
+pinned-snapshot plumbing totals in the handoff, which carry no verdict.
+
+- Cost per position change: fee 10 + spread 1 + slippage 9 = **20 bps
+  all-in** per unit change (taker schedule, liquid spread, slippage buffer).
+  Buy-and-hold pays one entry leg. Pinned in `btc_replay.py`.
+- Realized leg: entry at the next (T+1) open, exit at the next close,
+  open-to-close in bps. Position for day T uses only closes from
+  post-freeze bars (no pre-freeze formation context).
+- First eligible signal: **2027-01-20T00:00:00Z** (close of the Jan-19 bar,
+  the 64th post-freeze close). First fill: **2027-01-20T00:00:00Z**
+  (T+1 open on the daily boundary).
+- Exact scoring window: the first **181** scored decisions,
+  **2027-01-20T00:00:00Z .. 2027-07-19T00:00:00Z**.
+- Numerical turnover cap: **60** unit position changes over the window
+  (~a rebalance every 3rd day worst case). Breach → REJECT on protocol
+  grounds (churn regime), regardless of net.
+- Correction: the "21-bar holding tail" sentence in the windows section is
+  superseded — holding is 1 day by daily re-evaluation; it was
+  monthly-thinking residue, not a measured parameter.
+- Replay wire-up: the three-way agreement is implemented in
+  `src/advisorai/research/btc_replay.py` (no shared-map changes, so the
+  SPY/TLT cost contract is untouched). A `replay.py` BTCUSDT exposure is
+  deferred until the BTC profile is admitted, and needs its own contract
+  review for the shared costs map.
