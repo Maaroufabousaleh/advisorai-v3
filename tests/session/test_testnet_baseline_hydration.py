@@ -1387,3 +1387,70 @@ def test_restart_with_moved_cutoff_blocks_despite_matching_fill(
     assert len(absorptions) == 1
     assert absorptions[0].payload["venue_fill_id"] == "BTCUSDT:2697483"
     assert all("/api/v3/order" not in url for _, url in calls)
+
+
+def test_quiet_canary_cycles_abstain_with_reasons_and_record_no_traffic_outcomes(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """Decision path: ABSTAINED cycles with reasons, no-traffic outcomes, clean stop."""
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    account = _multi_asset_account()
+    fills = [_historical_fill()]
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester_with_fills(account, calls, fills), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-decision.sqlite3")
+    launch = _launch()
+    transport, baseline, balance_cutoff = read_testnet_baseline(
+        resolver=_resolver(), launch=launch
+    )
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "p02-decision-state",
+        lock_identity="p02-decision-path",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
+    )
+    exit_code = app.run(reason="p02 decision-path test")
+    capsys.readouterr()
+    assert exit_code == 0
+    cycles = [
+        event.payload["cycle"]
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "paper_runtime_cycle"
+    ]
+    terminal = [cycle for cycle in cycles if cycle["stage"] != "started"]
+    assert terminal, "quiet canary recorded no terminal cycles"
+    assert {cycle["stage"] for cycle in terminal} == {"abstained"}
+    assert all(cycle["reasons"] for cycle in terminal)
+    outcomes = [
+        event.payload["outcome"]
+        for event in ledgers.events(LedgerNamespace.MODEL)
+        if event.event_type == "paper_scorecard_recorded"
+    ]
+    assert outcomes, "quiet canary recorded no outcomes"
+    for outcome in outcomes:
+        if outcome["quality_sample_count"] is None:
+            assert outcome["quality_source"] == "provider-no-requests/binance_spot_testnet/v1"
+            assert outcome["quality_failed_count"] is None
+            assert outcome["quality_measurement_hash"] is None
