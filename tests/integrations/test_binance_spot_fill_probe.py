@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 
@@ -116,7 +117,7 @@ class _ProbeVenue:
         fee: str = "0",
         fee_asset: str = "USDT",
         withhold_fills: bool = False,
-        taker: str | None = "0.0000",
+        commission: str = "zero",
     ) -> None:
         self.calls = calls
         self.order_status = order_status
@@ -124,7 +125,7 @@ class _ProbeVenue:
         self.fee = fee
         self.fee_asset = fee_asset
         self.withhold_fills = withhold_fills
-        self.taker = taker
+        self.commission = commission
         self.posts = 0
 
     def request(self, method, url, headers, body, timeout):
@@ -136,6 +137,8 @@ class _ProbeVenue:
         if "/api/v3/ticker/bookTicker" in url:
             book = dict(_BOOK, bidQty=self.bid_qty)
             return (200, json.dumps(book).encode(), ())
+        if "/api/v3/account/commission" in url:
+            return (200, json.dumps(self._commission()).encode(), ())
         if "/api/v3/account" in url:
             return (200, json.dumps(self._account()).encode(), ())
         if "/api/v3/openOrders" in url:
@@ -200,27 +203,57 @@ class _ProbeVenue:
 
     def _account(self) -> dict:
         if self.posts == 0 or self.order_status != "FILLED":
-            payload = dict(_account())
-        else:
-            # Post-fill economics must match apply_fill exactly:
-            # cash 1000 + 15.00 - 0.000, BTC 0.010 - 0.003.
-            payload = {
-                "accountType": "SPOT",
-                "canTrade": True,
-                "balances": [
-                    {"asset": "USDT", "free": "1015.00", "locked": "0"},
-                    {"asset": "BTC", "free": "0.007", "locked": "0"},
-                    {"asset": "ETH", "free": "0.0", "locked": "0"},
-                ],
-            }
-        if self.taker is not None:
-            payload["commissionRates"] = {
-                "maker": "0.0000",
-                "taker": self.taker,
-                "buyer": "0.0000",
-                "seller": "0.0000",
-            }
-        return payload
+            return _account()
+        # Post-fill economics must match apply_fill exactly:
+        # cash 1000 + 15.00 - fee, BTC 0.010 - 0.003.
+        usdt = Decimal("1015") - Decimal(self.fee)
+        return {
+            "accountType": "SPOT",
+            "canTrade": True,
+            "balances": [
+                {"asset": "USDT", "free": str(usdt), "locked": "0"},
+                {"asset": "BTC", "free": "0.007", "locked": "0"},
+                {"asset": "ETH", "free": "0.0", "locked": "0"},
+            ],
+        }
+
+    def _commission(self) -> dict:
+        """Documented /api/v3/account/commission shape per scenario."""
+        zero = {
+            "maker": "0.00000000",
+            "taker": "0.00000000",
+            "buyer": "0.00000000",
+            "seller": "0.00000000",
+        }
+        standard = dict(zero)
+        special = dict(zero)
+        tax = dict(zero)
+        discount = {
+            "enabledForAccount": True,
+            "enabledForSymbol": True,
+            "discountAsset": "BNB",
+            "discount": "0.75000000",
+        }
+        if self.commission == "nonzero_seller":
+            standard["seller"] = "0.00040000"
+        elif self.commission == "nonzero_special":
+            special["taker"] = "0.02000000"
+        elif self.commission == "nonzero_tax":
+            tax["taker"] = "0.00000114"
+        elif self.commission == "positive_usdt_bnb_off":
+            standard["taker"] = "0.00100000"
+            discount["enabledForAccount"] = False
+        elif self.commission == "malformed":
+            return {"symbol": "BTCUSDT", "standardCommission": standard}
+        elif self.commission != "zero":
+            raise AssertionError(f"unknown commission scenario {self.commission}")
+        return {
+            "symbol": "BTCUSDT",
+            "standardCommission": standard,
+            "specialCommission": special,
+            "taxCommission": tax,
+            "discount": discount,
+        }
 
     @staticmethod
     def _query(url: str, name: str) -> str:
@@ -262,7 +295,7 @@ def _only_run_dir(tmp_path: Path) -> Path:
 def test_fok_probe_fills_reconciles_and_passes_p03_validator_offline(tmp_path, monkeypatch, capsys):
     """P03 prep: synthetic SELL FOK fills, reconciles, restarts, validates.
 
-    Offline structural proof with mocked HTTP: zero taker rate, exactly one
+    Offline structural proof with mocked HTTP: all-zero symbol legs, exactly one
     POST, zero USDT fee, exact reconciliation, zero resubmissions, and the
     REAL P03 validator certifies the synthetic evidence format. Not venue
     evidence; P03 still needs the owner run.
@@ -317,26 +350,64 @@ def test_fok_probe_fails_closed_when_fills_are_missing(tmp_path, monkeypatch, ca
     assert '"status":"failed"' in out
 
 
-def test_fok_probe_refuses_positive_taker_rate_without_submission(tmp_path, monkeypatch, capsys):
-    """P03 prep: positive taker rate refuses pre-write (BNB may apply)."""
+def test_fok_probe_refuses_nonzero_seller_leg_without_submission(tmp_path, monkeypatch, capsys):
+    """P03 prep: zero standard taker but nonzero seller refuses (BNB may apply)."""
     calls: list = []
-    venue = _ProbeVenue(calls, taker="0.0010")
+    venue = _ProbeVenue(calls, commission="nonzero_seller")
     assert _run_probe(monkeypatch, tmp_path, venue) == 1
     assert not [url for method, url in calls if method == "POST"]
     out = capsys.readouterr().out
     assert '"status":"failed"' in out
 
 
-def test_fok_probe_refuses_missing_commission_rates_without_submission(
-    tmp_path, monkeypatch, capsys
-):
-    """P03 prep: unestablishable commission refuses pre-write."""
+def test_fok_probe_refuses_nonzero_special_leg_without_submission(tmp_path, monkeypatch, capsys):
+    """P03 prep: zero standard taker but nonzero special refuses (BNB may apply)."""
     calls: list = []
-    venue = _ProbeVenue(calls, taker=None)
+    venue = _ProbeVenue(calls, commission="nonzero_special")
     assert _run_probe(monkeypatch, tmp_path, venue) == 1
     assert not [url for method, url in calls if method == "POST"]
     out = capsys.readouterr().out
     assert '"status":"failed"' in out
+
+
+def test_fok_probe_refuses_nonzero_tax_leg_without_submission(tmp_path, monkeypatch, capsys):
+    """P03 prep: zero standard taker but nonzero tax refuses (BNB may apply)."""
+    calls: list = []
+    venue = _ProbeVenue(calls, commission="nonzero_tax")
+    assert _run_probe(monkeypatch, tmp_path, venue) == 1
+    assert not [url for method, url in calls if method == "POST"]
+    out = capsys.readouterr().out
+    assert '"status":"failed"' in out
+
+
+def test_fok_probe_refuses_malformed_commission_without_submission(tmp_path, monkeypatch, capsys):
+    """P03 prep: commission record missing a block refuses pre-write."""
+    calls: list = []
+    venue = _ProbeVenue(calls, commission="malformed")
+    assert _run_probe(monkeypatch, tmp_path, venue) == 1
+    assert not [url for method, url in calls if method == "POST"]
+    out = capsys.readouterr().out
+    assert '"status":"failed"' in out
+
+
+def test_fok_probe_admits_positive_usdt_fee_with_bnb_disabled(tmp_path, monkeypatch, capsys):
+    """P03 prep: positive standard taker + BNB ruled out fills in USDT exactly.
+
+    Offline proof that path B (BNB disabled, USDT-supported fee) runs the
+    full lifecycle: exactly one POST, the 0.015 USDT fee passes the exact
+    post-fill fee check, reconciliation is exact, and the REAL P03
+    validator certifies the synthetic evidence format.
+    """
+    calls: list = []
+    venue = _ProbeVenue(calls, commission="positive_usdt_bnb_off", fee="0.015")
+    assert _run_probe(monkeypatch, tmp_path, venue) == 0
+    posts = [url for method, url in calls if method == "POST"]
+    assert len(posts) == 1 and "/api/v3/order" in posts[0]
+    report = validate_run(_only_run_dir(tmp_path))
+    assert report.fill_pass
+    assert report.p03_certified, [check.name for check in report.failed]
+    out = capsys.readouterr().out
+    assert '"status":"passed"' in out
 
 
 def _run_preflight(monkeypatch, tmp_path, venue: _ProbeVenue) -> int:
@@ -350,8 +421,8 @@ def _run_preflight(monkeypatch, tmp_path, venue: _ProbeVenue) -> int:
     return preflight_module.main(["--secrets", str(_synthetic_secrets_file(tmp_path))])
 
 
-def test_commission_preflight_passes_on_zero_taker_rate(tmp_path, monkeypatch, capsys):
-    """P03 prep: standalone preflight passes with zero fee, leaking nothing."""
+def test_commission_preflight_passes_on_zero_symbol_fees(tmp_path, monkeypatch, capsys):
+    """P03 prep: zero symbol legs pass even with BNB discount on, leaking nothing."""
     calls: list = []
     venue = _ProbeVenue(calls)
     assert _run_preflight(monkeypatch, tmp_path, venue) == 0
@@ -363,12 +434,24 @@ def test_commission_preflight_passes_on_zero_taker_rate(tmp_path, monkeypatch, c
     assert "synthetic-probe-key" not in out
 
 
-def test_commission_preflight_refuses_positive_taker_rate(tmp_path, monkeypatch, capsys):
+def test_commission_preflight_refuses_bnb_may_apply(tmp_path, monkeypatch, capsys):
     """P03 prep: standalone preflight reports BNB may apply, read-only."""
     calls: list = []
-    venue = _ProbeVenue(calls, taker="0.0010")
+    venue = _ProbeVenue(calls, commission="nonzero_seller")
     assert _run_preflight(monkeypatch, tmp_path, venue) == 1
     assert all(method == "GET" for method, _ in calls)
     out = capsys.readouterr().out
     assert '"status":"failed"' in out
     assert '"bnb_payment_can_apply":true' in out
+
+
+def test_commission_preflight_passes_positive_usdt_with_bnb_disabled(tmp_path, monkeypatch, capsys):
+    """P03 prep: positive taker + account-level BNB off passes, read-only."""
+    calls: list = []
+    venue = _ProbeVenue(calls, commission="positive_usdt_bnb_off")
+    assert _run_preflight(monkeypatch, tmp_path, venue) == 0
+    assert all(method == "GET" for method, _ in calls)
+    out = capsys.readouterr().out
+    assert '"status":"passed"' in out
+    assert '"bnb_payment_can_apply":false' in out
+    assert '"reason":"positive_usdt_fee_bnb_ruled_out"' in out

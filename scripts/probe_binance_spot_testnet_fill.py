@@ -206,7 +206,7 @@ def _run_probe(
     }
     commission = recorder.call(
         "commission_preflight_before_submission",
-        "/api/v3/account",
+        "/api/v3/account/commission",
         lambda: evaluate_commission(transport, _PROBE_SYMBOL),
     )
     if not isinstance(commission, Mapping):

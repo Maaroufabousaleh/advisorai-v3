@@ -390,6 +390,28 @@ class BinanceSpotTestnetTransport(NativeTransport):
         if payload.get("canTrade") is not True:
             raise VenueTransportError("Binance Spot Testnet account is not trade-enabled")
         return dict(payload)
+    def symbol_commission(self, symbol: str) -> Mapping[str, object]:
+        """Return validated per-symbol commission rates (read-only GET).
+
+        Shape follows the documented ``GET /api/v3/account/commission``
+        response: ``standardCommission`` / ``specialCommission`` /
+        ``taxCommission`` legs plus the BNB ``discount`` object.
+        """
+        spec = self._verified_symbol(symbol)
+        payload = self._request(
+            "GET",
+            "/api/v3/account/commission",
+            params={"symbol": spec.symbol},
+            authenticated=True,
+        )
+        if not isinstance(payload, Mapping):
+            raise VenueTransportError("Binance commission response must be an object")
+        if str(payload.get("symbol", "")).strip().upper() != spec.symbol:
+            raise VenueTransportError("Binance commission response named a different symbol")
+        for block in ("standardCommission", "specialCommission", "taxCommission"):
+            if not isinstance(payload.get(block), Mapping):
+                raise VenueTransportError(f"Binance commission response lacks {block}")
+        return dict(payload)
 
     @staticmethod
     def _balances(payload: Mapping[str, object]) -> tuple[Mapping[str, object], ...]:

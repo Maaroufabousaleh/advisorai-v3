@@ -1,24 +1,28 @@
 """Read-only Binance Spot Testnet commission preflight for the FOK probe.
 
-Establishes, before any submission, whether a taker fee can apply on the
-probe symbol and therefore whether BNB payment can apply. Read-only: three
-GETs at most (product catalogue, account state), no writes, no retries of
-anything but idempotent reads.
+Establishes, before any submission, the symbol-specific commission for a
+SELL taker order via the documented ``GET /api/v3/account/commission``
+endpoint. Read-only: product catalogue plus one commission read, no
+writes, no retries of anything but idempotent reads.
 
 Decision rule (fail-closed, shared with the probe via
-:func:`evaluate_commission`):
+:func:`evaluate_commission`). The applicable legs for a SELL taker fill
+are the taker and seller legs of each block:
 
-- taker rate parses to exactly zero (``commissionRates.taker``, falling
-  back to legacy ``takerCommission``) → fee known zero → BNB payment
-  cannot apply → exit 0.
-- taker rate positive → BNB burn status is not observable through the
-  admitted ``/api/v3`` surface (the adapter rejects ``/sapi`` by policy),
-  so BNB payment must be assumed possible → exit 1.
-- rates missing, malformed, or negative → cannot establish → exit 1.
+- all six applicable legs (standard/special/tax x taker/seller) verified
+  present, parseable, non-negative, and exactly zero → fee known zero →
+  BNB payment cannot apply → exit 0.
+- otherwise, the ``discount`` object must rule out BNB payment with an
+  explicit ``enabledForAccount: false`` or ``enabledForSymbol: false``;
+  the fee then lands in the received asset (USDT for a SELL), which the
+  ledger supports → exit 0. The exact post-fill fee check still verifies
+  the actual fill.
+- missing legs, malformed or negative values, a missing discount object
+  when fees are positive, or BNB payment not ruled out → exit 1.
 
 Stdout carries only the verdict (status, symbol, ``bnb_payment_can_apply``,
-fixed reason code). Balances, credentials, and response bodies are never
-printed or persisted.
+fixed reason code). Balances, credentials, rates, and response bodies are
+never printed or persisted.
 """
 
 from __future__ import annotations
@@ -41,62 +45,88 @@ from advisorai.integrations import (  # noqa: E402
 
 COMMISSION_SCHEMA = "advisorai.phase2.binance-spot-testnet.commission-preflight.v1"
 REASON_FEE_KNOWN_ZERO = "fee_known_zero"
-REASON_TAKER_POSITIVE = "taker_rate_positive_burn_unobservable"
-REASON_UNESTABLISHABLE = "commission_rates_unestablishable"
+REASON_USDT_NO_BNB = "positive_usdt_fee_bnb_ruled_out"
+REASON_BNB_MAY_APPLY = "bnb_payment_may_apply"
+REASON_UNESTABLISHABLE = "commission_unestablishable"
+
+_COMMISSION_BLOCKS = ("standardCommission", "specialCommission", "taxCommission")
+_SELL_TAKER_LEGS = ("taker", "seller")
 
 
-def _taker_rate(account: Mapping[str, object]) -> Decimal | None:
-    """Return the spot taker rate, or None when it cannot be established."""
-    candidates: list[object] = []
-    rates = account.get("commissionRates")
-    if isinstance(rates, Mapping):
-        candidates.append(rates.get("taker"))
-    else:
-        candidates.append(account.get("takerCommission"))
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        try:
-            return Decimal(str(candidate))
-        except (InvalidOperation, ValueError):
+def _applicable_legs(record: Mapping[str, object]) -> list[Decimal] | None:
+    """Return the six SELL-taker legs, or None when any is unestablishable."""
+    legs: list[Decimal] = []
+    for block in _COMMISSION_BLOCKS:
+        rates = record.get(block)
+        if not isinstance(rates, Mapping):
             return None
-    return None
+        for leg in _SELL_TAKER_LEGS:
+            raw = rates.get(leg)
+            if raw is None:
+                return None
+            try:
+                value = Decimal(str(raw))
+            except (InvalidOperation, ValueError):
+                return None
+            if value < 0:
+                return None
+            legs.append(value)
+    return legs
+
+
+def _bnb_ruled_out(record: Mapping[str, object]) -> bool:
+    """True only when the discount object explicitly disables BNB payment."""
+    discount = record.get("discount")
+    if not isinstance(discount, Mapping):
+        return False
+    account = discount.get("enabledForAccount")
+    symbol = discount.get("enabledForSymbol")
+    if not isinstance(account, bool) or not isinstance(symbol, bool):
+        return False
+    return account is False or symbol is False
 
 
 def evaluate_commission(transport, symbol: str) -> dict[str, object]:
-    """Decide whether BNB payment can apply for a taker order on ``symbol``.
+    """Decide whether a SELL FOK on ``symbol`` may proceed fee-wise.
 
-    Verifies the symbol against live product truth, then reads the
-    authenticated account's commission rates. Returns a verdict dict with
-    no balances, no credentials, and no numeric account values.
+    Reads the symbol-specific commission record and applies the admission
+    rule. Returns a verdict dict with no balances, no credentials, and no
+    numeric values.
     """
     products = transport.list_products()
     transport.verify_symbol_mappings(products)
     if symbol.strip().upper() not in transport.verified_symbol_ids:
         raise VenueTransportError("commission preflight symbol is not admitted")
-    account = transport.account_state()
-    if not isinstance(account, Mapping):
-        raise VenueTransportError("Binance account response must be an object")
-    rate = _taker_rate(account)
-    if rate is None or rate < 0:
+    record = transport.symbol_commission(symbol.strip().upper())
+    if not isinstance(record, Mapping):
+        raise VenueTransportError("Binance commission response must be an object")
+    legs = _applicable_legs(record)
+    if legs is None:
         return {
             "status": "failed",
             "symbol": symbol.strip().upper(),
             "bnb_payment_can_apply": True,
             "reason": REASON_UNESTABLISHABLE,
         }
-    if rate > 0:
+    if all(leg == 0 for leg in legs):
         return {
-            "status": "failed",
+            "status": "passed",
             "symbol": symbol.strip().upper(),
-            "bnb_payment_can_apply": True,
-            "reason": REASON_TAKER_POSITIVE,
+            "bnb_payment_can_apply": False,
+            "reason": REASON_FEE_KNOWN_ZERO,
+        }
+    if _bnb_ruled_out(record):
+        return {
+            "status": "passed",
+            "symbol": symbol.strip().upper(),
+            "bnb_payment_can_apply": False,
+            "reason": REASON_USDT_NO_BNB,
         }
     return {
-        "status": "passed",
+        "status": "failed",
         "symbol": symbol.strip().upper(),
-        "bnb_payment_can_apply": False,
-        "reason": REASON_FEE_KNOWN_ZERO,
+        "bnb_payment_can_apply": True,
+        "reason": REASON_BNB_MAY_APPLY,
     }
 
 

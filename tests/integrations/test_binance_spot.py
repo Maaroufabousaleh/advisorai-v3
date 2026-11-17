@@ -491,3 +491,49 @@ def test_public_truth_main_passes_from_foreign_cwd_with_stubbed_venue(
     assert manifest["result"]["status"] == "passed"
     assert len(manifest["result"]["adapter_source_sha256"]) == 64
     assert manifest["result"]["network_calls"] == 2
+
+
+def _commission_record(symbol="BTCUSDT"):
+    legs = {
+        "maker": "0.00000000",
+        "taker": "0.00100000",
+        "buyer": "0.00000000",
+        "seller": "0.00000000",
+    }
+    return {
+        "symbol": symbol,
+        "standardCommission": dict(legs),
+        "specialCommission": {**legs, "taker": "0.00000000"},
+        "taxCommission": {**legs, "taker": "0.00000000"},
+        "discount": {
+            "enabledForAccount": False,
+            "enabledForSymbol": True,
+            "discountAsset": "BNB",
+            "discount": "0.75000000",
+        },
+    }
+
+
+def test_binance_symbol_commission_is_signed_and_symbol_bound():
+    transport, calls = _transport([(200, json.dumps(_commission_record()).encode(), ())])
+    transport.verify_symbol_mappings(_symbols())
+    record = transport.symbol_commission("BTCUSDT")
+    assert record["symbol"] == "BTCUSDT"
+    assert record["standardCommission"]["taker"] == "0.00100000"
+    assert calls[0][2]["X-MBX-APIKEY"] == "fixture-key"
+    assert "symbol=BTCUSDT" in calls[0][1]
+    with pytest.raises(VenueTransportError, match="not admitted"):
+        transport.symbol_commission("DOGEUSDT")
+
+
+def test_binance_symbol_commission_rejects_wrong_symbol_and_missing_blocks():
+    wrong = _transport([(200, json.dumps(_commission_record("ETHUSDT")).encode(), ())])[0]
+    wrong.verify_symbol_mappings(_symbols())
+    with pytest.raises(VenueTransportError, match="different symbol"):
+        wrong.symbol_commission("BTCUSDT")
+    record = _commission_record()
+    del record["taxCommission"]
+    partial = _transport([(200, json.dumps(record).encode(), ())])[0]
+    partial.verify_symbol_mappings(_symbols())
+    with pytest.raises(VenueTransportError, match="lacks taxCommission"):
+        partial.symbol_commission("BTCUSDT")
