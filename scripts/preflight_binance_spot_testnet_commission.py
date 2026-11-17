@@ -68,7 +68,7 @@ def _applicable_legs(record: Mapping[str, object]) -> list[Decimal] | None:
                 value = Decimal(str(raw))
             except (InvalidOperation, ValueError):
                 return None
-            if value < 0:
+            if value < 0 or not value.is_finite():
                 return None
             legs.append(value)
     return legs

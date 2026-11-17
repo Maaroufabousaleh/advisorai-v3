@@ -243,6 +243,9 @@ class _ProbeVenue:
         elif self.commission == "positive_usdt_bnb_off":
             standard["taker"] = "0.00100000"
             discount["enabledForAccount"] = False
+        elif self.commission == "nonfinite_taker":
+            standard["taker"] = "Infinity"
+            discount["enabledForAccount"] = False
         elif self.commission == "malformed":
             return {"symbol": "BTCUSDT", "standardCommission": standard}
         elif self.commission != "zero":
@@ -390,6 +393,16 @@ def test_fok_probe_refuses_malformed_commission_without_submission(tmp_path, mon
     assert '"status":"failed"' in out
 
 
+def test_fok_probe_refuses_nonfinite_rate_despite_bnb_disabled(tmp_path, monkeypatch, capsys):
+    """P03 prep: non-finite leg blocks pre-write even with BNB ruled out."""
+    calls: list = []
+    venue = _ProbeVenue(calls, commission="nonfinite_taker")
+    assert _run_probe(monkeypatch, tmp_path, venue) == 1
+    assert not [url for method, url in calls if method == "POST"]
+    out = capsys.readouterr().out
+    assert '"status":"failed"' in out
+
+
 def test_fok_probe_admits_positive_usdt_fee_with_bnb_disabled(tmp_path, monkeypatch, capsys):
     """P03 prep: positive standard taker + BNB ruled out fills in USDT exactly.
 
@@ -455,3 +468,14 @@ def test_commission_preflight_passes_positive_usdt_with_bnb_disabled(tmp_path, m
     assert '"status":"passed"' in out
     assert '"bnb_payment_can_apply":false' in out
     assert '"reason":"positive_usdt_fee_bnb_ruled_out"' in out
+
+
+def test_commission_preflight_refuses_nonfinite_rate(tmp_path, monkeypatch, capsys):
+    """P03 prep: non-finite leg refuses even with BNB disabled, read-only."""
+    calls: list = []
+    venue = _ProbeVenue(calls, commission="nonfinite_taker")
+    assert _run_preflight(monkeypatch, tmp_path, venue) == 1
+    assert all(method == "GET" for method, _ in calls)
+    out = capsys.readouterr().out
+    assert '"status":"failed"' in out
+    assert '"reason":"commission_unestablishable"' in out
