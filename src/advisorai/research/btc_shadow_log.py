@@ -35,6 +35,42 @@ def bar_close_ms(date: str) -> int:
     return bar_open_ms(date) + DAY_MS
 
 
+def recording_cutoff_ms(date: str) -> int:
+    """Latest instant a decision for ``date`` may be recorded.
+
+    The decision must record before the next bar completes (one full
+    session of grace). After that the day is missed — even if its bar
+    is available on restart — and excluded from scoring and fills.
+    """
+    return bar_close_ms(date) + DAY_MS
+
+
+def first_open_after(dates: list[str], after_ms: int) -> str | None:
+    """First date whose 00:00 UTC open prints strictly after ``after_ms``."""
+    for day in sorted(dates):
+        if bar_open_ms(day) > after_ms:
+            return day
+    return None
+
+
+def benchmark_window(
+    dates: list[str], first_record_ms: int, last_record_ms: int
+) -> tuple[str, str] | None:
+    """Forward benchmark entry/exit under the pinned execution convention.
+
+    The buy-and-hold benchmark enters at the first open after the first
+    decision record and exits at the first open after the last decision
+    record — the same first-open-after-record rule as strategy fills, so
+    strategy and benchmark share identical timing assumptions. Returns
+    None while either execution bar is not yet in ``dates``.
+    """
+    entry = first_open_after(dates, first_record_ms)
+    exit_day = first_open_after(dates, last_record_ms)
+    if entry is None or exit_day is None:
+        return None
+    return (entry, exit_day)
+
+
 @dataclass(frozen=True, slots=True)
 class DecisionRecord:
     """Writable from received bars only: date, signal, position, the hash
@@ -106,18 +142,13 @@ def observe_fill(
     dates = [str(row["date"]) for row in view]
     if date not in dates:
         raise ValueError(f"decision date {date} is not a received bar")
-    index = dates.index(date)
-    fill_row: dict[str, Any] | None = None
-    for candidate in view[index + 1 :]:
-        if bar_open_ms(str(candidate["date"])) > decision_recorded_at_ms:
-            fill_row = candidate
-            break
-    if fill_row is None:
+    fill_date = first_open_after([day for day in dates if day > date], decision_recorded_at_ms)
+    if fill_date is None:
         raise ValueError(
             f"no eligible fill for {date}: "
             "every received price is at or before the actual decision time"
         )
-    fill_date = str(fill_row["date"])
+    fill_row = next(row for row in view if str(row["date"]) == fill_date)
     receipt = received_at.get(fill_date)
     if receipt is None or receipt > recorded_at_ms:
         raise ValueError(f"fill bar {fill_date} was not received by the fill record time")
@@ -179,15 +210,19 @@ def log_forward_day(
     view's segments are qualified by the caller (collector + session
     cutoff); re-running collection backfills gaps before this runs.
     A requested date whose bar has not completed returns None (retry
-    later, nothing recorded). A requested date whose close passed but
-    whose bar is still absent is recorded as missed, never scored.
-    Other violations — insufficient history, duplicate dates, late or
-    missing receipts — are recorded as abstentions, never scored.
+    later, nothing recorded). A requested date past its recording cutoff
+    — or whose close passed but whose bar is still absent — is recorded
+    as missed, never scored, even on restart. Other violations —
+    insufficient history, duplicate dates, late or missing receipts —
+    are recorded as abstentions, never scored.
     """
     dates = [str(row["date"]) for row in view]
     if date not in dates and bar_close_ms(date) > recorded_at_ms:
         return None
+    past_cutoff = recorded_at_ms > recording_cutoff_ms(date)
     try:
+        if past_cutoff:
+            raise ValueError(f"decision date {date} is past its recording cutoff")
         if len(set(dates)) != len(dates):
             raise ValueError("shadow view has duplicate bar dates")
         if date not in dates:
@@ -220,7 +255,7 @@ def log_forward_day(
             costs_bps=costs_bps,
             abstained=True,
             reason=f"{type(exc).__name__}: {exc}",
-            missed=date not in dates,
+            missed=(date not in dates) or past_cutoff,
         )
     append_decision(state_dir, record)
     return record
@@ -233,9 +268,12 @@ __all__ = [
     "append_decision",
     "bar_close_ms",
     "bar_open_ms",
+    "benchmark_window",
     "decide",
+    "first_open_after",
     "load_view",
     "log_forward_day",
     "observe_fill",
+    "recording_cutoff_ms",
     "verify_inputs_received",
 ]

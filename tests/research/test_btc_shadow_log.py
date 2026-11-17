@@ -12,6 +12,8 @@ import pytest
 from advisorai.research.btc_shadow_log import (
     MODEL_ID,
     bar_close_ms,
+    bar_open_ms,
+    benchmark_window,
     decide,
     load_view,
     log_forward_day,
@@ -84,6 +86,11 @@ def _view(tmp_path: Path, forward_rows: list[dict] | None = None) -> tuple[dict,
     return load_view(snap, forward)
 
 
+def _daily_stamp(date: str) -> int:
+    """The 02:00 UTC run after ``date`` closes: inside its recording window."""
+    return bar_close_ms(date) + 2 * HOUR_MS
+
+
 def test_decide_needs_formation_history():
     closes = [Decimal("100")] * 64
     with pytest.raises(ValueError, match="formation history"):
@@ -96,26 +103,24 @@ def test_log_scores_two_consecutive_long_days(tmp_path):
     assert len(view) == 70
     state = tmp_path / "state"
     receipts = _receipts(view)
-    stamp = bar_close_ms("2024-03-08") + 2 * HOUR_MS
     first = log_forward_day(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         date="2024-03-07",
         received_at=receipts,
-        recorded_at_ms=stamp,
+        recorded_at_ms=_daily_stamp("2024-03-07"),
     )
     assert first is not None and first.abstained is False
     assert (first.signal, first.position) == (1, 1)
     assert first.model_id == MODEL_ID
-    assert first.recorded_at_ms == stamp
     second = log_forward_day(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         date="2024-03-08",
         received_at=receipts,
-        recorded_at_ms=stamp,
+        recorded_at_ms=_daily_stamp("2024-03-08"),
     )
     assert second is not None and second.abstained is False
     assert (second.signal, second.position) == (1, 1)
@@ -128,13 +133,14 @@ def test_missing_past_day_is_recorded_as_missed(tmp_path):
     view = _view(tmp_path, _day_rows("2024-03-05", 1, close="200.0"))
     state = tmp_path / "state"
     receipts = _receipts(view)
+    stamp = bar_close_ms("2024-03-06") + 2 * HOUR_MS
     missing = log_forward_day(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         date="2024-03-06",
         received_at=receipts,
-        recorded_at_ms=bar_close_ms("2024-03-07") + HOUR_MS,
+        recorded_at_ms=stamp,
     )
     assert missing is not None
     assert missing.abstained is True
@@ -148,6 +154,23 @@ def test_missing_past_day_is_recorded_as_missed(tmp_path):
             recorded_at_ms=bar_close_ms("2024-03-08"),
             decision_recorded_at_ms=missing.recorded_at_ms,
         )
+
+
+def test_decision_past_cutoff_is_missed_despite_present_bar(tmp_path):
+    view = _view(tmp_path)
+    state = tmp_path / "state"
+    late = log_forward_day(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        date="2024-03-04",
+        received_at=_receipts(view),
+        recorded_at_ms=bar_close_ms("2024-03-05") + 2 * HOUR_MS,
+    )
+    assert late is not None
+    assert late.abstained is True
+    assert late.missed is True
+    assert "past its recording cutoff" in late.reason
 
 
 def test_future_day_returns_none_without_recording(tmp_path):
@@ -174,7 +197,7 @@ def test_log_quarantines_short_history_and_gapped_handoff(tmp_path):
         state_dir=state,
         date="2024-01-10",
         received_at=_receipts(view),
-        recorded_at_ms=bar_close_ms("2024-03-05") + HOUR_MS,
+        recorded_at_ms=_daily_stamp("2024-01-10"),
     )
     assert early is not None and early.abstained is True
     assert early.missed is False
@@ -230,6 +253,34 @@ def test_fill_uses_first_price_after_decision_time(tmp_path):
         )
 
 
+def test_execution_timing_matches_for_strategy_and_benchmark(tmp_path):
+    """A 01:30 UTC recording misses the 00:00 open, so strategy and benchmark
+    both execute at the following day's open."""
+    view = _view(tmp_path)
+    dates = [str(row["date"]) for row in view]
+    recorded_0130 = bar_open_ms("2024-03-06") + 90 * 60_000
+    decision = log_forward_day(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=tmp_path / "state",
+        date="2024-03-05",
+        received_at=_receipts(view),
+        recorded_at_ms=recorded_0130,
+    )
+    assert decision is not None and decision.abstained is False
+    fill = observe_fill(
+        view,
+        "2024-03-05",
+        received_at=_receipts(view),
+        recorded_at_ms=bar_close_ms("2024-03-07") + 2 * HOUR_MS,
+        decision_recorded_at_ms=recorded_0130,
+    )
+    window = benchmark_window(dates, recorded_0130, recorded_0130)
+    assert fill.fill_date == "2024-03-07"
+    assert window == ("2024-03-07", "2024-03-07")
+    assert benchmark_window(dates, bar_close_ms("2024-03-12"), bar_close_ms("2024-03-12")) is None
+
+
 def test_fill_rejects_unreceived_fill_bar(tmp_path):
     view = _view(tmp_path)
     decided = bar_close_ms("2024-03-05") + 2 * HOUR_MS
@@ -274,14 +325,13 @@ def test_decision_uses_only_received_bars(tmp_path):
     view = _view(tmp_path)
     state = tmp_path / "state"
     receipts = _receipts(view)
-    stamp = bar_close_ms("2024-03-05") + 2 * HOUR_MS
     flat = log_forward_day(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         date="2024-03-04",
         received_at=receipts,
-        recorded_at_ms=stamp,
+        recorded_at_ms=_daily_stamp("2024-03-04"),
     )
     assert flat is not None and flat.abstained is False
     assert (flat.signal, flat.position) == (0, 0)
@@ -292,19 +342,18 @@ def test_decision_uses_only_received_bars(tmp_path):
         state_dir=state,
         date="2024-03-05",
         received_at=receipts,
-        recorded_at_ms=stamp,
+        recorded_at_ms=_daily_stamp("2024-03-05"),
     )
     assert record is not None and record.abstained is False
     assert (record.signal, record.position) == (1, 1)
     assert record.bars_hash == "f" * 64
     assert record.received_through == "2024-03-10"
-    assert record.recorded_at_ms == stamp
 
 
 def test_late_formation_input_quarantines(tmp_path):
     view = _view(tmp_path)
     state = tmp_path / "state"
-    stamp = bar_close_ms("2024-03-05") + 2 * HOUR_MS
+    stamp = _daily_stamp("2024-03-05")
     late = _receipts(view)
     late["2024-01-15"] = stamp + 24 * HOUR_MS
     quarantined = log_forward_day(
@@ -338,14 +387,13 @@ def test_decision_then_fill_end_to_end_fixture(tmp_path):
     view = _view(tmp_path, _day_rows("2024-03-05", 1, close="200.0"))
     state = tmp_path / "state"
     receipts = _receipts(view)
-    decided = bar_close_ms("2024-03-05") + 2 * HOUR_MS
     fourth = log_forward_day(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         date="2024-03-04",
         received_at=receipts,
-        recorded_at_ms=decided,
+        recorded_at_ms=_daily_stamp("2024-03-04"),
     )
     fifth = log_forward_day(
         view=view,
@@ -353,17 +401,17 @@ def test_decision_then_fill_end_to_end_fixture(tmp_path):
         state_dir=state,
         date="2024-03-05",
         received_at=receipts,
-        recorded_at_ms=decided,
+        recorded_at_ms=_daily_stamp("2024-03-05"),
     )
-    assert fourth is not None and fourth.signal == 0
-    assert fifth is not None and fifth.signal == 1
+    assert fourth is not None and fourth.abstained is False and fourth.signal == 0
+    assert fifth is not None and fifth.abstained is False and fifth.signal == 1
     with pytest.raises(ValueError, match="at or before the actual decision time"):
         observe_fill(
             view,
             "2024-03-05",
             received_at=receipts,
-            recorded_at_ms=decided,
-            decision_recorded_at_ms=decided,
+            recorded_at_ms=fifth.recorded_at_ms,
+            decision_recorded_at_ms=fifth.recorded_at_ms,
         )
     stored = [json.loads(line) for line in (state / "decisions.jsonl").read_text().splitlines()]
     assert [entry["signal"] for entry in stored] == [0, 1]
@@ -375,7 +423,7 @@ def test_decision_then_fill_end_to_end_fixture(tmp_path):
         "2024-03-05",
         received_at=receipts2,
         recorded_at_ms=bar_close_ms("2024-03-07") + 2 * HOUR_MS,
-        decision_recorded_at_ms=decided,
+        decision_recorded_at_ms=fifth.recorded_at_ms,
     )
     assert fill.date == "2024-03-05"
     assert fill.fill_date == "2024-03-07"
@@ -437,7 +485,7 @@ def test_bar_received_before_close_rejected(tmp_path):
         state_dir=tmp_path / "state",
         date="2024-03-05",
         received_at=receipts,
-        recorded_at_ms=bar_close_ms("2024-03-05") + 2 * HOUR_MS,
+        recorded_at_ms=_daily_stamp("2024-03-05"),
     )
     assert record is not None and record.abstained is True
     assert "received before its close" in record.reason

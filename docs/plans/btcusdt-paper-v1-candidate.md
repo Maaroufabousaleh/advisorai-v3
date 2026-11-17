@@ -289,3 +289,37 @@ are unchanged by this amendment.
 - P07 rehearsal now also covers rejected outcomes: a short-bar exposure
  fails per-exposure while the healthy ones succeed, and the failure is
  retained in the rerun-stable report (`failed == ["FIXC"]`).
+
+## Amendment 9 (2026-11-17, before any forward scoring)
+
+Amendments 1-8 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment. Amendment 7's transparent catch-up is
+superseded below: late days are missed, not caught up.
+
+- Recording cutoff pinned: a decision for date D must record before the
+ next bar completes (`recording_cutoff_ms(D) = close(D) + 24h`, UTC).
+ After the cutoff the day is recorded as missed and excluded from
+ scoring and simulated fills, even if its bar is available on restart
+ (`test_decision_past_cutoff_is_missed_despite_present_bar`,
+ `test_catch_up_after_cutoff_is_missed`). Each daily run records its
+ own day; same-stamp consecutive days are impossible by construction.
+- Fill-price convention pinned: first daily open printing strictly
+ after the decision record time. A 01:30 UTC recording misses the
+ 00:00 open, so strategy fills use the following day's open. The
+ forward buy-and-hold benchmark uses the identical rule
+ (`benchmark_window`: enter at the first open after the first decision
+ record, exit at the first open after the last), via the shared
+ `first_open_after` helper — strategy and benchmark cannot diverge in
+ timing (`test_execution_timing_matches_for_strategy_and_benchmark`).
+- Note: the historical backtest executes at the next open (T+1), while
+ forward fills under 01:30 recording execute at the following day's
+ open (T+2). The backtest stays labeled characterization; it is not
+ directly comparable to forward fills. The hosted workflow stays a
+ collection-only dry run.
+- P07 session rehearsal: one command-equivalent run now bundles the
+ research chain and one shadow day into a single session manifest
+ (chain ids, shadow result, log hashes), with reruns reusing both
+ halves (`test_session_bundles_chain_and_shadow_evidence`,
+ `test_session_rerun_reuses_both_halves`).

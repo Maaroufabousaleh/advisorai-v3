@@ -76,6 +76,10 @@ def _receipts(view: tuple[dict, ...]) -> dict[str, int]:
     return {str(row["date"]): bar_close_ms(str(row["date"])) + HOUR_MS for row in view}
 
 
+def _daily_stamp(date: str) -> int:
+    return bar_close_ms(date) + 2 * HOUR_MS
+
+
 def _entries(state: Path) -> dict[str, dict]:
     return {
         json.loads(line)["date"]: json.loads(line)
@@ -86,48 +90,59 @@ def _entries(state: Path) -> dict[str, dict]:
 def test_duplicate_run_appends_nothing(tmp_path):
     view, _, _ = _view(tmp_path)
     state = tmp_path / "state"
-    decide_stamp = bar_close_ms("2024-03-05") + 2 * HOUR_MS
-    fill_stamp = bar_close_ms("2024-03-07") + 2 * HOUR_MS
+    receipts = _receipts(view)
     first = run_shadow_days(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
-        dates=["2024-03-04", "2024-03-05"],
-        received_at=_receipts(view),
-        recorded_at_ms=decide_stamp,
+        dates=["2024-03-04"],
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-04"),
     )
-    assert first["processed"] == ["2024-03-04", "2024-03-05"]
+    assert first["processed"] == ["2024-03-04"]
     assert first["quarantined"] == []
-    assert first["fills_logged"] == []
     second = run_shadow_days(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         dates=["2024-03-04", "2024-03-05"],
-        received_at=_receipts(view),
-        recorded_at_ms=fill_stamp,
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-05"),
     )
-    assert second["processed"] == []
-    assert second["fills_logged"] == ["2024-03-04", "2024-03-05"]
-    fills = [json.loads(line) for line in (state / "fills.jsonl").read_text().splitlines()]
-    assert all(entry["fill_date"] == "2024-03-07" for entry in fills)
-    before = (state / "decisions.jsonl").read_bytes()
-    before_fills = (state / "fills.jsonl").read_bytes()
+    assert second["processed"] == ["2024-03-05"]
     third = run_shadow_days(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         dates=["2024-03-04", "2024-03-05"],
-        received_at=_receipts(view),
-        recorded_at_ms=fill_stamp + HOUR_MS,
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-07"),
     )
     assert third["processed"] == []
-    assert third["fills_logged"] == []
+    assert third["fills_logged"] == ["2024-03-04", "2024-03-05"]
+    fills = {
+        json.loads(line)["date"]: json.loads(line)
+        for line in (state / "fills.jsonl").read_text().splitlines()
+    }
+    assert fills["2024-03-04"]["fill_date"] == "2024-03-06"
+    assert fills["2024-03-05"]["fill_date"] == "2024-03-07"
+    before = (state / "decisions.jsonl").read_bytes()
+    before_fills = (state / "fills.jsonl").read_bytes()
+    fourth = run_shadow_days(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        dates=["2024-03-04", "2024-03-05"],
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-07") + HOUR_MS,
+    )
+    assert fourth["processed"] == []
+    assert fourth["fills_logged"] == []
     assert (state / "decisions.jsonl").read_bytes() == before
     assert (state / "fills.jsonl").read_bytes() == before_fills
 
 
-def test_missed_day_is_caught_up_transparently(tmp_path):
+def test_catch_up_after_cutoff_is_missed(tmp_path):
     view, _, _ = _view(tmp_path)
     state = tmp_path / "state"
     receipts = _receipts(view)
@@ -137,29 +152,39 @@ def test_missed_day_is_caught_up_transparently(tmp_path):
         state_dir=state,
         dates=["2024-03-05"],
         received_at=receipts,
-        recorded_at_ms=bar_close_ms("2024-03-05") + 2 * HOUR_MS,
+        recorded_at_ms=_daily_stamp("2024-03-05"),
     )
-    late_stamp = bar_close_ms("2024-03-06") + 2 * HOUR_MS
+    mar5_line = (state / "decisions.jsonl").read_bytes()
     catchup = run_shadow_days(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         dates=["2024-03-04", "2024-03-05"],
         received_at=receipts,
-        recorded_at_ms=late_stamp,
+        recorded_at_ms=_daily_stamp("2024-03-06"),
     )
     assert catchup["processed"] == ["2024-03-04"]
+    assert catchup["quarantined"] == ["2024-03-04"]
     entries = _entries(state)
-    assert entries["2024-03-04"]["recorded_at_ms"] == late_stamp
-    assert entries["2024-03-05"]["recorded_at_ms"] < late_stamp
-    assert entries["2024-03-04"]["signal"] == 0
-    assert entries["2024-03-05"]["signal"] == 1
+    assert entries["2024-03-04"]["missed"] is True
+    assert "past its recording cutoff" in entries["2024-03-04"]["reason"]
+    assert entries["2024-03-05"]["missed"] is False
+    assert (state / "decisions.jsonl").read_bytes().startswith(mar5_line)
+    fills_run = run_shadow_days(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        dates=["2024-03-04", "2024-03-05"],
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-07"),
+    )
+    assert fills_run["fills_logged"] == ["2024-03-05"]
 
 
 def test_late_receipt_quarantines_without_scoring(tmp_path):
     view, _, _ = _view(tmp_path)
     state = tmp_path / "state"
-    stamp = bar_close_ms("2024-03-05") + 2 * HOUR_MS
+    stamp = _daily_stamp("2024-03-05")
     receipts = _receipts(view)
     receipts["2024-01-15"] = stamp + 24 * HOUR_MS
     result = run_shadow_days(
@@ -181,14 +206,14 @@ def test_late_receipt_quarantines_without_scoring(tmp_path):
 def test_restart_resumes_after_last_completed_date(tmp_path):
     view, _, _ = _view(tmp_path)
     state = tmp_path / "state"
-    stamp = bar_close_ms("2024-03-05") + 2 * HOUR_MS
+    receipts = _receipts(view)
     run_shadow_days(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
         dates=["2024-03-04"],
-        received_at=_receipts(view),
-        recorded_at_ms=stamp,
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-04"),
     )
     assert (
         json.loads((state / "shadow_state.json").read_text())["last_completed_date"] == "2024-03-04"
@@ -198,8 +223,8 @@ def test_restart_resumes_after_last_completed_date(tmp_path):
         forward_hash="f" * 64,
         state_dir=state,
         dates=["2024-03-04", "2024-03-05"],
-        received_at=_receipts(view),
-        recorded_at_ms=stamp,
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-05"),
     )
     assert resumed["processed"] == ["2024-03-05"]
     assert (
@@ -212,21 +237,38 @@ def test_restart_resumes_after_last_completed_date(tmp_path):
 def test_missed_day_recorded_as_missed_and_never_filled(tmp_path):
     view, _, _ = _view(tmp_path)
     state = tmp_path / "state"
-    stamp = bar_close_ms("2024-03-12")
+    receipts = _receipts(view)
+    run_shadow_days(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        dates=["2024-03-04"],
+        received_at=receipts,
+        recorded_at_ms=_daily_stamp("2024-03-04"),
+    )
     result = run_shadow_days(
         view=view,
         forward_hash="f" * 64,
         state_dir=state,
-        dates=["2024-03-04", "2024-03-11"],
-        received_at=_receipts(view),
-        recorded_at_ms=stamp,
+        dates=["2024-03-11"],
+        received_at=receipts,
+        recorded_at_ms=bar_close_ms("2024-03-12"),
     )
-    assert result["processed"] == ["2024-03-04", "2024-03-11"]
+    assert result["processed"] == ["2024-03-11"]
     assert result["quarantined"] == ["2024-03-11"]
-    assert result["fills_logged"] == []
+    assert result["fills_logged"] == ["2024-03-04"]
     entries = _entries(state)
     assert entries["2024-03-11"]["missed"] is True
     assert entries["2024-03-04"]["missed"] is False
+    fills_run = run_shadow_days(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        dates=["2024-03-04", "2024-03-11"],
+        received_at=receipts,
+        recorded_at_ms=bar_close_ms("2024-03-12") + HOUR_MS,
+    )
+    assert fills_run["fills_logged"] == []
 
 
 def test_uncompleted_day_skips_without_recording(tmp_path):
@@ -238,7 +280,7 @@ def test_uncompleted_day_skips_without_recording(tmp_path):
         state_dir=state,
         dates=["2024-03-04", "2024-03-20"],
         received_at=_receipts(view),
-        recorded_at_ms=bar_close_ms("2024-03-05") + 2 * HOUR_MS,
+        recorded_at_ms=_daily_stamp("2024-03-04"),
     )
     assert result["processed"] == ["2024-03-04"]
     assert result["skipped"] == ["2024-03-20"]
