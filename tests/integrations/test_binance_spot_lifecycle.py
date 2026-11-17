@@ -9,6 +9,7 @@ import pytest
 from advisorai.integrations import BinanceSpotSymbolSpec
 from scripts.qualify_binance_spot_testnet_lifecycle import (
     LifecycleBlocked,
+    _fill_from_record,
     _minimum_practical_quantity,
     _passive_price,
     _validate_read_only_evidence,
@@ -97,3 +98,43 @@ def test_lifecycle_requires_current_immutable_read_only_gate(tmp_path):
     manifest.write_bytes(encoded + b"tampered")
     with pytest.raises(LifecycleBlocked, match="hash"):
         _validate_read_only_evidence(evidence_dir, "a" * 64)
+
+
+def test_lifecycle_fill_rejects_non_quote_fee_denomination():
+    """P03: a BNB-denominated fee fails closed instead of corrupting USDT cash."""
+    from uuid import uuid4
+
+    from advisorai.config import CredentialResolver
+    from advisorai.integrations import build_binance_spot_testnet_transport
+
+    resolver = CredentialResolver.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "binance_spot_testnet",
+            "ADVISORAI_VENUE_ENVIRONMENT": "paper_testnet",
+            "ADVISORAI_VENUE_BASE_URL": "https://testnet.binance.vision",
+            "ADVISORAI_VENUE_API_KEY": "synthetic-testnet-key",
+            "ADVISORAI_VENUE_API_SECRET": "synthetic-testnet-secret",
+        }
+    )
+    transport = build_binance_spot_testnet_transport(resolver)
+    quote_fee_record = {
+        "symbol": "BTCUSDT",
+        "id": 1,
+        "orderId": 7,
+        "qty": "0.001",
+        "price": "50000",
+        "commission": "0.05",
+        "commissionAsset": "USDT",
+        "time": 1794067200000,
+        "isBuyer": True,
+    }
+    fill, side = _fill_from_record(transport, quote_fee_record, uuid4())
+    assert side == "buy"
+    assert fill.fee == Decimal("0.05")
+    assert fill.fee_currency == "USDT"
+    zero_fee_record = dict(quote_fee_record, commission="0E-8", commissionAsset="BNB")
+    zero_fill, _ = _fill_from_record(transport, zero_fee_record, uuid4())
+    assert zero_fill.fee == 0
+    bnb_fee_record = dict(quote_fee_record, id=2, commission="0.0001", commissionAsset="BNB")
+    with pytest.raises(LifecycleBlocked, match="quote asset"):
+        _fill_from_record(transport, bnb_fee_record, uuid4())

@@ -427,13 +427,26 @@ def _fill_from_record(
 ) -> tuple[Fill, str]:
     values = transport.fill_contract_values(record)
     venue_fill_id = str(values["venue_fill_id"])
+    fee = values["fee"]
+    assert isinstance(fee, Decimal)
+    # Local cash/margin accounting deducts the fee from the quote asset.
+    # A nonzero fee in any other asset (e.g. BNB) would silently corrupt
+    # cash, margin_available, and the venue free-balance equality check.
+    # Fail closed like the session provider projection instead.
+    commission_asset = str(record.get("commissionAsset", "")).strip().upper()
+    symbol = str(values["symbol"]).strip().upper()
+    if fee and (not commission_asset or not symbol.endswith(commission_asset)):
+        raise LifecycleBlocked(
+            "venue fill fee is not denominated in the order quote asset"
+        )
     fill = Fill(
         artifact_id=uuid5(NAMESPACE_URL, f"advisorai-v3/binance-fill/{venue_fill_id}"),
         order_id=order_id,
         venue_fill_id=venue_fill_id,
         quantity=values["quantity"],
         price=values["price"],
-        fee=values["fee"],
+        fee=fee,
+        fee_currency=commission_asset or None,
         occurred_at=values["occurred_at"],
     )
     return fill, str(values["side"])
