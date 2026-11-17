@@ -163,3 +163,82 @@ def test_scorer_fails_closed_without_traded_day_fill(tmp_path):
         assert "fill missing for traded day 2024-03-05" in str(exc)
     else:
         raise AssertionError("scorer accepted a traded day without a fill")
+
+
+def test_scorer_rejects_fill_printing_after_mark(tmp_path):
+    view, receipts = _rehearsal_view(tmp_path)
+    state = tmp_path / "state"
+
+    def daily(date: str):
+        return run_shadow_days(
+            view=view,
+            forward_hash="f" * 64,
+            state_dir=state,
+            dates=[date],
+            received_at=receipts,
+            recorded_at_ms=bar_close_ms(date) + 2 * HOUR_MS,
+        )
+
+    assert daily("2024-03-04")["processed"] == ["2024-03-04"]
+    assert daily("2024-03-05")["processed"] == ["2024-03-05"]
+    assert daily("2024-03-06")["processed"] == ["2024-03-06"]
+    assert daily("2024-03-07")["processed"] == ["2024-03-07"]
+    decisions = _read_jsonl(state / "decisions.jsonl")
+    fills = _read_jsonl(state / "fills.jsonl")
+    # The Mar 5 entry fills at the Mar 7 open; scoring at the Mar 6 mark
+    # must refuse rather than let a post-mark price into the valuation.
+    assert {item["date"]: item["fill_date"] for item in fills}["2024-03-05"] == "2024-03-07"
+    try:
+        score_window(view=view, decisions=decisions, fills=fills, mark_date="2024-03-06")
+    except ValueError as exc:
+        assert "prints after the mark" in str(exc)
+        assert "2024-03-07" in str(exc) and "2024-03-06" in str(exc)
+    else:
+        raise AssertionError("scorer applied a fill printing after the mark")
+
+
+def test_scorer_rejects_benchmark_entry_after_mark(tmp_path):
+    view, receipts = _rehearsal_view(tmp_path)
+    state = tmp_path / "state"
+    run_shadow_days(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        dates=["2024-03-04"],
+        received_at=receipts,
+        recorded_at_ms=bar_close_ms("2024-03-04") + 2 * HOUR_MS,
+    )
+    decisions = _read_jsonl(state / "decisions.jsonl")
+    fills = _read_jsonl(state / "fills.jsonl")
+    assert decisions[0]["signal"] == 0  # flat: no strategy executions
+    # First record is 2h after the Mar 4 close, so benchmark entry is the
+    # Mar 6 open — after the Mar 4 mark. It must refuse, not price the
+    # benchmark off a post-mark open.
+    try:
+        score_window(view=view, decisions=decisions, fills=fills, mark_date="2024-03-04")
+    except ValueError as exc:
+        assert "benchmark entry" in str(exc) and "after the mark" in str(exc)
+    else:
+        raise AssertionError("scorer entered the benchmark after the mark")
+
+
+def test_scorer_reports_pending_fill_without_moving_window(tmp_path):
+    view, receipts = _rehearsal_view(tmp_path)
+    state = tmp_path / "state"
+    run_shadow_days(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        dates=["2024-03-05"],
+        received_at=receipts,
+        recorded_at_ms=bar_close_ms("2024-03-05") + 2 * HOUR_MS,
+    )
+    decisions = _read_jsonl(state / "decisions.jsonl")
+    # No fill bar received yet: the trade is pending, and the report must
+    # name when it becomes observable instead of moving the window.
+    try:
+        score_window(view=view, decisions=decisions, fills=[], mark_date="2024-03-05")
+    except ValueError as exc:
+        assert "pending until 2024-03-07" in str(exc)
+    else:
+        raise AssertionError("scorer accepted a traded day with a pending fill")

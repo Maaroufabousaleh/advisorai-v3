@@ -4,10 +4,15 @@ Pure accounting over recorded decisions, fills, and bars. Pinned rules:
 - Missed or quarantined days hold the prior position (no new decision, no
   trade); only scored days can change the position.
 - Position changes execute at the recorded fill (first open after the
-  decision record time); a missing fill for a traded day fails closed.
+  decision record time); a missing fill for a traded day fails closed,
+  naming the date the fill stays pending until when it is not yet
+  observable. A fill printing after the valuation mark is refused: a
+  post-mark price can never change the value at the earlier mark, and
+  the window is never moved to accommodate it.
 - Every unit position change pays ``costs_bps``; both sides mark at the
   final close. The benchmark enters at the first open after the first
-  decision record — the same timing rule as strategy fills.
+  decision record — the same timing rule as strategy fills — and an
+  entry after the mark fails closed.
 """
 
 from __future__ import annotations
@@ -35,6 +40,25 @@ class ScoringReport:
     mark_date: str
     executions: tuple[Execution, ...]
     positions: tuple[tuple[str, int], ...]
+
+
+def _missing_fill_detail(day: str, entry: dict[str, Any], dates: list[str], mark: str) -> str:
+    """Refusal detail for a traded day without a fill.
+
+    When the decision's record time shows the fill is not yet observable
+    at the mark, the report names the date it stays pending until so the
+    caller can wait for that bar instead of moving the window. Otherwise
+    the fill data itself is missing and the day is named as-is.
+    """
+
+    base = f"cannot score: fill missing for traded day {day}"
+    recorded = entry.get("recorded_at_ms")
+    if recorded is None:
+        return base
+    expected = first_open_after([date for date in dates if date > day], int(recorded))
+    if expected is None or expected <= mark:
+        return base
+    return f"{base} (pending until {expected})"
 
 
 def score_window(
@@ -71,7 +95,13 @@ def score_window(
         if target != position:
             fill = fills_by_date.get(day)
             if fill is None:
-                raise ValueError(f"cannot score: fill missing for traded day {day}")
+                raise ValueError(_missing_fill_detail(day, entry, dates, mark))
+            fill_date = str(fill["fill_date"])
+            if fill_date > mark:
+                raise ValueError(
+                    f"cannot score: fill for traded day {day} prints after the mark "
+                    f"({fill_date} > {mark})"
+                )
             price = Decimal(str(fill["fill_price"]))
             if position == 1:
                 assert anchor is not None
@@ -96,6 +126,8 @@ def score_window(
     entry_day = first_open_after(dates, first_record)
     if entry_day is None:
         raise ValueError("cannot score: benchmark entry not yet observable")
+    if entry_day > mark:
+        raise ValueError(f"cannot score: benchmark entry {entry_day} is after the mark {mark}")
     benchmark_value = (
         factor * Decimal(str(bars[mark]["adj_close"])) / Decimal(str(bars[entry_day]["open"]))
     )

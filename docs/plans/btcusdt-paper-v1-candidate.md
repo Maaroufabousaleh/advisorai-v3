@@ -347,3 +347,20 @@ are unchanged by this amendment.
  205.0. Strategy 0.998 x 205/209 = 0.97889952; benchmark 0.998 x
  205/207.50 = 0.98597590 (entered Mar 6 open). Hold-day fills are
  logged but correctly unused (4 fills, 1 execution).
+
+## Amendment 11 (2026-11-17, before any forward scoring)
+
+Amendments 1-10 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- End-of-window accounting pinned (`btc_scoring.score_window`): a fill
+  printing after the valuation mark is refused, so a post-mark price can
+  never change the portfolio value at the earlier mark
+  (`test_scorer_rejects_fill_printing_after_mark`); a benchmark entry
+  after the mark fails closed under the same timing rule
+  (`test_scorer_rejects_benchmark_entry_after_mark`). A traded day whose
+  fill is not yet observable at the mark is reported as pending until
+  its expected fill date (`test_scorer_reports_pending_fill_without_
+  moving_window`); the window is never moved to accommodate it.
