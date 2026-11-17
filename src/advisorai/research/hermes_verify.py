@@ -54,15 +54,20 @@ def set_hermes_bars_path(snapshot_root: Path) -> None:
 
     The caller passes the owner-configured snapshot root; the file name is
     derived, never taken from payload input. Only an existing ``bars.json``
-    file directly inside the root is admitted.
+    file that resolves inside the root is admitted: a symlink pointing out
+    of the root is rejected even when its target exists.
     """
 
     root = Path(snapshot_root).resolve(strict=True)
     if not root.is_dir():
         raise ValueError("Hermes snapshot root must be a directory containing bars.json")
-    resolved = root / "bars.json"
+    resolved = (root / "bars.json").resolve(strict=True)
     if not resolved.is_file():
         raise ValueError("Hermes bars path must be a snapshot bars.json file")
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("Hermes bars file escapes its snapshot root") from exc
     global _BARS_PATH
     _BARS_PATH = str(resolved)
 

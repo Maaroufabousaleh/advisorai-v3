@@ -195,6 +195,16 @@ def test_setter_rejects_non_snapshot_files_and_missing_paths(tmp_path):
         set_hermes_bars_path(empty)
 
 
+def test_setter_rejects_symlink_escape_from_snapshot_root(tmp_path):
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}")
+    root = tmp_path / "root"
+    root.mkdir()
+    (root / "bars.json").symlink_to(outside)
+    with pytest.raises(ValueError, match="escapes its snapshot root"):
+        set_hermes_bars_path(root)
+
+
 def test_sandbox_blocks_network_write_spawn_and_secrets(tmp_path, monkeypatch):
     monkeypatch.setenv("BROKER_API_KEY", "must-not-cross-boundary")
     runner = HermesIsolationRunner(POLICY)
