@@ -46,7 +46,9 @@ def _requester(account: dict, calls: list):
         if "/api/v3/account" in url:
             return (200, json.dumps(account).encode(), ())
         if "/api/v3/time" in url:
-            return (200, json.dumps({"serverTime": 1700000070000}).encode(), ())
+            # Saved-evidence clock: the failed canary's baseline snapshot was
+            # taken 2026-11-16, after fill 2697483 (2026-11-14T00:51:51.787Z).
+            return (200, json.dumps({"serverTime": 1794787500000}).encode(), ())
         if "/api/v3/openOrders" in url:
             return (200, b"[]", ())
         if "/api/v3/myTrades" in url:
@@ -839,6 +841,34 @@ def test_first_start_with_historical_venue_fill_in_opening_balances(
         event.event_type != "fill_applied" for event in account_events
     )
 
+def test_new_fitting_fill_is_not_absorbed_as_baseline_settled(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: a NEW unmatched fill that fits the baseline still blocks recovery.
+
+    Regression against the 8085b27 balance-only proof: a fill nobody
+    ordered arrives AFTER the baseline snapshot, but its economics are
+    small enough to fit inside the opening balances. Arithmetic alone
+    would absorb it; recovery must instead block, because no verified
+    evidence ties this fill to the exact opening baseline.
+    """
+    account = _multi_asset_account()
+    new_fill = _historical_fill()
+    new_fill["id"] = 9990002
+    new_fill["orderId"] = 9990002
+    # After the mocked baseline snapshot (serverTime 1794787500000): a fill
+    # nobody ordered, small enough to fit the balances, but not settled.
+    new_fill["time"] = 1794787600000
+    app, calls = _run_zero_submission_session(tmp_path, monkeypatch, account, [new_fill])
+    exit_code = app.run(reason="p02 new-fill over-acceptance")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "SESSION READY" not in output
+    assert "RECOVERY INCOMPLETE" in output
+    assert "outcome=clean" not in output
+    assert "reconciliation=reconciled" not in output
+    assert all("/api/v3/order" not in url for _, url in calls)
+
 def _run_zero_submission_session(tmp_path, monkeypatch, account, fills, open_orders=()):
     """Drive the real launcher path with seeded venue history; return app + output."""
 
@@ -1012,3 +1042,137 @@ def test_absorbed_fill_survives_restart_without_reapply_or_block(
     assert absorptions[0].payload["venue_fill_id"] == "BTCUSDT:2697483"
     assert second.account.positions.get("BTC") == baseline.positions["BTC"]
     assert second.account.cash == baseline.cash
+
+def test_changed_absorbed_fill_blocks_recovery_after_restart(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: venue history drifting under an absorption record blocks restart.
+
+    First run absorbs the historical fill and passes. On restart the
+    venue replays the same fill ID with different economics (price
+    drift). The durable record no longer matches, so recovery fails
+    closed instead of trusting stale evidence.
+    """
+    from advisorai.ledger import LedgerNamespace
+
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    account = _multi_asset_account()
+    fills = [_historical_fill()]
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester_with_fills(account, calls, fills), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-drift.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+
+    def build(tag):
+        return build_testnet_owner_application(
+            ledgers=ledgers,
+            state_dir=tmp_path / "p02-drift-state",
+            lock_identity=f"p02-drift-{tag}",
+            code_hash="c" * 64,
+            config_hash="d" * 64,
+            config=OwnerApplicationConfig(
+                scenario="quiet",
+                interval_seconds=0.5,
+                max_runtime_seconds=2,
+            ),
+            resolver=_resolver(),
+            launch=launch,
+            transport=transport,
+            baseline=baseline,
+        )
+
+    assert build("first").run(reason="p02 drift first") == 0
+    capsys.readouterr()
+    drifted = _historical_fill()
+    drifted["price"] = "70000.00"
+    fills.clear()
+    fills.append(drifted)
+    exit_code = build("second").run(reason="p02 drift second")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "SESSION READY" not in output
+    assert "RECOVERY INCOMPLETE" in output
+    absorptions = [
+        event
+        for event in ledgers.events(LedgerNamespace.VENUE)
+        if event.event_type == "baseline_settled_fill_absorbed"
+    ]
+    assert len(absorptions) == 1
+    assert all("/api/v3/order" not in url for _, url in calls)
+
+
+def test_new_fill_after_absorbed_restart_still_blocks_recovery(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: a new post-snapshot fill blocks even with history absorbed.
+
+    First run absorbs the historical fill and passes. On restart the
+    venue additionally reports a NEW unmatched fill that landed after
+    the baseline snapshot but fits the balances. The proof (predates
+    the snapshot) fails for the new fill, so recovery fails closed —
+    the old absorption must not whitelist new venue activity.
+    """
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    account = _multi_asset_account()
+    fills = [_historical_fill()]
+    real_builder = build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester_with_fills(account, calls, fills), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-newafter.sqlite3")
+    launch = _launch()
+    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+
+    def build(tag):
+        return build_testnet_owner_application(
+            ledgers=ledgers,
+            state_dir=tmp_path / "p02-newafter-state",
+            lock_identity=f"p02-newafter-{tag}",
+            code_hash="c" * 64,
+            config_hash="d" * 64,
+            config=OwnerApplicationConfig(
+                scenario="quiet",
+                interval_seconds=0.5,
+                max_runtime_seconds=2,
+            ),
+            resolver=_resolver(),
+            launch=launch,
+            transport=transport,
+            baseline=baseline,
+        )
+
+    assert build("first").run(reason="p02 new-after first") == 0
+    capsys.readouterr()
+    new_fill = _historical_fill()
+    new_fill["id"] = 9990003
+    new_fill["orderId"] = 9990003
+    new_fill["time"] = 1794787600000  # after the mocked snapshot
+    fills.append(new_fill)
+    exit_code = build("second").run(reason="p02 new-after second")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "SESSION READY" not in output
+    assert "RECOVERY INCOMPLETE" in output
+    assert "outcome=clean" not in output
+    assert all("/api/v3/order" not in url for _, url in calls)

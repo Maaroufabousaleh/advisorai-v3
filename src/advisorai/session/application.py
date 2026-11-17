@@ -690,24 +690,43 @@ class PaperOwnerApplication:
         venue keeps reporting that fill in trade history, but no local
         order claims it and re-applying it would double-count.
 
-        Absorption is per-fill and accounting-proven, never a timestamp
-        filter: reverse the fill's exact economics off a copy of the
-        durable baseline. If any leg underflows (the baseline cannot
-        contain the fill), the fill is not baseline-settled and recovery
-        fails closed. Otherwise record the fill's identity durably so it
-        is recognized without re-proof on restart, and never applied.
+        Proof is verified evidence tied to the exact opening baseline,
+        not arithmetic: the fill's venue-attested ``occurred_at`` must
+        strictly predate the baseline snapshot's ``as_of`` — a fill that
+        landed after the snapshot cannot be settled inside it, however
+        well its economics fit. Balance containment is only a sanity
+        check on top. Each absorbed fill records its full economics
+        durably so a restart re-verifies the replayed fill against the
+        record and blocks on any change; absorbed fills are recognized,
+        never applied.
         """
+        from datetime import datetime
         from decimal import Decimal
 
         from advisorai.ledger import LedgerEvent, LedgerNamespace
 
+        baseline = self.adapters.initial_account
         for entry in unresolved:
             venue_fill_id = str(entry["venue_fill_id"])
             key = f"baseline-settled-fill:{venue_fill_id}"
-            if any(
-                event.idempotency_key == key for event in self.ledgers.events(LedgerNamespace.VENUE)
-            ):
+            recorded = next(
+                (
+                    event
+                    for event in self.ledgers.events(LedgerNamespace.VENUE)
+                    if event.idempotency_key == key
+                ),
+                None,
+            )
+            if recorded is not None:
+                self._verify_absorbed_fill_unchanged(entry, recorded.payload)
                 continue
+            occurred_at = entry["occurred_at"]
+            assert isinstance(occurred_at, datetime)
+            if occurred_at >= baseline.as_of:
+                raise RuntimeError(
+                    f"paper venue fill {venue_fill_id} occurred after the opening "
+                    "baseline snapshot and cannot be baseline-settled"
+                )
             side = str(entry["side"])
             quantity = entry["quantity"]
             price = entry["price"]
@@ -716,20 +735,21 @@ class PaperOwnerApplication:
             assert isinstance(price, Decimal)
             assert isinstance(fee, Decimal)
             notional = price * quantity
-            baseline = self.adapters.initial_account
             baseline_cash = baseline.cash
             baseline_btc = baseline.positions.get("BTC", Decimal("0"))
             baseline_fees = baseline.fees_paid
             if side == "buy":
-                # Reversing a buy credits notional+fee and removes BTC; the
-                # BTC and fee legs must cover the fill or it is not contained.
+                # Sanity check only: reversing a buy credits notional+fee
+                # and removes BTC; the BTC and fee legs must cover the fill
+                # or the baseline cannot contain it.
                 if baseline_btc < quantity or baseline_fees < fee:
                     raise RuntimeError(
                         f"paper venue fill {venue_fill_id} is not settled in the baseline"
                     )
             elif side == "sell":
-                # Reversing a sell re-adds BTC and removes net proceeds; the
-                # cash leg must cover the notional or the fill is not contained.
+                # Sanity check only: reversing a sell re-adds BTC and
+                # removes net proceeds; the cash leg must cover the
+                # notional or the fill is not contained.
                 if baseline_cash < notional - fee:
                     raise RuntimeError(
                         f"paper venue fill {venue_fill_id} is not settled in the baseline"
@@ -752,6 +772,31 @@ class PaperOwnerApplication:
                     },
                 )
             )
+
+    @staticmethod
+    def _verify_absorbed_fill_unchanged(
+        entry: dict[str, object], recorded: dict[str, object]
+    ) -> None:
+        """Block when a replayed absorbed fill no longer matches its record.
+
+        The durable absorption record is the verified evidence for this
+        fill; any drift in identity or economics between restarts means
+        the venue history changed under us and recovery fails closed.
+        """
+        venue_fill_id = str(entry["venue_fill_id"])
+        expected = {
+            "provider_order_id": str(entry["provider_order_id"]),
+            "side": str(entry["side"]),
+            "quantity": str(entry["quantity"]),
+            "price": str(entry["price"]),
+            "fee": str(entry["fee"]),
+            "occurred_at": str(entry["occurred_at"]),
+        }
+        for name, value in expected.items():
+            if str(recorded.get(name, "")) != value:
+                raise RuntimeError(
+                    f"paper venue fill {venue_fill_id} changed since absorption: {name}"
+                )
 
     def _recovery_checks(self) -> SessionRecoveryChecks:
         return SessionRecoveryChecks(
