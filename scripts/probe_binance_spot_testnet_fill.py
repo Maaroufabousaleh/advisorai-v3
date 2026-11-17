@@ -71,6 +71,7 @@ from advisorai.integrations import (  # noqa: E402
     build_binance_spot_testnet_transport,
 )
 from advisorai.ledger import LedgerNamespace, SqliteLedgers  # noqa: E402
+from scripts.preflight_binance_spot_testnet_commission import evaluate_commission  # noqa: E402
 from scripts.qualify_binance_spot_testnet_lifecycle import (  # noqa: E402
     LifecycleBlocked,
     OperationRecorder,
