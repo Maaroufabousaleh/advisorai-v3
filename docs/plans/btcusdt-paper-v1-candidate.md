@@ -214,3 +214,21 @@ are unchanged by this amendment.
 - End-to-end fixture (`test_decision_then_fill_end_to_end_fixture`):
   2024-03-05 decides 1 with no fill bar present; the fill records only
   after 2024-03-06 arrives at 207.50.
+
+## Amendment 6 (2026-11-17, before any forward scoring)
+
+Amendments 1–5 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: a bar date alone is not proof of receipt time. Every
+  formation close must now carry an explicit receipt timestamp at or
+  before the decision record time, or the decision quarantines
+  (`verify_inputs_received`; late or missing receipts abstain, pinned by
+  `test_late_formation_input_quarantines`).
+- Decision records pin `recorded_at_ms` alongside the receipt frontier;
+  fills pin their own `recorded_at_ms` and require the fill bar's
+  receipt by that time (`test_fill_rejects_unreceived_fill_bar`).
+- End-to-end fixture extended: the 2024-03-05 decision and its 2024-03-06
+  fill both carry pinned receipt and record timestamps.

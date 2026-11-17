@@ -25,14 +25,17 @@ MODEL_ID = "btc-tsmom-63d-longflat-v1"
 @dataclass(frozen=True, slots=True)
 class DecisionRecord:
     """Writable from received bars only: date, signal, position, the hash
-    of the qualified input, and the receipt frontier. No fill, no future
-    bar, no venue data."""
+    of the qualified input, the receipt frontier, and the record time. A
+    bar date alone is not proof of receipt: every formation close must
+    carry a receipt at or before the record time. No fill, no future bar,
+    no venue data."""
 
     date: str
     signal: int
     position: int
     bars_hash: str
     received_through: str
+    recorded_at_ms: int
     model_id: str
     costs_bps: str
     abstained: bool
@@ -42,19 +45,42 @@ class DecisionRecord:
 @dataclass(frozen=True, slots=True)
 class FillRecord:
     """Separate artifact, observable only after the decision: the fill
-    prints at the next open, so it requires the next bar received."""
+    prints at the next open, so it requires the next bar received at or
+    before the fill record time, with a price timestamp strictly after
+    the recorded decision."""
 
     date: str
     fill_date: str
     fill_price: str
     observable_after: str
+    recorded_at_ms: int
 
 
-def observe_fill(view: tuple[dict[str, Any], ...], date: str) -> FillRecord:
+def verify_inputs_received(
+    dates: list[str], index: int, received_at: dict[str, int], recorded_at_ms: int
+) -> None:
+    """Prove the 64 formation closes were received by the record time."""
+    for position in range(index - FORMATION_CLOSES, index + 1):
+        day = dates[position]
+        receipt = received_at.get(day)
+        if receipt is None:
+            raise ValueError(f"decision input {day} has no receipt timestamp")
+        if receipt > recorded_at_ms:
+            raise ValueError(f"decision input {day} received after the record time")
+
+
+def observe_fill(
+    view: tuple[dict[str, Any], ...],
+    date: str,
+    *,
+    received_at: dict[str, int],
+    recorded_at_ms: int,
+) -> FillRecord:
     """Record the simulated fill for a decision once its bar is received.
 
-    The fill price timestamp must be strictly after the recorded decision;
-    anything else is rejected, never recorded.
+    The fill price timestamp must be strictly after the recorded decision,
+    and the fill bar must carry a receipt at or before the fill record
+    time. Anything else is rejected, never recorded.
     """
     dates = [str(row["date"]) for row in view]
     if date not in dates:
@@ -66,11 +92,15 @@ def observe_fill(view: tuple[dict[str, Any], ...], date: str) -> FillRecord:
     fill_date = str(fill_row["date"])
     if fill_date <= date:
         raise ValueError(f"fill price timestamp {fill_date} precedes recorded decision {date}")
+    receipt = received_at.get(fill_date)
+    if receipt is None or receipt > recorded_at_ms:
+        raise ValueError(f"fill bar {fill_date} was not received by the fill record time")
     return FillRecord(
         date=date,
         fill_date=fill_date,
         fill_price=str(fill_row["open"]),
         observable_after=fill_date,
+        recorded_at_ms=recorded_at_ms,
     )
 
 
@@ -108,14 +138,18 @@ def log_forward_day(
     forward_hash: str,
     state_dir: Path,
     date: str,
+    received_at: dict[str, int],
+    recorded_at_ms: int,
     costs_bps: str = "20",
 ) -> DecisionRecord:
     """Record one decision from its own completed close, or quarantine it.
 
     ``date`` is the decision date: the signal uses that date's completed
-    close, never the prior bar. The view's segments are qualified by the
-    caller (collector + session cutoff). Structural violations here —
-    unknown date, insufficient history, duplicate dates — are recorded as
+    close, never the prior bar. Every formation close must carry a receipt
+    at or before the record time — a bar date alone is not proof of
+    receipt. The view's segments are qualified by the caller (collector +
+    session cutoff). Violations here — unknown date, insufficient history,
+    duplicate dates, late or missing receipts — are recorded as
     abstentions, never scored.
     """
     try:
@@ -127,12 +161,14 @@ def log_forward_day(
         index = dates.index(date)
         closes = [Decimal(str(row["adj_close"])) for row in view]
         signal = decide(closes, index)
+        verify_inputs_received(dates, index, received_at, recorded_at_ms)
         record = DecisionRecord(
             date=date,
             signal=signal,
             position=signal,
             bars_hash=forward_hash,
             received_through=dates[-1],
+            recorded_at_ms=recorded_at_ms,
             model_id=MODEL_ID,
             costs_bps=costs_bps,
             abstained=False,
@@ -145,6 +181,7 @@ def log_forward_day(
             position=0,
             bars_hash="",
             received_through="",
+            recorded_at_ms=recorded_at_ms,
             model_id=MODEL_ID,
             costs_bps=costs_bps,
             abstained=True,
@@ -163,4 +200,5 @@ __all__ = [
     "load_view",
     "log_forward_day",
     "observe_fill",
+    "verify_inputs_received",
 ]
