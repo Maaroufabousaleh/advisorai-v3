@@ -203,6 +203,22 @@ def _run_probe(
         "bid_qty": str(bid_qty),
         "pre_existing_open_orders": len(pre_orders),
     }
+    commission = recorder.call(
+        "commission_preflight_before_submission",
+        "/api/v3/account",
+        lambda: evaluate_commission(transport, _PROBE_SYMBOL),
+    )
+    if not isinstance(commission, Mapping):
+        raise LifecycleBlocked("commission preflight response is malformed")
+    payload["commission_preflight"] = {
+        "status": commission.get("status"),
+        "bnb_payment_can_apply": commission.get("bnb_payment_can_apply"),
+        "reason": commission.get("reason"),
+    }
+    if commission.get("status") != "passed":
+        raise LifecycleBlocked(
+            f"commission preflight refused submission: {commission.get('reason')}"
+        )
 
     instrument = _instrument(spec)
     mark = (bid + ask) / Decimal("2")
