@@ -169,3 +169,28 @@ bar completing after 2026-09-30.
   151 trades, net **38141.81** bps vs BH **137118.90** bps. The BH jump
   is the 2017–2025 buy-and-hold run-up measured as portfolio value;
   it is characterization, not a verdict.
+
+## Amendment 4 (2026-11-17, before any forward scoring)
+
+Amendments 1–3 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30.
+
+- Same portfolio-value accounting for strategy and buy-and-hold from
+  identical starting capital (unit notional 1). Reported nets are
+  `(V_end − 1)` in bps for both legs.
+- Consistent cost deductions: every unit position change multiplies
+  portfolio value by (1 − 20/10000) on the fill day; BH pays it once at
+  entry. No additive bps bookkeeping anywhere.
+- End-to-end fixture pinned (`test_decision_then_fill_end_to_end_fixture`):
+  the 2024-03-05 decision records from the completed close with no fill
+  bar present (and the stored record contains no fill data); the
+  simulated fill records only after 2024-03-06 arrives, at the next open
+  207.50, observable after the decision.
+- Superseded plumbing (Amendment-3 economics, kept as evidence only):
+  3268 obs, 151 trades, net 38141.81 bps vs BH 137118.90 bps.
+- Current plumbing (Amendment-4 economics, `run_btc_three_way.py` on the
+  pinned snapshot, three implementations agree at 0.01 bps): 3268 obs,
+  151 trades, net **154319.31** bps vs BH **136844.63** bps.
+  Characterization, not a verdict; compounding over 2017–2025 explains
+  the scale versus additive legs.

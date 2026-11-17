@@ -149,3 +149,33 @@ def test_decision_uses_only_received_bars(tmp_path):
     assert record.abstained is False
     assert record.signal == 1
     assert record.bars_hash == "f" * 64
+
+
+def test_decision_then_fill_end_to_end_fixture(tmp_path):
+    """Timestamped: decision from the completed 2024-03-05 close with no
+    fill bar present; the fill records only after 2024-03-06 arrives."""
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    _write_snapshot(snap, _day_rows("2024-01-01", 63, close="100.0"))
+    forward = tmp_path / "forward"
+    forward.mkdir()
+    _write_snapshot(forward, _day_rows("2024-03-04", 2, close="200.0"))
+    view = load_view(snap, forward)
+    state = tmp_path / "state"
+    record = log_forward_day(view=view, forward_hash="f" * 64, state_dir=state, date="2024-03-05")
+    assert record.abstained is False
+    assert (record.date, record.signal, record.position) == ("2024-03-05", 1, 1)
+    with pytest.raises(ValueError, match="not yet observable"):
+        observe_fill(view, "2024-03-05")
+    stored = json.loads((state / "decisions.jsonl").read_text().splitlines()[0])
+    assert "fill" not in json.dumps(stored)
+    rows = _day_rows("2024-03-04", 2, close="200.0") + _day_rows(
+        "2024-03-06", 1, close="201.0", open_="207.50"
+    )
+    _write_snapshot(forward, rows)
+    view2 = load_view(snap, forward)
+    fill = observe_fill(view2, "2024-03-05")
+    assert fill.date == "2024-03-05"
+    assert fill.fill_date == "2024-03-06"
+    assert fill.fill_price == "207.50"
+    assert fill.observable_after == "2024-03-06"
