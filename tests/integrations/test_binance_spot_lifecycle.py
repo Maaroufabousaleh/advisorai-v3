@@ -10,6 +10,7 @@ from advisorai.integrations import BinanceSpotSymbolSpec
 from scripts.qualify_binance_spot_testnet_lifecycle import (
     LifecycleBlocked,
     _fill_from_record,
+    _fill_matches_submitted_order,
     _minimum_practical_quantity,
     _passive_price,
     _validate_read_only_evidence,
@@ -100,10 +101,7 @@ def test_lifecycle_requires_current_immutable_read_only_gate(tmp_path):
         _validate_read_only_evidence(evidence_dir, "a" * 64)
 
 
-def test_lifecycle_fill_rejects_non_quote_fee_denomination():
-    """P03: a BNB-denominated fee fails closed instead of corrupting USDT cash."""
-    from uuid import uuid4
-
+def _synthetic_transport():
     from advisorai.config import CredentialResolver
     from advisorai.integrations import build_binance_spot_testnet_transport
 
@@ -116,8 +114,11 @@ def test_lifecycle_fill_rejects_non_quote_fee_denomination():
             "ADVISORAI_VENUE_API_SECRET": "synthetic-testnet-secret",
         }
     )
-    transport = build_binance_spot_testnet_transport(resolver)
-    quote_fee_record = {
+    return build_binance_spot_testnet_transport(resolver)
+
+
+def _fill_record(**overrides):
+    record = {
         "symbol": "BTCUSDT",
         "id": 1,
         "orderId": 7,
@@ -128,13 +129,61 @@ def test_lifecycle_fill_rejects_non_quote_fee_denomination():
         "time": 1794067200000,
         "isBuyer": True,
     }
-    fill, side = _fill_from_record(transport, quote_fee_record, uuid4())
+    record.update(overrides)
+    return record
+
+
+def test_lifecycle_fill_rejects_non_quote_fee_denomination():
+    """P03: a BNB-denominated fee fails closed instead of corrupting USDT cash."""
+    from uuid import uuid4
+
+    transport = _synthetic_transport()
+    fill, side = _fill_from_record(transport, _fill_record(), uuid4(), quote_asset="USDT")
     assert side == "buy"
     assert fill.fee == Decimal("0.05")
     assert fill.fee_currency == "USDT"
-    zero_fee_record = dict(quote_fee_record, commission="0E-8", commissionAsset="BNB")
-    zero_fill, _ = _fill_from_record(transport, zero_fee_record, uuid4())
+    zero_fill, _ = _fill_from_record(
+        transport,
+        _fill_record(commission="0E-8", commissionAsset="BNB"),
+        uuid4(),
+        quote_asset="USDT",
+    )
     assert zero_fill.fee == 0
-    bnb_fee_record = dict(quote_fee_record, id=2, commission="0.0001", commissionAsset="BNB")
     with pytest.raises(LifecycleBlocked, match="quote asset"):
-        _fill_from_record(transport, bnb_fee_record, uuid4())
+        _fill_from_record(
+            transport,
+            _fill_record(id=2, commission="0.0001", commissionAsset="BNB"),
+            uuid4(),
+            quote_asset="USDT",
+        )
+
+
+def test_lifecycle_fill_rejects_suffix_match_fee_asset():
+    """P03: a nonzero T fee on BTCUSDT fails; suffix matching would accept it."""
+    from uuid import uuid4
+
+    transport = _synthetic_transport()
+    with pytest.raises(LifecycleBlocked, match="quote asset"):
+        _fill_from_record(
+            transport,
+            _fill_record(id=3, commission="0.0001", commissionAsset="T"),
+            uuid4(),
+            quote_asset="USDT",
+        )
+
+
+def test_lifecycle_fill_match_requires_selected_symbol_and_order():
+    """P03: a fill on the other symbol with the same order ID never matches."""
+    assert _fill_matches_submitted_order(
+        _fill_record(symbol="BTCUSDT", orderId=7), symbol="BTCUSDT", venue_order_id="7"
+    )
+    assert not _fill_matches_submitted_order(
+        _fill_record(symbol="ETHUSDT", orderId=7), symbol="BTCUSDT", venue_order_id="7"
+    )
+    assert not _fill_matches_submitted_order(
+        _fill_record(symbol="BTCUSDT", orderId=8), symbol="BTCUSDT", venue_order_id="7"
+    )
+    assert not _fill_matches_submitted_order(
+        {"not": "a fill"}, symbol="BTCUSDT", venue_order_id="7"
+    )
+    assert not _fill_matches_submitted_order(None, symbol="BTCUSDT", venue_order_id="7")

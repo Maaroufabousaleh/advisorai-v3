@@ -420,10 +420,26 @@ def _provider_status(record: Mapping[str, object] | None) -> str:
     return str(record.get("status", record.get("state", ""))).strip().upper()
 
 
+def _fill_matches_submitted_order(record: object, *, symbol: str, venue_order_id: str) -> bool:
+    """True only for a fill on the selected symbol for the submitted order.
+
+    Venue order IDs are not unique across symbols: matching on the order
+    ID alone would ingest a fill on the other admitted symbol with a
+    colliding ID into this order's economics.
+    """
+    if not isinstance(record, Mapping):
+        return False
+    if str(record.get("symbol", "")).strip().upper() != symbol:
+        return False
+    return str(record.get("orderId", "")) == venue_order_id
+
+
 def _fill_from_record(
     transport: BinanceSpotTestnetTransport,
     record: Mapping[str, object],
     order_id: UUID,
+    *,
+    quote_asset: str,
 ) -> tuple[Fill, str]:
     values = transport.fill_contract_values(record)
     venue_fill_id = str(values["venue_fill_id"])
@@ -432,13 +448,11 @@ def _fill_from_record(
     # Local cash/margin accounting deducts the fee from the quote asset.
     # A nonzero fee in any other asset (e.g. BNB) would silently corrupt
     # cash, margin_available, and the venue free-balance equality check.
-    # Fail closed like the session provider projection instead.
+    # Compare against the selected product's verified quote asset with
+    # exact equality: a suffix match would accept "T" for a "USDT" quote.
     commission_asset = str(record.get("commissionAsset", "")).strip().upper()
-    symbol = str(values["symbol"]).strip().upper()
-    if fee and (not commission_asset or not symbol.endswith(commission_asset)):
-        raise LifecycleBlocked(
-            "venue fill fee is not denominated in the order quote asset"
-        )
+    if fee and commission_asset != quote_asset.strip().upper():
+        raise LifecycleBlocked("venue fill fee is not denominated in the order quote asset")
     fill = Fill(
         artifact_id=uuid5(NAMESPACE_URL, f"advisorai-v3/binance-fill/{venue_fill_id}"),
         order_id=order_id,
@@ -949,9 +963,14 @@ def _run_lifecycle(
             raise LifecycleBlocked("venue fills response is malformed")
         added = 0
         for record in records:
-            if not isinstance(record, Mapping) or str(record.get("orderId", "")) != venue_order_id:
+            if not _fill_matches_submitted_order(
+                record, symbol=symbol, venue_order_id=venue_order_id
+            ):
                 continue
-            fill, fill_side = _fill_from_record(transport, record, order.artifact_id)
+            assert isinstance(record, Mapping)
+            fill, fill_side = _fill_from_record(
+                transport, record, order.artifact_id, quote_asset=spec.quote_asset
+            )
             fills_seen.add(fill.venue_fill_id)
             if fill.venue_fill_id not in oms.fills:
                 oms.record_fill(fill, fill_side)
