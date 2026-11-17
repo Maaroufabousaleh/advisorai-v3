@@ -390,6 +390,7 @@ class BinanceSpotTestnetTransport(NativeTransport):
         if payload.get("canTrade") is not True:
             raise VenueTransportError("Binance Spot Testnet account is not trade-enabled")
         return dict(payload)
+
     def symbol_commission(self, symbol: str) -> Mapping[str, object]:
         """Return validated per-symbol commission rates (read-only GET).
 
