@@ -69,6 +69,37 @@ def test_rising_market_three_way_agreement():
     assert Decimal(str(result["net_bps"])) == Decimal(str(result["baseline_bps"]))
 
 
+def test_two_consecutive_long_days_with_gap_move():
+    """Entry fill skips the overnight gap; the exit fill ends attribution."""
+    base = datetime(2024, 1, 1, tzinfo=UTC).date()
+    rows = []
+    for i in range(66):
+        day = (base + timedelta(days=i)).isoformat()
+        close = "200.0" if i >= 64 else "100.0"
+        rows.append(
+            {
+                "date": day,
+                "open": "205.0" if i == 65 else "100.0",
+                "high": "205.0" if i == 65 else "200.0" if i == 64 else "100.0",
+                "low": "200.0" if i >= 64 else "100.0",
+                "adj_close": close,
+                "volume": "10.0",
+            }
+        )
+    bars = tuple(rows)
+    result = agree(bars)
+    assert result["obs"] == 2
+    assert result["trades"] == 1
+    expected_net = (Decimal("200.0") - Decimal("205.0")) / Decimal("205.0") * Decimal(
+        "10000"
+    ) - Decimal("20")
+    assert Decimal(str(result["net_bps"])) == expected_net
+    expected_base = (Decimal("0") - Decimal("20")) + (
+        Decimal("200.0") - Decimal("100.0")
+    ) / Decimal("100.0") * Decimal("10000")
+    assert Decimal(str(result["baseline_bps"])) == expected_base
+
+
 def test_manifest_values_reject_mismatch():
     good = {
         "source": "binance-public-spot-archive",

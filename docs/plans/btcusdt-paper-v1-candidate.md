@@ -67,8 +67,8 @@ sensitivity (±10 bps grid), abstention/quarantine counts.
 ## Evidence still needed (do not pass P06 before these exist)
 
 - [x] Qualified BTCUSDT snapshot hash recorded (`1ee07b5b…10e53dce`, QUALIFIED 2026-11-17).
-- [ ] 63+ post-freeze bars accrued for the first forward decision.
-- [ ] Independent replay wired for BTCUSDT with three-way agreement.
+- [ ] 64 closes after the snapshot end accrued for the first forward decision (47/64 as of 2026-11-16; first signal 2026-12-04).
+- [x] Independent replay wired for BTCUSDT (`btc_replay.py`, three-way agreement at 0.01 bps on the pinned snapshot; plumbing only, no verdict).
 - [ ] Forward shadow log started at the freeze date below.
 
 Freeze date: 2026-11-17 (input hash recorded above; forward clock starts here).
@@ -101,3 +101,39 @@ pinned-snapshot plumbing totals in the handoff, which carry no verdict.
   SPY/TLT cost contract is untouched). A `replay.py` BTCUSDT exposure is
   deferred until the BTC profile is admitted, and needs its own contract
   review for the shared costs map.
+
+## Amendment 2 (2026-11-17, before any forward scoring)
+
+Amendment 1 is preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Only the pinned-snapshot plumbing totals
+below were ever produced, and they carry no verdict.
+
+- Continuous holdings replace per-day legs. The position for day j is
+  decided at the close of day j-1 and fills at the open of day j (the
+  fill price is observable after the signal — this is the simulated fill).
+  Entry day scores open-to-close of the fill day; held days score
+  close-to-close; exit day scores 0 from the exit fill. Overnight gaps
+  are never attributed (fill prices only, disclosed).
+- True buy-and-hold: enter the first scored open, hold to the last close,
+  one entry leg, no rebalancing, no dividends (spot). Cash is 0.
+- Actual turnover costs: 20 bps × |position change| on every fill day,
+  fee 10 + spread 1 + slippage 9 per unit.
+- First-signal correction: Amendment 1 started the 64-bar count at the
+  freeze date, wrongly excluding prospectively collected October–November
+  bars that were unseen at freeze. The forward frontier at freeze is the
+  snapshot end (2026-09-30); eligible closes are bars completing after it.
+  The 64th such close is the Dec-3 bar, so the first eligible signal is
+  **2026-12-04T00:00:00Z** and the first fill prints at the same stamp.
+- Scoring window correction: the first **181** scored decisions,
+  **2026-12-04T00:00:00Z .. 2027-06-02T00:00:00Z**. Turnover cap **60**
+  stands.
+- Formation context may include qualified historical bars (disclosed
+  history, same as replay warmup); only decision days must be forward
+  (on/after the first-signal date). This supersedes Amendment 1's
+  post-freeze-bars-only rule, which would have discarded unseen data.
+- Superseded plumbing (open-to-close-leg economics, kept as evidence
+  only): 3268 obs, 151 trades, net 38153.28 bps vs BH 46670.89 bps.
+- Current plumbing (continuous holdings, `run_btc_three_way.py` on the
+  pinned snapshot, three implementations agree at 0.01 bps): 3268 obs,
+  151 trades, net **38190.11** bps vs BH **46667.66** bps.

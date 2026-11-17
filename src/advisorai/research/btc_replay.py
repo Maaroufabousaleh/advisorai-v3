@@ -3,12 +3,16 @@
 Plumbing only: these agree-or-fail on the pinned historical snapshot. No
 verdict language lives here; pass/fail applies to the forward shadow only.
 
-Pinned profile (see docs/plans/btcusdt-paper-v1-candidate.md, amendment 1):
-- Formation 63 closes, daily re-evaluation, long/flat only.
-- Decision at a bar close uses only closes available then; entry at the
-  next open, exit at the next close; realized open-to-close in bps.
-- Costs: fee 10 + spread 1 + slippage 9 = 20 bps all-in per unit change.
-  Buy-and-hold pays one entry leg only; cash is 0.
+Amendment-2 economics (see docs/plans/btcusdt-paper-v1-candidate.md):
+- Continuous holdings. The position for day j is decided at the close of
+  day j-1 from closes then available; fills print at the open of day j.
+- Entry day: open-to-close of the fill day. Held days: close-to-close.
+  Exit day: flat from the exit fill, contributing 0. Overnight gaps are
+  never attributed to the strategy (fill prices only, disclosed).
+- Costs: fee 10 + spread 1 + slippage 9 = 20 bps all-in per unit change,
+  applied on every fill day. Buy-and-hold enters once at the first scored
+  open, holds to the last close, and pays one entry leg. Cash is 0.
+- Formation 63 closes, long/flat only (never short).
 """
 
 from __future__ import annotations
@@ -31,8 +35,14 @@ def _opens(bars: tuple[dict, ...]) -> list[Decimal]:
     return [Decimal(str(row["open"])) for row in bars]
 
 
+def _bps(numerator: Decimal, denominator: Decimal) -> Decimal:
+    if not denominator:
+        return Decimal("0")
+    return (numerator / denominator) * Decimal("10000")
+
+
 def replay_sign_only(bars: tuple[dict, ...]) -> dict[str, str | int]:
-    """Cutoff/signal/costing loop mirroring the research replay structure."""
+    """Day-based loop mirroring the research replay structure."""
     closes = _closes(bars)
     opens = _opens(bars)
     net = Decimal("0")
@@ -40,20 +50,20 @@ def replay_sign_only(bars: tuple[dict, ...]) -> dict[str, str | int]:
     previous = 0
     trades = 0
     observations = 0
-    for index in range(FORMATION_CLOSES, len(closes) - 1):
-        position = 1 if closes[index] > closes[index - FORMATION_CLOSES] else 0
-        entry = opens[index + 1]
-        exit_ = closes[index + 1]
-        realized = (exit_ - entry) / entry * Decimal("10000") if entry else Decimal("0")
-        net += Decimal(position) * realized
-        baseline += realized
-        change = abs(position - previous)
-        if change:
+    for day in range(FORMATION_CLOSES + 1, len(closes)):
+        signal = 1 if closes[day - 1] > closes[day - 1 - FORMATION_CLOSES] else 0
+        if signal != previous:
             trades += 1
-            net -= Decimal(change) * BTCUSDT_ALL_IN_BPS
-        if index == FORMATION_CLOSES:
-            baseline -= BTCUSDT_ALL_IN_BPS
-        previous = position
+            net -= BTCUSDT_ALL_IN_BPS
+            if signal == 1:
+                net += _bps(closes[day] - opens[day], opens[day])
+            previous = signal
+        elif signal == 1:
+            net += _bps(closes[day] - closes[day - 1], closes[day - 1])
+        if day == FORMATION_CLOSES + 1:
+            baseline += _bps(closes[day] - opens[day], opens[day]) - BTCUSDT_ALL_IN_BPS
+        else:
+            baseline += _bps(closes[day] - closes[day - 1], closes[day - 1])
         observations += 1
     return {
         "net_bps": str(net),
@@ -64,41 +74,41 @@ def replay_sign_only(bars: tuple[dict, ...]) -> dict[str, str | int]:
 
 
 def mirror_accounting(bars: tuple[dict, ...]) -> dict[str, str | int]:
-    """Independent mirror: explicit state machine, separate cost ledger."""
+    """Independent mirror: explicit holding state, separate cost ledger."""
     closes = _closes(bars)
     opens = _opens(bars)
     earned = Decimal("0")
     costs = Decimal("0")
     baseline_earned = Decimal("0")
-    baseline_paid = False
-    position = 0
+    baseline_entered = False
+    holding = 0
     trades = 0
     scored = 0
-    index = FORMATION_CLOSES
-    while index < len(closes) - 1:
-        signal = closes[index] > closes[index - FORMATION_CLOSES]
-        wanted = 1 if signal else 0
-        fill_open = opens[index + 1]
-        fill_close = closes[index + 1]
-        leg = (fill_close - fill_open) / fill_open * Decimal("10000") if fill_open else Decimal("0")
-        if wanted != position:
+    day = FORMATION_CLOSES + 1
+    while day < len(closes):
+        wanted = 1 if closes[day - 1] > closes[day - 1 - FORMATION_CLOSES] else 0
+        if wanted != holding:
             trades += 1
             costs += BTCUSDT_ALL_IN_BPS
-            position = wanted
-        earned += Decimal(position) * leg
-        baseline_earned += leg
-        if not baseline_paid:
-            baseline_paid = True
-            costs_baseline = BTCUSDT_ALL_IN_BPS
+            if wanted == 1:
+                earned += _bps(closes[day] - opens[day], opens[day])
+            holding = wanted
+        elif holding == 1:
+            earned += _bps(closes[day] - closes[day - 1], closes[day - 1])
+        if not baseline_entered:
+            baseline_entered = True
+            baseline_earned += _bps(closes[day] - opens[day], opens[day]) - BTCUSDT_ALL_IN_BPS
+        else:
+            baseline_earned += _bps(closes[day] - closes[day - 1], closes[day - 1])
         scored += 1
-        index += 1
+        day += 1
     net = earned - costs
-    baseline = baseline_earned - costs_baseline if scored else Decimal("0")
+    baseline = baseline_earned if scored else Decimal("0")
     return {"net_bps": str(net), "baseline_bps": str(baseline), "trades": trades, "obs": scored}
 
 
 def plain_loop(bars: tuple[dict, ...]) -> dict[str, str | int]:
-    """Minimal third loop: no state reuse, straight-line arithmetic."""
+    """Minimal third loop: straight-line day arithmetic, no reused state."""
     closes = [Decimal(str(row["adj_close"])) for row in bars]
     opens = [Decimal(str(row["open"])) for row in bars]
     total = Decimal("0")
@@ -106,30 +116,50 @@ def plain_loop(bars: tuple[dict, ...]) -> dict[str, str | int]:
     prior = 0
     count = 0
     n_trades = 0
-    for i, _ in enumerate(closes):
-        if i < FORMATION_CLOSES or i + 1 >= len(closes):
+    entered = False
+    for day, _ in enumerate(closes):
+        if day < FORMATION_CLOSES + 1 or day >= len(closes):
             continue
-        pos = 1 if closes[i] > closes[i - FORMATION_CLOSES] else 0
-        ret = (opens[i + 1], closes[i + 1])
-        pct = (ret[1] - ret[0]) / ret[0] * Decimal("10000") if ret[0] else Decimal("0")
-        total += pos * pct
-        base += pct
+        pos = 1 if closes[day - 1] > closes[day - 1 - FORMATION_CLOSES] else 0
         if pos != prior:
             n_trades += 1
             total -= BTCUSDT_ALL_IN_BPS
-        if count == 0:
-            base -= BTCUSDT_ALL_IN_BPS
-        prior = pos
+            if pos == 1:
+                total += _bps(closes[day] - opens[day], opens[day])
+            prior = pos
+        elif pos == 1:
+            total += _bps(closes[day] - closes[day - 1], closes[day - 1])
+        if not entered:
+            entered = True
+            base += _bps(closes[day] - opens[day], opens[day]) - BTCUSDT_ALL_IN_BPS
+        else:
+            base += _bps(closes[day] - closes[day - 1], closes[day - 1])
         count += 1
     return {"net_bps": str(total), "baseline_bps": str(base), "trades": n_trades, "obs": count}
 
 
+def _reported(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"))
+
+
 def agree(bars: tuple[dict, ...]) -> dict[str, str | int]:
-    """Run all three; return the shared result or raise on disagreement."""
+    """Run all three; return the shared result or raise on disagreement.
+
+    Nets agree at reporting precision (0.01 bps): 28-digit intermediate
+    division can differ by a unit in the last place across summation
+    orders. Trades and observations must match exactly.
+    """
     results = (replay_sign_only(bars), mirror_accounting(bars), plain_loop(bars))
     first = results[0]
     for other in results[1:]:
-        if other != first:
+        if (
+            other["trades"] != first["trades"]
+            or other["obs"] != first["obs"]
+            or _reported(Decimal(str(other["net_bps"])))
+            != _reported(Decimal(str(first["net_bps"])))
+            or _reported(Decimal(str(other["baseline_bps"])))
+            != _reported(Decimal(str(first["baseline_bps"])))
+        ):
             raise ValueError(f"three-way replay disagreement: {first} vs {other}")
     return first
 
