@@ -192,7 +192,7 @@ def load_snapshot_bars(snapshot_root: Path) -> tuple[dict[str, tuple[dict[str, A
                 "high": Decimal(str(row["high"])),
                 "low": Decimal(str(row["low"])),
                 "adj_close": Decimal(str(row["adj_close"])),
-                "volume": int(row["volume"]),
+                "volume": int(Decimal(str(row["volume"]))),
             }
             for row in rows
         )
