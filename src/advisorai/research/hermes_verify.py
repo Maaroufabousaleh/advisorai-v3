@@ -49,11 +49,19 @@ POLICY = HermesSandboxPolicy(mode="builder", cpu_seconds=120, memory_mib=512, wa
 _BARS_PATH: str | None = None
 
 
-def set_hermes_bars_path(path: Path) -> None:
-    """Fix the frozen bars file; only ``<snapshot_root>/bars.json`` is admitted."""
+def set_hermes_bars_path(snapshot_root: Path) -> None:
+    """Fix the frozen bars file to ``<snapshot_root>/bars.json``.
 
-    resolved = path.resolve(strict=True)
-    if resolved.name != "bars.json" or not resolved.is_file():
+    The caller passes the owner-configured snapshot root; the file name is
+    derived, never taken from payload input. Only an existing ``bars.json``
+    file directly inside the root is admitted.
+    """
+
+    root = Path(snapshot_root).resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError("Hermes snapshot root must be a directory containing bars.json")
+    resolved = root / "bars.json"
+    if not resolved.is_file():
         raise ValueError("Hermes bars path must be a snapshot bars.json file")
     global _BARS_PATH
     _BARS_PATH = str(resolved)
@@ -145,7 +153,7 @@ def run_hermes_verification(
             materialize(snapshot_root)
         else:
             raise ValueError(f"frozen bars are missing: {bars_path}")
-    set_hermes_bars_path(bars_path)
+    set_hermes_bars_path(snapshot_root)
     result = HermesIsolationRunner(POLICY).run(task_name=HERMES_TASK_NAME, task=verify_replay_task)
     return HermesVerification(
         task_name=result.task_name,

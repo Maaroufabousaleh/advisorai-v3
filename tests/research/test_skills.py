@@ -31,7 +31,7 @@ from advisorai.research.retrieval import ResearchRetrieval
 from advisorai.research.skills import SKILL_NAMES, SKILL_SPECS, SkillRunner, skill_spec
 
 
-def _runner(tmp_path: Path) -> SkillRunner:
+def _runner(tmp_path: Path, snapshot_root: Path | None = None) -> SkillRunner:
     state = tmp_path / "state"
     state.mkdir()
     registry = ResearchRegistry(state / "registry.sqlite3")
@@ -40,6 +40,7 @@ def _runner(tmp_path: Path) -> SkillRunner:
         registry=registry,
         coordinator=coordinator,
         retrieval=ResearchRetrieval(state / "registry.sqlite3"),
+        snapshot_root=snapshot_root if snapshot_root is not None else tmp_path,
     )
 
 
@@ -154,7 +155,6 @@ def test_data_skill_rejects_future_inputs(tmp_path):
         "multi_asset_data_and_features",
         {
             "symbol": "SPY",
-            "snapshot_root": str(tmp_path),
             "bars_path": "bars.json",
             "feature_spec": "adj_close",
         },
@@ -175,7 +175,6 @@ def test_data_skill_rejects_future_inputs(tmp_path):
         "multi_asset_data_and_features",
         {
             "symbol": "SPY",
-            "snapshot_root": str(tmp_path),
             "bars_path": "bars.json",
             "feature_spec": "adj_close",
         },
@@ -193,20 +192,63 @@ def test_data_skill_rejects_unscoped_paths(tmp_path):
     outside.write_text(json.dumps({"SPY": []}))
     for bad in (
         {"symbol": "SPY", "bars_path": "bars.json"},
+        {"symbol": "SPY", "bars_path": str(outside)},
+        {"symbol": "SPY", "bars_path": "../outside.json"},
         {
             "symbol": "SPY",
             "snapshot_root": str(root),
-            "bars_path": str(outside),
-        },
-        {
-            "symbol": "SPY",
-            "snapshot_root": str(root),
-            "bars_path": "../outside.json",
+            "bars_path": "bars.json",
         },
     ):
         result = runner.run_skill("multi_asset_data_and_features", bad)
         assert result.output.get("pit_ok") is not True
         assert "error" in result.output
+
+
+def test_data_skill_root_is_runner_configuration(tmp_path):
+    trusted = tmp_path / "trusted"
+    trusted.mkdir()
+    (trusted / "bars.json").write_text(
+        json.dumps(
+            {
+                "SPY": [
+                    {"date": "2020-01-02", "adj_close": 1.0},
+                    {"date": "2020-01-03", "adj_close": 1.1},
+                ]
+            }
+        )
+    )
+    rogue = tmp_path / "rogue"
+    rogue.mkdir()
+    (rogue / "bars.json").write_text(
+        json.dumps(
+            {
+                "SPY": [
+                    {"date": "1999-01-04", "adj_close": 9.0},
+                    {"date": "1999-01-05", "adj_close": 9.5},
+                ]
+            }
+        )
+    )
+    runner = _runner(tmp_path, snapshot_root=trusted)
+    # A payload naming its own root is rejected even when the file is valid.
+    hijack = runner.run_skill(
+        "multi_asset_data_and_features",
+        {"symbol": "SPY", "snapshot_root": str(rogue), "bars_path": "bars.json"},
+    )
+    assert hijack.output.get("pit_ok") is not True
+    assert "error" in hijack.output
+    # An absolute path into the rogue directory is rejected too.
+    escape = runner.run_skill(
+        "multi_asset_data_and_features",
+        {"symbol": "SPY", "bars_path": str(rogue / "bars.json")},
+    )
+    assert escape.output.get("pit_ok") is not True
+    assert "error" in escape.output
+    # The trusted root still serves: notes cite the trusted dates.
+    good = runner.run_skill("multi_asset_data_and_features", {"symbol": "SPY"})
+    assert good.output["pit_ok"] is True
+    assert "2020-01-02" in good.output["calendar_notes"]
 
 
 def _experiment(runner: SkillRunner, net: str, trades: str, drawdown: str) -> str:

@@ -169,7 +169,7 @@ def test_verification_recomputes_fixture_replay_exactly(tmp_path):
 
 def test_verification_cost_contract_guards_unknown_symbols(tmp_path):
     root = _write_snapshot(tmp_path, symbols=("SPY", "QQQ"))
-    set_hermes_bars_path(root / "bars.json")
+    set_hermes_bars_path(root)
     with pytest.raises(ValueError, match="no pinned all-in cost"):
         verify_replay_task()
 
@@ -183,12 +183,16 @@ def test_bars_path_must_be_configured(monkeypatch):
 
 
 def test_setter_rejects_non_snapshot_files_and_missing_paths(tmp_path):
-    other = tmp_path / "other.json"
-    other.write_text("{}")
-    with pytest.raises(ValueError, match="snapshot bars.json"):
-        set_hermes_bars_path(other)
+    file_as_root = tmp_path / "other.json"
+    file_as_root.write_text("{}")
     with pytest.raises((ValueError, OSError), match="bars.json|No such file"):
-        set_hermes_bars_path(tmp_path / "missing-bars.json")
+        set_hermes_bars_path(file_as_root)
+    with pytest.raises((ValueError, OSError), match="bars.json|No such file"):
+        set_hermes_bars_path(tmp_path / "missing-root")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises((ValueError, OSError), match="bars.json|No such file"):
+        set_hermes_bars_path(empty)
 
 
 def test_sandbox_blocks_network_write_spawn_and_secrets(tmp_path, monkeypatch):

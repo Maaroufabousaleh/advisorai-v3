@@ -69,7 +69,7 @@ SKILL_SPECS: tuple[SkillSpec, ...] = (
     SkillSpec(
         name="multi_asset_data_and_features",
         when_to_call="building PIT features for any asset class",
-        inputs=("symbol", "snapshot_root", "bars_path", "feature_spec"),
+        inputs=("symbol", "bars_path", "feature_spec"),
         outputs=("pit_ok", "feature_hash", "calendar_notes"),
         test_reference="tests/research/test_skills.py::test_data_skill_rejects_future_inputs",
         role=ResearchRole.FACTOR_MINER,
@@ -103,16 +103,18 @@ SKILL_SPECS: tuple[SkillSpec, ...] = (
 SKILL_NAMES = tuple(spec.name for spec in SKILL_SPECS)
 
 
-def _snapshot_scoped_bars_path(payload: dict[str, Any]) -> Path:
-    """Resolve the skill's bars file strictly inside its declared snapshot root.
+def _runner_scoped_bars_path(root: Path, payload: dict[str, Any]) -> Path:
+    """Resolve the skill's bars file strictly inside the runner's trusted root.
 
-    The payload must name a ``snapshot_root`` directory plus a relative
-    ``bars_path`` inside it. Absolute paths, parent traversal, and any
-    resolved path escaping the root are rejected before any read.
+    The root is owner configuration, never payload input: a payload that names
+    its own ``snapshot_root`` is rejected. The payload selects only a relative
+    file inside that root (default ``bars.json``). Absolute paths, parent
+    traversal, resolved escapes, and non-files are rejected before any read.
     """
 
-    root = Path(str(payload["snapshot_root"])).resolve()
-    candidate = Path(str(payload["bars_path"]))
+    if "snapshot_root" in payload:
+        raise ValueError("data skill: snapshot_root is runner configuration, not payload input")
+    candidate = Path(str(payload.get("bars_path", "bars.json")))
     if candidate.is_absolute() or ".." in candidate.parts:
         raise ValueError("data skill: bars_path must be relative without parent traversal")
     resolved = (root / candidate).resolve()
@@ -120,6 +122,8 @@ def _snapshot_scoped_bars_path(payload: dict[str, Any]) -> Path:
         resolved.relative_to(root)
     except ValueError as exc:
         raise ValueError("data skill: bars_path escapes its snapshot root") from exc
+    if not resolved.is_file():
+        raise ValueError(f"data skill: bars file is missing: {resolved.name}")
     return resolved
 
 
@@ -146,10 +150,12 @@ class SkillRunner:
         registry: ResearchRegistry,
         coordinator: ResearchCoordinator,
         retrieval: ResearchRetrieval,
+        snapshot_root: Path,
     ) -> None:
         self.registry = registry
         self.coordinator = coordinator
         self.retrieval = retrieval
+        self._snapshot_root = Path(snapshot_root).resolve()
 
     def run_skill(self, name: str, payload: dict[str, Any]) -> SkillResult:
         spec = skill_spec(name)
@@ -252,7 +258,7 @@ class SkillRunner:
     def _data_features(self, payload: dict[str, Any]) -> dict[str, Any]:
         import hashlib
 
-        bars_path = _snapshot_scoped_bars_path(payload)
+        bars_path = _runner_scoped_bars_path(self._snapshot_root, payload)
         rows = json.loads(bars_path.read_text())
         symbol = str(payload["symbol"])
         if symbol not in rows:
