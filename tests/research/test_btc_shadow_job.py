@@ -167,7 +167,7 @@ def test_catch_up_after_cutoff_is_missed(tmp_path):
     assert catchup["quarantined"] == ["2024-03-04"]
     entries = _entries(state)
     assert entries["2024-03-04"]["missed"] is True
-    assert "past its recording cutoff" in entries["2024-03-04"]["reason"]
+    assert "missed its recording cutoff" in entries["2024-03-04"]["reason"]
     assert entries["2024-03-05"]["missed"] is False
     assert (state / "decisions.jsonl").read_bytes().startswith(mar5_line)
     fills_run = run_shadow_days(
@@ -252,7 +252,7 @@ def test_missed_day_recorded_as_missed_and_never_filled(tmp_path):
         state_dir=state,
         dates=["2024-03-11"],
         received_at=receipts,
-        recorded_at_ms=bar_close_ms("2024-03-12"),
+        recorded_at_ms=bar_close_ms("2024-03-12") - HOUR_MS,
     )
     assert result["processed"] == ["2024-03-11"]
     assert result["quarantined"] == ["2024-03-11"]

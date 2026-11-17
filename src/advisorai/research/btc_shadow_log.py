@@ -36,11 +36,10 @@ def bar_close_ms(date: str) -> int:
 
 
 def recording_cutoff_ms(date: str) -> int:
-    """Latest instant a decision for ``date`` may be recorded.
-
-    The decision must record before the next bar completes (one full
-    session of grace). After that the day is missed — even if its bar
-    is available on restart — and excluded from scoring and fills.
+    """Exclusive boundary: a decision for ``date`` must record strictly
+    before this instant — the next bar's completion, one full session of
+    grace after the decision close. At or after the boundary the day is
+    missed, even if its bar is available on restart.
     """
     return bar_close_ms(date) + DAY_MS
 
@@ -219,10 +218,10 @@ def log_forward_day(
     dates = [str(row["date"]) for row in view]
     if date not in dates and bar_close_ms(date) > recorded_at_ms:
         return None
-    past_cutoff = recorded_at_ms > recording_cutoff_ms(date)
+    past_cutoff = recorded_at_ms >= recording_cutoff_ms(date)
     try:
         if past_cutoff:
-            raise ValueError(f"decision date {date} is past its recording cutoff")
+            raise ValueError(f"decision date {date} missed its recording cutoff")
         if len(set(dates)) != len(dates):
             raise ValueError("shadow view has duplicate bar dates")
         if date not in dates:

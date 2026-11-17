@@ -170,7 +170,24 @@ def test_decision_past_cutoff_is_missed_despite_present_bar(tmp_path):
     assert late is not None
     assert late.abstained is True
     assert late.missed is True
-    assert "past its recording cutoff" in late.reason
+    assert "missed its recording cutoff" in late.reason
+
+
+def test_decision_at_exact_cutoff_instant_is_missed(tmp_path):
+    view = _view(tmp_path)
+    state = tmp_path / "state"
+    boundary = log_forward_day(
+        view=view,
+        forward_hash="f" * 64,
+        state_dir=state,
+        date="2024-03-04",
+        received_at=_receipts(view),
+        recorded_at_ms=bar_close_ms("2024-03-04") + 24 * HOUR_MS,
+    )
+    assert boundary is not None
+    assert boundary.abstained is True
+    assert boundary.missed is True
+    assert "missed its recording cutoff" in boundary.reason
 
 
 def test_future_day_returns_none_without_recording(tmp_path):

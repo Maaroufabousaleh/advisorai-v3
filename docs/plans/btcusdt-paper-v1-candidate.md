@@ -323,3 +323,27 @@ superseded below: late days are missed, not caught up.
  (chain ids, shadow result, log hashes), with reruns reusing both
  halves (`test_session_bundles_chain_and_shadow_evidence`,
  `test_session_rerun_reuses_both_halves`).
+
+## Amendment 10 (2026-11-17, before any forward scoring)
+
+Amendments 1-9 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: the recording cutoff is exclusive. A decision must record
+ strictly before `close(D) + 24h`; the exact cutoff instant is missed
+ (`test_decision_at_exact_cutoff_instant_is_missed`). Amendment 9's
+ timing convention is otherwise unchanged.
+- Scoring rules pinned (`btc_scoring.score_window`): missed or
+ quarantined days hold the prior position; position changes execute at
+ the recorded fill and pay `costs_bps` per unit; a traded day without
+ a fill fails closed; both sides mark at the final close; the
+ benchmark enters at the first open after the first decision record.
+- Offline rehearsal (`test_scoring_rehearsal_with_entry_miss_restart_
+ and_valuation`, March 2024 fixture only): flat Mar 4, long entry Mar 5
+ (filled Mar 7 open 209.0), Mar 6 missed across a restart (position
+ held, pre-outage bytes preserved), long through Mar 10, marked at
+ 205.0. Strategy 0.998 x 205/209 = 0.97889952; benchmark 0.998 x
+ 205/207.50 = 0.98597590 (entered Mar 6 open). Hold-day fills are
+ logged but correctly unused (4 fills, 1 execution).
