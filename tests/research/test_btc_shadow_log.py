@@ -14,6 +14,7 @@ from advisorai.research.btc_shadow_log import (
     decide,
     load_view,
     log_forward_day,
+    observe_fill,
 )
 
 
@@ -115,3 +116,36 @@ def test_view_rejects_duplicate_dates(tmp_path):
     _write_snapshot(forward, _day_rows("2024-03-04", 2))
     with pytest.raises(ValueError, match="duplicate"):
         load_view(snap, forward)
+
+
+def test_fill_requires_next_bar_received(tmp_path):
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    _write_snapshot(snap, _day_rows("2024-01-01", 64, close="100.0"))
+    forward = tmp_path / "forward"
+    forward.mkdir()
+    _write_snapshot(forward, _day_rows("2024-03-05", 1, close="200.0", open_="205.0"))
+    view = load_view(snap, forward)
+    with pytest.raises(ValueError, match="not yet observable"):
+        observe_fill(view, "2024-03-05")
+    fill = observe_fill(view, "2024-03-04")
+    assert fill.fill_date == "2024-03-05"
+    assert fill.fill_price == "205.0"
+    assert fill.observable_after == "2024-03-05"
+    with pytest.raises(ValueError, match="not a received bar"):
+        observe_fill(view, "2024-03-06")
+
+
+def test_decision_uses_only_received_bars(tmp_path):
+    snap = tmp_path / "snap"
+    snap.mkdir()
+    _write_snapshot(snap, _day_rows("2024-01-01", 63, close="100.0"))
+    forward = tmp_path / "forward"
+    forward.mkdir()
+    _write_snapshot(forward, _day_rows("2024-03-04", 2, close="200.0"))
+    view = load_view(snap, forward)
+    state = tmp_path / "state"
+    record = log_forward_day(view=view, forward_hash="f" * 64, state_dir=state, date="2024-03-05")
+    assert record.abstained is False
+    assert record.signal == 1
+    assert record.bars_hash == "f" * 64

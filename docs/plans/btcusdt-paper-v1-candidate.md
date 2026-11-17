@@ -137,3 +137,35 @@ below were ever produced, and they carry no verdict.
 - Current plumbing (continuous holdings, `run_btc_three_way.py` on the
   pinned snapshot, three implementations agree at 0.01 bps): 3268 obs,
   151 trades, net **38190.11** bps vs BH **46667.66** bps.
+
+## Amendment 3 (2026-11-17, before any forward scoring)
+
+Amendments 1–2 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30.
+
+- Decision record is writable from received bars only: date, signal,
+  position, qualified input hash, model id, costs. No fill, no future
+  bar, no venue data (`DecisionRecord`, pinned by
+  `test_decision_uses_only_received_bars`).
+- Simulated fill is a separate artifact observable after the decision:
+  fill price = next open, recordable only once the next bar is received
+  (`FillRecord` + `observe_fill`; unreceived fill → "not yet observable",
+  pinned by `test_fill_requires_next_bar_received`). Never inferred.
+- Correction: exit-day P&L. Amendment 2 scored exit day 0 from the exit
+  fill, dropping the overnight gap the closing position actually held
+  through. The exit leg is now prior close through the exit fill; entry
+  gaps remain unattributed (flat before the entry fill). Reason: a fill
+  at the open settles the close-to-open move for whoever held it
+  overnight — the exiter, not nobody.
+- Correction: buy-and-hold benchmark is portfolio value —
+  `(last_close / first_scored_open − 1)` in bps minus one entry leg —
+  path-independent and auditable against two prices. Amendment 2's
+  leg-summed BH is superseded.
+- Superseded plumbing (Amendment-2 economics, kept as evidence only):
+  3268 obs, 151 trades, net 38190.11 bps vs BH 46667.66 bps.
+- Current plumbing (Amendment-3 economics, `run_btc_three_way.py` on the
+  pinned snapshot, three implementations agree at 0.01 bps): 3268 obs,
+  151 trades, net **38141.81** bps vs BH **137118.90** bps. The BH jump
+  is the 2017–2025 buy-and-hold run-up measured as portfolio value;
+  it is characterization, not a verdict.

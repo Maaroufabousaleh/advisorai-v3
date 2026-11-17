@@ -66,7 +66,10 @@ def test_rising_market_three_way_agreement():
     result = agree(bars)
     assert result["obs"] == 70 - 1 - 63
     assert result["trades"] == 1
-    assert Decimal(str(result["net_bps"])) == Decimal(str(result["baseline_bps"]))
+    expected_base = (Decimal("169") - Decimal("163")) / Decimal("163") * Decimal("10000") - Decimal(
+        "20"
+    )
+    assert Decimal(str(result["baseline_bps"])) == expected_base
 
 
 def test_two_consecutive_long_days_with_gap_move():
@@ -97,6 +100,37 @@ def test_two_consecutive_long_days_with_gap_move():
     expected_base = (Decimal("0") - Decimal("20")) + (
         Decimal("200.0") - Decimal("100.0")
     ) / Decimal("100.0") * Decimal("10000")
+    assert Decimal(str(result["baseline_bps"])) == expected_base
+
+
+def test_exit_attributes_gap_through_the_fill():
+    """Closing prints at the exit fill: the overnight gap belongs to the exit."""
+    base = datetime(2024, 1, 1, tzinfo=UTC).date()
+    closes = ["100.0"] * 64 + ["200.0", "50.0", "50.0"]
+    opens = ["100.0"] * 64 + ["100.0", "205.0", "40.0"]
+    rows = []
+    for i in range(67):
+        day = (base + timedelta(days=i)).isoformat()
+        rows.append(
+            {
+                "date": day,
+                "open": opens[i],
+                "high": max(opens[i], closes[i]),
+                "low": min(opens[i], closes[i]),
+                "adj_close": closes[i],
+                "volume": "10.0",
+            }
+        )
+    bars = tuple(rows)
+    result = agree(bars)
+    assert result["obs"] == 3
+    assert result["trades"] == 2
+    entry_leg = (Decimal("50.0") - Decimal("205.0")) / Decimal("205.0") * Decimal("10000")
+    exit_leg = (Decimal("40.0") - Decimal("50.0")) / Decimal("50.0") * Decimal("10000")
+    assert Decimal(str(result["net_bps"])) == entry_leg + exit_leg - Decimal("40")
+    expected_base = (Decimal("50.0") - Decimal("100.0")) / Decimal("100.0") * Decimal(
+        "10000"
+    ) - Decimal("20")
     assert Decimal(str(result["baseline_bps"])) == expected_base
 
 

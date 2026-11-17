@@ -24,6 +24,9 @@ MODEL_ID = "btc-tsmom-63d-longflat-v1"
 
 @dataclass(frozen=True, slots=True)
 class DecisionRecord:
+    """Writable from received bars only: date, signal, position, and the
+    hash of the qualified input. No fill, no future bar, no venue data."""
+
     date: str
     signal: int
     position: int
@@ -32,6 +35,34 @@ class DecisionRecord:
     costs_bps: str
     abstained: bool
     reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class FillRecord:
+    """Separate artifact, observable only after the decision: the fill
+    prints at the next open, so it requires the next bar received."""
+
+    date: str
+    fill_date: str
+    fill_price: str
+    observable_after: str
+
+
+def observe_fill(view: tuple[dict[str, Any], ...], date: str) -> FillRecord:
+    """Record the simulated fill for a decision once its bar is received."""
+    dates = [str(row["date"]) for row in view]
+    if date not in dates:
+        raise ValueError(f"decision date {date} is not a received bar")
+    index = dates.index(date)
+    if index + 1 >= len(view):
+        raise ValueError(f"fill for {date} is not yet observable: next bar not received")
+    fill_row = view[index + 1]
+    return FillRecord(
+        date=date,
+        fill_date=str(fill_row["date"]),
+        fill_price=str(fill_row["open"]),
+        observable_after=str(fill_row["date"]),
+    )
 
 
 def decide(closes: list[Decimal], decision_index: int) -> int:
@@ -113,8 +144,10 @@ def log_forward_day(
 __all__ = [
     "MODEL_ID",
     "DecisionRecord",
+    "FillRecord",
     "append_decision",
     "decide",
     "load_view",
     "log_forward_day",
+    "observe_fill",
 ]
