@@ -988,7 +988,7 @@ def test_app_start_prints_baseline_only_with_explicit_flag(
             return 0
 
     def _baseline(*args, **kwargs):
-        return object(), baseline
+        return object(), baseline, datetime(2026, 11, 16, tzinfo=UTC)
 
     def _build(**kwargs):
         assert kwargs["baseline"] is baseline

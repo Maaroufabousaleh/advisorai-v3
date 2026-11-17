@@ -241,7 +241,7 @@ def test_baseline_preserves_exact_verified_btc_quantity(monkeypatch) -> None:
     monkeypatch.setattr(
         "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
     )
-    transport, baseline = read_testnet_baseline(
+    transport, baseline, balance_cutoff = read_testnet_baseline(
         resolver=_resolver(), launch=_launch()
     )
     expected_key = transport.canonical_instrument_id("BTCUSDT")
@@ -271,7 +271,7 @@ def test_baseline_verifies_instrument_on_same_transport_before_account_read(
     monkeypatch.setattr(
         "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
     )
-    transport, baseline = read_testnet_baseline(
+    transport, baseline, balance_cutoff = read_testnet_baseline(
         resolver=_resolver(), launch=_launch()
     )
     assert seen["transport"] is transport
@@ -344,7 +344,7 @@ def test_baseline_refuses_unmapped_canonical_position_but_pins_faucet_assets(
     monkeypatch.setattr(
         "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
     )
-    transport, baseline = read_testnet_baseline(
+    transport, baseline, balance_cutoff = read_testnet_baseline(
         resolver=_resolver(), launch=_launch()
     )
     assert transport.verified_symbol_ids == ("BTCUSDT",)
@@ -379,7 +379,7 @@ def test_zero_submission_session_reaches_ready_and_reconciles_clean(
     )
     ledgers = SqliteLedgers(tmp_path / "p02.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
     assert baseline.positions == {"BTC": Decimal("0.010")}
     app = build_testnet_owner_application(
         ledgers=ledgers,
@@ -396,6 +396,7 @@ def test_zero_submission_session_reaches_ready_and_reconciles_clean(
         launch=launch,
         transport=transport,
         baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
     )
     assert app.adapters.paper_venue.native.max_submissions == 0
     exit_code = app.run(reason="p02 zero-submission test")
@@ -429,7 +430,7 @@ def test_baseline_preserves_exact_verified_btc_quantity_on_coinbase(monkeypatch)
         "advisorai.integrations.build_coinbase_exchange_sandbox_transport",
         seeded_builder,
     )
-    transport, baseline = read_testnet_baseline(
+    transport, baseline, balance_cutoff = read_testnet_baseline(
         resolver=_coinbase_resolver(), launch=_coinbase_launch()
     )
     expected_key = transport.canonical_instrument_id("BTC-USD")
@@ -513,7 +514,7 @@ def test_builder_reuses_owner_supervisor_and_stop_event(
     state_dir = tmp_path / "p02-lock-handoff"
     ledgers = SqliteLedgers(tmp_path / "p02-lock-handoff.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
     supervisor = SessionSupervisor(
         ledgers,
         state_dir=state_dir,
@@ -539,6 +540,7 @@ def test_builder_reuses_owner_supervisor_and_stop_event(
             launch=launch,
             transport=transport,
             baseline=baseline,
+            baseline_balance_cutoff=balance_cutoff,
             supervisor=supervisor,
             stop_requested=stop_event,
         )
@@ -587,7 +589,7 @@ def test_coinbase_zero_submission_session_reaches_ready_and_reconciles_clean(
     )
     ledgers = SqliteLedgers(tmp_path / "p02-coinbase.sqlite3")
     launch = _coinbase_launch()
-    transport, baseline = read_testnet_baseline(
+    transport, baseline, balance_cutoff = read_testnet_baseline(
         resolver=_coinbase_resolver(), launch=launch
     )
     assert baseline.positions == {"BTC": Decimal("0.010")}
@@ -606,6 +608,7 @@ def test_coinbase_zero_submission_session_reaches_ready_and_reconciles_clean(
         launch=launch,
         transport=transport,
         baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
     )
     assert app.adapters.paper_venue.native.max_submissions == 0
     exit_code = app.run(reason="p02 coinbase zero-submission test")
@@ -670,7 +673,7 @@ def test_multi_asset_zero_submission_session_reconciles_clean(
     _seeded_binance(monkeypatch, _multi_asset_account(), calls)
     ledgers = SqliteLedgers(tmp_path / "p02-multi.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
     assert baseline.positions == {
         "BTC": Decimal("0.010"),
         "asset:ETH": Decimal("1.5"),
@@ -692,6 +695,7 @@ def test_multi_asset_zero_submission_session_reconciles_clean(
         launch=launch,
         transport=transport,
         baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
     )
     assert app.adapters.paper_venue.native.max_submissions == 0
     exit_code = app.run(reason="p02 multi-asset zero-submission test")
@@ -735,7 +739,7 @@ def test_multi_asset_session_fails_closed_on_faucet_drift(
     )
     ledgers = SqliteLedgers(tmp_path / "p02-drift.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
     app = build_testnet_owner_application(
         ledgers=ledgers,
         state_dir=tmp_path / "p02-drift-state",
@@ -751,6 +755,7 @@ def test_multi_asset_session_fails_closed_on_faucet_drift(
         launch=launch,
         transport=transport,
         baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
     )
     live["balances"] = {
         "accountType": "SPOT",
@@ -801,7 +806,7 @@ def test_first_start_with_historical_venue_fill_in_opening_balances(
     )
     ledgers = SqliteLedgers(tmp_path / "p02-historical.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
     app = build_testnet_owner_application(
         ledgers=ledgers,
         state_dir=tmp_path / "p02-historical-state",
@@ -817,6 +822,7 @@ def test_first_start_with_historical_venue_fill_in_opening_balances(
         launch=launch,
         transport=transport,
         baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
     )
     exit_code = app.run(reason="p02 historical-fill repro")
     output = capsys.readouterr().out
@@ -893,7 +899,7 @@ def _run_zero_submission_session(tmp_path, monkeypatch, account, fills, open_ord
     )
     ledgers = SqliteLedgers(tmp_path / "p02-failclosed.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
     app = build_testnet_owner_application(
         ledgers=ledgers,
         state_dir=tmp_path / "p02-failclosed-state",
@@ -909,6 +915,7 @@ def _run_zero_submission_session(tmp_path, monkeypatch, account, fills, open_ord
         launch=launch,
         transport=transport,
         baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
     )
     return app, calls
 
@@ -1003,7 +1010,7 @@ def test_absorbed_fill_survives_restart_without_reapply_or_block(
     )
     ledgers = SqliteLedgers(tmp_path / "p02-restart.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
 
     def build(tag):
         return build_testnet_owner_application(
@@ -1021,6 +1028,7 @@ def test_absorbed_fill_survives_restart_without_reapply_or_block(
             launch=launch,
             transport=transport,
             baseline=baseline,
+            baseline_balance_cutoff=balance_cutoff,
         )
 
     first = build("first")
@@ -1073,7 +1081,7 @@ def test_changed_absorbed_fill_blocks_recovery_after_restart(
     )
     ledgers = SqliteLedgers(tmp_path / "p02-drift.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
 
     def build(tag):
         return build_testnet_owner_application(
@@ -1091,6 +1099,7 @@ def test_changed_absorbed_fill_blocks_recovery_after_restart(
             launch=launch,
             transport=transport,
             baseline=baseline,
+            baseline_balance_cutoff=balance_cutoff,
         )
 
     assert build("first").run(reason="p02 drift first") == 0
@@ -1142,7 +1151,7 @@ def test_new_fill_after_absorbed_restart_still_blocks_recovery(
     )
     ledgers = SqliteLedgers(tmp_path / "p02-newafter.sqlite3")
     launch = _launch()
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
 
     def build(tag):
         return build_testnet_owner_application(
@@ -1160,6 +1169,7 @@ def test_new_fill_after_absorbed_restart_still_blocks_recovery(
             launch=launch,
             transport=transport,
             baseline=baseline,
+            baseline_balance_cutoff=balance_cutoff,
         )
 
     assert build("first").run(reason="p02 new-after first") == 0
@@ -1175,4 +1185,205 @@ def test_new_fill_after_absorbed_restart_still_blocks_recovery(
     assert "SESSION READY" not in output
     assert "RECOVERY INCOMPLETE" in output
     assert "outcome=clean" not in output
+    assert all("/api/v3/order" not in url for _, url in calls)
+
+
+def test_balance_gap_fill_is_not_absorbed_as_baseline_settled(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: a fill in the balance-to-time gap still blocks recovery.
+
+    The Binance account payload carries no timestamp; the adapter stamps
+    the snapshot with a server time fetched AFTER the balances. A fill
+    that lands between the balance read and that time read occurred
+    after the snapshot's balance truth, however much its timestamp
+    predates the cutoff. dbb1662 compares against the post-read cutoff
+    and absorbs it; it must instead refuse, because the later
+    reconciliation read moves the balances but does not retract the
+    wrongly recorded absorption.
+    """
+    gap_fill = _historical_fill()
+    gap_fill["id"] = 9990004
+    gap_fill["orderId"] = 9990004
+    # Balance read reflects T0; the mocked serverTime cutoff is T1 > T0.
+    # The gap fill lands strictly inside (T0, T1): after the balances,
+    # before the cutoff, small enough to fit the opening balances.
+    gap_fill["time"] = 1794787400000
+    balance_before = _multi_asset_account()
+    # The gap fill (buy 0.00008 BTC @ 68384.74) settles into the venue
+    # balances only on later reads: opening USDT 1000 -> 994.52922,
+    # opening BTC 0.010 -> 0.01008. The mocked venue serves the
+    # pre-fill balances until ``armed`` flips, then the settled ones.
+    balance_after = {
+        "accountType": "SPOT",
+        "canTrade": True,
+        "balances": [
+            {"asset": "USDT", "free": "994.52922", "locked": "0"},
+            {"asset": "BTC", "free": "0.01008", "locked": "0"},
+            {"asset": "ETH", "free": "1.5", "locked": "0"},
+            {"asset": "BNB", "free": "2", "locked": "0.25"},
+            {"asset": "SOL", "free": "0", "locked": "0"},
+        ],
+    }
+    live = {"armed": False, "time_calls": 0}
+    calls: list = []
+
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    real_builder = build_binance_spot_testnet_transport
+
+    def request(method, url, headers, body, timeout):
+        if "/api/v3/time" in url:
+            calls.append((method, url))
+            live["time_calls"] += 1
+            # Bracket the baseline balance read: the pre-read time T0
+            # predates the gap fill, the post-read time T1 postdates it.
+            # dbb1662 proves against T1 and absorbs; the fix proves
+            # against the pre-read T0 and refuses.
+            moment = 1794787300000 if live["time_calls"] == 1 else 1794787500000
+            return (200, json.dumps({"serverTime": moment}).encode(), ())
+        if "/api/v3/account" in url and live["armed"]:
+            calls.append((method, url))
+            return (200, json.dumps(balance_after).encode(), ())
+        return _requester_with_fills(balance_before, calls, [gap_fill])(
+            method, url, headers, body, timeout
+        )
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(resolver, requester=request, **kwargs)
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-gap.sqlite3")
+    launch = _launch()
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    # The gap fill settles after the baseline read but before recovery's
+    # venue reads: exactly the real timing that makes the post-read
+    # cutoff unusable as inclusion proof.
+    live["armed"] = True
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "p02-gap-state",
+        lock_identity="p02-gap",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
+    )
+    exit_code = app.run(reason="p02 balance-gap negative")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "SESSION READY" not in output
+    assert "RECOVERY INCOMPLETE" in output
+    assert "outcome=clean" not in output
+    assert "reconciliation=reconciled" not in output
+    assert all("/api/v3/order" not in url for _, url in calls)
+    absorptions = [
+        event
+        for event in ledgers.events(LedgerNamespace.VENUE)
+        if event.event_type == "baseline_settled_fill_absorbed"
+    ]
+    assert absorptions == []
+
+
+def test_restart_with_moved_cutoff_blocks_despite_matching_fill(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02: a fresh baseline read cannot silently move the absorption cutoff.
+
+    First run absorbs the known lifecycle fill and passes. On restart
+    the operator re-reads the baseline from a live venue whose clock
+    has advanced: same balances, same fill economics, but a later
+    pre-read cutoff and as_of. The durable record pins the exact
+    opening baseline it was proven against, so recovery fails closed
+    instead of silently re-proving history against a moved cutoff.
+    """
+    from advisorai.ledger import LedgerNamespace
+
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    account = _multi_asset_account()
+    fills = [_historical_fill()]
+    clock = {"server_time": 1794787500000}
+    real_builder = build_binance_spot_testnet_transport
+
+    def request(method, url, headers, body, timeout):
+        if "/api/v3/time" in url:
+            calls.append((method, url))
+            return (200, json.dumps({"serverTime": clock["server_time"]}).encode(), ())
+        return _requester_with_fills(account, calls, fills)(
+            method, url, headers, body, timeout
+        )
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(resolver, requester=request, **kwargs)
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    ledgers = SqliteLedgers(tmp_path / "p02-cutoffmove.sqlite3")
+    launch = _launch()
+
+    def build(tag, baseline, balance_cutoff, venue_transport):
+        return build_testnet_owner_application(
+            ledgers=ledgers,
+            state_dir=tmp_path / "p02-cutoffmove-state",
+            lock_identity=f"p02-cutoffmove-{tag}",
+            code_hash="c" * 64,
+            config_hash="d" * 64,
+            config=OwnerApplicationConfig(
+                scenario="quiet",
+                interval_seconds=0.5,
+                max_runtime_seconds=2,
+            ),
+            resolver=_resolver(),
+            launch=launch,
+            transport=venue_transport,
+            baseline=baseline,
+            baseline_balance_cutoff=balance_cutoff,
+        )
+
+    transport, baseline, balance_cutoff = read_testnet_baseline(
+        resolver=_resolver(), launch=launch
+    )
+    assert build("first", baseline, balance_cutoff, transport).run(
+        reason="p02 cutoff first"
+    ) == 0
+    capsys.readouterr()
+    # Fresh venue read on restart: balances and fill identical, clock moved.
+    clock["server_time"] = 1794787600000
+    transport2, baseline2, balance_cutoff2 = read_testnet_baseline(
+        resolver=_resolver(), launch=launch
+    )
+    assert balance_cutoff2 > balance_cutoff
+    assert baseline2.cash == baseline.cash
+    assert baseline2.positions == baseline.positions
+    exit_code = build("second", baseline2, balance_cutoff2, transport2).run(
+        reason="p02 cutoff second"
+    )
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "SESSION READY" not in output
+    assert "RECOVERY INCOMPLETE" in output
+    assert "outcome=clean" not in output
+    assert "reconciliation=reconciled" not in output
+    absorptions = [
+        event
+        for event in ledgers.events(LedgerNamespace.VENUE)
+        if event.event_type == "baseline_settled_fill_absorbed"
+    ]
+    assert len(absorptions) == 1
+    assert absorptions[0].payload["venue_fill_id"] == "BTCUSDT:2697483"
     assert all("/api/v3/order" not in url for _, url in calls)

@@ -280,7 +280,7 @@ def read_testnet_baseline(
     *,
     resolver: CredentialResolver,
     launch: TestnetLaunchRequest,
-) -> tuple[object, AccountState]:
+) -> tuple[object, AccountState, datetime]:
     """Read-only venue snapshot used to seed the durable account baseline.
 
     Verifies the selected instrument and quote against live provider truth
@@ -380,7 +380,9 @@ def read_testnet_baseline(
         as_of=snapshot.as_of,
     )
     baseline.positions.update(mapped_positions)
-    return transport, baseline
+    if snapshot.balance_cutoff is None:
+        raise ValueError("testnet baseline refused: venue snapshot has no balance cutoff")
+    return transport, baseline, snapshot.balance_cutoff
 
 
 def build_testnet_owner_application(
@@ -395,6 +397,7 @@ def build_testnet_owner_application(
     launch: TestnetLaunchRequest,
     transport: object | None = None,
     baseline: AccountState | None = None,
+    baseline_balance_cutoff: datetime | None = None,
     supervisor: SessionSupervisor | None = None,
     stop_requested: threading.Event | None = None,
 ) -> PaperOwnerApplication:
@@ -406,6 +409,9 @@ def build_testnet_owner_application(
     use happens here either way. ``baseline`` carries the read-only venue
     snapshot from :func:`read_testnet_baseline`; omitting it falls back to
     the launch-request fake-funds baseline (synthetic/test use only).
+    ``baseline_balance_cutoff`` carries the same read's pre-balance server
+    time; a funded baseline without one is refused, since the
+    fill-absorption proof cannot run without it.
     ``supervisor`` carries the caller-owned ``SessionSupervisor`` holding
     the pre-acquired owner lock; omitting it builds one (synthetic/test
     use only — owner entry points must pass theirs, since a second
@@ -429,6 +435,10 @@ def build_testnet_owner_application(
         marks={"BTC": validated.initial_mark},
         as_of=datetime(1970, 1, 1, tzinfo=UTC),
     )
+    if baseline is not None and baseline_balance_cutoff is None:
+        raise ValueError(
+            "testnet baseline refused: funded baseline needs its balance cutoff"
+        )
     evidence_council: EvidenceCouncil = (
         EvidenceCouncil({}) if config.scenario == "quiet" else _fixture_council()
     )
@@ -441,6 +451,7 @@ def build_testnet_owner_application(
         instrument=instrument,
         account_quote_currency=validated.quote_currency,
         fx_rate_provider=_snapshot_bound_fx(validated.quote_currency),  # type: ignore[arg-type]
+        baseline_balance_cutoff=baseline_balance_cutoff,
     )
     components = ProviderProfileComponents(
         context=context,

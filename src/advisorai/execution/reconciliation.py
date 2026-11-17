@@ -23,7 +23,6 @@ class VenueAccountSnapshot:
     The venue snapshot is an input to reconciliation only; it never becomes a
     second account authority and cannot approve an order.
     """
-
     as_of: datetime
     cash: Decimal
     positions: Mapping[str, Decimal]
@@ -34,6 +33,11 @@ class VenueAccountSnapshot:
     # identity; omitting the projection keeps account-only reconciliation
     # useful for venues that expose balances before open-order state.
     venue_open_order_ids: frozenset[UUID] | None = None
+    # Latest instant the balances can reflect, for venues whose account
+    # payload carries no timestamp of its own: a pre-read server time.
+    # Only fills strictly before this cutoff can be settled inside the
+    # balances; the post-read ``as_of`` cannot prove inclusion.
+    balance_cutoff: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.as_of.tzinfo is None or self.as_of.utcoffset() is None:
@@ -66,6 +70,10 @@ class VenueAccountSnapshot:
             not isinstance(order_id, UUID) for order_id in self.venue_open_order_ids
         ):
             raise ValueError("venue open order identifiers must be UUIDs")
+        if self.balance_cutoff is not None and (
+            self.balance_cutoff.tzinfo is None or self.balance_cutoff.utcoffset() is None
+        ):
+            raise ValueError("venue balance cutoff must include a timezone")
 
     @property
     def normalized_as_of(self) -> datetime:

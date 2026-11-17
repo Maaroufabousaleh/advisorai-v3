@@ -198,6 +198,7 @@ def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
         (200, json.dumps({"symbols": _symbols()}).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000004000}).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
         (200, json.dumps({"serverTime": 1700000005000}).encode(), ()),
     ]
@@ -212,10 +213,11 @@ def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
     snapshot = transport.fetch_account_snapshot()
     assert snapshot.cash == Decimal("1000")
     assert snapshot.positions == {"crypto:BTCUSDT:binance_spot_testnet:spot": Decimal("0.010")}
-    assert len(calls) == 6
+    assert len(calls) == 7
     assert "X-MBX-APIKEY" not in calls[0][2]
-    assert all("X-MBX-APIKEY" in calls[index][2] for index in (2, 3, 4))
-    assert "X-MBX-APIKEY" not in calls[5][2]
+    assert all("X-MBX-APIKEY" in calls[index][2] for index in (2, 3, 5))
+    assert "X-MBX-APIKEY" not in calls[4][2]
+    assert "X-MBX-APIKEY" not in calls[6][2]
 
 
 def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
@@ -223,6 +225,7 @@ def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
     account["balances"].append({"asset": "BNB", "free": "0.25", "locked": "0"})
     responses = [
         (200, json.dumps({"serverTime": 1700000000000}).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000004000}).encode(), ()),
         (200, json.dumps(account).encode(), ()),
         (200, json.dumps({"serverTime": 1700000005000}).encode(), ()),
     ]
@@ -238,7 +241,12 @@ def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
 def test_binance_account_snapshot_rejects_duplicate_asset_rows():
     account = _account()
     account["balances"].append({"asset": "BTC", "free": "0.2", "locked": "0"})
-    transport, _calls = _transport([(200, json.dumps(account).encode(), ())])
+    transport, _calls = _transport(
+        [
+            (200, json.dumps({"serverTime": 1794547200000}).encode(), ()),
+            (200, json.dumps(account).encode(), ()),
+        ]
+    )
     transport._last_server_time = datetime(2026, 11, 12, tzinfo=UTC)
     transport.verify_symbol_mappings(_symbols())
 

@@ -521,7 +521,8 @@ def test_launcher_prints_baseline_only_with_explicit_flag(
     monkeypatch.setattr(
         launch_testnet_paper,
         "read_testnet_baseline",
-        lambda resolver, launch: (SimpleNamespace(), baseline),
+        lambda resolver, launch: (SimpleNamespace(), baseline,
+        datetime(2026, 11, 16, tzinfo=UTC)),
     )
     lock_calls: list = []
 
@@ -578,7 +579,8 @@ def test_launcher_refuses_corrupt_ledger_without_traceback(
     monkeypatch.setattr(
         launch_testnet_paper,
         "read_testnet_baseline",
-        lambda resolver, launch: (SimpleNamespace(), baseline),
+        lambda resolver, launch: (SimpleNamespace(), baseline,
+        datetime(2026, 11, 16, tzinfo=UTC)),
     )
     monkeypatch.setenv("ADVISORAI_STATE_DIR", str(state_dir))
     monkeypatch.delenv("ADVISORAI_LEDGER_PATH", raising=False)

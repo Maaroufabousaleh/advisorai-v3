@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None) -> int:
         max_submissions=args.max_submissions,
     )
     try:
-        transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
+        transport, baseline, balance_cutoff = read_testnet_baseline(resolver=resolver, launch=launch)
     except ValueError as exc:
         print(f"SESSION START REFUSED: testnet baseline refused: {exc}", flush=True)
         return 2
@@ -215,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
             resolver=resolver,
             launch=launch,
             baseline=baseline,
+            baseline_balance_cutoff=balance_cutoff,
             supervisor=supervisor,
             stop_requested=stop_event,
         )

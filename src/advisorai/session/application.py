@@ -154,6 +154,7 @@ class OwnerApplicationAdapters:
     outcome_adapter: OwnerOutcomeAdapter
     initial_account: AccountState
     instrument: InstrumentIdentity = _BTC
+    baseline_balance_cutoff: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.data.source.strip() or not self.data.dataset.strip():
@@ -189,6 +190,11 @@ class OwnerApplicationAdapters:
             raise ValueError("owner instrument must use the supervised paper venue alias")
         if self.instrument.canonical_id not in self.initial_account.marks:
             raise ValueError("owner account baseline must mark the configured instrument")
+        if self.baseline_balance_cutoff is not None and (
+            self.baseline_balance_cutoff.tzinfo is None
+            or self.baseline_balance_cutoff.utcoffset() is None
+        ):
+            raise ValueError("owner baseline balance cutoff must include a timezone")
 
 
 class LocalPaperOutcomeAdapter:
@@ -692,13 +698,15 @@ class PaperOwnerApplication:
 
         Proof is verified evidence tied to the exact opening baseline,
         not arithmetic: the fill's venue-attested ``occurred_at`` must
-        strictly predate the baseline snapshot's ``as_of`` — a fill that
-        landed after the snapshot cannot be settled inside it, however
-        well its economics fit. Balance containment is only a sanity
-        check on top. Each absorbed fill records its full economics
-        durably so a restart re-verifies the replayed fill against the
-        record and blocks on any change; absorbed fills are recognized,
-        never applied.
+        strictly predate the baseline snapshot's pre-read
+        ``balance_cutoff`` — the latest instant the balances can
+        reflect. The post-read ``as_of`` is freshness only: a fill that
+        lands between the balance read and that time read cannot be
+        settled inside the balances, however well its economics fit.
+        Balance containment is only a sanity check on top. Each
+        absorbed fill records its full economics durably so a restart
+        re-verifies the replayed fill against the record and blocks on
+        any change; absorbed fills are recognized, never applied.
         """
         from datetime import datetime
         from decimal import Decimal
@@ -706,6 +714,7 @@ class PaperOwnerApplication:
         from advisorai.ledger import LedgerEvent, LedgerNamespace
 
         baseline = self.adapters.initial_account
+        cutoff = self.adapters.baseline_balance_cutoff
         for entry in unresolved:
             venue_fill_id = str(entry["venue_fill_id"])
             key = f"baseline-settled-fill:{venue_fill_id}"
@@ -718,14 +727,21 @@ class PaperOwnerApplication:
                 None,
             )
             if recorded is not None:
-                self._verify_absorbed_fill_unchanged(entry, recorded.payload)
+                self._verify_absorbed_fill_unchanged(
+                    entry, recorded.payload, baseline.as_of, cutoff
+                )
                 continue
             occurred_at = entry["occurred_at"]
             assert isinstance(occurred_at, datetime)
-            if occurred_at >= baseline.as_of:
+            if cutoff is None:
+                raise RuntimeError(
+                    f"paper venue fill {venue_fill_id} cannot be baseline-settled "
+                    "without the opening baseline's balance cutoff"
+                )
+            if occurred_at >= cutoff:
                 raise RuntimeError(
                     f"paper venue fill {venue_fill_id} occurred after the opening "
-                    "baseline snapshot and cannot be baseline-settled"
+                    "baseline balance cutoff and cannot be baseline-settled"
                 )
             side = str(entry["side"])
             quantity = entry["quantity"]
@@ -769,19 +785,26 @@ class PaperOwnerApplication:
                         "price": str(price),
                         "fee": str(fee),
                         "occurred_at": str(entry["occurred_at"]),
+                        "baseline_as_of": str(baseline.as_of),
+                        "baseline_balance_cutoff": str(cutoff),
                     },
                 )
             )
 
     @staticmethod
     def _verify_absorbed_fill_unchanged(
-        entry: dict[str, object], recorded: dict[str, object]
+        entry: dict[str, object],
+        recorded: dict[str, object],
+        baseline_as_of: object,
+        baseline_cutoff: object,
     ) -> None:
         """Block when a replayed absorbed fill no longer matches its record.
 
         The durable absorption record is the verified evidence for this
-        fill; any drift in identity or economics between restarts means
-        the venue history changed under us and recovery fails closed.
+        fill; any drift in identity, economics, or the opening baseline
+        it was proven against means the venue history changed under us —
+        or the baseline was re-read with a silently moved cutoff — and
+        recovery fails closed.
         """
         venue_fill_id = str(entry["venue_fill_id"])
         expected = {
@@ -791,6 +814,8 @@ class PaperOwnerApplication:
             "price": str(entry["price"]),
             "fee": str(entry["fee"]),
             "occurred_at": str(entry["occurred_at"]),
+            "baseline_as_of": str(baseline_as_of),
+            "baseline_balance_cutoff": str(baseline_cutoff),
         }
         for name, value in expected.items():
             if str(recorded.get(name, "")) != value:

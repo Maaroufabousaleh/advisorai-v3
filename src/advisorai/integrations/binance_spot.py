@@ -426,6 +426,16 @@ class BinanceSpotTestnetTransport(NativeTransport):
         return tuple(positions)
 
     def fetch_account_snapshot(self) -> VenueAccountSnapshot:
+        # The account response carries no timestamp of its own. Bound the
+        # balance read with a server time on each side: the pre-read
+        # balance_cutoff is the latest instant the balances can reflect,
+        # so only fills strictly before it can be settled inside them.
+        # A fill that lands between the balance read and the post-read
+        # as_of cannot be proven included, however well its economics
+        # fit. Monotonic guards keep either clock from going backwards.
+        self.server_time()
+        balance_cutoff = self._last_server_time
+        assert balance_cutoff is not None
         payload = self.account_state()
         balances = self._balances(payload)
         by_asset: dict[str, Mapping[str, object]] = {}
@@ -462,22 +472,18 @@ class BinanceSpotTestnetTransport(NativeTransport):
                 # Preserve nonzero out-of-profile balances so an owner adapter
                 # can reject them instead of silently understating account state.
                 positions[f"asset:{asset}"] = quantity
-        # The account response carries no timestamp of its own. Take a fresh
-        # server time at read time so the snapshot never predates fills that
-        # landed after an earlier server_time call. Monotonic guard: a clock
-        # step backwards keeps the prior reading instead of going backwards.
-        prior = self._last_server_time
         self.server_time()
         as_of = self._last_server_time
         assert as_of is not None
-        if prior is not None and as_of < prior:
-            as_of = prior
+        if as_of < balance_cutoff:
+            as_of = balance_cutoff
         return VenueAccountSnapshot(
             as_of=as_of,
             cash=cash,
             positions=positions,
             margin_used=Decimal("0"),
             margin_available=_decimal(quote_record.get("free", "0"), f"{quote_asset} free balance"),
+            balance_cutoff=balance_cutoff,
         )
 
     @staticmethod

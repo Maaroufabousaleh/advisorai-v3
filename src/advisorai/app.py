@@ -232,7 +232,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 max_submissions=getattr(args, "max_submissions", None),
             )
             try:
-                _transport, baseline = read_testnet_baseline(resolver=resolver, launch=launch)
+                _transport, baseline, balance_cutoff = read_testnet_baseline(resolver=resolver, launch=launch)
             except ValueError as exc:
                 supervisor._release_lock()
                 print(f"SESSION START REFUSED: testnet baseline refused: {exc}", flush=True)
@@ -253,6 +253,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 resolver=resolver,
                 launch=launch,
                 baseline=baseline,
+                baseline_balance_cutoff=balance_cutoff,
                 supervisor=supervisor,
                 stop_requested=stop_event,
             )

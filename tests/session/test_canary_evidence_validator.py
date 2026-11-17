@@ -66,7 +66,7 @@ def _run_offline_canary(tmp_path, monkeypatch, capsys, *, label: str):
         quote_currency="USDT",
         max_submissions=0,
     )
-    transport, baseline = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
     app = build_testnet_owner_application(
         ledgers=ledgers,
         state_dir=state_dir,
@@ -82,6 +82,7 @@ def _run_offline_canary(tmp_path, monkeypatch, capsys, *, label: str):
         launch=launch,
         transport=transport,
         baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
     )
     exit_code = app.run(reason="canary validator fixture")
     assert exit_code == 0

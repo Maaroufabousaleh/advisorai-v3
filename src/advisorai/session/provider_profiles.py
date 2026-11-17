@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 
@@ -80,6 +81,7 @@ class ProviderProfileContext:
     instrument: InstrumentIdentity
     account_quote_currency: str
     fx_rate_provider: FxRateProvider | None = None
+    baseline_balance_cutoff: datetime | None = None
 
     def __post_init__(self) -> None:
         quote = self.account_quote_currency.strip().upper()
@@ -95,6 +97,11 @@ class ProviderProfileContext:
             raise ValueError("provider profile requires a decision model factory")
         if self.fx_rate_provider is not None and not callable(self.fx_rate_provider):
             raise ValueError("provider FX rate provider must be callable")
+        if self.baseline_balance_cutoff is not None and (
+            self.baseline_balance_cutoff.tzinfo is None
+            or self.baseline_balance_cutoff.utcoffset() is None
+        ):
+            raise ValueError("baseline balance cutoff must include a timezone")
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,6 +264,7 @@ def _compose(
         outcome_adapter=outcome_adapter,
         initial_account=context.initial_account,
         instrument=instrument,
+        baseline_balance_cutoff=context.baseline_balance_cutoff,
     )
 
 

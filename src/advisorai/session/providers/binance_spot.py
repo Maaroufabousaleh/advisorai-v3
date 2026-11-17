@@ -184,6 +184,7 @@ class BinanceSpotTestnetOwnerAdapter:
             margin_used=snapshot.margin_used,
             margin_available=snapshot.margin_available,
             venue_open_order_ids=frozenset(item.order_id for item in acknowledgements),
+            balance_cutoff=snapshot.balance_cutoff,
         )
 
     @property

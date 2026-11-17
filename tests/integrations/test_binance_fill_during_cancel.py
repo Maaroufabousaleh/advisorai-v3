@@ -56,8 +56,10 @@ def test_snapshot_timestamp_tracks_the_balance_read_not_run_start() -> None:
     responses = [
         _server_time_response(1700000000000),  # run-start server time
         (200, json.dumps({"symbols": _symbols()}).encode(), ()),
+        _server_time_response(1700000004000),  # pre-read cutoff
         (200, json.dumps(_account()).encode(), ()),  # baseline balances
         _server_time_response(1700000005000),  # fresh time for baseline snapshot
+        _server_time_response(1700000006000),  # pre-read cutoff
         (200, json.dumps(_account()).encode(), ()),  # final balances
         _server_time_response(1700000070000),  # fresh time for final snapshot
     ]
@@ -120,8 +122,10 @@ def test_full_reconciliation_is_clean_after_fill_during_cancel(tmp_path) -> None
     responses = [
         _server_time_response(1700000000000),
         (200, json.dumps({"symbols": _symbols()}).encode(), ()),
+        _server_time_response(1700000004000),
         (200, json.dumps(_account()).encode(), ()),
         _server_time_response(1700000005000),
+        _server_time_response(1700000006000),
         (200, json.dumps(_account()).encode(), ()),
         _server_time_response(1700000070000),
     ]
@@ -291,6 +295,7 @@ def test_fill_during_cancel_reproduces_both_discrepancies_then_reconciles_exactl
     # on how many time reads a snapshot performs internally.
     baseline_transport, _ = _transport(
         [
+            _server_time_response(int(run_start.timestamp() * 1000)),
             (200, json.dumps(_account()).encode(), ()),
             _server_time_response(int(run_start.timestamp() * 1000) + 5000),
         ]
@@ -300,6 +305,7 @@ def test_fill_during_cancel_reproduces_both_discrepancies_then_reconciles_exactl
     ledgers = SqliteLedgers(tmp_path / "oms.sqlite3")
     final_transport, _ = _transport(
         [
+            _server_time_response(int(final_time.timestamp() * 1000) - 5000),
             (
                 200,
                 json.dumps(

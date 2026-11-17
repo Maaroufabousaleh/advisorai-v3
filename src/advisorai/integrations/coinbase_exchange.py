@@ -417,6 +417,14 @@ class CoinbaseExchangeSandboxTransport(NativeTransport):
         return tuple(positions)
 
     def fetch_account_snapshot(self) -> VenueAccountSnapshot:
+        # Same bracketed contract as Binance: the accounts read carries
+        # no timestamp, so bound it with a server time on each side.
+        # The pre-read balance_cutoff is the latest instant the balances
+        # can reflect; the post-read as_of keeps the freshness check.
+        server = self.server_time()
+        del server
+        balance_cutoff = self._last_server_time
+        assert balance_cutoff is not None
         accounts = self._accounts()
         cash_account = next(
             (account for account in accounts if str(account.get("currency", "")).upper() == "USD"),
@@ -447,22 +455,19 @@ class CoinbaseExchangeSandboxTransport(NativeTransport):
                     f"Coinbase account contains non-zero unmapped asset {currency}"
                 )
             positions[self.canonical_instrument_id(product.product_id)] = quantity
-        # Same staleness contract as the Binance adapter: the accounts read
-        # carries no timestamp, so take a fresh server time at read time with
-        # a monotonic guard against clock steps backwards.
-        prior = self._last_server_time
         server = self.server_time()
+        del server
         as_of = self._last_server_time
         assert as_of is not None
-        del server
-        if prior is not None and as_of < prior:
-            as_of = prior
+        if as_of < balance_cutoff:
+            as_of = balance_cutoff
         return VenueAccountSnapshot(
             as_of=as_of,
             cash=cash,
             positions=positions,
             margin_used=Decimal("0"),
             margin_available=margin_available,
+            balance_cutoff=balance_cutoff,
         )
 
     @staticmethod
