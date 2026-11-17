@@ -125,7 +125,7 @@ def test_diagnostic_verdict_matches_launcher_predicate(monkeypatch) -> None:
             resolver, requester=_requester(_account_payload(clean_balances), clean_calls)
         ),
     )
-    _, baseline = read_testnet_baseline(resolver=_resolver(), launch=_launch())
+    _, baseline, _ = read_testnet_baseline(resolver=_resolver(), launch=_launch())
     assert baseline.positions == {"BTC": Decimal("0.010")}
     assert classify_balances(clean_balances) == []
 
@@ -137,7 +137,7 @@ def test_diagnostic_verdict_matches_launcher_predicate(monkeypatch) -> None:
             resolver, requester=_requester(_account_payload(dirty_balances), dirty_calls)
         ),
     )
-    _, pinned = read_testnet_baseline(resolver=_resolver(), launch=_launch())
+    _, pinned, _ = read_testnet_baseline(resolver=_resolver(), launch=_launch())
     assert pinned.positions == {"BTC": Decimal("0.010"), "asset:ETH": Decimal("0.500")}
     assert classify_balances(dirty_balances) == [
         {"asset": "ETH", "free_nonzero": True, "locked_nonzero": False}

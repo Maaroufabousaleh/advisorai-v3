@@ -100,7 +100,7 @@ def test_baseline_verifies_instrument_and_quote_before_account_read(monkeypatch)
         "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
     )
     assert launch_module is not None  # module import seam for monkeypatch target
-    transport, baseline = read_testnet_baseline(
+    transport, baseline, _ = read_testnet_baseline(
         resolver=_resolver(), launch=_launch()
     )
     assert transport.verified_symbol_ids == ("BTCUSDT",)
