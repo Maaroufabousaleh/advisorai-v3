@@ -232,3 +232,32 @@ are unchanged by this amendment.
   receipt by that time (`test_fill_rejects_unreceived_fill_bar`).
 - End-to-end fixture extended: the 2024-03-05 decision and its 2024-03-06
   fill both carry pinned receipt and record timestamps.
+
+## Amendment 7 (2026-11-17, before any forward scoring)
+
+Amendments 1-6 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Daily shadow runner (`btc_shadow_job.run_shadow_days`): processes
+ decision dates in order, persists progress after every date, and never
+ rewrites a record. A missed day is caught up under its own decision
+ date with a late record time (transparent catch-up, not backdating);
+ a duplicate run appends nothing. Quarantine is final: a day that
+ abstains (late or missing receipts) is never rescored.
+- Fills are observed only for scored decisions, once the next bar is
+ received, into a separate fills log. Pinned by `test_duplicate_run_
+ appends_nothing`, `test_missed_day_is_caught_up_transparently`,
+ `test_late_receipt_quarantines_without_scoring`, and `test_restart_
+ resumes_after_last_completed_date`.
+- Hosted dry-run workflow prepared (`.github/workflows/btc-shadow-
+ dry-run.yml`), not enabled: rebuilds the frozen snapshot, verifies the
+ pinned bars hash, collects the forward segment read-only, and uploads
+ evidence. No records, no scores, no credentials, no orders. Enabling
+ it is an explicit owner decision after P04 lands.
+- P07 fixture rehearsal started (`scripts/rehearse_p07_fixture.py`):
+ offline intake-to-replay chain with per-step fingerprints; reruns
+ reuse verified artifacts and resume past completed steps (pinned by
+ `test_rerun_reuses_verified_artifacts` and `test_resume_after_
+ dropped_step_reuses_earlier_artifacts`).

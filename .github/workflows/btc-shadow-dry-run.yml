@@ -1,0 +1,66 @@
+# BTCUSDT forward-shadow dry run (prepared, NOT enabled).
+#
+# Intent: let the daily shadow inputs accrue on hosted runners so the
+# owner's laptop can be off, with evidence preserved as run artifacts.
+# This workflow is inert while it lives on a non-default branch: GitHub
+# only runs `schedule` triggers from the default branch, and nothing
+# here deploys, scores, writes to the repo, or touches credentials,
+# venues, or orders. Enabling it is an explicit owner decision: merge
+# to the default branch (or retarget the schedule) after P04 lands.
+#
+# Scope per run: rebuild the frozen snapshot from the public archive and
+# verify its pinned hash, collect the read-only forward segment,
+# re-qualify the archive-to-feed handoff, and upload the evidence report.
+# No shadow records are written by this job (recording stays a supervised
+# local step until the owner approves hosted recording).
+on:
+  schedule:
+    # 01:30 UTC daily: after the 00:00 UTC close plus formation buffer.
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: btc-shadow-dry-run
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    name: Forward collection dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: 0.13.7
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Rebuild frozen snapshot and verify pinned hash
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+          EXPECTED_BARS_SHA256: 1ee07b5b24a5640da47e8be89964daf63a9bee86e18e8488fbf7136a10e53dce
+        run: |
+          mkdir -p /tmp/btcusdt-snapshot /tmp/btc-forward-evidence
+          uv run --locked python scripts/fetch_btcusdt_snapshot.py \
+            --start 2017-08 --end 2026-09 --out /tmp/btcusdt-snapshot | tee /tmp/btc-forward-evidence/snapshot.log
+          ACTUAL=$(uv run --locked python -c "import json; print(json.load(open('/tmp/btcusdt-snapshot/manifest.json'))['bars_sha256'])")
+          test "$ACTUAL" = "$EXPECTED_BARS_SHA256"
+      - name: Collect forward segment (read-only)
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          uv run --locked python scripts/collect_btc_forward.py \
+            --snapshot /tmp/btcusdt-snapshot \
+            --out /tmp/btc-forward-evidence | tee /tmp/btc-forward-evidence/dry_run.log
+      - name: Upload evidence
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: btc-shadow-dry-run
+          path: /tmp/btc-forward-evidence/
+          retention-days: 90
+          if-no-files-found: error
