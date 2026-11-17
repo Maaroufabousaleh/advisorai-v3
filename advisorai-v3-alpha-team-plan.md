@@ -242,7 +242,12 @@ Use two independent implementations before promotion:
 - **Fast falsification:** Polars/NumPy or VectorBT. It tests broad candidate batches cheaply.
 - **Realism gate:** independent NautilusTrader replay using the canonical event/cost/latency model.
 
-For US equities, Qlib/QuantaAlpha can be an isolated **research challenger**, but it never becomes the data source of truth, production feature owner, portfolio authority, or execution engine. Its current published configuration is centred on Qlib Chinese daily data and a Qlib Top-K/Dropout simulation, so it cannot be transferred untested to your US equities or crypto setup.
+For U.S. equities, Qlib is an isolated benchmark environment. Start with
+Alpha158 + LightGBM on an AdvisorAI frozen snapshot and reproduce finalists
+in the canonical replay. QuantaAlpha remains deferred. Its published
+configuration centers on Chinese daily data and a Top-K/Dropout simulation
+that needs separate evaluation for a different market. See the [equity data
+and research integration plan](docs/plans/equity-data-and-research-integrations.md).
 
 ## 7. How the named repositories fit
 
@@ -252,9 +257,12 @@ For US equities, Qlib/QuantaAlpha can be an isolated **research challenger**, bu
 | [Inalpha](https://github.com/mirror29/inalpha) | **Architecture reference only initially** | factor-timing, candidate audit trail, plan/approve/execute separation, sandbox gates and factor-decay monitoring patterns | code-level integration or a production dependency; it is alpha status and AGPL-3.0, so direct reuse would carry strong copyleft obligations |
 | [WorldQuant Miner](https://github.com/zhutoutoutousan/worldquant-miner) | **Reference and isolated external-platform experiment only** | restricted-expression-mining ideas, run dashboards, trial logging and rate-limit concepts | its credential file pattern, automatic submission, WorldQuant API automation, or treating platform scores as AdvisorAI validation |
 | [awesome-quant](https://github.com/wilsonfreitas/awesome-quant) | **Curated discovery index** | source catalogue for a Scout allow-list, each candidate reviewed individually | mass-installing its contents or using a list entry as endorsement |
-| Qlib / RD-Agent | **Post-Core equity lab** | factor/model research and benchmark replication in a sealed environment | production data, risk, backtest, OMS or execution ownership |
+| Qlib | **Phase 9 equity benchmark** | Alpha158/LightGBM comparison on a frozen AdvisorAI snapshot | upstream sample data as canonical input, production risk, backtest or execution ownership |
+| RD-Agent | **Deferred** | later evaluation if experiment automation is a measured bottleneck | a second research orchestrator |
 | Investing Algorithm Framework / VectorBT | **Research challengers** | rapid sweeps, robustness reports and experiment comparison | broker/live deployment or a second risk/OMS engine |
-| TradingAgents / ai-hedge-fund | **Qualitative long-horizon shadow research** | independent bull/bear thesis and valuation research after equities expansion | mandatory live dependency, portfolio authority or order access |
+| TradingAgents | **One bounded qualitative challenger** | bull/bear review of selected dated Equity Council cases | trader/risk stages, portfolio authority, order access |
+| ai-hedge-fund | **Valuation reference** | one alternate valuation calculation when assumptions are material | investor-agent roster, portfolio simulator, order access |
+| Paper2Code | **Hermes Builder prototype** | adapt planning, analysis and generation for a missing paper implementation | second agent runtime, automatic execution or promotion |
 
 No repository enters the trusted codebase merely because it has an "autonomous" label. Before any adoption: pin commit → SCA/license review → isolated install → reproducibility test on a frozen snapshot → security/tool-permission review → benchmark → CapabilityCard → quarantine/read-only activation.
 
@@ -319,6 +327,11 @@ The ModelGateway must classify, redact, enforce schemas, attach provider/model/r
 
 Hermes is used only in **Deep**, **Builder**, or **Recovery** jobs. It runs in an isolated task directory/container with no broker credentials, no production repository write access, no shell access outside its workspace, and no live order tool. Its skills export through CapabilityCards and must earn admission through the same validation route.
 
+The [paper-to-code prototype](docs/plans/paper-to-code-prototype.md) is a
+Builder fallback when author code is unavailable or unsuitable. Its first trial
+compares a maintained Paper2Code adaptation with ordinary Hermes work and a
+withheld reference implementation.
+
 ## 10. Operations, dashboard and observability
 
 Extend the local AdvisorAI dashboard with an Alpha Team section. The main drill-down must be:
@@ -349,7 +362,7 @@ control operational admission and promotion only.
 | **E2 — Controlled Alpha Lab** *(inside Phase 9 research scope)* | DSL, feature catalog, baseline suite, fast screen, full manifest, validation/red-team workflow and research dashboard | Intentionally leaky/overfit candidates are rejected; a known baseline reproduces |
 | **E3 — First V3 strategy challenger** | a small BTC/ETH research-only candidate set using existing MarketStateArtifact and independent Nautilus replay | incremental net value versus the existing V3 baseline across preregistered regimes; eligible for a paper shadow only |
 | **E4 — Optional capability adapters** | one isolated Hermes/QuantaAlpha/AlphaAgent/Qlib/DEAP/Optuna adapter at a time, with CapabilityCards and code-sandbox checks | adapter is removable, cannot escape sandbox, and produces a valid replayable artifact |
-| **E5 — Equity and long-horizon research extension** | SEC/IR/corporate-action snapshots, equity factor families, valuation/event research cards, paper ledger | clean point-in-time history and corporate-action correctness; no crypto assumption is reused blindly |
+| **E5 — Equity and long-horizon research extension** | U.S. research bars, SEC/IR/corporate-action snapshots, equity factors and valuation/event cards | clean point-in-time history, separate verification and labeled source lineage. Broker-paper scope requires its own qualification. |
 | **E6 — Controlled candidate expansion** | limited approved-paper candidates, factor decay monitor and capital-allocation research | Accumulated evidence across independent sessions and relevant market states; no unresolved safety/reconciliation/data-quality incident. A provisional 20–30 meaningful sessions / 100–150 operating hours may inform review, not act as a calendar-time pass rule |
 | **E7 — Optional bounded-live scope** | no architecture change: use existing V3 live-capital gate, credential enclave, caps and emergency controls | explicit separate go-live review; paper results and operations demonstrate parity; immediate paper rollback is tested |
 

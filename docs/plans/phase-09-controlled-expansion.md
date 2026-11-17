@@ -28,13 +28,21 @@ may begin before Phase 7; promotion remains gated.
    measured deficiency in the frozen reference fabric. TimesFM 3, TTM-R3,
    Kronos-base, TabPFN-TS, Kev/Jev variants, and future AdvisorAI-CDM remain
    separately gated; model release novelty is not a trigger.
-6. Add SEC/ALFRED/equity sources, selected OpenBB providers, browser collectors,
-   external validation tools, and optional cloud workers only as bounded,
-   separately reviewed work behind existing ports.
+6. Qualify U.S. daily research bars and official issuer evidence through the
+   [equity integration plan](equity-data-and-research-integrations.md). Evaluate
+   Alpaca historical SIP and SEC EDGAR first, then a secondary daily-bar
+   candidate. Admit provider adapters and optional tools one at a time. Keep
+   equity broker-paper qualification separate from frozen research replay.
+   Keep browser collectors and optional cloud workers behind their existing
+   ports and qualification boundaries.
 7. Prototype official-text-first event evidence after Integrated Alpha. Defer
    broad third-party transcript and audio ingestion until access, recording,
    storage, transformation, retention, latency, and redistribution rights are
    established. Verify material numbers against an official filing or release.
+8. Benchmark Qlib on a frozen equity snapshot and TradingAgents on selected
+   dated Equity Council cases. Use Awesome Quant as a discovery list and
+   route missing research implementations through the optional
+   [Hermes paper-to-code trial](paper-to-code-prototype.md).
 
 ## Research Brain separation
 
