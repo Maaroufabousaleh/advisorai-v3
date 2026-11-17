@@ -24,13 +24,15 @@ MODEL_ID = "btc-tsmom-63d-longflat-v1"
 
 @dataclass(frozen=True, slots=True)
 class DecisionRecord:
-    """Writable from received bars only: date, signal, position, and the
-    hash of the qualified input. No fill, no future bar, no venue data."""
+    """Writable from received bars only: date, signal, position, the hash
+    of the qualified input, and the receipt frontier. No fill, no future
+    bar, no venue data."""
 
     date: str
     signal: int
     position: int
     bars_hash: str
+    received_through: str
     model_id: str
     costs_bps: str
     abstained: bool
@@ -49,7 +51,11 @@ class FillRecord:
 
 
 def observe_fill(view: tuple[dict[str, Any], ...], date: str) -> FillRecord:
-    """Record the simulated fill for a decision once its bar is received."""
+    """Record the simulated fill for a decision once its bar is received.
+
+    The fill price timestamp must be strictly after the recorded decision;
+    anything else is rejected, never recorded.
+    """
     dates = [str(row["date"]) for row in view]
     if date not in dates:
         raise ValueError(f"decision date {date} is not a received bar")
@@ -57,11 +63,14 @@ def observe_fill(view: tuple[dict[str, Any], ...], date: str) -> FillRecord:
     if index + 1 >= len(view):
         raise ValueError(f"fill for {date} is not yet observable: next bar not received")
     fill_row = view[index + 1]
+    fill_date = str(fill_row["date"])
+    if fill_date <= date:
+        raise ValueError(f"fill price timestamp {fill_date} precedes recorded decision {date}")
     return FillRecord(
         date=date,
-        fill_date=str(fill_row["date"]),
+        fill_date=fill_date,
         fill_price=str(fill_row["open"]),
-        observable_after=str(fill_row["date"]),
+        observable_after=fill_date,
     )
 
 
@@ -101,11 +110,13 @@ def log_forward_day(
     date: str,
     costs_bps: str = "20",
 ) -> DecisionRecord:
-    """Score one forward day from a qualified view, or quarantine it.
+    """Record one decision from its own completed close, or quarantine it.
 
-    The view's segments are qualified by the caller (collector + session
-    cutoff). Structural violations here — unknown date, insufficient
-    history, duplicate dates — are recorded as abstentions, never scored.
+    ``date`` is the decision date: the signal uses that date's completed
+    close, never the prior bar. The view's segments are qualified by the
+    caller (collector + session cutoff). Structural violations here —
+    unknown date, insufficient history, duplicate dates — are recorded as
+    abstentions, never scored.
     """
     try:
         dates = [str(row["date"]) for row in view]
@@ -115,12 +126,13 @@ def log_forward_day(
             raise ValueError(f"decision date {date} is not a qualified bar")
         index = dates.index(date)
         closes = [Decimal(str(row["adj_close"])) for row in view]
-        signal = decide(closes, index - 1)
+        signal = decide(closes, index)
         record = DecisionRecord(
             date=date,
             signal=signal,
             position=signal,
             bars_hash=forward_hash,
+            received_through=dates[-1],
             model_id=MODEL_ID,
             costs_bps=costs_bps,
             abstained=False,
@@ -132,6 +144,7 @@ def log_forward_day(
             signal=0,
             position=0,
             bars_hash="",
+            received_through="",
             model_id=MODEL_ID,
             costs_bps=costs_bps,
             abstained=True,

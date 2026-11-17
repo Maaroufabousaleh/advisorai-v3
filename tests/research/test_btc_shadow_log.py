@@ -134,42 +134,58 @@ def test_fill_requires_next_bar_received(tmp_path):
     assert fill.observable_after == "2024-03-05"
     with pytest.raises(ValueError, match="not a received bar"):
         observe_fill(view, "2024-03-06")
+    unordered = (
+        {"date": "2024-03-05", "open": "200.0"},
+        {"date": "2024-03-04", "open": "100.0"},
+    )
+    with pytest.raises(ValueError, match="precedes recorded decision"):
+        observe_fill(unordered, "2024-03-05")
 
 
 def test_decision_uses_only_received_bars(tmp_path):
     snap = tmp_path / "snap"
     snap.mkdir()
-    _write_snapshot(snap, _day_rows("2024-01-01", 63, close="100.0"))
+    _write_snapshot(snap, _day_rows("2024-01-01", 64, close="100.0"))
     forward = tmp_path / "forward"
     forward.mkdir()
-    _write_snapshot(forward, _day_rows("2024-03-04", 2, close="200.0"))
+    _write_snapshot(forward, _day_rows("2024-03-05", 1, close="200.0"))
     view = load_view(snap, forward)
     state = tmp_path / "state"
+    flat = log_forward_day(view=view, forward_hash="f" * 64, state_dir=state, date="2024-03-04")
+    assert flat.abstained is False
+    assert (flat.signal, flat.position) == (0, 0)
+    assert flat.received_through == "2024-03-05"
     record = log_forward_day(view=view, forward_hash="f" * 64, state_dir=state, date="2024-03-05")
     assert record.abstained is False
-    assert record.signal == 1
+    assert (record.signal, record.position) == (1, 1)
     assert record.bars_hash == "f" * 64
+    assert record.received_through == "2024-03-05"
 
 
 def test_decision_then_fill_end_to_end_fixture(tmp_path):
-    """Timestamped: decision from the completed 2024-03-05 close with no
-    fill bar present; the fill records only after 2024-03-06 arrives."""
+    """Timestamped: the 2024-03-04 and 2024-03-05 decisions use their own
+    completed closes (opposite signals); the 2024-03-05 fill records only
+    after 2024-03-06 arrives."""
     snap = tmp_path / "snap"
     snap.mkdir()
-    _write_snapshot(snap, _day_rows("2024-01-01", 63, close="100.0"))
+    _write_snapshot(snap, _day_rows("2024-01-01", 64, close="100.0"))
     forward = tmp_path / "forward"
     forward.mkdir()
-    _write_snapshot(forward, _day_rows("2024-03-04", 2, close="200.0"))
+    _write_snapshot(forward, _day_rows("2024-03-05", 1, close="200.0"))
     view = load_view(snap, forward)
     state = tmp_path / "state"
+    prior = log_forward_day(view=view, forward_hash="f" * 64, state_dir=state, date="2024-03-04")
+    assert (prior.signal, prior.position) == (0, 0)
     record = log_forward_day(view=view, forward_hash="f" * 64, state_dir=state, date="2024-03-05")
     assert record.abstained is False
     assert (record.date, record.signal, record.position) == ("2024-03-05", 1, 1)
+    assert record.received_through == "2024-03-05"
     with pytest.raises(ValueError, match="not yet observable"):
         observe_fill(view, "2024-03-05")
-    stored = json.loads((state / "decisions.jsonl").read_text().splitlines()[0])
+    stored = [json.loads(line) for line in (state / "decisions.jsonl").read_text().splitlines()]
+    assert [entry["signal"] for entry in stored] == [0, 1]
     assert "fill" not in json.dumps(stored)
-    rows = _day_rows("2024-03-04", 2, close="200.0") + _day_rows(
+    rows = _day_rows("2024-03-05", 1, close="200.0") + _day_rows(
         "2024-03-06", 1, close="201.0", open_="207.50"
     )
     _write_snapshot(forward, rows)

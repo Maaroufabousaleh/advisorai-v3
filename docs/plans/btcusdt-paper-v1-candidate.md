@@ -194,3 +194,23 @@ bar completing after 2026-09-30.
   151 trades, net **154319.31** bps vs BH **136844.63** bps.
   Characterization, not a verdict; compounding over 2017–2025 explains
   the scale versus additive legs.
+
+## Amendment 5 (2026-11-17, before any forward scoring)
+
+Amendments 1–4 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: the logger indexed the decision one bar early (prior
+  close). The decision for a date now uses that date's own completed
+  close. Pinned by the opposite-signal fixture: 2024-03-04 decides 0
+  from its flat close while 2024-03-05 decides 1 from its elevated
+  close; the old indexing fails both assertions.
+- Decision records pin actual receipt: `received_through` is the latest
+  bar date in the view at record time, alongside the input hash.
+- Simulated fills carry `observable_after`, and a fill whose price
+  timestamp precedes the recorded decision is rejected, never recorded.
+- End-to-end fixture (`test_decision_then_fill_end_to_end_fixture`):
+  2024-03-05 decides 1 with no fill bar present; the fill records only
+  after 2024-03-06 arrives at 207.50.
