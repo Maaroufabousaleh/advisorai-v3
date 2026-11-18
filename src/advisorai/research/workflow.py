@@ -31,6 +31,7 @@ from advisorai.research import (
     ResearchRole,
     ResearchSourceUse,
 )
+from advisorai.research import cards as research_cards
 from advisorai.research.replay import ExposureSpec, run_replay
 
 WORKFLOW_VERSION = "advisorai.research.agent-workflow.v1"
@@ -217,11 +218,11 @@ class ResearchWorkflow:
                         detail=f"trades={item.trade_count}",
                     )
                 )
-            for failure in report.failed:
+            for failure, failure_id in zip(report.failed, report.failed_ids, strict=True):
                 symbol = failure.split(":", 1)[0]
                 results.append(
                     ExperimentOutcome(
-                        experiment_id=hypothesis.artifact_id,
+                        experiment_id=failure_id,
                         symbol=symbol,
                         net_bps="n/a",
                         baseline_net_bps="n/a",
@@ -260,15 +261,24 @@ class ResearchWorkflow:
                 continue
             metrics = dict(getattr(record, "metrics", {}) or {})
             windows = tuple(getattr(record, "windows", ()) or ())
-            symbol = windows[0].split(":")[0] if windows else "unknown"
+            if windows:
+                symbol = windows[0].split(":")[0]
+            else:
+                symbol = str(metrics.get("symbol", "unknown"))
+            rejected = getattr(record, "status", None) is research_cards.ArtifactStatus.REJECTED
+            detail = (
+                str(metrics.get("failure", "rejected"))
+                if rejected
+                else f"trial_count={getattr(record, 'trial_count', '?')}"
+            )
             outcomes.append(
                 ExperimentOutcome(
                     experiment_id=hit.artifact_id,
                     symbol=symbol,
                     net_bps=str(metrics.get("net_bps", "n/a")),
                     baseline_net_bps=str(metrics.get("baseline_net_bps", "n/a")),
-                    succeeded=True,
-                    detail=f"trial_count={getattr(record, 'trial_count', '?')}",
+                    succeeded=not rejected,
+                    detail=detail,
                 )
             )
         # Failed runs are first-class memory: surface interrupted/cancelled

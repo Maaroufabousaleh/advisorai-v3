@@ -74,6 +74,11 @@ paper's skip-month construction is disclosed here, not hidden in a "12m" label.
   reproduce exactly across state dirs.
 - Per-exposure independence: one bad exposure is recorded as failure evidence,
   never masks its sibling.
+- Retry idempotency: each exposure replay carries a deterministic identity
+  over its scientific inputs, so a retry reuses the stored experiment
+  (or its recorded failure) instead of duplicating rows.
+- Negative results persist: per-exposure failures are stored as rejected
+  experiments and retrieved alongside accepted ones by outcome memory.
 
 ## What is not proven
 

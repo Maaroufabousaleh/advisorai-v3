@@ -319,3 +319,157 @@ def test_costs_come_from_single_recorded_config():
         ExposureSpec(symbol="SPY", fee_bps=Decimal("9")).resolved_costs()
     with pytest.raises(ValueError, match="no pinned cost"):
         ExposureSpec(symbol="UNKNOWN").resolved_costs()
+
+
+def _good_bad_snapshot(tmp_path):
+    bars = _bars(300)
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    payload = {
+        "GOOD": [
+            {
+                "date": row["date"],
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "adj_close": float(row["adj_close"]),
+                "volume": row["volume"],
+            }
+            for row in bars
+        ],
+        "BAD": [
+            {
+                "date": row["date"],
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "adj_close": float(row["adj_close"]),
+                "volume": row["volume"],
+            }
+            for row in bars[:10]
+        ],
+    }
+    (snapshot / "bars.json").write_text(json.dumps(payload))
+    return snapshot
+
+
+def _specs(*symbols):
+    return tuple(
+        ExposureSpec(
+            symbol=symbol,
+            fee_bps=Decimal("1"),
+            spread_bps=Decimal("1"),
+            slippage_bps=Decimal("2"),
+        )
+        for symbol in symbols
+    )
+
+
+def test_retry_reuses_stored_experiments_without_duplicates(tmp_path):
+    snapshot = _good_bad_snapshot(tmp_path)
+    registry = ResearchRegistry(tmp_path / "registry.sqlite3")
+    spec = SignalPolicySpec(policy_id="test-sign-only", family=SignalPolicyFamily.SIGN_ONLY)
+    first = run_replay(
+        registry=registry,
+        snapshot_root=snapshot,
+        exposures=_specs("GOOD"),
+        spec=spec,
+        require_all_windows=False,
+    )
+    counts = (
+        registry.count("factor"),
+        registry.count("experiment"),
+        registry.count("validation"),
+    )
+    second = run_replay(
+        registry=registry,
+        snapshot_root=snapshot,
+        exposures=_specs("GOOD"),
+        spec=spec,
+        require_all_windows=False,
+    )
+    assert second.exposures == first.exposures
+    assert second.failed == first.failed == ()
+    assert (
+        registry.count("factor"),
+        registry.count("experiment"),
+        registry.count("validation"),
+    ) == counts
+    # Changed inputs still yield a fresh experiment, not a stale reuse.
+    repriced = run_replay(
+        registry=registry,
+        snapshot_root=snapshot,
+        exposures=(
+            ExposureSpec(
+                symbol="GOOD",
+                fee_bps=Decimal("9"),
+                spread_bps=Decimal("9"),
+                slippage_bps=Decimal("9"),
+            ),
+        ),
+        spec=spec,
+        require_all_windows=False,
+    )
+    assert repriced.exposures[0].experiment_id != first.exposures[0].experiment_id
+    assert registry.count("experiment") == counts[1] + 1
+
+
+def test_failed_exposure_persists_as_rejected_and_reuses(tmp_path):
+    snapshot = _good_bad_snapshot(tmp_path)
+    registry = ResearchRegistry(tmp_path / "registry.sqlite3")
+    spec = SignalPolicySpec(policy_id="test-sign-only", family=SignalPolicyFamily.SIGN_ONLY)
+    first = run_replay(
+        registry=registry,
+        snapshot_root=snapshot,
+        exposures=_specs("GOOD", "BAD"),
+        spec=spec,
+        require_all_windows=False,
+    )
+    assert [item.symbol for item in first.exposures] == ["GOOD"]
+    assert len(first.failed) == 1 and first.failed[0].startswith("BAD:")
+    assert len(first.failed_ids) == 1
+    stored = registry.get(first.failed_ids[0])
+    assert stored is not None and stored.status.value == "rejected"
+    assert stored.metrics["failure"] == first.failed[0]
+    counts = (
+        registry.count("experiment"),
+        registry.count("validation"),
+    )
+    second = run_replay(
+        registry=registry,
+        snapshot_root=snapshot,
+        exposures=_specs("GOOD", "BAD"),
+        spec=spec,
+        require_all_windows=False,
+    )
+    assert second.exposures == first.exposures
+    assert second.failed == first.failed
+    assert second.failed_ids == first.failed_ids
+    assert (registry.count("experiment"), registry.count("validation")) == counts
+
+
+def test_partial_cost_overrides_recorded_per_exposure(tmp_path):
+    snapshot = _good_bad_snapshot(tmp_path)
+    registry = ResearchRegistry(tmp_path / "registry.sqlite3")
+    spec = SignalPolicySpec(policy_id="test-sign-only", family=SignalPolicyFamily.SIGN_ONLY)
+    exposures = _specs("GOOD") + (ExposureSpec(symbol="GOOD", fee_bps=Decimal("9")),)
+    first = run_replay(
+        registry=registry,
+        snapshot_root=snapshot,
+        exposures=exposures,
+        spec=spec,
+        require_all_windows=False,
+    )
+    assert [item.symbol for item in first.exposures] == ["GOOD"]
+    assert len(first.failed) == 1 and "partial cost overrides" in first.failed[0]
+    counts = (registry.count("experiment"), registry.count("validation"))
+    second = run_replay(
+        registry=registry,
+        snapshot_root=snapshot,
+        exposures=exposures,
+        spec=spec,
+        require_all_windows=False,
+    )
+    assert second.failed == first.failed
+    assert second.failed_ids == first.failed_ids
+    assert (registry.count("experiment"), registry.count("validation")) == counts

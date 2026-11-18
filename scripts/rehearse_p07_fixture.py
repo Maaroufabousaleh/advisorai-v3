@@ -221,8 +221,11 @@ def run_fixture_chain(state_dir: Path, snapshot_dir: Path) -> dict[str, Any]:
         "experiment_ids": experiment_ids,
         "failed": failed,
         "prior_count": len(prior),
+        "prior_succeeded": sum(1 for item in prior if item.succeeded),
+        "prior_rejected": sum(1 for item in prior if not item.succeeded),
         "paper_rows": workflow.registry.count("paper"),
         "experiment_rows": workflow.registry.count("experiment"),
+        "validation_rows": workflow.registry.count("validation"),
     }
 
 

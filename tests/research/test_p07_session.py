@@ -94,6 +94,8 @@ def run_session(session_dir: Path, session_date: str) -> dict:
             "experiment_ids": chain_report["experiment_ids"],
             "failed": chain_report["failed"],
             "prior_count": chain_report["prior_count"],
+            "prior_succeeded": chain_report["prior_succeeded"],
+            "prior_rejected": chain_report["prior_rejected"],
         },
         "shadow": shadow_result,
         "artifacts": {
@@ -110,7 +112,9 @@ def run_session(session_dir: Path, session_date: str) -> dict:
 def test_session_bundles_chain_and_shadow_evidence(tmp_path):
     manifest = run_session(tmp_path / "session", "2024-03-05")
     assert manifest["session_date"] == "2024-03-05"
-    assert manifest["chain"]["prior_count"] == 2
+    assert manifest["chain"]["prior_count"] == 3
+    assert manifest["chain"]["prior_succeeded"] == 2
+    assert manifest["chain"]["prior_rejected"] == 1
     assert manifest["chain"]["failed"] == ["FIXC"]
     assert manifest["shadow"]["processed"] == ["2024-03-05"]
     assert manifest["shadow"]["quarantined"] == []
