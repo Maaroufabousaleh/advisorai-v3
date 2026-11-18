@@ -132,7 +132,18 @@ def main() -> int:
     if os.getenv("ADVISORAI_RUN_NETWORK_SMOKE") != "1":
         raise SystemExit("refusing network access; set ADVISORAI_RUN_NETWORK_SMOKE=1 explicitly")
 
-    settings = SecretSettings.from_mapping(load_env_file(args.secrets))
+    try:
+        settings = SecretSettings.from_mapping(load_env_file(args.secrets))
+    except (OSError, ValueError) as exc:
+        return _emit(
+            {
+                "status": "not_ready",
+                "reason": "secrets_file_unreadable",
+                "error_class": type(exc).__name__,
+                "network_calls": 0,
+            },
+            args.evidence_dir,
+        )
     venue_key = settings.secret_for("ADVISORAI_VENUE_API_KEY")
     venue_secret = settings.secret_for("ADVISORAI_VENUE_API_SECRET")
     if not settings.venue_name or not settings.venue_base_url or not venue_key or not venue_secret:

@@ -14,6 +14,36 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run pytest -q tests/session tests/decision
 ADVISORAI_STATE_DIR=var/advisorai uv run python -m advisorai.app start --reason "owner session"
 ```
 
+To use a reviewed sandbox venue instead of the local simulator, pass the
+supervised venue profile with enforced bounds. Owner shell only (reads the
+operator inventory, snapshots the read-only testnet baseline, then starts
+under the same lock). Run from the pinned commit named in the current
+handoff on `review/testnet-launch-path`, never a moving branch tip. The
+deadline and submission cap are required for any testnet run: the session
+stops clean at the deadline and the venue boundary refuses submissions
+beyond the cap.
+
+```bash
+ADVISORAI_STATE_DIR=var/advisorai-testnet uv run python -m advisorai.app start \
+  --reason "owner testnet canary" \
+  --venue-profile binance_spot_testnet \
+  --scenario qualification --interval-seconds 10 \
+  --max-runtime-seconds 120 --max-submissions 0
+```
+
+`--max-submissions 0` hard-refuses any submission at the venue boundary and
+is the correct first canary: it proves SESSION READY, deadline stop, clean
+reconciliation, and lease release with zero venue writes (same prescription
+as the bounded-canary block in `binance-spot-testnet.md`). Raise the cap
+only after the zero-submission canary certifies and the single-order
+lifecycle gate passes.
+
+The baseline cash and timestamp stay out of stdout by default; pass
+`--print-baseline` for explicit one-shot inspection. `--venue-instrument` /
+`--venue-quote` default per profile (`BTCUSDT`/`USDT`,
+`BTC-USD`/`USD`); anything else refuses with `SESSION START REFUSED`
+before the secrets file is read.
+
 `start` stays in the foreground for the whole owner session. It holds the
 durable single-owner lock while one bounded scheduler runs paper cycles. The
 default `quiet` profile is a local, no-network reference fixture that abstains

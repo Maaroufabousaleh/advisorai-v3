@@ -46,8 +46,13 @@ requested scope fail closed. Diagnostics may use `available_names()`; values
 must not be logged.
 
 `PUBLIC_DATA` contains only the non-secret `SEC_USER_AGENT`. Provider keys are
-separated by provider. The Infisical resolver accepts one named secret only
-for a matching provider scope; the trusted EIA smoke runtime is the only new
-consumer. No machine identity is provisioned. Any previously exposed BEA key
-is compromised and must not be reused; only an owner-issued replacement may be
-used after secure transfer.
+separated by provider: `BLS_PUBLIC_DATA`, `BEA_PUBLIC_DATA`, and
+`EIA_PUBLIC_DATA` each resolve exactly one name, so one key is never visible
+to another provider's client. The local-file resolver supports `EIA_API_KEY`
+as a credential source through `CredentialResolver.from_env_file` (see
+`scripts/smoke_official_providers.py --provider eia`). The Infisical resolver
+accepts one named secret only for a matching provider scope; the trusted EIA
+smoke runtime (`advisorai.integrations.eia_trusted_runtime`) remains the
+documented Infisical alternative. No machine identity is provisioned. Any
+previously exposed BEA key is compromised and must not be reused; only an
+owner-issued replacement may be used after secure transfer.

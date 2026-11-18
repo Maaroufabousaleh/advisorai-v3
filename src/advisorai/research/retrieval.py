@@ -72,6 +72,21 @@ def _extract_text(record_type: str, payload: dict) -> tuple[str, str]:
         body = " ".join(
             str(value) for value in (get("policy_version", ""), get("rollback_condition", ""))
         )
+    elif record_type == "implementation":
+        title = str(get("repository_url", "implementation") or "implementation")
+        body = " ".join(
+            str(value)
+            for value in (
+                get("revision", ""),
+                get("license", ""),
+                get("relationship", ""),
+                get("entry_point", ""),
+                get("replication_evidence", ""),
+                get("disposition", ""),
+                " ".join(get("dependencies", []) or []),
+                " ".join(get("data_assumptions", []) or []),
+            )
+        )
     else:
         title, body = record_type, ""
     return title, body

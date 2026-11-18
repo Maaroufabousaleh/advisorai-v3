@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -153,6 +154,7 @@ class OwnerApplicationAdapters:
     outcome_adapter: OwnerOutcomeAdapter
     initial_account: AccountState
     instrument: InstrumentIdentity = _BTC
+    baseline_balance_cutoff: datetime | None = None
 
     def __post_init__(self) -> None:
         if not self.data.source.strip() or not self.data.dataset.strip():
@@ -188,6 +190,11 @@ class OwnerApplicationAdapters:
             raise ValueError("owner instrument must use the supervised paper venue alias")
         if self.instrument.canonical_id not in self.initial_account.marks:
             raise ValueError("owner account baseline must mark the configured instrument")
+        if self.baseline_balance_cutoff is not None and (
+            self.baseline_balance_cutoff.tzinfo is None
+            or self.baseline_balance_cutoff.utcoffset() is None
+        ):
+            raise ValueError("owner baseline balance cutoff must include a timezone")
 
 
 class LocalPaperOutcomeAdapter:
@@ -313,6 +320,7 @@ class OwnerApplicationConfig:
     interval_seconds: float = 3600.0
     accelerated_clock: bool = False
     max_rss_mb: int = 2048
+    max_runtime_seconds: float | None = None
 
     def __post_init__(self) -> None:
         if self.scenario not in {"quiet", "qualification"}:
@@ -323,6 +331,8 @@ class OwnerApplicationConfig:
             raise ValueError("scheduler interval must be between 0.1 seconds and one day")
         if not 256 <= self.max_rss_mb <= 8192:
             raise ValueError("owner process RSS limit must be between 256 and 8192 MiB")
+        if self.max_runtime_seconds is not None and not 1 <= self.max_runtime_seconds <= 86_400:
+            raise ValueError("owner runtime deadline must be between 1 second and one day")
 
 
 class PaperOwnerApplication:
@@ -533,10 +543,19 @@ class PaperOwnerApplication:
 
     def _wait_and_stop(self, session_id: UUID) -> int:
         requested_outcome = SessionOutcome.CLEAN
+        deadline = (
+            time.monotonic() + self.config.max_runtime_seconds
+            if self.config.max_runtime_seconds is not None
+            else None
+        )
         while not self.stop_requested.wait(0.25):
             request = self._consume_stop_request(session_id)
             if request is not None:
                 requested_outcome = request
+                self.stop_requested.set()
+                break
+            if deadline is not None and time.monotonic() >= deadline:
+                print("stop_reason=runtime_deadline_reached", flush=True)
                 self.stop_requested.set()
                 break
             if self._scheduler_done.is_set():
@@ -654,6 +673,9 @@ class PaperOwnerApplication:
             raise RuntimeError("current paper account/order reconciliation failed")
 
     def _settle_venue_fills(self) -> None:
+        unresolved = getattr(self.venue, "unresolved_venue_fills", None)
+        if callable(unresolved):
+            self._absorb_baseline_settled_fills(tuple(unresolved()))
         for fill in self.venue.fills:
             order = self.orders.orders.get(fill.order_id)
             if order is None:
@@ -664,6 +686,142 @@ class PaperOwnerApplication:
             if order.state.value in {"acknowledged", "partially_filled", "cancel_pending"}:
                 self.orders.record_fill(fill, order.side)
             self.account_ledger.apply_fill(fill, order.side, order.instrument.canonical_id)
+
+    def _absorb_baseline_settled_fills(self, unresolved: tuple[dict[str, object], ...]) -> None:
+        """Absorb venue fills already settled inside the opening baseline.
+
+        First start seeds its balances from a live venue snapshot that
+        already reflects settled lifecycle history (e.g. fill
+        ``BTCUSDT:2697483`` from run ``20261114T005138.117654Z``). The
+        venue keeps reporting that fill in trade history, but no local
+        order claims it and re-applying it would double-count.
+
+        Proof is verified evidence tied to the exact opening baseline,
+        not arithmetic: the fill's venue-attested ``occurred_at`` must
+        strictly predate the baseline snapshot's pre-read
+        ``balance_cutoff`` — the latest instant the balances can
+        reflect. The post-read ``as_of`` is freshness only: a fill that
+        lands between the balance read and that time read cannot be
+        settled inside the balances, however well its economics fit.
+        Balance containment is only a sanity check on top. Each
+        absorbed fill records its full economics durably so a restart
+        re-verifies the replayed fill against the record and blocks on
+        any change; absorbed fills are recognized, never applied.
+        """
+        from datetime import datetime
+        from decimal import Decimal
+
+        from advisorai.ledger import LedgerEvent, LedgerNamespace
+
+        baseline = self.adapters.initial_account
+        cutoff = self.adapters.baseline_balance_cutoff
+        for entry in unresolved:
+            venue_fill_id = str(entry["venue_fill_id"])
+            key = f"baseline-settled-fill:{venue_fill_id}"
+            recorded = next(
+                (
+                    event
+                    for event in self.ledgers.events(LedgerNamespace.VENUE)
+                    if event.idempotency_key == key
+                ),
+                None,
+            )
+            if recorded is not None:
+                self._verify_absorbed_fill_unchanged(
+                    entry, recorded.payload, baseline.as_of, cutoff
+                )
+                continue
+            occurred_at = entry["occurred_at"]
+            assert isinstance(occurred_at, datetime)
+            if cutoff is None:
+                raise RuntimeError(
+                    f"paper venue fill {venue_fill_id} cannot be baseline-settled "
+                    "without the opening baseline's balance cutoff"
+                )
+            if occurred_at >= cutoff:
+                raise RuntimeError(
+                    f"paper venue fill {venue_fill_id} occurred after the opening "
+                    "baseline balance cutoff and cannot be baseline-settled"
+                )
+            side = str(entry["side"])
+            quantity = entry["quantity"]
+            price = entry["price"]
+            fee = entry["fee"]
+            assert isinstance(quantity, Decimal)
+            assert isinstance(price, Decimal)
+            assert isinstance(fee, Decimal)
+            notional = price * quantity
+            baseline_cash = baseline.cash
+            baseline_btc = baseline.positions.get("BTC", Decimal("0"))
+            baseline_fees = baseline.fees_paid
+            if side == "buy":
+                # Sanity check only: reversing a buy credits notional+fee
+                # and removes BTC; the BTC and fee legs must cover the fill
+                # or the baseline cannot contain it.
+                if baseline_btc < quantity or baseline_fees < fee:
+                    raise RuntimeError(
+                        f"paper venue fill {venue_fill_id} is not settled in the baseline"
+                    )
+            elif side == "sell":
+                # Sanity check only: reversing a sell re-adds BTC and
+                # removes net proceeds; the cash leg must cover the
+                # notional or the fill is not contained.
+                if baseline_cash < notional - fee:
+                    raise RuntimeError(
+                        f"paper venue fill {venue_fill_id} is not settled in the baseline"
+                    )
+            else:
+                raise RuntimeError(f"paper venue fill {venue_fill_id} has an unmodeled side")
+            self.ledgers.append(
+                LedgerEvent(
+                    namespace=LedgerNamespace.VENUE,
+                    event_type="baseline_settled_fill_absorbed",
+                    idempotency_key=key,
+                    payload={
+                        "venue_fill_id": venue_fill_id,
+                        "provider_order_id": str(entry["provider_order_id"]),
+                        "side": side,
+                        "quantity": str(quantity),
+                        "price": str(price),
+                        "fee": str(fee),
+                        "occurred_at": str(entry["occurred_at"]),
+                        "baseline_as_of": str(baseline.as_of),
+                        "baseline_balance_cutoff": str(cutoff),
+                    },
+                )
+            )
+
+    @staticmethod
+    def _verify_absorbed_fill_unchanged(
+        entry: dict[str, object],
+        recorded: dict[str, object],
+        baseline_as_of: object,
+        baseline_cutoff: object,
+    ) -> None:
+        """Block when a replayed absorbed fill no longer matches its record.
+
+        The durable absorption record is the verified evidence for this
+        fill; any drift in identity, economics, or the opening baseline
+        it was proven against means the venue history changed under us —
+        or the baseline was re-read with a silently moved cutoff — and
+        recovery fails closed.
+        """
+        venue_fill_id = str(entry["venue_fill_id"])
+        expected = {
+            "provider_order_id": str(entry["provider_order_id"]),
+            "side": str(entry["side"]),
+            "quantity": str(entry["quantity"]),
+            "price": str(entry["price"]),
+            "fee": str(entry["fee"]),
+            "occurred_at": str(entry["occurred_at"]),
+            "baseline_as_of": str(baseline_as_of),
+            "baseline_balance_cutoff": str(baseline_cutoff),
+        }
+        for name, value in expected.items():
+            if str(recorded.get(name, "")) != value:
+                raise RuntimeError(
+                    f"paper venue fill {venue_fill_id} changed since absorption: {name}"
+                )
 
     def _recovery_checks(self) -> SessionRecoveryChecks:
         return SessionRecoveryChecks(

@@ -35,11 +35,15 @@ class NativeVenueAdapter:
     environment: str
     transport: NativeTransport
     strict_venue: bool = False
+    max_submissions: int | None = None
     _acknowledgements: dict[UUID, VenueAcknowledgement] = field(
         default_factory=dict, init=False, repr=False, compare=False
     )
     _known_order_ids: dict[str, UUID] = field(
         default_factory=dict, init=False, repr=False, compare=False
+    )
+    _submission_count: list[int] = field(
+        default_factory=lambda: [0], init=False, repr=False, compare=False
     )
 
     def __post_init__(self) -> None:
@@ -47,6 +51,12 @@ class NativeVenueAdapter:
             raise ValueError("native venue name is required")
         if self.environment.strip().lower() not in {"paper", "testnet", "paper_testnet"}:
             raise ValueError("Phase 2 native adapter accepts only paper/testnet environments")
+        if self.max_submissions is not None and self.max_submissions < 0:
+            raise ValueError("native submission cap cannot be negative")
+
+    @property
+    def submission_count(self) -> int:
+        return self._submission_count[0]
 
     def submit(self, order: Order) -> VenueAcknowledgement:
         if self.strict_venue and order.instrument.venue not in {None, self.venue}:
@@ -54,6 +64,11 @@ class NativeVenueAdapter:
                 f"order instrument venue {order.instrument.venue!r} does not match native venue"
             )
         self.bind_order(order)
+        if self.max_submissions is not None and self._submission_count[0] >= self.max_submissions:
+            raise NativeVenueProjectionError(
+                f"native submission cap reached ({self.max_submissions}); refusing order"
+            )
+        self._submission_count[0] += 1
         response = self.transport.submit_order(
             {
                 "client_order_id": order.idempotency_key,

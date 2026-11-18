@@ -190,7 +190,9 @@ def test_coinbase_read_schema_maps_accounts_to_balances_positions_and_snapshot()
         (200, json.dumps(_accounts()).encode(), ()),
         (200, json.dumps(_accounts()).encode(), ()),
         (200, json.dumps(_accounts()).encode(), ()),
+        (200, json.dumps({"iso": "2026-08-09T18:00:30Z", "epoch": 1786298430}).encode(), ()),
         (200, json.dumps(_accounts()).encode(), ()),
+        (200, json.dumps({"iso": "2026-08-09T18:01:00Z", "epoch": 1786298460}).encode(), ()),
     ]
     transport, calls = _transport(responses)
     server = transport.server_time()
@@ -203,9 +205,9 @@ def test_coinbase_read_schema_maps_accounts_to_balances_positions_and_snapshot()
     snapshot = transport.fetch_account_snapshot()
     assert snapshot.cash == Decimal("1000")
     assert snapshot.positions == {}
-    assert len(calls) == 6
-    assert all("CB-ACCESS-KEY" not in calls[index][2] for index in (0, 1))
-    assert all("CB-ACCESS-KEY" in calls[index][2] for index in (2, 3, 4))
+    assert len(calls) == 8
+    assert all("CB-ACCESS-KEY" not in calls[index][2] for index in (0, 1, 5, 7))
+    assert all("CB-ACCESS-KEY" in calls[index][2] for index in (2, 3, 4, 6))
 
 
 def test_coinbase_fills_use_product_filter_and_signature_path_excludes_query():
@@ -368,7 +370,12 @@ def test_coinbase_snapshot_fails_closed_on_unmapped_nonzero_asset():
             "trading_enabled": True,
         }
     )
-    transport, _calls = _transport([(200, json.dumps(accounts).encode(), ())])
+    transport, _calls = _transport(
+        [
+            (200, json.dumps({"iso": "2026-08-09T18:00:00Z", "epoch": 1786298400}).encode(), ()),
+            (200, json.dumps(accounts).encode(), ()),
+        ]
+    )
     transport.verify_product_mappings(_products())
     with pytest.raises(VenueTransportError, match="unmapped asset SOL"):
         transport.fetch_account_snapshot()
@@ -377,6 +384,7 @@ def test_coinbase_snapshot_fails_closed_on_unmapped_nonzero_asset():
 def test_coinbase_snapshot_timestamp_is_timezone_aware():
     transport, _calls = _transport(
         [
+            (200, json.dumps({"iso": "2026-08-09T17:59:00Z", "epoch": 1786298340}).encode(), ()),
             (200, json.dumps(_accounts()).encode(), ()),
             (200, json.dumps({"iso": "2026-08-09T18:00:00Z", "epoch": 1786298400}).encode(), ()),
         ]

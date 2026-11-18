@@ -142,3 +142,29 @@ def test_coinbase_wss_runner_bounds_connection_duration(tmp_path, duration):
 
     with pytest.raises(ValueError, match="bounded qualification limit"):
         runner.run_evidence(tmp_path, duration_seconds=duration)
+
+
+def test_coinbase_wss_main_refuses_out_of_bounds_at_argparse(
+    monkeypatch, capsys
+) -> None:
+    """Out-of-bounds --duration-seconds/--connections exit 2, no traceback."""
+    import sys
+
+    from scripts.qualify_phase3_coinbase_wss import main
+
+    cases = (
+        (["--real", "--duration-seconds", "0"], "--duration-seconds"),
+        (["--real", "--duration-seconds", "121"], "--duration-seconds"),
+        (["--real", "--connections", "0"], "--connections"),
+        (["--real", "--connections", "5"], "--connections"),
+    )
+    for extra, flag in cases:
+        monkeypatch.setattr(
+            sys, "argv", ["qualify_phase3_coinbase_wss.py", *extra]
+        )
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2, extra
+        captured = capsys.readouterr()
+        assert flag in captured.err, extra
+        assert "Traceback" not in captured.out + captured.err, extra

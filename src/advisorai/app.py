@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 import signal
+import sqlite3
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -113,7 +114,11 @@ def _repo_identity() -> tuple[str, str]:
 
 def cmd_start(args: argparse.Namespace) -> int:
     state_dir = _state_dir()
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
+    try:
+        ledgers = SqliteLedgers(_ledger_path(state_dir))
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"SESSION START REFUSED: cannot read session ledger ({type(exc).__name__})", flush=True)
+        return 2
     supervisor = SessionSupervisor(
         ledgers,
         state_dir=state_dir,
@@ -135,23 +140,123 @@ def cmd_start(args: argparse.Namespace) -> int:
         raise
     stop_event = __import__("threading").Event()
     try:
-        from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
-
-        app = PaperOwnerApplication(
-            ledgers=ledgers,
-            state_dir=state_dir,
-            lock_identity=args.lock_identity,
-            code_hash=code_hash,
-            config_hash=config_hash,
-            supervisor=supervisor,
-            config=OwnerApplicationConfig(
-                scenario=args.scenario,
-                interval_seconds=args.interval_seconds,
-                accelerated_clock=args.accelerated_clock,
-                max_rss_mb=args.max_rss_mb,
-            ),
-            stop_requested=stop_event,
+        from advisorai.session.application import OwnerApplicationConfig
+        from advisorai.session.testnet_launch import (
+            SandboxLaunchRequest,
+            build_testnet_owner_application,
+            read_testnet_baseline,
         )
+
+        owner_config = OwnerApplicationConfig(
+            scenario=args.scenario,
+            interval_seconds=args.interval_seconds,
+            accelerated_clock=args.accelerated_clock,
+            max_rss_mb=args.max_rss_mb,
+            max_runtime_seconds=getattr(args, "max_runtime_seconds", None),
+        )
+        venue_profile = getattr(args, "venue_profile", "local-simulator") or "local-simulator"
+        if venue_profile == "local-simulator":
+            from advisorai.session.application import PaperOwnerApplication
+
+            app = PaperOwnerApplication(
+                ledgers=ledgers,
+                state_dir=state_dir,
+                lock_identity=args.lock_identity,
+                code_hash=code_hash,
+                config_hash=config_hash,
+                supervisor=supervisor,
+                config=owner_config,
+                stop_requested=stop_event,
+                venue_profile="local-simulator",
+            )
+        else:
+            from advisorai.config import CredentialResolver
+
+            if getattr(args, "max_submissions", None) is None:
+                supervisor._release_lock()
+                print(
+                    "SESSION START REFUSED: --max-submissions is required "
+                    "for testnet venue profiles",
+                    flush=True,
+                )
+                return 2
+            if not 0 <= args.max_submissions <= 100:
+                supervisor._release_lock()
+                print(
+                    "SESSION START REFUSED: --max-submissions must be "
+                    "between 0 and 100",
+                    flush=True,
+                )
+                return 2
+            expected_instrument = (
+                "BTCUSDT" if venue_profile == "binance_spot_testnet" else "BTC-USD"
+            )
+            expected_quote = "USDT" if venue_profile == "binance_spot_testnet" else "USD"
+            requested_instrument = (
+                getattr(args, "venue_instrument", None) or expected_instrument
+            )
+            requested_quote = getattr(args, "venue_quote", None) or expected_quote
+            if (
+                requested_instrument.strip().upper() != expected_instrument
+                or requested_quote.strip().upper() != expected_quote
+            ):
+                supervisor._release_lock()
+                print(
+                    f"SESSION START REFUSED: {venue_profile} admits exactly "
+                    f"{expected_instrument}/{expected_quote} in this path",
+                    flush=True,
+                )
+                return 2
+            secrets_path = Path(
+                getattr(args, "secrets", None)
+                or os.getenv("ADVISORAI_SECRETS_FILE", "secrets.env")
+            )
+            try:
+                resolver = CredentialResolver.from_env_file(secrets_path)
+            except (OSError, ValueError) as exc:
+                supervisor._release_lock()
+                print(
+                    f"SESSION START REFUSED: cannot read secrets file ({type(exc).__name__})",
+                    flush=True,
+                )
+                return 2
+            default_instrument = (
+                "BTCUSDT" if venue_profile == "binance_spot_testnet" else "BTC-USD"
+            )
+            default_quote = "USDT" if venue_profile == "binance_spot_testnet" else "USD"
+            launch = SandboxLaunchRequest(
+                provider=venue_profile,
+                provider_instrument_id=getattr(args, "venue_instrument", None)
+                or default_instrument,
+                quote_currency=getattr(args, "venue_quote", None) or default_quote,
+                max_submissions=getattr(args, "max_submissions", None),
+            )
+            try:
+                _transport, baseline, balance_cutoff = read_testnet_baseline(resolver=resolver, launch=launch)
+            except ValueError as exc:
+                supervisor._release_lock()
+                print(f"SESSION START REFUSED: testnet baseline refused: {exc}", flush=True)
+                return 2
+            if getattr(args, "print_baseline", False):
+                print(
+                    f"testnet_baseline cash={baseline.cash} "
+                    f"as_of={baseline.as_of.isoformat()}",
+                    flush=True,
+                )
+            app = build_testnet_owner_application(
+                ledgers=ledgers,
+                state_dir=state_dir,
+                lock_identity=args.lock_identity,
+                code_hash=code_hash,
+                config_hash=config_hash,
+                config=owner_config,
+                resolver=resolver,
+                launch=launch,
+                baseline=baseline,
+                baseline_balance_cutoff=balance_cutoff,
+                supervisor=supervisor,
+                stop_requested=stop_event,
+            )
     except BaseException:
         supervisor._release_lock()
         raise
@@ -228,7 +333,11 @@ def cmd_stop(args: argparse.Namespace) -> int:
             os.fsync(handle.fileno())
     print(f"stop_requested={session_id}", flush=True)
 
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
+    try:
+        ledgers = SqliteLedgers(_ledger_path(state_dir))
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"STOP UNVERIFIED: cannot read session ledger ({type(exc).__name__})", flush=True)
+        return 2
     deadline = time.monotonic() + args.timeout_seconds
     while time.monotonic() < deadline:
         ended = False
@@ -251,16 +360,20 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 def cmd_status(_args: argparse.Namespace) -> int:
     state_dir = _state_dir()
-    ledgers = SqliteLedgers(_ledger_path(state_dir))
-    code_hash, config_hash = _repo_identity()
-    supervisor = SessionSupervisor(
-        ledgers,
-        state_dir=state_dir,
-        lock_identity="status-probe",
-        code_hash=code_hash,
-        config_hash=config_hash,
-    )
-    history = supervisor._session_history()
+    try:
+        ledgers = SqliteLedgers(_ledger_path(state_dir))
+        code_hash, config_hash = _repo_identity()
+        supervisor = SessionSupervisor(
+            ledgers,
+            state_dir=state_dir,
+            lock_identity="status-probe",
+            code_hash=code_hash,
+            config_hash=config_hash,
+        )
+        history = supervisor._session_history()
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"STATUS UNAVAILABLE: {type(exc).__name__}", flush=True)
+        return 2
     unmatched = [str(sid) for sid in history["starts"] if sid not in history["ends"]]
     print(f"starts={len(history['starts'])} ends={len(history['ends'])}")
     print(f"unmatched_starts={unmatched}")
@@ -288,7 +401,11 @@ def cmd_backup(_args: argparse.Namespace) -> int:
     if not ledger_path.is_file() or not scorecards_path.is_file():
         print("BACKUP REFUSED: both owner databases must already exist", flush=True)
         return 2
-    ledgers = SqliteLedgers(ledger_path)
+    try:
+        ledgers = SqliteLedgers(ledger_path)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        print(f"BACKUP REFUSED: cannot read owner database ({type(exc).__name__})", flush=True)
+        return 2
     code_hash, config_hash = _repo_identity()
     supervisor = SessionSupervisor(
         ledgers,
@@ -350,6 +467,15 @@ def main(argv: list[str] | None = None) -> int:
         default="quiet",
         help="local paper data profile; qualification uses deterministic evidence and fills",
     )
+    p_start.add_argument(
+        "--venue-profile",
+        choices=("local-simulator", "binance_spot_testnet", "coinbase_exchange_sandbox"),
+        default="local-simulator",
+        help="paper venue: local simulator (default) or reviewed sandbox testnet profile",
+    )
+    p_start.add_argument("--venue-instrument", default=None)
+    p_start.add_argument("--venue-quote", default=None)
+    p_start.add_argument("--secrets", default=None)
     p_start.add_argument("--interval-seconds", type=float, default=3600.0)
     p_start.add_argument(
         "--accelerated-clock",
@@ -357,6 +483,23 @@ def main(argv: list[str] | None = None) -> int:
         help="advance local paper cutoffs by one hour each cycle for integration qualification",
     )
     p_start.add_argument("--max-rss-mb", type=int, default=2048)
+    p_start.add_argument(
+        "--max-runtime-seconds",
+        type=float,
+        default=None,
+        help="enforced wall-clock deadline for the owner session; stops clean when reached",
+    )
+    p_start.add_argument(
+        "--max-submissions",
+        type=int,
+        default=None,
+        help="cap on venue order submissions through testnet profiles (0-100); required for testnet profiles, refuses beyond the cap",
+    )
+    p_start.add_argument(
+        "--print-baseline",
+        action="store_true",
+        help="print the testnet baseline cash and timestamp to stdout; off by default to keep balance state out of shared logs",
+    )
     p_start.set_defaults(func=cmd_start)
     p_stop = sub.add_parser("stop", help="request a graceful stop of the active owner process")
     p_stop.add_argument("--outcome", default="clean", choices=["clean", "emergency", "unclean"])
@@ -381,6 +524,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "stop" and not 0.1 <= args.timeout_seconds <= 600:
         parser.error("--timeout-seconds must be between 0.1 and 600")
+    if args.command == "start":
+        if not 0.1 <= args.interval_seconds <= 86_400:
+            parser.error("--interval-seconds must be between 0.1 and 86400")
+        if not 256 <= args.max_rss_mb <= 8192:
+            parser.error("--max-rss-mb must be between 256 and 8192")
+        if args.max_runtime_seconds is not None and not (
+            1 <= args.max_runtime_seconds <= 86_400
+        ):
+            parser.error("--max-runtime-seconds must be between 1 and 86400")
     return int(args.func(args))
 
 

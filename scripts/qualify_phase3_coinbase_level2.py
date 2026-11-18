@@ -530,6 +530,8 @@ def main() -> int:
     args = parser.parse_args()
     if not args.real:
         parser.error("network reads require explicit --real")
+    if not 1 <= args.duration_seconds <= MAX_CONNECTION_SECONDS:
+        parser.error("--duration-seconds must be between 1 and 120")
     path, report, evidence_sha256 = run_evidence(
         args.evidence_dir,
         ws_url=args.ws_url,

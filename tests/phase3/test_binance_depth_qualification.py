@@ -182,3 +182,35 @@ def test_binance_depth_latest_pointer_is_atomic_and_mutable(tmp_path):
     _write_latest_pointer(pointer, {"run_id": "first", "status": "partial_failed_closed"})
     _write_latest_pointer(pointer, {"run_id": "second", "status": "partial_failed_closed"})
     assert '"run_id": "second"' in pointer.read_text()
+
+
+def test_binance_depth_main_refuses_out_of_bounds_at_argparse(
+    monkeypatch, capsys
+) -> None:
+    """Out-of-bounds --duration-seconds/--connections exit 2, no traceback.
+
+    Same contract as the P02 entry points: numeric bounds refuse at
+    argparse with the bound named, before any evidence dir or venue
+    touch. Runs main() in-process with stubbed argv; --real is given
+    so the bounds checks (not the network gate) are exercised.
+    """
+    import sys
+
+    from scripts.qualify_phase3_binance_spot_testnet_depth import main
+
+    cases = (
+        (["--real", "--duration-seconds", "0"], "--duration-seconds"),
+        (["--real", "--duration-seconds", "121"], "--duration-seconds"),
+        (["--real", "--connections", "0"], "--connections"),
+        (["--real", "--connections", "5"], "--connections"),
+    )
+    for extra, flag in cases:
+        monkeypatch.setattr(
+            sys, "argv", ["qualify_phase3_binance_spot_testnet_depth.py", *extra]
+        )
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2, extra
+        captured = capsys.readouterr()
+        assert flag in captured.err, extra
+        assert "Traceback" not in captured.out + captured.err, extra

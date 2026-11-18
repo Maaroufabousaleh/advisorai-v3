@@ -791,6 +791,10 @@ def main() -> int:
     args = parser.parse_args()
     if not args.real:
         parser.error("public network reads require explicit --real")
+    if not 1 <= args.duration_seconds <= MAX_CONNECTION_SECONDS:
+        parser.error("--duration-seconds must be between 1 and 120")
+    if not 1 <= args.connections <= MAX_CONNECTIONS:
+        parser.error("--connections must be between 1 and 4")
     result = run_evidence(
         args.evidence_dir,
         duration_seconds=args.duration_seconds,

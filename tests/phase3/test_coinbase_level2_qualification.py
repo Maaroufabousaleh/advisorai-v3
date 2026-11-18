@@ -146,3 +146,25 @@ def test_level2_url_and_product_guards_are_fail_closed():
 def test_level2_runner_rejects_unreviewed_channel_before_network(tmp_path):
     with pytest.raises(ValueError, match="unsupported channel"):
         run_evidence(tmp_path, channel="ticker")
+
+
+def test_level2_main_refuses_out_of_bounds_duration_at_argparse(
+    monkeypatch, capsys
+) -> None:
+    """Out-of-bounds --duration-seconds exits 2, no traceback."""
+    import sys
+
+    from scripts.qualify_phase3_coinbase_level2 import main
+
+    for value in ("0", "121"):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["qualify_phase3_coinbase_level2.py", "--real", "--duration-seconds", value],
+        )
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2, value
+        captured = capsys.readouterr()
+        assert "--duration-seconds" in captured.err, value
+        assert "Traceback" not in captured.out + captured.err, value

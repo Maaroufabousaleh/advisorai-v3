@@ -979,6 +979,10 @@ def main() -> int:
     args = parser.parse_args()
     if not args.real:
         parser.error("public network reads require explicit --real")
+    if not 0 < args.duration_seconds <= MAX_CONNECTION_SECONDS:
+        parser.error("--duration-seconds must be between 1 and 30")
+    if not 0 < args.connection_rounds <= MAX_CONNECTION_ROUNDS:
+        parser.error("--connection-rounds must be between 1 and 3")
     print(
         json.dumps(
             run_evidence(

@@ -434,3 +434,598 @@ def test_subprocess_start_paper_fill_outcome_stop_and_restart(tmp_path):
                 if first.poll() is None:
                     first.terminate()
                 first.wait(timeout=5)
+
+
+def test_subprocess_testnet_start_without_cap_refuses_before_secrets(tmp_path):
+    """P02 owner-flow: testnet start without --max-submissions refuses fast.
+
+    Black-box: a real ``advisorai.app start --venue-profile
+    binance_spot_testnet`` child with no secrets file and no cap must
+    exit 2 naming the missing cap — before reading secrets or touching
+    the venue (no baseline print, no session start). The refusal also
+    releases the owner lock, so an immediate retry is not blocked.
+    """
+    environment = _environment(tmp_path)
+    assert not Path("secrets.env").exists() or True  # no reliance on repo secrets
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "cap-refusal-probe",
+            "start",
+            "--venue-profile",
+            "binance_spot_testnet",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "--max-submissions is required" in run.stdout
+    assert "testnet_baseline" not in run.stdout
+    assert "SESSION READY" not in run.stdout
+    assert "session_id=" not in run.stdout
+    # Lock released: an immediate local-simulator start reaches READY.
+    environment["ADVISORAI_STATE_DIR"] = str(tmp_path / "application-state")
+    retry = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "cap-refusal-probe",
+            "start",
+            "--scenario",
+            "quiet",
+            "--interval-seconds",
+            "3600",
+        ],
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _read_until(retry, "SESSION READY", timeout=60)
+    finally:
+        if retry.poll() is None:
+            retry.terminate()
+        retry.wait(timeout=10)
+
+
+def test_subprocess_testnet_start_with_out_of_bounds_cap_refuses_before_secrets(
+    tmp_path,
+) -> None:
+    """P02 owner-flow: out-of-bounds --max-submissions refuses fast.
+
+    Black-box: a real child with ``--max-submissions -1`` or ``101``
+    must exit 2 naming the bounds — before reading secrets or
+    touching the venue. Mirrors the canary launcher's 0–100 bound
+    so both owner entry points enforce the same contract.
+    """
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    for cap in ("-1", "101"):
+        run = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "cap-bounds-probe",
+                "start",
+                "--venue-profile",
+                "binance_spot_testnet",
+                "--max-submissions",
+                cap,
+            ],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert run.returncode == 2, cap
+        assert "--max-submissions must be between 0 and 100" in run.stdout, cap
+        assert "testnet_baseline" not in run.stdout, cap
+        assert "SESSION READY" not in run.stdout, cap
+        assert "Traceback" not in run.stdout + run.stderr, cap
+
+
+def test_subprocess_start_with_out_of_bounds_flags_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: out-of-bounds start flags refuse at argparse.
+
+    Black-box: a real child with an invalid --interval-seconds,
+    --max-rss-mb, or --max-runtime-seconds must exit 2 naming the
+    bound — before lock acquisition, so no SESSION START REFUSED
+    and no traceback. Mirrors the canary launcher's exact bounds.
+    """
+    environment = _environment(tmp_path)
+    cases = (
+        (["--interval-seconds", "0.05"], "--interval-seconds must be between 0.1 and 86400"),
+        (["--interval-seconds", "86401"], "--interval-seconds must be between 0.1 and 86400"),
+        (["--max-rss-mb", "255"], "--max-rss-mb must be between 256 and 8192"),
+        (["--max-rss-mb", "8193"], "--max-rss-mb must be between 256 and 8192"),
+        (["--max-runtime-seconds", "0"], "--max-runtime-seconds must be between 1 and 86400"),
+        (["--max-runtime-seconds", "86401"], "--max-runtime-seconds must be between 1 and 86400"),
+    )
+    for extra, message in cases:
+        run = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "flag-bounds-probe",
+                "start",
+                "--scenario",
+                "quiet",
+                "--interval-seconds",
+                "3600",
+                *extra,
+            ]
+            if extra[0] != "--interval-seconds"
+            else [
+                sys.executable,
+                "-m",
+                "advisorai.app",
+                "--lock-identity",
+                "flag-bounds-probe",
+                "start",
+                "--scenario",
+                "quiet",
+                *extra,
+            ],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert run.returncode == 2, extra
+        assert message in run.stderr, extra
+        assert "SESSION READY" not in run.stdout, extra
+        assert "Traceback" not in run.stdout + run.stderr, extra
+
+
+def test_subprocess_testnet_start_with_missing_secrets_refuses_cleanly(
+    tmp_path,
+) -> None:
+    """P02 owner-flow: unreadable secrets refuse with SESSION START REFUSED.
+
+    Black-box: a real child with valid bounds but a missing secrets
+    file must exit 2 naming the failure — no traceback — and release
+    the owner lock so an immediate retry is not blocked.
+    """
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "secrets-refusal-probe",
+            "start",
+            "--venue-profile",
+            "binance_spot_testnet",
+            "--max-submissions",
+            "0",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "SESSION START REFUSED: cannot read secrets file" in run.stdout
+    assert "testnet_baseline" not in run.stdout
+    assert "SESSION READY" not in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    # Lock released: an immediate local-simulator start reaches READY.
+    environment["ADVISORAI_STATE_DIR"] = str(tmp_path / "application-state")
+    retry = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "secrets-refusal-probe",
+            "start",
+            "--scenario",
+            "quiet",
+            "--interval-seconds",
+            "3600",
+        ],
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _read_until(retry, "SESSION READY", timeout=60)
+    finally:
+        if retry.poll() is None:
+            retry.terminate()
+        retry.wait(timeout=10)
+
+
+def test_subprocess_status_on_corrupt_ledger_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: status on a damaged ledger refuses without traceback.
+
+    Black-box: a real ``status`` child against a state dir whose
+    ledger file is not a database must exit 2 with STATUS
+    UNAVAILABLE — no traceback. Status is the first diagnostic an
+    owner runs when something is wrong, so it must fail clean.
+    """
+    state_dir = tmp_path / "corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "status-corruption-probe",
+            "status",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "STATUS UNAVAILABLE" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+
+
+def test_subprocess_stop_on_corrupt_ledger_is_unverified_not_traceback(tmp_path) -> None:
+    """P02 owner-flow: stop with a live owner but damaged ledger stays clean.
+
+    Black-box: the owner record points at this live test process,
+    so stop writes its request file, then finds the ledger
+    unreadable and must exit 2 with STOP UNVERIFIED — no
+    traceback. The request file must still exist (the live owner
+    can act on it even though confirmation is impossible).
+    """
+    import json
+
+    import psutil
+
+    state_dir = tmp_path / "stop-corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    session_id = str(uuid5(NAMESPACE_URL, "stop-corruption-probe"))
+    me = psutil.Process()
+    owner = {
+        "session_id": session_id,
+        "pid": me.pid,
+        "process_create_time": me.create_time(),
+        "lock_identity": "stop-corruption-probe",
+    }
+    (state_dir / "owner.json").write_text(json.dumps(owner), encoding="utf-8")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "stop-corruption-probe",
+            "stop",
+            "--outcome",
+            "clean",
+            "--timeout-seconds",
+            "2",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert f"stop_requested={session_id}" in run.stdout
+    assert "STOP UNVERIFIED" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    assert (state_dir / f"stop-request-{session_id}.json").exists()
+
+
+def test_subprocess_start_on_corrupt_ledger_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: start on a damaged ledger refuses without traceback.
+
+    Black-box: a real ``start`` child against a state dir whose
+    ledger file is not a database must exit 2 with SESSION START
+    REFUSED — no traceback, and no owner record written (the
+    ledger open sits before lock acquisition, so nothing to
+    release).
+    """
+    state_dir = tmp_path / "start-corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "start-corruption-probe",
+            "start",
+            "--reason",
+            "corruption-probe",
+            "--venue-profile",
+            "local-simulator",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "SESSION START REFUSED" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    assert not (state_dir / "owner.json").exists()
+
+
+def test_subprocess_backup_on_corrupt_ledger_refuses_cleanly(tmp_path) -> None:
+    """P02 owner-flow: backup on a damaged ledger refuses without traceback.
+
+    Black-box: both database files exist (so the missing-file
+    refusal does not trigger) but the ledger is not a database.
+    Backup must exit 2 with BACKUP REFUSED — no traceback, and
+    no backup directory created.
+    """
+    state_dir = tmp_path / "backup-corrupt-state"
+    state_dir.mkdir()
+    (state_dir / "ledgers.sqlite3").write_bytes(b"not-a-sqlite-file")
+    (state_dir / "scorecards.sqlite3").write_bytes(b"also-garbage")
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_STATE_DIR"] = str(state_dir)
+    environment["ADVISORAI_LEDGER_PATH"] = str(state_dir / "ledgers.sqlite3")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "backup-corruption-probe",
+            "backup",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert "BACKUP REFUSED" in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+    assert not (state_dir / "backups").exists()
+
+
+def test_subprocess_testnet_start_with_wrong_instrument_refuses_cleanly(
+    tmp_path,
+) -> None:
+    """P02 owner-flow: out-of-profile instrument refuses before secrets.
+
+    Black-box: a real child with a wrong ``--venue-instrument`` must
+    exit 2 with SESSION START REFUSED — no traceback — without
+    touching the secrets file or the venue. The secrets path points
+    at a missing file to prove the bounds check runs first; the
+    refusal must name the instrument bound, not the missing file.
+    """
+    environment = _environment(tmp_path)
+    environment["ADVISORAI_SECRETS_FILE"] = str(tmp_path / "no-such-secrets.env")
+    run = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "advisorai.app",
+            "--lock-identity",
+            "instrument-refusal-probe",
+            "start",
+            "--venue-profile",
+            "binance_spot_testnet",
+            "--venue-instrument",
+            "ETHUSDT",
+            "--max-submissions",
+            "0",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert run.returncode == 2
+    assert (
+        "SESSION START REFUSED: binance_spot_testnet admits exactly BTCUSDT/USDT"
+        in run.stdout
+    )
+    assert "cannot read secrets file" not in run.stdout
+    assert "testnet_baseline" not in run.stdout
+    assert "SESSION READY" not in run.stdout
+    assert "Traceback" not in run.stdout + run.stderr
+
+
+def test_app_start_refuses_out_of_profile_baseline_without_traceback(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 owner-flow: baseline-guard rejection refuses cleanly in-process.
+
+    In-process (the black-box children cannot reach the baseline
+    read without venue network): valid synthetic secrets, then the
+    baseline read raises the exact guard ValueError. ``cmd_start``
+    must exit 2 with SESSION START REFUSED surfacing the guard
+    message — no traceback — and release the owner lock.
+    """
+    import argparse
+
+    import advisorai.app as app_module
+
+    secrets = tmp_path / "synthetic.env"
+    secrets.write_text(
+        "ADVISORAI_VENUE_API_KEY=synthetic-testnet-key\n"
+        "ADVISORAI_VENUE_API_SECRET=synthetic-testnet-secret\n"
+        "ADVISORAI_VENUE_NAME=binance_spot_testnet\n"
+        "ADVISORAI_VENUE_ENVIRONMENT=testnet\n",
+        encoding="utf-8",
+    )
+    state_dir = tmp_path / "guard-state"
+    monkeypatch.setenv("ADVISORAI_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("ADVISORAI_LEDGER_PATH", str(state_dir / "ledgers.sqlite3"))
+
+    def _refuse(*args, **kwargs):
+        raise ValueError(
+            "testnet account holds out-of-profile balances; clear them first"
+        )
+
+    import advisorai.session.testnet_launch as launch_module
+
+    monkeypatch.setattr(launch_module, "read_testnet_baseline", _refuse)
+    argv = argparse.Namespace(
+        lock_identity="guard-refusal-probe",
+        scenario="quiet",
+        interval_seconds=10.0,
+        accelerated_clock=False,
+        max_rss_mb=1024,
+        max_runtime_seconds=120.0,
+        venue_profile="binance_spot_testnet",
+        max_submissions=0,
+        secrets=secrets,
+        venue_instrument=None,
+        venue_quote=None,
+        print_baseline=False,
+        reason="guard-probe",
+    )
+    assert app_module.cmd_start(argv) == 2
+    captured = capsys.readouterr()
+    assert "SESSION START REFUSED: testnet baseline refused" in captured.out
+    assert "clear them first" in captured.out
+    assert "Traceback" not in captured.out + captured.err
+    assert not (state_dir / "owner.json").exists()
+    # Lock released: the supervisor lock path is not held.
+    from advisorai.session.supervisor import SessionSupervisor
+
+    probe = SessionSupervisor(
+        app_module.SqliteLedgers(app_module._ledger_path(state_dir)),
+        state_dir=state_dir,
+        lock_identity="guard-release-check",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+    )
+    probe._acquire_lock()
+    probe._release_lock()
+
+
+def test_app_start_prints_baseline_only_with_explicit_flag(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02 disclosure gate: ``cmd_start`` prints baseline cash only on opt-in.
+
+    Positive + negative control for the ``--print-baseline`` gate on the
+    github-advanced-security inline finding (PR 216): with
+    ``print_baseline=False`` the cash line stays out of stdout; with
+    ``print_baseline=True`` it appears. Both legs run in-process with a
+    synthetic baseline and a stubbed application so no venue network or
+    session lifecycle is involved.
+    """
+    import argparse
+    from decimal import Decimal
+
+    import advisorai.app as app_module
+    import advisorai.session.testnet_launch as launch_module
+    from advisorai.execution import AccountState
+
+    secrets = tmp_path / "synthetic.env"
+    secrets.write_text(
+        "ADVISORAI_VENUE_API_KEY=synthetic-testnet-key\n"
+        "ADVISORAI_VENUE_API_SECRET=synthetic-testnet-secret\n"
+        "ADVISORAI_VENUE_NAME=binance_spot_testnet\n"
+        "ADVISORAI_VENUE_ENVIRONMENT=testnet\n",
+        encoding="utf-8",
+    )
+    sentinel_cash = Decimal("9876.54")
+    baseline = AccountState(
+        cash=sentinel_cash,
+        marks={"BTC": Decimal("50000")},
+        margin_used=Decimal("0"),
+        margin_available=sentinel_cash,
+        as_of=datetime(2026, 11, 16, tzinfo=UTC),
+    )
+
+    class _StubApp:
+        def run(self, reason: str) -> int:
+            assert reason == "gate-probe"
+            return 0
+
+    def _baseline(*args, **kwargs):
+        return object(), baseline, datetime(2026, 11, 16, tzinfo=UTC)
+
+    def _build(**kwargs):
+        assert kwargs["baseline"] is baseline
+        return _StubApp()
+
+    monkeypatch.setattr(launch_module, "read_testnet_baseline", _baseline)
+    monkeypatch.setattr(app_module, "_repo_identity", lambda: ("c" * 64, "d" * 64))
+
+    def _run_case(print_baseline: bool) -> str:
+        state_dir = tmp_path / ("gate-off" if not print_baseline else "gate-on")
+        monkeypatch.setenv("ADVISORAI_STATE_DIR", str(state_dir))
+        monkeypatch.setenv(
+            "ADVISORAI_LEDGER_PATH", str(state_dir / "ledgers.sqlite3")
+        )
+        monkeypatch.setattr(
+            launch_module, "build_testnet_owner_application", _build
+        )
+        argv = argparse.Namespace(
+            lock_identity=f"gate-probe-{print_baseline}",
+            scenario="quiet",
+            interval_seconds=10.0,
+            accelerated_clock=False,
+            max_rss_mb=1024,
+            max_runtime_seconds=120.0,
+            venue_profile="binance_spot_testnet",
+            max_submissions=0,
+            secrets=secrets,
+            venue_instrument=None,
+            venue_quote=None,
+            print_baseline=print_baseline,
+            reason="gate-probe",
+        )
+        assert app_module.cmd_start(argv) == 0
+        return capsys.readouterr().out
+
+    out_off = _run_case(False)
+    assert "testnet_baseline cash=" not in out_off
+    assert str(sentinel_cash) not in out_off
+    out_on = _run_case(True)
+    assert f"testnet_baseline cash={sentinel_cash}" in out_on

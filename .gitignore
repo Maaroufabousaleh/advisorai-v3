@@ -16,3 +16,7 @@ artifacts/*
 dashboard/node_modules/
 dashboard/dist/
 .VSCodeCounter*
+secrets-inventory.md
+overnight-canary-monitor
+var/
+data/research-replay/snapshots/synthetic-daily-2015-2025-v1/
