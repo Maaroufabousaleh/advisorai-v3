@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 
@@ -53,6 +54,7 @@ class ProviderProfileRequest:
     provider: str
     provider_instrument_id: str
     quote_currency: str
+    max_submissions: int | None = None
 
     def __post_init__(self) -> None:
         provider = self.provider.strip().lower()
@@ -60,6 +62,8 @@ class ProviderProfileRequest:
         quote_currency = self.quote_currency.strip().upper()
         if not provider or not provider_instrument_id or not quote_currency:
             raise ValueError("provider profile needs provider, instrument, and quote identities")
+        if self.max_submissions is not None and self.max_submissions < 0:
+            raise ValueError("provider submission cap cannot be negative")
         object.__setattr__(self, "provider", provider)
         object.__setattr__(self, "provider_instrument_id", provider_instrument_id)
         object.__setattr__(self, "quote_currency", quote_currency)
@@ -77,6 +81,7 @@ class ProviderProfileContext:
     instrument: InstrumentIdentity
     account_quote_currency: str
     fx_rate_provider: FxRateProvider | None = None
+    baseline_balance_cutoff: datetime | None = None
 
     def __post_init__(self) -> None:
         quote = self.account_quote_currency.strip().upper()
@@ -92,6 +97,11 @@ class ProviderProfileContext:
             raise ValueError("provider profile requires a decision model factory")
         if self.fx_rate_provider is not None and not callable(self.fx_rate_provider):
             raise ValueError("provider FX rate provider must be callable")
+        if self.baseline_balance_cutoff is not None and (
+            self.baseline_balance_cutoff.tzinfo is None
+            or self.baseline_balance_cutoff.utcoffset() is None
+        ):
+            raise ValueError("baseline balance cutoff must include a timezone")
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,7 +166,9 @@ def _validate_credentials(resolver: CredentialResolver, provider: str) -> None:
         raise ValueError("PAPER_VENUE credentials contain an unadmitted WebSocket endpoint")
 
 
-def _verify_selected_instrument(transport: object, components: ProviderProfileComponents) -> None:
+def verify_selected_instrument(
+    transport: object, components: ProviderProfileComponents
+) -> None:
     request = components.request
     if getattr(transport, "venue_name", None) != request.provider:
         raise ValueError("provider transport identity differs from the selected profile")
@@ -203,7 +215,7 @@ def _compose(
     *,
     transport: BinanceSpotTestnetTransport | CoinbaseExchangeSandboxTransport,
 ) -> OwnerApplicationAdapters:
-    _verify_selected_instrument(transport, components)
+    verify_selected_instrument(transport, components)
     context = components.context
     request = components.request
     instrument = context.instrument.model_copy(
@@ -217,6 +229,7 @@ def _compose(
         venue=request.provider,
         environment="paper_testnet",
         transport=transport,
+        max_submissions=request.max_submissions,
     )
     if request.provider == "binance_spot_testnet":
         venue = BinanceSpotTestnetOwnerAdapter(
@@ -251,6 +264,7 @@ def _compose(
         outcome_adapter=outcome_adapter,
         initial_account=context.initial_account,
         instrument=instrument,
+        baseline_balance_cutoff=context.baseline_balance_cutoff,
     )
 
 
@@ -315,4 +329,5 @@ __all__ = [
     "build_binance_spot_testnet_profile",
     "build_coinbase_exchange_sandbox_profile",
     "build_provider_profile",
+    "verify_selected_instrument",
 ]

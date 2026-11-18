@@ -74,10 +74,29 @@ class ProviderOutcomeQualityProvider:
             attempts = current.attempt_count - self._last_metrics.attempt_count
             failures = current.failed_count - self._last_metrics.failed_count
             elapsed_ms = current.latency_ms_total - self._last_metrics.latency_ms_total
-            if attempts <= 0:
-                raise ValueError("provider quality requires current measured request samples")
-            if failures < 0 or failures > attempts or elapsed_ms < 0:
+            if failures < 0 or elapsed_ms < 0 or failures > max(attempts, 0):
                 raise ValueError("provider HTTP counters moved backwards or became inconsistent")
+            if attempts <= 0:
+                state = snapshot.data_quality_state.strip().lower()
+                source = f"provider-no-requests/{self.provider_identity}/v1"
+                quality = PaperOutcomeQuality(
+                    data_reliability=Decimal("1")
+                    if state in {"validated", "gold"}
+                    else Decimal("0"),
+                    latency_ms=0,
+                    failure_rate=Decimal("0"),
+                    evidence_id=uuid5(
+                        NAMESPACE_URL,
+                        f"advisorai-v3/provider-no-requests/{self.provider_identity}/{snapshot.artifact_id}",
+                    ),
+                    source=source,
+                    snapshot_id=snapshot.artifact_id,
+                    as_of=cutoff,
+                )
+                self._quality_by_snapshot[snapshot.artifact_id] = quality
+                while len(self._quality_by_snapshot) > 64:
+                    self._quality_by_snapshot.popitem(last=False)
+                return quality
             self._last_metrics = current
 
             state = snapshot.data_quality_state.strip().lower()

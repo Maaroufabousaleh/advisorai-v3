@@ -598,6 +598,10 @@ def main() -> int:
     args = parser.parse_args()
     if not args.real:
         parser.error("public network reads require explicit --real")
+    if not 0 < args.timeout_seconds <= MAX_TIMEOUT_SECONDS:
+        parser.error("--timeout-seconds must be between 0 (exclusive) and 30")
+    if not 0 < args.attempts <= MAX_ATTEMPTS:
+        parser.error("--attempts must be between 1 and 3")
     result = run_evidence(
         args.evidence_dir,
         timeout_seconds=args.timeout_seconds,

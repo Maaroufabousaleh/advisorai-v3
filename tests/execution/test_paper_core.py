@@ -20,6 +20,7 @@ from advisorai.contracts import (
 from advisorai.execution import (
     AccountLedger,
     AccountState,
+    AccountStateSnapshot,
     AmbiguousAcknowledgement,
     DeterministicExecutionPolicy,
     ExecutionPolicyKind,
@@ -54,6 +55,7 @@ from advisorai.gates import (
 )
 from advisorai.ledger import (
     IdempotencyConflict,
+    LedgerEvent,
     LedgerNamespace,
     SqliteEventOutbox,
     SqliteLedgers,
@@ -1164,6 +1166,216 @@ def test_native_open_order_projection_rehydrates_client_id_bindings_after_restar
     assert restarted_adapter.open_orders()[0].order_id == order.artifact_id
 
 
+def test_native_adapter_refuses_blank_venue_or_negative_cap(btc_usdt, timestamp):
+    """P02/P09 prep: the native adapter validates at construction.
+
+    A blank venue name and a negative submission cap are refused
+    (the live-environment refusal is pinned by the client-id test).
+    Pure unit coverage; no network, no credentials.
+    """
+
+    class Transport:
+        def submit_order(self, payload):
+            raise AssertionError("refused before any transport use")
+
+        def query_order(self, *, client_order_id):
+            raise AssertionError("refused before any transport use")
+
+    with pytest.raises(ValueError, match="venue name is required"):
+        NativeVenueAdapter(venue="  ", environment="testnet", transport=Transport())
+    with pytest.raises(ValueError, match="cap cannot be negative"):
+        NativeVenueAdapter(
+            venue="venue",
+            environment="testnet",
+            transport=Transport(),
+            max_submissions=-1,
+        )
+
+
+def test_native_adapter_refuses_venue_drift_and_rebound_keys(btc_usdt, timestamp):
+    """P02/P09 prep: strict venue and idempotency-key binding hold.
+
+    A strict adapter refuses an order whose instrument venue differs;
+    a rebound idempotency key onto a different local order is refused
+    before any transport submission. No network, no credentials.
+    """
+
+    class Transport:
+        def __init__(self):
+            self.submissions = 0
+
+        def submit_order(self, payload):
+            self.submissions += 1
+            return {"accepted": True, "venue_order_id": "native-strict"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    transport = Transport()
+    strict = NativeVenueAdapter(
+        venue="venue", environment="testnet", transport=transport, strict_venue=True
+    )
+    foreign = _order(btc_usdt, timestamp).model_copy(
+        update={"instrument": btc_usdt.model_copy(update={"venue": "live"})}
+    )
+    with pytest.raises(ValueError, match="does not match native venue"):
+        strict.submit(foreign)
+    assert transport.submissions == 0
+
+    order = _order(btc_usdt, timestamp)
+    rebound = order.model_copy(update={"artifact_id": uuid4()})
+    assert rebound.idempotency_key == order.idempotency_key
+    loose = NativeVenueAdapter(venue="venue", environment="testnet", transport=transport)
+    loose.submit(order)
+    assert transport.submissions == 1
+    with pytest.raises(NativeVenueProjectionError, match="already bound to a different"):
+        loose.submit(rebound)
+    assert transport.submissions == 1
+
+
+def test_native_adapter_refuses_misshapen_acknowledgements(btc_usdt, timestamp):
+    """P02/P09 prep: misshapen venue acks fail closed.
+
+    A non-mapping ack, an ack without a venue order id, and an ack
+    with a non-boolean acceptance are all refused. No network, no
+    credentials.
+    """
+
+    class ScriptedTransport:
+        def __init__(self, response):
+            self.response = response
+
+        def submit_order(self, payload):
+            return self.response
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    def submit(response):
+        adapter = NativeVenueAdapter(
+            venue="venue", environment="testnet", transport=ScriptedTransport(response)
+        )
+        return adapter.submit(_order(btc_usdt, timestamp))
+
+    with pytest.raises(RuntimeError, match="non-mapping acknowledgement"):
+        submit(["native-1"])
+    with pytest.raises(RuntimeError, match="rejected order"):
+        submit({"accepted": True, "venue_order_id": "  "})
+    with pytest.raises(RuntimeError, match="rejected order"):
+        submit({"accepted": "yes", "venue_order_id": "native-1"})
+
+
+def test_native_adapter_cancel_requires_an_explicit_typed_endpoint(btc_usdt, timestamp):
+    """P02/P09 prep: cancellation without a typed endpoint fails closed.
+
+    A transport without ``cancel_order``, a non-mapping cancellation,
+    and a cancellation with a non-boolean result are all refused
+    instead of pretending the local transition cancelled the venue
+    order. No network, no credentials.
+    """
+    order = _order(btc_usdt, timestamp)
+
+    class NoCancelTransport:
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-cancel"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    bare = NativeVenueAdapter(
+        venue="venue", environment="testnet", transport=NoCancelTransport()
+    )
+    with pytest.raises(NativeVenueProjectionError, match="does not expose cancellation"):
+        bare.cancel(order)
+
+    class ScriptedTransport:
+        def __init__(self, response):
+            self.response = response
+
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-cancel"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+        def cancel_order(self, *, client_order_id):
+            return self.response
+
+    def cancel(response):
+        adapter = NativeVenueAdapter(
+            venue="venue", environment="testnet", transport=ScriptedTransport(response)
+        )
+        return adapter.cancel(order)
+
+    with pytest.raises(NativeVenueProjectionError, match="non-mapping cancellation"):
+        cancel(["cancelled"])
+    with pytest.raises(NativeVenueProjectionError, match="invalid cancellation result"):
+        cancel({"cancelled": "eventually"})
+    assert cancel({"cancelled": True}) is True
+
+
+def test_native_open_order_projection_validates_record_shape(btc_usdt, timestamp):
+    """P02/P09 prep: misshapen open-order projections fail closed.
+
+    A non-sequence projection, a non-object record, a record without
+    a venue identity, an unknown client order, and an invalid local
+    identity are all refused. No network, no credentials.
+    """
+    order = _order(btc_usdt, timestamp)
+
+    class ScriptedTransport:
+        def __init__(self, records):
+            self.records = records
+
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-known"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+        def list_open_orders(self):
+            return self.records
+
+    def project(records):
+        adapter = NativeVenueAdapter(
+            venue="venue", environment="testnet", transport=ScriptedTransport(records)
+        )
+        adapter.submit(order)
+        return adapter.open_orders()
+
+    with pytest.raises(NativeVenueProjectionError, match="must be a sequence"):
+        project({"id": "native-known"})
+    with pytest.raises(NativeVenueProjectionError, match="non-object record"):
+        project(["native-known"])
+    with pytest.raises(NativeVenueProjectionError, match="missing a venue order identity"):
+        project([{"client_order_id": order.idempotency_key, "accepted": True}])
+    with pytest.raises(NativeVenueProjectionError, match="unknown client order"):
+        project([{"client_order_id": "ghost-key", "id": "native-ghost"}])
+    with pytest.raises(NativeVenueProjectionError, match="invalid local order identity"):
+        project([{"local_order_id": "not-a-uuid", "id": "native-bad"}])
+
+
+def test_native_account_snapshot_requires_an_explicit_endpoint(btc_usdt, timestamp):
+    """P02/P09 prep: account reads without an endpoint fail closed.
+
+    A transport without ``fetch_account_snapshot`` is refused instead
+    of returning a fabricated balance. No network, no credentials.
+    """
+
+    class NoAccountTransport:
+        def submit_order(self, payload):
+            return {"accepted": True, "venue_order_id": "native-account"}
+
+        def query_order(self, *, client_order_id):
+            return None
+
+    bare = NativeVenueAdapter(
+        venue="venue", environment="testnet", transport=NoAccountTransport()
+    )
+    with pytest.raises(RuntimeError, match="does not expose account snapshots"):
+        bare.account_snapshot()
+
+
 def test_oms_reconnect_queries_completed_order_before_open_order_projection(
     tmp_path, btc_usdt, timestamp
 ):
@@ -1681,3 +1893,766 @@ def test_tca_records_market_impact_and_venue_performance(btc_usdt, timestamp):
     assert report.venue == "approved-paper-venue"
     assert report.venue_performance == Decimal("0.98")
     assert report.implementation_shortfall >= Decimal("1.35")
+
+
+def test_account_state_refuses_misshapen_construction(timestamp):
+    """P02/P09 prep: account state validates at construction.
+
+    Non-finite monetary values, blank identifiers, non-finite
+    positions/marks, non-positive marks, negative average costs,
+    negative fee/funding/margin ledgers, negative cash, and naive
+    timestamps are all refused. Pure unit coverage; no network, no
+    credentials.
+    """
+    with pytest.raises(ValueError, match="monetary values must be finite"):
+        AccountState(cash=Decimal("NaN"), as_of=timestamp)
+    with pytest.raises(ValueError, match="identifiers cannot be blank"):
+        AccountState(cash=Decimal("100"), positions={"  ": Decimal("1")}, as_of=timestamp)
+    with pytest.raises(ValueError, match="positions and marks must be finite"):
+        AccountState(
+            cash=Decimal("100"),
+            positions={"BTC": Decimal("Infinity")},
+            as_of=timestamp,
+        )
+    with pytest.raises(ValueError, match="marks must be positive"):
+        AccountState(cash=Decimal("100"), marks={"BTC": Decimal("0")}, as_of=timestamp)
+    with pytest.raises(ValueError, match="average costs cannot be negative"):
+        AccountState(
+            cash=Decimal("100"), average_cost={"BTC": Decimal("-1")}, as_of=timestamp
+        )
+    with pytest.raises(ValueError, match="fees, funding, and margin cannot be negative"):
+        AccountState(cash=Decimal("100"), fees_paid=Decimal("-1"), as_of=timestamp)
+    with pytest.raises(ValueError, match="cash cannot start negative"):
+        AccountState(cash=Decimal("-1"), as_of=timestamp)
+    with pytest.raises(ValueError, match="peak equity cannot be negative"):
+        AccountState(
+            cash=Decimal("100"), peak_equity=Decimal("-1"), as_of=timestamp
+        )
+    with pytest.raises(ValueError, match="timestamp must include a timezone"):
+        AccountState(cash=Decimal("100"), as_of=timestamp.replace(tzinfo=None))
+
+
+def test_account_mutations_refuse_misshapen_adjustments(timestamp):
+    """P02/P09 prep: account mutations validate their adjustments.
+
+    Negative funding, zero cash transfers, negative borrows, zero FX
+    and corporate-action adjustments, blank split/dividend
+    instruments, non-positive split ratios, negative dividend rates,
+    negative margin values, blank mark instruments, and non-positive
+    mark prices are all refused without mutating state. Pure unit
+    coverage; no network, no credentials.
+    """
+    account = AccountState(cash=Decimal("100"), as_of=timestamp)
+    before = account.snapshot()
+    with pytest.raises(ValueError, match="funding amount must be finite"):
+        account.apply_funding(Decimal("-1"), timestamp)
+    with pytest.raises(ValueError, match="transfer amount cannot be zero"):
+        account.apply_cash_transfer(Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="borrow amount must be finite"):
+        account.apply_borrow(Decimal("-1"), timestamp)
+    with pytest.raises(ValueError, match="FX adjustment must be finite"):
+        account.apply_fx_adjustment(Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="corporate action adjustment must be finite"):
+        account.apply_corporate_action(Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="split instrument identifier cannot be blank"):
+        account.apply_split("  ", Decimal("2"), timestamp)
+    with pytest.raises(ValueError, match="split ratio must be finite and positive"):
+        account.apply_split("BTC", Decimal("0"), timestamp)
+    with pytest.raises(ValueError, match="dividend instrument identifier cannot be blank"):
+        account.apply_dividend("  ", Decimal("1"), timestamp)
+    with pytest.raises(ValueError, match="dividend cash per unit must be finite"):
+        account.apply_dividend("BTC", Decimal("-1"), timestamp)
+    with pytest.raises(ValueError, match="margin values cannot be negative"):
+        account.update_margin(
+            margin_used=Decimal("-1"), margin_available=Decimal("10"), as_of=timestamp
+        )
+    with pytest.raises(ValueError, match="mark instrument identifier cannot be blank"):
+        account.mark("  ", Decimal("100"), timestamp)
+    with pytest.raises(ValueError, match="mark price must be positive"):
+        account.mark("BTC", Decimal("0"), timestamp)
+    assert account.snapshot() == before
+
+
+def test_account_fill_refuses_blank_instrument_or_side(timestamp):
+    """P02/P09 prep: fill ingestion validates instrument and side.
+
+    A blank instrument identifier and an unknown side are refused
+    before any position moves. Pure unit coverage; no network, no
+    credentials.
+    """
+    account = AccountState(cash=Decimal("100"), as_of=timestamp)
+    fill = Fill(
+        order_id=uuid4(),
+        venue_fill_id="venue-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0.1"),
+        fee_currency="USDT",
+        occurred_at=timestamp,
+    )
+    with pytest.raises(ValueError, match="fill instrument identifier cannot be blank"):
+        account.apply_fill(fill, "buy", "  ")
+    with pytest.raises(ValueError, match="side must be buy or sell"):
+        account.apply_fill(fill, "hold", "BTC")
+    assert account.positions == {}
+
+
+def test_account_state_snapshot_refuses_misshapen_projection(timestamp):
+    """P02/P09 prep: the frozen snapshot validates at construction.
+
+    Non-finite values, blank position/mark/average-cost identifiers,
+    negative average costs, duplicate identifiers, naive timestamps,
+    and non-digest state hashes are all refused. Pure unit coverage;
+    no network, no credentials.
+    """
+    digest = "ab" * 32
+    base = {
+        "cash": Decimal("100"),
+        "positions": (("BTC", Decimal("0.01")),),
+        "marks": (("BTC", Decimal("50000")),),
+        "fees_paid": Decimal("0"),
+        "funding_paid": Decimal("0"),
+        "realized_pnl": Decimal("0"),
+        "unrealized_pnl": Decimal("0"),
+        "margin_used": Decimal("0"),
+        "margin_available": None,
+        "as_of": timestamp,
+        "state_hash": digest,
+    }
+    with pytest.raises(ValueError, match="snapshot values must be finite"):
+        AccountStateSnapshot(**{**base, "cash": Decimal("NaN")})
+    with pytest.raises(ValueError, match="position identifiers cannot be blank"):
+        AccountStateSnapshot(
+            **{**base, "positions": (("  ", Decimal("0.01")),)}
+        )
+    with pytest.raises(ValueError, match="mark identifiers cannot be blank"):
+        AccountStateSnapshot(**{**base, "marks": (("  ", Decimal("50000")),)})
+    with pytest.raises(ValueError, match="average-cost identifiers cannot be blank"):
+        AccountStateSnapshot(
+            **{**base, "average_cost": (("  ", Decimal("1")),)}
+        )
+    with pytest.raises(ValueError, match="average costs must be finite"):
+        AccountStateSnapshot(
+            **{**base, "average_cost": (("BTC", Decimal("-1")),)}
+        )
+    with pytest.raises(ValueError, match="positions must be unique"):
+        AccountStateSnapshot(
+            **{
+                **base,
+                "positions": (("BTC", Decimal("1")), ("BTC", Decimal("2"))),
+            }
+        )
+    with pytest.raises(ValueError, match="marks must be unique"):
+        AccountStateSnapshot(
+            **{**base, "marks": (("BTC", Decimal("1")), ("BTC", Decimal("2")))}
+        )
+    with pytest.raises(ValueError, match="average costs must be unique"):
+        AccountStateSnapshot(
+            **{
+                **base,
+                "average_cost": (("BTC", Decimal("1")), ("BTC", Decimal("2"))),
+            }
+        )
+    with pytest.raises(ValueError, match="snapshot timestamp must include a timezone"):
+        AccountStateSnapshot(**{**base, "as_of": timestamp.replace(tzinfo=None)})
+    with pytest.raises(ValueError, match="state_hash must be a lowercase"):
+        AccountStateSnapshot(**{**base, "state_hash": "NOT-A-DIGEST"})
+
+
+def test_venue_account_snapshot_refuses_misshapen_projection(timestamp):
+    """P02/P09 prep: the venue projection validates at construction.
+
+    Naive timestamps, non-Decimal values, non-string or blank
+    position identifiers, non-finite values, misshapen margins, and
+    non-UUID open-order identifiers are all refused before any
+    reconciliation comparison. Pure unit coverage; no network, no
+    credentials.
+    """
+    with pytest.raises(ValueError, match="snapshot timestamp must include a timezone"):
+        VenueAccountSnapshot(
+            as_of=timestamp.replace(tzinfo=None),
+            cash=Decimal("100"),
+            positions={},
+        )
+    with pytest.raises(ValueError, match="account values must be Decimal instances"):
+        VenueAccountSnapshot(as_of=timestamp, cash=100.0, positions={})
+    with pytest.raises(ValueError, match="position identifiers must be strings"):
+        VenueAccountSnapshot(
+            as_of=timestamp, cash=Decimal("100"), positions={123: Decimal("1")}
+        )
+    with pytest.raises(ValueError, match="account values must be finite"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={"BTC": Decimal("NaN")},
+        )
+    with pytest.raises(ValueError, match="position identifiers cannot be blank"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={"  ": Decimal("1")},
+        )
+    with pytest.raises(ValueError, match="margin used must be"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={},
+            margin_used=Decimal("-1"),
+        )
+    with pytest.raises(ValueError, match="margin available must be"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={},
+            margin_available=Decimal("-1"),
+        )
+    with pytest.raises(ValueError, match="open order identifiers must be UUIDs"):
+        VenueAccountSnapshot(
+            as_of=timestamp,
+            cash=Decimal("100"),
+            positions={},
+            venue_open_order_ids=frozenset({"not-a-uuid"}),
+        )
+
+
+def test_account_ledger_requires_event_identifiers(timestamp, tmp_path):
+    """P02/P09 prep: ledger-coupled mutations require identifiers.
+
+    Blank funding, cash-transfer, borrow, mark, and margin
+    identifiers, blank split/dividend instrument/action pairs, and
+    split/dividend corporate-action records missing their amounts
+    are all refused before any ledger write. Pure unit coverage over
+    a throwaway SQLite ledger; no network, no credentials.
+    """
+    from types import SimpleNamespace
+
+    ledger = AccountLedger(
+        SqliteLedgers(tmp_path / "ledgers.sqlite"),
+        AccountState(cash=Decimal("1000"), as_of=timestamp),
+    )
+    with pytest.raises(ValueError, match="funding ID is required"):
+        ledger.apply_funding(Decimal("1"), timestamp, "  ")
+    with pytest.raises(ValueError, match="cash transfer ID is required"):
+        ledger.apply_cash_transfer(Decimal("1"), timestamp, "  ")
+    with pytest.raises(ValueError, match="account adjustment ID is required"):
+        ledger.apply_borrow(Decimal("1"), timestamp, "  ")
+    with pytest.raises(ValueError, match="mark and instrument IDs are required"):
+        ledger.mark("BTC", Decimal("100"), timestamp, "  ")
+    with pytest.raises(ValueError, match="mark and instrument IDs are required"):
+        ledger.mark("  ", Decimal("100"), timestamp, "mark-1")
+    with pytest.raises(ValueError, match="margin ID is required"):
+        ledger.update_margin(
+            margin_used=Decimal("0"),
+            margin_available=Decimal("100"),
+            as_of=timestamp,
+            margin_id="  ",
+        )
+    with pytest.raises(
+        ValueError, match="corporate-action instrument and action IDs are required"
+    ):
+        ledger.apply_split("  ", Decimal("2"), timestamp, "split-1")
+    with pytest.raises(
+        ValueError, match="corporate-action instrument and action IDs are required"
+    ):
+        ledger.apply_dividend("BTC", Decimal("1"), timestamp, "  ")
+    split_action = SimpleNamespace(
+        action_type=SimpleNamespace(value="split"),
+        instrument=SimpleNamespace(canonical_id="BTC"),
+        action_id="split-record-1",
+        effective_at=timestamp,
+        ratio=None,
+    )
+    with pytest.raises(ValueError, match="split corporate actions require a ratio"):
+        ledger.apply_corporate_action_record(split_action)
+    dividend_action = SimpleNamespace(
+        action_type=SimpleNamespace(value="dividend"),
+        instrument=SimpleNamespace(canonical_id="BTC"),
+        action_id="dividend-record-1",
+        effective_at=timestamp,
+        cash_amount=None,
+    )
+    with pytest.raises(
+        ValueError, match="dividend corporate actions require a cash amount"
+    ):
+        ledger.apply_corporate_action_record(dividend_action)
+    merger_action = SimpleNamespace(
+        action_type=SimpleNamespace(value="merger"),
+        instrument=SimpleNamespace(canonical_id="BTC"),
+        action_id="merger-record-1",
+        effective_at=timestamp,
+        cash_amount=Decimal("0"),
+    )
+    with pytest.raises(ValueError, match="merger/spinoff accounting requires"):
+        ledger.apply_corporate_action_record(merger_action)
+
+
+def test_account_ledger_refuses_reused_keys_for_different_events(timestamp, tmp_path):
+    """P02/P09 prep: idempotency keys bind to their first event.
+
+    Reusing a funding, cash-transfer, borrow, mark, margin, split,
+    or dividend key for changed content raises IdempotencyConflict
+    naming the event kind; identical retries still dedupe. Pure unit
+    coverage over a throwaway SQLite ledger; no network, no
+    credentials.
+    """
+    ledger = AccountLedger(
+        SqliteLedgers(tmp_path / "ledgers.sqlite"),
+        AccountState(cash=Decimal("1000"), as_of=timestamp),
+    )
+    ledger.apply_funding(Decimal("1"), timestamp, "funding-1")
+    ledger.apply_funding(Decimal("1"), timestamp, "funding-1")
+    with pytest.raises(IdempotencyConflict, match="different funding"):
+        ledger.apply_funding(Decimal("2"), timestamp, "funding-1")
+    ledger.apply_cash_transfer(Decimal("5"), timestamp, "transfer-1")
+    ledger.apply_cash_transfer(Decimal("5"), timestamp, "transfer-1")
+    with pytest.raises(IdempotencyConflict, match="different cash transfer"):
+        ledger.apply_cash_transfer(Decimal("6"), timestamp, "transfer-1")
+    ledger.apply_borrow(Decimal("1"), timestamp, "borrow-1")
+    ledger.apply_borrow(Decimal("1"), timestamp, "borrow-1")
+    with pytest.raises(IdempotencyConflict, match="different account adjustment"):
+        ledger.apply_borrow(Decimal("2"), timestamp, "borrow-1")
+    ledger.mark("BTC", Decimal("100"), timestamp, "mark-1")
+    ledger.mark("BTC", Decimal("100"), timestamp, "mark-1")
+    with pytest.raises(IdempotencyConflict, match="different mark"):
+        ledger.mark("BTC", Decimal("101"), timestamp, "mark-1")
+    margin = {"margin_used": Decimal("0"), "margin_available": Decimal("100")}
+    ledger.update_margin(**margin, as_of=timestamp, margin_id="margin-1")
+    ledger.update_margin(**margin, as_of=timestamp, margin_id="margin-1")
+    with pytest.raises(IdempotencyConflict, match="different margin"):
+        ledger.update_margin(
+            margin_used=Decimal("1"),
+            margin_available=Decimal("100"),
+            as_of=timestamp,
+            margin_id="margin-1",
+        )
+    ledger.apply_split("BTC", Decimal("2"), timestamp, "split-1")
+    ledger.apply_split("BTC", Decimal("2"), timestamp, "split-1")
+    with pytest.raises(IdempotencyConflict, match="different corporate action"):
+        ledger.apply_split("BTC", Decimal("3"), timestamp, "split-1")
+    ledger.apply_dividend("BTC", Decimal("1"), timestamp, "dividend-1")
+    ledger.apply_dividend("BTC", Decimal("1"), timestamp, "dividend-1")
+    with pytest.raises(IdempotencyConflict, match="different corporate action"):
+        ledger.apply_dividend("BTC", Decimal("2"), timestamp, "dividend-1")
+
+
+def test_account_ledger_hydrate_refuses_corrupt_or_diverged_history(timestamp, tmp_path):
+    """P02/P09 prep: restart hydration validates durable history.
+
+    A durable fill event with an invalid payload and a durable
+    event whose recorded state hash no longer matches the replayed
+    account both raise IdempotencyConflict instead of hydrating a
+    corrupt balance. Pure unit coverage over throwaway SQLite
+    ledgers; no network, no credentials.
+    """
+    bad_ledgers = SqliteLedgers(tmp_path / "bad.sqlite")
+    bad_ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.ACCOUNT,
+            event_type="fill_applied",
+            idempotency_key="account-fill:bad-fill",
+            payload={"venue_fill_id": "bad-fill"},
+        )
+    )
+    with pytest.raises(IdempotencyConflict, match="invalid fill payload"):
+        AccountLedger(
+            bad_ledgers,
+            AccountState(cash=Decimal("1000"), as_of=timestamp),
+        )
+
+    diverged_ledgers = SqliteLedgers(tmp_path / "diverged.sqlite")
+    diverged_ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.ACCOUNT,
+            event_type="funding_applied",
+            idempotency_key="funding:diverged-1",
+            payload={
+                "amount": "1",
+                "occurred_at": timestamp.isoformat(),
+                "funding_id": "diverged-1",
+                "state_hash": "00" * 32,
+            },
+        )
+    )
+    with pytest.raises(IdempotencyConflict, match="state hash mismatch"):
+        AccountLedger(
+            diverged_ledgers,
+            AccountState(cash=Decimal("1000"), as_of=timestamp),
+        )
+
+
+def test_oms_cancel_fails_closed_on_venue_refusals(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: cancellation validates the venue acknowledgement.
+
+    A venue adapter without cancellation, a transport fault, a
+    non-boolean acknowledgement, and a rejected cancellation are
+    all refused with the order left in durable CANCEL_PENDING for
+    recovery through reconciliation. Pure unit coverage over
+    throwaway SQLite ledgers; no network, no credentials.
+    """
+
+    class StubAdapter:
+        def __init__(self, cancel_behavior):
+            self.cancel_behavior = cancel_behavior
+
+        def submit(self, order):
+            return VenueAcknowledgement(
+                order_id=order.artifact_id,
+                venue_order_id=f"stub-{order.artifact_id}",
+                accepted=True,
+            )
+
+        def open_orders(self):
+            return ()
+
+        def cancel(self, order):
+            if isinstance(self.cancel_behavior, Exception):
+                raise self.cancel_behavior
+            return self.cancel_behavior
+
+    class NoCancelAdapter(StubAdapter):
+        cancel = None
+
+    def _routed(tmp_name, adapter):
+        ledgers = SqliteLedgers(tmp_path / tmp_name)
+        orders = OrderManager(ledgers, adapter)
+        order = _order(btc_usdt, timestamp)
+        orders.create(order)
+        orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+        assert orders.route(order.artifact_id).accepted
+        return orders, order
+
+    orders, order = _routed("cancel-no-adapter.sqlite", NoCancelAdapter(True))
+    with pytest.raises(OrderStateError, match="does not expose cancellation"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+    orders, order = _routed(
+        "cancel-ambiguous.sqlite", StubAdapter(RuntimeError("transport lost"))
+    )
+    with pytest.raises(OrderStateError, match="acknowledgement is ambiguous"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+    orders, order = _routed("cancel-nonbool.sqlite", StubAdapter("yes"))
+    with pytest.raises(OrderStateError, match="must be boolean"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+    orders, order = _routed("cancel-rejected.sqlite", StubAdapter(False))
+    with pytest.raises(OrderStateError, match="venue rejected cancellation"):
+        orders.cancel(order.artifact_id)
+    assert orders.orders[order.artifact_id].state is OrderState.CANCEL_PENDING
+
+
+def test_oms_record_fill_validates_side_quantity_and_state(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: fill recording validates side, quantity, and state.
+
+    An unknown side, a side mismatch against the canonical order,
+    an overfill beyond order quantity, a fill on a non-fillable
+    order, and a venue fill ID reused for different content are
+    all refused. Pure unit coverage over throwaway SQLite ledgers;
+    no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "fill-guards.sqlite")
+    orders = OrderManager(ledgers, PaperVenueAdapter())
+    order = _order(btc_usdt, timestamp)
+    orders.create(order)
+    orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    assert orders.route(order.artifact_id).accepted
+
+    def _fill(venue_fill_id, quantity):
+        return Fill(
+            order_id=order.artifact_id,
+            venue_fill_id=venue_fill_id,
+            quantity=quantity,
+            price=Decimal("100"),
+            fee=Decimal("0.10"),
+            occurred_at=timestamp,
+        )
+
+    with pytest.raises(OrderStateError, match="fill side must be buy or sell"):
+        orders.record_fill(_fill("fill-bad-side", Decimal("1")), "hold")
+    with pytest.raises(OrderStateError, match="does not match the canonical order"):
+        orders.record_fill(_fill("fill-wrong-side", Decimal("1")), "sell")
+    with pytest.raises(OrderStateError, match="fills exceed order quantity"):
+        orders.record_fill(_fill("fill-overfill", Decimal("2")), "buy")
+    orders.record_fill(_fill("fill-ok", Decimal("1")), "buy")
+    with pytest.raises(OrderStateError, match="reused for different fill content"):
+        orders.record_fill(_fill("fill-ok", Decimal("0.5")), "buy")
+
+    created = _order(btc_usdt, timestamp)
+    orders.create(created)
+    early = Fill(
+        order_id=created.artifact_id,
+        venue_fill_id="fill-early",
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        fee=Decimal("0.10"),
+        occurred_at=timestamp,
+    )
+    with pytest.raises(OrderStateError, match="cannot fill order in state"):
+        orders.record_fill(early, "buy")
+
+
+def test_oms_reconcile_routed_rejects_misshapen_query_responses(
+    tmp_path, btc_usdt, timestamp
+):
+    """P02/P09 prep: routed reconciliation validates venue queries.
+
+    Reconciling a non-routed order, a non-object query response, a
+    query missing the venue order identity, a query with no
+    admitted order state, and a routed order with no matching
+    venue record are all refused without resubmission. Pure unit
+    coverage over throwaway SQLite ledgers; no network, no
+    credentials.
+    """
+
+    class QueryAdapter:
+        def __init__(self, response):
+            self.response = response
+            self.submits = 0
+
+        def submit(self, order):
+            self.submits += 1
+            return VenueAcknowledgement(
+                order_id=order.artifact_id,
+                venue_order_id=f"query-{order.artifact_id}",
+                accepted=True,
+            )
+
+        def open_orders(self):
+            return ()
+
+        def reconcile(self, order):
+            return self.response
+
+    def _routed(tmp_name, response):
+        adapter = QueryAdapter(response)
+        ledgers = SqliteLedgers(tmp_path / tmp_name)
+        orders = OrderManager(ledgers, adapter)
+        order = _order(btc_usdt, timestamp)
+        orders.create(order)
+        orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+        orders.transition(order.artifact_id, OrderState.ROUTED)
+        return orders, order, adapter
+
+    orders, order, adapter = _routed("query-nonobject.sqlite", ["not-a-mapping"])
+    with pytest.raises(OrderStateError, match="non-object response"):
+        orders.reconcile_routed(order.artifact_id)
+    assert adapter.submits == 0
+    assert orders.orders[order.artifact_id].state is OrderState.ROUTED
+
+    orders, order, adapter = _routed("query-no-identity.sqlite", {"state": "open"})
+    with pytest.raises(OrderStateError, match="missing a venue order identity"):
+        orders.reconcile_routed(order.artifact_id)
+    assert adapter.submits == 0
+
+    orders, order, adapter = _routed(
+        "query-no-state.sqlite", {"venue_order_id": "venue-1", "state": "mysterious"}
+    )
+    with pytest.raises(OrderStateError, match="no admitted order state"):
+        orders.reconcile_routed(order.artifact_id)
+    assert adapter.submits == 0
+
+    ledgers = SqliteLedgers(tmp_path / "query-no-match.sqlite")
+    orphan_orders = OrderManager(ledgers, PaperVenueAdapter())
+    orphan = _order(btc_usdt, timestamp)
+    orphan_orders.create(orphan)
+    orphan_orders.transition(orphan.artifact_id, OrderState.RISK_APPROVED)
+    orphan_orders.transition(orphan.artifact_id, OrderState.ROUTED)
+    with pytest.raises(OrderStateError, match="no matching routed order"):
+        orphan_orders.reconcile_routed(orphan.artifact_id)
+
+    ledgers = SqliteLedgers(tmp_path / "query-wrong-state.sqlite")
+    settled_orders = OrderManager(ledgers, PaperVenueAdapter())
+    settled = _order(btc_usdt, timestamp)
+    settled_orders.create(settled)
+    with pytest.raises(OrderStateError, match="only routed orders require"):
+        settled_orders.reconcile_routed(settled.artifact_id)
+
+
+def test_oms_create_and_transition_validate_lifecycle(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: order creation and transitions validate lifecycle.
+
+    An idempotency key reused for a different order, a direct
+    invalid transition, a transition on an unknown order, and a
+    reconciliation request on a non-terminal order are all
+    refused. Pure unit coverage over a throwaway SQLite ledger; no
+    network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "lifecycle.sqlite")
+    orders = OrderManager(ledgers, PaperVenueAdapter())
+    order = _order(btc_usdt, timestamp)
+    orders.create(order)
+    divergent = _order(btc_usdt, timestamp).model_copy(
+        update={"idempotency_key": order.idempotency_key}
+    )
+    with pytest.raises(OrderStateError, match="reused for different order"):
+        orders.create(divergent)
+    with pytest.raises(OrderStateError, match="invalid order transition"):
+        orders.transition(order.artifact_id, OrderState.FILLED)
+    assert orders.orders[order.artifact_id].state is OrderState.CREATED
+    with pytest.raises(OrderStateError, match="unknown order"):
+        orders.transition(uuid4(), OrderState.CANCELLED)
+    with pytest.raises(OrderStateError, match="must be terminal before reconciliation"):
+        orders.reconcile(order.artifact_id)
+
+
+def test_oms_record_rejects_non_artifacts(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: the order ledger only records Order or Fill artifacts.
+
+    Recording any other object type raises TypeError before any
+    ledger write. Pure unit coverage over a throwaway SQLite
+    ledger; no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "record-type.sqlite")
+    orders = OrderManager(ledgers, PaperVenueAdapter())
+    with pytest.raises(TypeError, match="can only ledger Order or Fill"):
+        orders._record({"not": "an-artifact"}, "order_created")
+    assert ledgers.events(LedgerNamespace.ORDER) == ()
+
+
+def test_oms_hydrate_refuses_corrupt_order_history(tmp_path, btc_usdt, timestamp):
+    """P02/P09 prep: restart hydration validates the order ledger.
+
+    A transition recorded before order creation, a creation entry
+    with a non-created state, an invalid recorded transition, and
+    a fill recorded before its order all refuse hydration with
+    the underlying fault chained. Pure unit coverage over
+    throwaway SQLite ledgers; no network, no credentials.
+    """
+
+    def _append(ledgers, event_type, artifact, key):
+        ledgers.append(
+            LedgerEvent(
+                namespace=LedgerNamespace.ORDER,
+                event_type=event_type,
+                idempotency_key=key,
+                payload={
+                    "artifact_id": str(artifact.artifact_id),
+                    "artifact": artifact.model_dump(mode="json", round_trip=True),
+                },
+            )
+        )
+
+    order = _order(btc_usdt, timestamp)
+    early_ledgers = SqliteLedgers(tmp_path / "early-transition.sqlite")
+    _append(
+        early_ledgers,
+        "order_routed",
+        order.model_copy(update={"state": OrderState.ROUTED}),
+        "order:early:order_routed",
+    )
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(early_ledgers, PaperVenueAdapter())
+    assert "transition before order creation" in str(excinfo.value.__cause__)
+
+    state_ledgers = SqliteLedgers(tmp_path / "bad-creation-state.sqlite")
+    _append(
+        state_ledgers,
+        "order_created",
+        order.model_copy(update={"state": OrderState.ROUTED}),
+        "order:badstate:order_created",
+    )
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(state_ledgers, PaperVenueAdapter())
+    assert "non-created state" in str(excinfo.value.__cause__)
+
+    skip_ledgers = SqliteLedgers(tmp_path / "skipped-transition.sqlite")
+    _append(skip_ledgers, "order_created", order, "order:skip:order_created")
+    _append(
+        skip_ledgers,
+        "order_filled",
+        order.model_copy(update={"state": OrderState.FILLED}),
+        "order:skip:order_filled",
+    )
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(skip_ledgers, PaperVenueAdapter())
+    assert "invalid transition" in str(excinfo.value.__cause__)
+
+    orphan_ledgers = SqliteLedgers(tmp_path / "orphan-fill.sqlite")
+    orphan_fill = Fill(
+        order_id=uuid4(),
+        venue_fill_id="orphan-fill-1",
+        quantity=Decimal("1"),
+        price=Decimal("100"),
+        fee=Decimal("0.10"),
+        occurred_at=timestamp,
+    )
+    _append(orphan_ledgers, "fill_recorded", orphan_fill, "fill:orphan-fill-1")
+    with pytest.raises(OrderStateError, match="invalid artifact") as excinfo:
+        OrderManager(orphan_ledgers, PaperVenueAdapter())
+    assert "precedes its order" in str(excinfo.value.__cause__)
+
+
+def test_risk_market_state_refuses_misshapen_construction(btc_usdt):
+    """P02/P09 prep: the risk market snapshot validates at construction.
+
+    Non-integer clock drift and order counts, non-Decimal
+    scalars, non-digest and mismatched state hashes, blank
+    identifiers, non-Decimal/non-finite numerics, non-boolean
+    venue health, non-positive marks and liquidity, negative
+    staleness/volatility/costs/drift/counters, and non-finite
+    collateral are all refused. Pure unit coverage; no network, no
+    credentials.
+    """
+    marks = {btc_usdt.canonical_id: Decimal("100")}
+    with pytest.raises(ValueError, match="clock drift must be an integer"):
+        RiskMarketState(marks=marks, clock_drift_seconds=1.5)
+    with pytest.raises(ValueError, match="order count must be an integer"):
+        RiskMarketState(marks=marks, order_count=True)
+    with pytest.raises(ValueError, match="scalar values must be Decimal"):
+        RiskMarketState(marks=marks, funding_cost_bps=1.5)
+    with pytest.raises(ValueError, match="must be a lowercase SHA-256 digest"):
+        RiskMarketState(marks=marks, market_state_hash="NOT-A-DIGEST")
+    with pytest.raises(ValueError, match="identifiers cannot be blank"):
+        RiskMarketState(marks={"  ": Decimal("100")})
+    with pytest.raises(ValueError, match="numeric values must be Decimal instances"):
+        RiskMarketState(marks=marks, volatility={btc_usdt.canonical_id: 0.5})
+    with pytest.raises(ValueError, match="health values must be booleans"):
+        RiskMarketState(marks=marks, venue_healthy={"venue": "yes"})
+    with pytest.raises(ValueError, match="numeric values must be finite"):
+        RiskMarketState(marks={btc_usdt.canonical_id: Decimal("NaN")})
+    with pytest.raises(ValueError, match="counters must be finite"):
+        RiskMarketState(marks=marks, funding_cost_bps=Decimal("Infinity"))
+    with pytest.raises(ValueError, match="marks must be positive"):
+        RiskMarketState(marks={btc_usdt.canonical_id: Decimal("0")})
+    with pytest.raises(ValueError, match="stale durations cannot be negative"):
+        RiskMarketState(marks=marks, stale_seconds={btc_usdt.canonical_id: -1})
+    with pytest.raises(ValueError, match="volatility values cannot be negative"):
+        RiskMarketState(
+            marks=marks, volatility={btc_usdt.canonical_id: Decimal("-1")}
+        )
+    with pytest.raises(ValueError, match="liquidity notionals must be positive"):
+        RiskMarketState(
+            marks=marks, liquidity_notional={btc_usdt.canonical_id: Decimal("0")}
+        )
+    with pytest.raises(ValueError, match="cost estimates cannot be negative"):
+        RiskMarketState(
+            marks=marks, spread_bps={btc_usdt.canonical_id: Decimal("-1")}
+        )
+    with pytest.raises(ValueError, match="clock drift cannot be negative"):
+        RiskMarketState(marks=marks, clock_drift_seconds=-1)
+    with pytest.raises(ValueError, match="counters/costs cannot be negative"):
+        RiskMarketState(marks=marks, order_count=-1)
+    with pytest.raises(ValueError, match="collateral availability must be finite"):
+        RiskMarketState(marks=marks, collateral_available=Decimal("NaN"))
+    with pytest.raises(ValueError, match="does not match canonical market state"):
+        RiskMarketState(marks=marks, market_state_hash="00" * 32)
+
+
+def test_kill_switch_reset_requires_human_approver(tmp_path):
+    """P02/P09 prep: kill-switch reset requires an explicit approver.
+
+    A blank approver is refused and the switch stays tripped.
+    Pure unit coverage over a throwaway SQLite ledger; no network,
+    no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "kill-switch-reset.sqlite")
+    switch = KillSwitch(ledgers)
+    switch.trip("venue outage")
+    with pytest.raises(ValueError, match="explicit human approver"):
+        switch.reset(approved_by="  ")
+    assert switch.tripped
+    switch.reset(approved_by="human-operator")
+    assert not switch.tripped

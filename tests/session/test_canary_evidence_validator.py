@@ -1,0 +1,394 @@
+"""Regression for the offline P02 canary-evidence validator.
+
+Runs a real zero-submission bounded session offline (synthetic transport,
+no network, no credentials), captures its stdout as the run log, then
+validates the stopped state directory. A second case corrupts the outcome
+to prove fail-closed behavior.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import sys
+
+sys.path.insert(0, "scripts")
+
+from validate_testnet_canary_evidence import main, validate_canary
+
+from advisorai.config import CredentialResolver
+from advisorai.integrations import BINANCE_SPOT_TESTNET_BASE_URL
+from advisorai.ledger import SqliteLedgers
+from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
+from advisorai.session.testnet_launch import (
+    SandboxLaunchRequest,
+    build_testnet_owner_application,
+    read_testnet_baseline,
+)
+from tests.integrations.test_binance_spot import _account
+from tests.session.test_testnet_baseline_hydration import _requester
+
+
+def _resolver() -> CredentialResolver:
+    return CredentialResolver.from_mapping(
+        {
+            "ADVISORAI_VENUE_NAME": "binance_spot_testnet",
+            "ADVISORAI_VENUE_ENVIRONMENT": "paper_testnet",
+            "ADVISORAI_VENUE_BASE_URL": BINANCE_SPOT_TESTNET_BASE_URL,
+            "ADVISORAI_VENUE_API_KEY": "synthetic-testnet-key",
+            "ADVISORAI_VENUE_API_SECRET": "synthetic-testnet-secret",
+        }
+    )
+
+
+def _run_offline_canary(tmp_path, monkeypatch, capsys, *, label: str):
+    import advisorai.integrations as integ
+
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    calls: list = []
+    real_builder = integ.build_binance_spot_testnet_transport
+
+    def seeded_builder(resolver, **kwargs):
+        return real_builder(
+            resolver, requester=_requester(_account(), calls), **kwargs
+        )
+
+    monkeypatch.setattr(
+        "advisorai.integrations.build_binance_spot_testnet_transport", seeded_builder
+    )
+    state_dir = tmp_path / label
+    ledgers = SqliteLedgers(state_dir / "ledgers.sqlite3")
+    launch = SandboxLaunchRequest(
+        provider="binance_spot_testnet",
+        provider_instrument_id="BTCUSDT",
+        quote_currency="USDT",
+        max_submissions=0,
+    )
+    transport, baseline, balance_cutoff = read_testnet_baseline(resolver=_resolver(), launch=launch)
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=state_dir,
+        lock_identity=f"canary-validator-{label}",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=launch,
+        transport=transport,
+        baseline=baseline,
+        baseline_balance_cutoff=balance_cutoff,
+    )
+    exit_code = app.run(reason="canary validator fixture")
+    assert exit_code == 0
+    run_log = tmp_path / f"{label}.log"
+    run_log.write_text(capsys.readouterr().out, encoding="utf-8")
+    return state_dir, run_log
+
+
+def test_validator_certifies_clean_zero_submission_canary(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="clean-canary"
+    )
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.submission_count == 0
+    assert report.failed == []
+    assert report.p02_certified is True
+
+
+def test_validator_rejects_unclean_stop(tmp_path, monkeypatch, capsys) -> None:
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="dirty-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        payload["end"]["outcome"] = "unclean"
+        payload["end"]["unfinished_work"] = ["paper_scheduler_did_not_stop"]
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "outcome_clean" in names
+    assert "no_unfinished_work" in names
+
+
+def test_validator_rejects_missing_ledger_and_run_log(tmp_path) -> None:
+    """Validator inputs fail closed: no ledger or log, no certification."""
+    empty_dir = tmp_path / "empty-state"
+    empty_dir.mkdir()
+    report = validate_canary(
+        state_dir=empty_dir, run_log=tmp_path / "absent.log"
+    )
+    assert report.p02_certified is False
+    assert report.failed[0].name == "ledger_present"
+
+def test_cli_exit_codes_distinguish_input_and_clean(tmp_path, monkeypatch, capsys) -> None:
+    """CLI: 2 on missing state dir, 0 on clean canary."""
+    assert main(["--state-dir", str(tmp_path / "absent")]) == 2
+
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="cli-clean"
+    )
+    assert main(["--state-dir", str(state_dir), "--run-log", str(run_log)]) == 0
+
+
+def test_cli_returns_1_on_unclean_stop(tmp_path, monkeypatch, capsys) -> None:
+    """CLI: 1 when the canary stopped unclean."""
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="cli-dirty"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        payload["end"]["outcome"] = "unclean"
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    assert main(["--state-dir", str(state_dir), "--run-log", str(run_log)]) == 1
+
+
+def test_validator_rejects_open_orders_and_unreleased_leases(tmp_path, monkeypatch, capsys) -> None:
+    """P02: open orders or held leases at stop refuse certification.
+
+    P02 acceptance requires "no unexplained open orders" and "released
+    leases" as independent checks: a session end that claims
+    ``outcome=clean`` while orders remain open or leases stay held must
+    still fail certification, naming the exact check. Offline only;
+    corrupts a real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="open-orders-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["end"]["outcome"] == "clean"
+        payload["end"]["open_orders"] = ["00000000-0000-0000-0000-000000000001"]
+        payload["end"]["leases_released"] = False
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "no_open_orders" in names
+    assert "leases_released" in names
+
+
+def test_validator_rejects_truncated_run_log(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a run log missing stop markers refuses certification.
+
+    P02 acceptance requires the run log to show the clean-stop marker
+    trail; a log truncated before ``leases_released=True`` must fail
+    certification naming ``run_log_markers`` even though the ledger
+    itself is clean. Offline only; edits a real captured log, no venue
+    writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="truncated-log-canary"
+    )
+    text = run_log.read_text(encoding="utf-8")
+    assert "leases_released=True" in text
+    truncated = text.replace("leases_released=True", "leases_released=<truncated>")
+    truncated_log = tmp_path / "truncated.log"
+    truncated_log.write_text(truncated, encoding="utf-8")
+    report = validate_canary(state_dir=state_dir, run_log=truncated_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "run_log_markers" in names
+
+
+def test_validator_rejects_wrong_venue_profile(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a non-testnet venue profile refuses certification.
+
+    P02 acceptance requires the session to have run on a testnet
+    profile; a ledger whose ``session_profile`` records
+    ``local-simulator`` must fail certification naming
+    ``testnet_profile`` even though the stop itself is clean. Offline
+    only; edits a real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="wrong-profile-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_profile'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["profile"]["venue_profile"] == "binance_spot_testnet"
+        payload["profile"]["venue_profile"] = "local-simulator"
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_profile'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "testnet_profile" in names
+
+
+def test_validator_rejects_dirty_reconciliation_state(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a verification-failed reconciliation state refuses certification.
+
+    P02 acceptance requires ``reconciliation_state=reconciled``; a
+    session end whose reconciliation state reads ``verification_failed``
+    must fail certification naming ``reconciliation_clean`` even
+    though the outcome field still claims clean. Offline only; edits a
+    real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="dirty-reconciliation-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["end"]["reconciliation_state"] == "reconciled"
+        payload["end"]["reconciliation_state"] = "verification_failed"
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "reconciliation_clean" in names
+
+
+def test_validator_rejects_duplicate_session_end(tmp_path, monkeypatch, capsys) -> None:
+    """P02: two session_ended events refuse certification.
+
+    P02 acceptance requires exactly one stop record; a ledger with a
+    duplicated ``session_ended`` event (double-stop defect) must fail
+    certification naming ``single_session_end`` even though each stop
+    is individually clean. Offline only; duplicates a real
+    stopped-session row, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="duplicate-stop-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT event_id, idempotency_key, occurred_at, payload_json"
+            " FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        event_id, key, occurred_at, payload_json = row
+        connection.execute(
+            "INSERT INTO mission_events"
+            " (event_id, idempotency_key, event_type, occurred_at, payload_json)"
+            " VALUES (?, ?, 'session_ended', ?, ?)",
+            (event_id + "-dup", key + "-dup", occurred_at, payload_json),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "single_session_end" in names
+
+
+def test_validator_rejects_missing_order_events_table(tmp_path, monkeypatch, capsys) -> None:
+    """P02: a ledger without order events refuses certification.
+
+    P02 acceptance requires a recorded submission count; a ledger
+    whose ``order_events`` table is absent (submission history
+    unrecoverable) must fail certification naming
+    ``submission_count_recorded`` even though the stop record itself
+    is clean. Offline only; drops the table from a real
+    stopped-session ledger, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="missing-order-events-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master"
+            " WHERE type='table' AND name='order_events'"
+        ).fetchone()
+        assert row[0] == 1
+        connection.execute("DROP TABLE order_events")
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.submission_count is None
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert "submission_count_recorded" in names
+
+
+def test_validator_rejects_unfinished_work_on_clean_outcome(tmp_path, monkeypatch, capsys) -> None:
+    """P02: unfinished work on a clean outcome refuses certification.
+
+    P02 acceptance requires a clean stop with nothing left running: a
+    session end that claims ``outcome=clean`` while
+    ``unfinished_work`` is non-empty must still fail certification,
+    naming ``no_unfinished_work`` alone (the existing unclean-stop
+    test only triggers it alongside a dirty outcome). Offline only;
+    corrupts a real stopped-session payload, no venue writes.
+    """
+    state_dir, run_log = _run_offline_canary(
+        tmp_path, monkeypatch, capsys, label="unfinished-work-canary"
+    )
+    connection = sqlite3.connect(state_dir / "ledgers.sqlite3")
+    try:
+        row = connection.execute(
+            "SELECT payload_json FROM mission_events WHERE event_type='session_ended'"
+        ).fetchone()
+        payload = json.loads(row[0])
+        assert payload["end"]["outcome"] == "clean"
+        payload["end"]["unfinished_work"] = ["paper_scheduler_still_running"]
+        connection.execute(
+            "UPDATE mission_events SET payload_json=? WHERE event_type='session_ended'",
+            (json.dumps(payload),),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    report = validate_canary(state_dir=state_dir, run_log=run_log)
+    assert report.p02_certified is False
+    names = [check.name for check in report.failed]
+    assert names == ["no_unfinished_work"]

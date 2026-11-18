@@ -207,6 +207,12 @@ class AccountState:
         self.cash -= fill.price * signed_quantity
         self.fees_paid += fill.fee
         self.cash -= fill.fee
+        if self.margin_available is not None:
+            # Spot fills settle in the quote asset: a buy deducts notional +
+            # fee from free balance, a sell credits notional minus fee. Keep
+            # the projection exact so venue free-balance comparison stays an
+            # equality check instead of drifting from a frozen baseline.
+            self.margin_available -= fill.price * signed_quantity + fill.fee
         realized_delta = self.realized_pnl - realized_before
         # Loss controls include transaction costs even though gross realized P&L
         # remains separately auditable.

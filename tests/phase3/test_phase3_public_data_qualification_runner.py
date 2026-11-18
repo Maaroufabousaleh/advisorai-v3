@@ -135,3 +135,27 @@ def test_binance_source_observation_uses_window_end_before_close_cleanup(
     _rest, _websocket, observed_at = _collect_source_window(source, tmp_path, 1)
 
     assert observed_at == measured_at
+
+
+def test_market_data_main_refuses_out_of_bounds_at_argparse(
+    monkeypatch, capsys
+) -> None:
+    """Out-of-bounds --duration-seconds/--connection-rounds exit 2."""
+    from scripts.qualify_phase3_public_market_data import main
+
+    cases = (
+        (["--real", "--duration-seconds", "0"], "--duration-seconds"),
+        (["--real", "--duration-seconds", "31"], "--duration-seconds"),
+        (["--real", "--connection-rounds", "0"], "--connection-rounds"),
+        (["--real", "--connection-rounds", "4"], "--connection-rounds"),
+    )
+    for extra, flag in cases:
+        monkeypatch.setattr(
+            sys, "argv", ["qualify_phase3_public_market_data.py", *extra]
+        )
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2, extra
+        captured = capsys.readouterr()
+        assert flag in captured.err, extra
+        assert "Traceback" not in captured.out + captured.err, extra

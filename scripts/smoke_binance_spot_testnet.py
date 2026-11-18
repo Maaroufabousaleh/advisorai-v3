@@ -159,7 +159,10 @@ def main() -> int:
     ):
         raise SystemExit("--configuration-hash must be a lowercase SHA-256 digest")
 
-    resolver = CredentialResolver.from_env_file(args.secrets)
+    try:
+        resolver = CredentialResolver.from_env_file(args.secrets)
+    except (OSError, ValueError) as exc:
+        parser.error(f"cannot read secrets file: {type(exc).__name__}")
     scoped_names = resolver.available_names(CredentialScope.PAPER_VENUE)
     base: dict[str, object] = {
         "status": "failed",
@@ -169,7 +172,10 @@ def main() -> int:
         "reviewed_host": BINANCE_SPOT_TESTNET_HOST,
         "adapter": BINANCE_SPOT_TESTNET_ADAPTER_VERSION,
         "adapter_source_sha256": sha256(
-            Path("src/advisorai/integrations/binance_spot.py").read_bytes()
+            (
+                Path(__file__).resolve().parents[1]
+                / "src/advisorai/integrations/binance_spot.py"
+            ).read_bytes()
         ).hexdigest(),
         "credential_refs": tuple(name for name in _CREDENTIAL_REFS if name in scoped_names),
         "config_hash": args.configuration_hash,
