@@ -2,6 +2,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+import pytest
+
 from advisorai.agents.fusion import DecisionBundle, EvidenceGateResult
 from advisorai.api.service import DecisionPipelineResult
 from advisorai.contracts import (
@@ -151,6 +153,27 @@ def test_runtime_reconcile_once_trips_kill_switch_on_venue_mismatch(tmp_path):
     result = runtime.reconcile_once()
     assert not result.reconciled
     assert "venue_cash_mismatch" in result.discrepancies[0]
+    assert runtime.risk_kernel.kill_switch.tripped
+
+
+def test_runtime_reconcile_once_trips_kill_switch_on_venue_error(tmp_path):
+    """P09 prep: venue read failure trips the kill switch, then re-raises."""
+
+    class FailingAdapter:
+        def account_snapshot(self):
+            raise RuntimeError("venue unreachable")
+
+        def open_orders(self):
+            raise AssertionError("unreachable after snapshot failure")
+
+    runtime, _cutoff, _ledgers, _learning = _runtime(
+        tmp_path,
+        admitted=False,
+        adapter=FailingAdapter(),
+        database_name="runtime-venue-error.sqlite3",
+    )
+    with pytest.raises(RuntimeError, match="venue unreachable"):
+        runtime.reconcile_once()
     assert runtime.risk_kernel.kill_switch.tripped
 
 
@@ -326,3 +349,44 @@ def test_runtime_marks_created_order_rejected_when_order_level_risk_fails(tmp_pa
     assert result.stage is RuntimeStage.RISK_REJECTED
     assert len(runtime.orders.orders) == 1
     assert next(iter(runtime.orders.orders.values())).state.value == "rejected"
+
+
+def test_runtime_cycle_fails_closed_on_ambiguous_ack_without_retry(tmp_path):
+    """P03/P09 prep: lost venue ack ends the cycle RECONCILIATION_FAILED.
+
+    A paper venue that loses its acknowledgement response (submit raises
+    ``AmbiguousAcknowledgement``) must surface the pending order in the
+    cycle result with a fail-closed stage and reason, must NOT retry the
+    submission (exactly one venue submit), and must leave the order in
+    the ambiguous set for explicit venue reconciliation — never silently
+    acknowledged or dropped. Offline only; deterministic local adapter.
+    """
+    from advisorai.execution import AmbiguousAcknowledgement
+
+    class LostAckAdapter(PaperVenueAdapter):
+        def __init__(self):
+            super().__init__(venue="paper")
+            self.submit_calls = 0
+
+        def submit(self, order):
+            self.submit_calls += 1
+            raise AmbiguousAcknowledgement("venue response was lost")
+
+    adapter = LostAckAdapter()
+    runtime, cutoff, ledgers, _ = _runtime(
+        tmp_path,
+        admitted=True,
+        adapter=adapter,
+        database_name="runtime-lost-ack.sqlite3",
+    )
+    result = runtime.run_once(cutoff)
+
+    assert result.stage is RuntimeStage.RECONCILIATION_FAILED
+    assert result.reasons == ("ambiguous_order_acknowledgement_pending",)
+    assert len(result.order_ids) == 1
+    assert adapter.submit_calls == 1
+    assert result.order_ids[0] in runtime.orders.ambiguous_orders
+    assert runtime.orders.orders[result.order_ids[0]].state is OrderState.ROUTED
+    assert any(
+        event.event_type == "order_ack_ambiguous" for event in ledgers.events(LedgerNamespace.ORDER)
+    )

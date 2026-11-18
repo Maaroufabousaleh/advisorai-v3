@@ -148,7 +148,10 @@ def main() -> int:
     if os.getenv("ADVISORAI_RUN_NETWORK_SMOKE") != "1":
         raise SystemExit("refusing network access; set ADVISORAI_RUN_NETWORK_SMOKE=1 explicitly")
 
-    resolver = CredentialResolver.from_env_file(args.secrets)
+    try:
+        resolver = CredentialResolver.from_env_file(args.secrets)
+    except (OSError, ValueError) as exc:
+        parser.error(f"cannot read secrets file: {type(exc).__name__}")
     if len(args.configuration_hash) != 64 or any(
         character not in "0123456789abcdef" for character in args.configuration_hash
     ):
@@ -162,7 +165,10 @@ def main() -> int:
         "reviewed_host": COINBASE_EXCHANGE_SANDBOX_HOST,
         "adapter": COINBASE_EXCHANGE_SANDBOX_ADAPTER_VERSION,
         "adapter_source_sha256": sha256(
-            Path("src/advisorai/integrations/coinbase_exchange.py").read_bytes()
+            (
+                Path(__file__).resolve().parents[1]
+                / "src/advisorai/integrations/coinbase_exchange.py"
+            ).read_bytes()
         ).hexdigest(),
         "credential_refs": tuple(
             name

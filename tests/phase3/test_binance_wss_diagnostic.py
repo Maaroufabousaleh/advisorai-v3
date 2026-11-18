@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 import scripts.qualify_phase3_binance_wss_diagnostic as diagnostic
 from scripts.qualify_phase3_binance_wss_diagnostic import (
     HOST,
@@ -71,3 +73,34 @@ def test_evidence_writer_is_immutable(tmp_path, monkeypatch):
     assert payload["credentials_loaded"] is False
     assert payload["order_writes_attempted"] is False
     assert len(result["evidence_sha256"]) == 64
+
+
+def test_wss_diagnostic_main_refuses_out_of_bounds_at_argparse(
+    monkeypatch, capsys
+) -> None:
+    """Out-of-bounds --timeout-seconds/--attempts exit 2, no traceback.
+
+    Mirrors the depth-qualify contract: numeric bounds refuse at
+    argparse with the bound named, after the --real gate and before
+    any evidence dir or venue touch.
+    """
+    import sys
+
+    from scripts.qualify_phase3_binance_wss_diagnostic import main
+
+    cases = (
+        (["--real", "--timeout-seconds", "0"], "--timeout-seconds"),
+        (["--real", "--timeout-seconds", "31"], "--timeout-seconds"),
+        (["--real", "--attempts", "0"], "--attempts"),
+        (["--real", "--attempts", "4"], "--attempts"),
+    )
+    for extra, flag in cases:
+        monkeypatch.setattr(
+            sys, "argv", ["qualify_phase3_binance_wss_diagnostic.py", *extra]
+        )
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 2, extra
+        captured = capsys.readouterr()
+        assert flag in captured.err, extra
+        assert "Traceback" not in captured.out + captured.err, extra

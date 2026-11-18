@@ -165,6 +165,13 @@ class BinanceSpotTestnetOwnerAdapter:
         for provider_id, quantity in snapshot.positions.items():
             if provider_id == self.provider_account_key:
                 positions[self.canonical_instrument_id] = quantity
+            elif provider_id.startswith("asset:"):
+                # Out-of-profile Testnet faucet holdings, pinned in the
+                # durable baseline by read_testnet_baseline. Passed through
+                # verbatim so reconciliation compares them exactly; any
+                # drift fails closed there. Never mapped to strategy
+                # authority and never marked, so never buying power.
+                positions[provider_id] = quantity
             elif quantity != 0:
                 raise NativeVenueProjectionError(
                     "Binance account contains a nonzero unmapped spot position"
@@ -177,11 +184,15 @@ class BinanceSpotTestnetOwnerAdapter:
             margin_used=snapshot.margin_used,
             margin_available=snapshot.margin_available,
             venue_open_order_ids=frozenset(item.order_id for item in acknowledgements),
+            balance_cutoff=snapshot.balance_cutoff,
         )
 
     @property
     def fills(self) -> tuple[Fill, ...]:
         records = self.transport.list_fills()
+        return self._project_fills(records)
+
+    def _project_fills(self, records: tuple[Mapping[str, object], ...]) -> tuple[Fill, ...]:
         normalized: dict[str, Fill] = {}
         for record in records:
             if not isinstance(record, Mapping):
@@ -197,6 +208,8 @@ class BinanceSpotTestnetOwnerAdapter:
                 raise NativeVenueProjectionError(
                     "Binance fill fee is not denominated in the profile quote asset"
                 )
+            if self._is_baseline_settled_fill(provider_fill_id):
+                continue
             order_id = self._resolve_local_order_id(provider_order_id)
             order = self._orders[order_id]
             if str(values.get("side", "")).strip().lower() != order.side:
@@ -222,6 +235,53 @@ class BinanceSpotTestnetOwnerAdapter:
                 raise NativeVenueProjectionError("Binance reused a fill identity with new contents")
             normalized[provider_fill_id] = fill
         return tuple(normalized[key] for key in sorted(normalized))
+
+    def unresolved_venue_fills(self) -> tuple[dict[str, object], ...]:
+        """Return raw venue fills no local order claims, with contract values.
+
+        Read-only triage surface for session recovery: each entry carries
+        the venue fill/order identities plus the transport's validated
+        economics (side, quantity, price, fee, occurred_at). Symbol and
+        fee-denomination gates still apply; only the local-order binding
+        is deferred to the caller. The caller must fail closed on any
+        entry it cannot prove baseline-settled.
+        """
+        unresolved: list[dict[str, object]] = []
+        for record in self.transport.list_fills():
+            if not isinstance(record, Mapping):
+                raise NativeVenueProjectionError("Binance fill projection contains a non-object")
+            values = self.transport.fill_contract_values(record)
+            if str(values.get("symbol", "")).strip().upper() != self.symbol:
+                raise NativeVenueProjectionError("Binance returned a fill for an unmapped symbol")
+            provider_fill_id = str(values.get("venue_fill_id", "")).strip()
+            provider_order_id = str(values.get("order_id", "")).strip()
+            fee = Decimal(str(values.get("fee", "0")))
+            commission_asset = str(record.get("commissionAsset", "")).strip().upper()
+            if fee and commission_asset != self.quote_asset:
+                raise NativeVenueProjectionError(
+                    "Binance fill fee is not denominated in the profile quote asset"
+                )
+            if provider_order_id in self._provider_order_ids:
+                continue
+            unresolved.append(
+                {
+                    "venue_fill_id": provider_fill_id,
+                    "provider_order_id": provider_order_id,
+                    "side": str(values.get("side", "")).strip().lower(),
+                    "quantity": Decimal(str(values["quantity"])),
+                    "price": Decimal(str(values["price"])),
+                    "fee": fee,
+                    "occurred_at": values["occurred_at"],
+                }
+            )
+        return tuple(unresolved)
+
+    def _is_baseline_settled_fill(self, provider_fill_id: str) -> bool:
+        """True only with a durable absorption record for this exact fill."""
+        key = f"baseline-settled-fill:{provider_fill_id}"
+        return any(
+            event.idempotency_key == key for event in self.ledgers.events(LedgerNamespace.VENUE)
+        )
 
     def _resolve_local_order_id(self, provider_order_id: str) -> UUID:
         local_id = self._provider_order_ids.get(provider_order_id)

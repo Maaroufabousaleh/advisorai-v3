@@ -118,11 +118,16 @@ No Coinbase order may be sent until a new immutable read-only smoke records:
 3. the exact reviewed sandbox host and current configuration hash.
 
 Only then may a supervised operator wire the existing `NativeVenueAdapter` and
-`OrderManager` around the transport. The first order must be minimum practical
-size, post-only/passive where supported, persist intent before transport, pass
-the deterministic order-level `RiskKernel` check, reconcile venue state, and
-cancel or ingest a fill through the OMS. No agent, model, Hermes task, browser
-task, dashboard, or LLM route can invoke this write path.
+`OrderManager` around the transport. The supervised testnet launcher
+(`scripts/launch_testnet_paper.py --provider coinbase_exchange_sandbox`)
+admits exactly `BTC-USD`/`USD` in this path and hard-refuses anything else
+before touching credentials; the `ETH-USD` catalogue entry above is a smoke
+coverage requirement, not a second launchable instrument. The first order must
+be minimum practical size, post-only/passive where supported, persist intent
+before transport, pass the deterministic order-level `RiskKernel` check,
+reconcile venue state, and cancel or ingest a fill through the OMS. No agent,
+model, Hermes task, browser task, dashboard, or LLM route can invoke this
+write path.
 
 The current next actions are operator/provider-side: ensure the local inventory
 passes the strict scoped resolver, use a Coinbase Exchange Sandbox

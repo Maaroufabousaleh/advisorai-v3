@@ -263,3 +263,162 @@ def test_owner_composition_rejects_non_paper_venue_identity(tmp_path):
             outcome_adapter=fixture.adapters.outcome_adapter,
             initial_account=fixture.account,
         )
+
+
+def test_owner_config_rejects_out_of_bounds_session_envelope() -> None:
+    """P02/P09 prep: the session envelope refuses invalid bounds.
+
+    ``OwnerApplicationConfig`` is the supervised session boundary:
+    only the quiet/qualification scenarios, a sub-day scheduler
+    interval, a bounded RSS envelope, and a sub-day runtime
+    deadline are admissible. Anything else raises at construction
+    instead of starting a misshapen session. Pure unit coverage;
+    no threads, no network, no credentials.
+    """
+    with pytest.raises(ValueError, match="only quiet or qualification"):
+        OwnerApplicationConfig(scenario="live")
+    with pytest.raises(ValueError, match="between 0.1 seconds and one day"):
+        OwnerApplicationConfig(interval_seconds=0.05)
+    with pytest.raises(ValueError, match="between 0.1 seconds and one day"):
+        OwnerApplicationConfig(interval_seconds=86_401)
+    with pytest.raises(ValueError, match="between 256 and 8192 MiB"):
+        OwnerApplicationConfig(max_rss_mb=128)
+    with pytest.raises(ValueError, match="between 256 and 8192 MiB"):
+        OwnerApplicationConfig(max_rss_mb=16_384)
+    with pytest.raises(ValueError, match="between 1 second and one day"):
+        OwnerApplicationConfig(max_runtime_seconds=0.5)
+    with pytest.raises(ValueError, match="between 1 second and one day"):
+        OwnerApplicationConfig(max_runtime_seconds=86_401)
+    assert OwnerApplicationConfig(
+        scenario="qualification",
+        interval_seconds=0.1,
+        max_rss_mb=256,
+        max_runtime_seconds=1,
+    ).scenario == "qualification"
+
+
+def test_owner_rejects_unknown_venue_profile_and_naive_cutoff(tmp_path) -> None:
+    """P02/P09 prep: unknown profiles and naive cutoffs fail closed.
+
+    Only the reviewed paper venue aliases are admissible, and paper
+    cutoffs must carry a timezone. Both gates raise instead of
+    starting a session against an unreviewed venue or an ambiguous
+    clock. Pure unit coverage; no threads, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "ledgers.sqlite3")
+    with pytest.raises(ValueError, match="unknown owner venue profile"):
+        PaperOwnerApplication(
+            ledgers=ledgers,
+            state_dir=tmp_path / "bad-profile",
+            lock_identity="bad-profile-test",
+            code_hash="a" * 64,
+            config_hash="b" * 64,
+            config=OwnerApplicationConfig(scenario="quiet"),
+            venue_profile="live-exchange",
+        )
+    owner = _owner(tmp_path, ledgers, lock_identity="fixture")
+    with pytest.raises(ValueError, match="must include a timezone"):
+        owner._snapshot_at(datetime(2026, 11, 15, 12, 0))
+
+
+def test_owner_composition_rejects_misshapen_adapters(tmp_path) -> None:
+    """P02/P09 prep: adapter composition guards fail closed.
+
+    ``OwnerApplicationAdapters`` is the reviewed composition seam:
+    data adapters without identities, inconsistent watermark
+    keys, missing current-state methods, uncallable factories,
+    venues without submit/fills, non-AccountState baselines, and
+    instruments outside the paper alias are all refused at
+    construction. Pure unit coverage; no threads, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "ledgers.sqlite3")
+    fixture = _owner(tmp_path, ledgers, lock_identity="fixture")
+    good = fixture.adapters
+
+    def compose(**overrides):
+        kwargs = {
+            "data": good.data,
+            "evidence_council": EvidenceCouncil({}),
+            "decision_model_factory": good.decision_model_factory,
+            "paper_venue": good.paper_venue,
+            "outcome_adapter": good.outcome_adapter,
+            "initial_account": good.initial_account,
+            "instrument": good.instrument,
+        }
+        kwargs.update(overrides)
+        return OwnerApplicationAdapters(**kwargs)
+
+    blank_source = _RecordingDataAdapter(good.data)
+    blank_source.source = "  "
+    with pytest.raises(ValueError, match="source and dataset identities"):
+        compose(data=blank_source)
+
+    skewed_watermark = _RecordingDataAdapter(good.data)
+    skewed_watermark.watermark_key = "elsewhere/other"
+    with pytest.raises(ValueError, match="watermark identity is inconsistent"):
+        compose(data=skewed_watermark)
+
+    class _MethodlessData(_RecordingDataAdapter):
+        snapshot_at = None  # type: ignore[assignment]
+
+    with pytest.raises(ValueError, match="missing a required current-state method"):
+        compose(data=_MethodlessData(good.data))
+
+    with pytest.raises(ValueError, match="requires a decision model factory"):
+        compose(decision_model_factory=None)
+
+    class _OutcomeWithoutSemantics:
+        pass
+
+    with pytest.raises(ValueError, match="requires explicit outcome semantics"):
+        compose(outcome_adapter=_OutcomeWithoutSemantics())
+
+    class _MethodlessVenue(_RecordingVenueAdapter):
+        submit = None  # type: ignore[assignment]
+
+    with pytest.raises(
+        ValueError, match="venue adapter is missing a current-state method"
+    ):
+        compose(paper_venue=_MethodlessVenue(fixture.venue))
+
+    class _FillLessVenue:
+        venue = "paper"
+
+        def __init__(self, delegate) -> None:
+            self.delegate = delegate
+
+        def submit(self, order):
+            return self.delegate.submit(order)
+
+        def reconcile(self, order):
+            return self.delegate.reconcile(order)
+
+        def open_orders(self):
+            return self.delegate.open_orders()
+
+        def cancel(self, order):
+            return self.delegate.cancel(order)
+
+        def account_snapshot(self):
+            return self.delegate.account_snapshot()
+
+    assert not hasattr(_FillLessVenue(fixture.venue), "fills")
+    with pytest.raises(ValueError, match="must expose authoritative fills"):
+        compose(paper_venue=_FillLessVenue(fixture.venue))
+
+    with pytest.raises(ValueError, match="requires an AccountState baseline"):
+        compose(initial_account={"cash": 100})
+
+    live_instrument = good.instrument.model_copy(update={"venue": "live"})
+    with pytest.raises(ValueError, match="supervised paper venue alias"):
+        compose(instrument=live_instrument)
+
+    unmarked = AccountState(
+        cash=good.initial_account.cash,
+        marks={"ETH": Decimal("3000")},
+        as_of=good.initial_account.as_of,
+    )
+    with pytest.raises(ValueError, match="must mark the configured instrument"):
+        compose(initial_account=unmarked)

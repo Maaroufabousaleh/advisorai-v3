@@ -226,12 +226,13 @@ def test_owner_adapter_requires_exact_testnet_and_single_symbol_profile(tmp_path
 def test_owner_adapter_rejects_unmapped_positions_unknown_fills_and_base_fees(tmp_path):
     ledgers = SqliteLedgers(tmp_path / "fail-closed.sqlite3")
     transport = _Transport()
-    transport.positions["asset:BNB"] = Decimal("0.1")
+    transport.positions["crypto:ETHUSDT:binance_spot_testnet:spot"] = Decimal("0.1")
     adapter = _owner_adapter(ledgers, transport)
     with pytest.raises(NativeVenueProjectionError, match="unmapped spot position"):
         adapter.account_snapshot()
 
-    transport.positions.pop("asset:BNB")
+    transport.positions.pop("crypto:ETHUSDT:binance_spot_testnet:spot")
+
     transport.trade_records = [
         {
             "id": "unmapped",
@@ -263,3 +264,17 @@ def test_owner_adapter_rejects_changed_local_order_identity_after_durable_bindin
     changed = order.model_copy(update={"idempotency_key": "changed-client-id"})
     with pytest.raises(NativeVenueProjectionError, match="local order identity changed"):
         adapter.bind_order(changed)
+
+def test_owner_adapter_passes_frozen_faucet_assets_through_verbatim(tmp_path):
+    """P02: asset:-pinned faucet holdings pass through for exact reconcile."""
+    ledgers = SqliteLedgers(tmp_path / "passthrough.sqlite3")
+    transport = _Transport()
+    transport.positions["asset:ETH"] = Decimal("1.5")
+    transport.positions["asset:BNB"] = Decimal("2.25")
+    adapter = _owner_adapter(ledgers, transport)
+    snapshot = adapter.account_snapshot()
+    assert snapshot.positions == {
+        "BTC": Decimal("0"),
+        "asset:ETH": Decimal("1.5"),
+        "asset:BNB": Decimal("2.25"),
+    }

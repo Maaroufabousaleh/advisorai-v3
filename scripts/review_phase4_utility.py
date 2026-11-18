@@ -1257,8 +1257,8 @@ def review_phase4(
         "reviewed_at": at.isoformat(),
         "repository_commit": _git_head(),
         "code_sha256": {
-            "phase4_contract": _sha256(Path("src/advisorai/phase4/paper_utility.py")),
-            "reviewer": _sha256(Path("scripts/review_phase4_utility.py")),
+            "phase4_contract": _sha256(REPOSITORY_ROOT / "src/advisorai/phase4/paper_utility.py"),
+            "reviewer": _sha256(REPOSITORY_ROOT / "scripts/review_phase4_utility.py"),
         },
         "policy": policy.model_dump(mode="json"),
         "predecessor": predecessor,

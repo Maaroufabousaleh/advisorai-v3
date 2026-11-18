@@ -47,7 +47,7 @@ The bounded public qualifier performs no authenticated operation and never
 writes an order:
 
 ```bash
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
+ADVISORAI_RUN_NETWORK_SMOKE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ./.venv/bin/python \
   scripts/qualify_binance_spot_testnet_public.py \
   --evidence-dir artifacts/phase2/binance-spot-testnet/public-truth
 ```
@@ -108,19 +108,121 @@ ADVISORAI_RUN_PAPER_LIFECYCLE=1 \
   ./.venv/bin/python scripts/qualify_binance_spot_testnet_lifecycle.py \
   --secrets /mnt/c/projects/advisorai-v3/secrets.env \
   --configuration-hash <zero-network-binance-config-sha256> \
-  --read-only-evidence-dir artifacts/phase2/binance-spot-testnet/read-only-smoke \
-  --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle \
-  --ledger <new-supervised-ledger-path>
+  --read-only-evidence artifacts/phase2/binance-spot-testnet/read-only-smoke \
+  --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle
 ```
 
 The runner validates the immutable read-only pointer and performs exactly one
 signed submission and, if the passive order remains open, one signed
 cancellation. It never retries a signed write after an ambiguous result; it
-queries venue truth first. The first measured run passed the no-fill/cancel
-path, restart recovery, TCA, attribution, duplicate protection, ambiguous-ack
-handling, cancel-race, divergence, interruption, and kill-switch drills. It
-did not observe a real fill, so fill ingestion remains fixture evidence rather
-than an externally measured fill claim.
+queries venue truth first. The passing lifecycle run
+(`20261114T014319.347437Z`, 1 submission, 1 cancellation, 0 fills) passed
+restart recovery, TCA, attribution, duplicate protection, ambiguous-ack
+handling, cancel-race, divergence, interruption, and kill-switch drills, but
+it observed no fill itself. A real venue fill WAS observed in the earlier
+failed run `20261114T005138.117654Z`, where the venue reproduced the
+fill-during-cancel race (`order_cancel_pending` → `fill_recorded` → terminal
+`filled`, zero cancel-ack events) and final reconciliation failed closed.
+That failure is preserved evidence for the P03 race label, not a pass: a
+post-fix fill match is still required, so certified fill ingestion remains
+an open claim, not fixture evidence alone.
+
+## Bounded testnet canary
+
+After the lifecycle gate passes, the owner may run a bounded canary session
+under an enforced wall-clock deadline and venue-boundary submission cap.
+Run from a pinned commit on `review/testnet-launch-path` (check out the
+exact SHA, never a moving branch tip, so the evidence maps to reviewed
+code): fetch, check out the SHA named in the current handoff, then run.
+Both bounds are explicit and required for any testnet run:
+
+```bash
+ADVISORAI_STATE_DIR=var/advisorai-testnet \
+  uv run python scripts/launch_testnet_paper.py \
+  --provider binance_spot_testnet --instrument BTCUSDT --quote USDT \
+  --reason "owner testnet canary" --interval-seconds 10 \
+  --max-runtime-seconds 120 --max-submissions 0
+```
+
+`--max-submissions 0` hard-refuses any submission at the venue boundary and
+is the correct first canary: it proves SESSION READY, deadline stop, clean
+reconciliation, and lease release with zero venue writes. Expect
+`stop_reason=runtime_deadline_reached` followed by `outcome=clean`,
+`reconciliation=reconciled`, and `leases_released=True`. Record the actual
+submission count from the run output; zero is valid for the first canary.
+Known limit at `b231632`: the quiet canary proves session mechanics only.
+Cycles go FAILED before learning because the testnet reference decision
+factory builds artifacts with short non-digest hashes, and fixing it alone
+unmasks a second latent fault (outcome quality requires per-cycle HTTP
+samples the fixture path never makes). Both must be fixed together before
+the canary can exercise the decision path; see the P02 tracker line.
+The launcher verifies the instrument and quote on the same transport before
+hydrating the funded baseline. The real Testnet account is multi-asset by
+design (hundreds of faucet holdings): the baseline pins BTC and USDT as
+trading state and every other nonzero asset as a frozen `asset:` position
+— excluded from equity and buying power, exactly reconciled, any drift
+fails closed. A nonzero canonical position outside BTC/USDT, an off-profile
+open order (detected by the unfiltered open-order sweep), or a locked BTC
+leg still refuses cleanly (`SESSION START REFUSED: testnet baseline
+refused`). The baseline cash and positions stay out of stdout by default;
+pass `--print-baseline` for explicit one-shot inspection (same flag on
+`advisorai.app start`). If the canary stops at the guard, run the read-only
+diagnostic before retrying — it issues one `GET /api/v3/account` through
+the `PAPER_VENUE` scope and reports the pin preview: which symbols would
+pin plus which leg (`free` / `locked`) is nonzero. It prints no
+credentials, amounts, prices, or full account data:
+
+```bash
+uv run python scripts/diagnose_testnet_baseline.py --secrets secrets.env
+```
+
+Exit 0 lists the assets the launcher would pin (empty pin list = clean
+BTC/USDT-only account); exit 1 means the launcher would refuse (canonical
+position outside the profile, off-profile open orders, or a locked BTC
+leg); exit 2 is an input/transport error.
+The coinbase sandbox profile has the same helper with its own legs
+(`available` / `hold` over `GET /accounts`):
+
+```bash
+uv run python scripts/diagnose_testnet_baseline.py --secrets secrets.env --provider coinbase_exchange_sandbox
+```
+
+Never start the loop without both bounds.
+
+## Fill-evidence validation (P03 prep)
+
+Validate any paper-lifecycle run directory offline before claiming a venue
+fill. The validator is read-only, credential-free, and network-free:
+
+```bash
+uv run python scripts/validate_binance_fill_evidence.py \
+  --evidence-dir artifacts/phase2/binance-spot-testnet/paper-lifecycle/<run_id>
+```
+
+It checks manifest schema, single submission, fill linkage and quantity
+match between OMS and account ledgers, fee agreement, the terminal
+filled-to-reconciled chain, clean reconciliation, restart without
+duplicate submission, and event-sequence consistency. Exit 0 certifies a
+fill pass; exit 3 reports a cancellation-only pass, which can never
+certify P03. Ledger reads go through a temporary copy, so evidence
+directories are never modified.
+
+## Canary-evidence validation (P02 prep)
+
+Validate a stopped bounded-canary state directory offline. The validator
+is read-only, credential-free, and network-free:
+
+```bash
+uv run python scripts/validate_testnet_canary_evidence.py \
+  --state-dir var/advisorai-testnet --run-log canary.log
+```
+
+It checks the testnet session profile, a single clean `session_ended`
+record, reconciled state, zero open orders, released leases, no
+unfinished work, a recorded submission count from durable order events,
+and the run-log markers (`SESSION READY`, deadline stop, clean outcome).
+Exit 0 certifies the canary; any failure names the check. Ledger reads
+go through a temporary copy, so state directories are never modified.
 
 No model, LLM, Hermes task, research agent, browser task, dashboard, or venue
 provider can bypass `RiskKernel` or mutate OMS truth. Transfers, withdrawals,
