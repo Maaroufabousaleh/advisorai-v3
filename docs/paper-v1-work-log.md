@@ -325,3 +325,12 @@ Credentials and raw private data never enter this log.
   plus the same owner Dashboard exception (recorded, not hidden).
 - Tracker on `main` at `f499709`: P05 DONE, count 4/10. P06/P07 now
   unblocked on dependencies (need forward data / #220 landing).
+
+## 2026-11-18 — #220 line merged with new `main`, retargeted to `main`
+
+- Merged `main@f499709` into `omp/btc-shadow-accounting` as `6307f68`
+  (clean, no conflicts); 226/226 `tests/research/` green on the merged
+  tree. Pushed; PR base retargeted to `main` via the pulls API (`gh pr
+  edit --base` exits 1 with a swallowed error on this repo).
+- #220 diff vs `main` is now exactly Amendments 4–11 + the recording
+  workflow. Still draft; forward data gates P06, review gates the merge.
