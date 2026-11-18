@@ -311,3 +311,17 @@ Credentials and raw private data never enter this log.
 - The tracker copy seeded on this docs branch is SUPERSEDED by `main`;
   `main` is canonical from here on. PR comments posted on both PRs.
 - Next runnable: P05 closeout verification on the merged base.
+
+## 2026-11-18 — P05 DONE on merged base (`f499709`)
+
+- Re-verified the owner-accepted BTCUSDT handoff on `d8b5a5d`:
+  `test_btc_spot.py` 8/8 (PIT/completion/freshness/gap/provenance/
+  fail-closed), `test_skills.py` + `test_multi_asset_replay.py` +
+  `test_synthetic.py` green (31 total with btc_spot), pins intact
+  (`1ee07b5b…53dce` in both plan docs, synthetic seed/SHA/counts in
+  code), model id pinned in the candidate doc. Per-cutoff LightGBM
+  stays private challenger research (not release-selected).
+- The handoff doc's "(merge + green CI)" gate: satisfied by the merge
+  plus the same owner Dashboard exception (recorded, not hidden).
+- Tracker on `main` at `f499709`: P05 DONE, count 4/10. P06/P07 now
+  unblocked on dependencies (need forward data / #220 landing).
