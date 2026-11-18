@@ -169,3 +169,198 @@ bar completing after 2026-09-30.
   151 trades, net **38141.81** bps vs BH **137118.90** bps. The BH jump
   is the 2017–2025 buy-and-hold run-up measured as portfolio value;
   it is characterization, not a verdict.
+
+## Amendment 4 (2026-11-17, before any forward scoring)
+
+Amendments 1–3 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30.
+
+- Same portfolio-value accounting for strategy and buy-and-hold from
+  identical starting capital (unit notional 1). Reported nets are
+  `(V_end − 1)` in bps for both legs.
+- Consistent cost deductions: every unit position change multiplies
+  portfolio value by (1 − 20/10000) on the fill day; BH pays it once at
+  entry. No additive bps bookkeeping anywhere.
+- End-to-end fixture pinned (`test_decision_then_fill_end_to_end_fixture`):
+  the 2024-03-05 decision records from the completed close with no fill
+  bar present (and the stored record contains no fill data); the
+  simulated fill records only after 2024-03-06 arrives, at the next open
+  207.50, observable after the decision.
+- Superseded plumbing (Amendment-3 economics, kept as evidence only):
+  3268 obs, 151 trades, net 38141.81 bps vs BH 137118.90 bps.
+- Current plumbing (Amendment-4 economics, `run_btc_three_way.py` on the
+  pinned snapshot, three implementations agree at 0.01 bps): 3268 obs,
+  151 trades, net **154319.31** bps vs BH **136844.63** bps.
+  Characterization, not a verdict; compounding over 2017–2025 explains
+  the scale versus additive legs.
+
+## Amendment 5 (2026-11-17, before any forward scoring)
+
+Amendments 1–4 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: the logger indexed the decision one bar early (prior
+  close). The decision for a date now uses that date's own completed
+  close. Pinned by the opposite-signal fixture: 2024-03-04 decides 0
+  from its flat close while 2024-03-05 decides 1 from its elevated
+  close; the old indexing fails both assertions.
+- Decision records pin actual receipt: `received_through` is the latest
+  bar date in the view at record time, alongside the input hash.
+- Simulated fills carry `observable_after`, and a fill whose price
+  timestamp precedes the recorded decision is rejected, never recorded.
+- End-to-end fixture (`test_decision_then_fill_end_to_end_fixture`):
+  2024-03-05 decides 1 with no fill bar present; the fill records only
+  after 2024-03-06 arrives at 207.50.
+
+## Amendment 6 (2026-11-17, before any forward scoring)
+
+Amendments 1–5 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: a bar date alone is not proof of receipt time. Every
+  formation close must now carry an explicit receipt timestamp at or
+  before the decision record time, or the decision quarantines
+  (`verify_inputs_received`; late or missing receipts abstain, pinned by
+  `test_late_formation_input_quarantines`).
+- Decision records pin `recorded_at_ms` alongside the receipt frontier;
+  fills pin their own `recorded_at_ms` and require the fill bar's
+  receipt by that time (`test_fill_rejects_unreceived_fill_bar`).
+- End-to-end fixture extended: the 2024-03-05 decision and its 2024-03-06
+  fill both carry pinned receipt and record timestamps.
+
+## Amendment 7 (2026-11-17, before any forward scoring)
+
+Amendments 1-6 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Daily shadow runner (`btc_shadow_job.run_shadow_days`): processes
+ decision dates in order, persists progress after every date, and never
+ rewrites a record. A missed day is caught up under its own decision
+ date with a late record time (transparent catch-up, not backdating);
+ a duplicate run appends nothing. Quarantine is final: a day that
+ abstains (late or missing receipts) is never rescored.
+- Fills are observed only for scored decisions, once the next bar is
+ received, into a separate fills log. Pinned by `test_duplicate_run_
+ appends_nothing`, `test_missed_day_is_caught_up_transparently`,
+ `test_late_receipt_quarantines_without_scoring`, and `test_restart_
+ resumes_after_last_completed_date`.
+- Hosted dry-run workflow prepared (`.github/workflows/btc-shadow-
+ dry-run.yml`), not enabled: rebuilds the frozen snapshot, verifies the
+ pinned bars hash, collects the forward segment read-only, and uploads
+ evidence. No records, no scores, no credentials, no orders. Enabling
+ it is an explicit owner decision after P04 lands.
+- P07 fixture rehearsal started (`scripts/rehearse_p07_fixture.py`):
+ offline intake-to-replay chain with per-step fingerprints; reruns
+ reuse verified artifacts and resume past completed steps (pinned by
+ `test_rerun_reuses_verified_artifacts` and `test_resume_after_
+ dropped_step_reuses_earlier_artifacts`).
+
+## Amendment 8 (2026-11-17, before any forward scoring)
+
+Amendments 1-7 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: the March 9 decision / March 6 open case the runner
+ previously accepted is rejected. Three timestamps are now distinct:
+ the price's market timestamp (bar open print), the input receipt
+ timestamp (completed-bar arrival), and the decision record timestamp
+ (when the decision was actually recorded).
+- A completed bar received before its market close is rejected
+ (`test_bar_received_before_close_rejected`); a simulated fill priced
+ at or before the actual decision time is rejected
+ (`test_fill_priced_before_decision_time_rejected`, written red first).
+ Fills price at the first open printing strictly after the decision's
+ own record time (`test_fill_skips_stale_prices_after_late_decision`).
+- Missed days are recorded as missed (`missed=True`, never scored, never
+ filled); days whose bars have not completed are left unrecorded for a
+ later run. Backfill is re-running collection, which re-fetches the
+ full range and fails closed on any gap; re-proven gapless (47 bars
+ through 2026-11-16, QUALIFIED). The hosted workflow stays a
+ collection-only dry run.
+- P07 rehearsal now also covers rejected outcomes: a short-bar exposure
+ fails per-exposure while the healthy ones succeed, and the failure is
+ retained in the rerun-stable report (`failed == ["FIXC"]`).
+
+## Amendment 9 (2026-11-17, before any forward scoring)
+
+Amendments 1-8 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment. Amendment 7's transparent catch-up is
+superseded below: late days are missed, not caught up.
+
+- Recording cutoff pinned: a decision for date D must record before the
+ next bar completes (`recording_cutoff_ms(D) = close(D) + 24h`, UTC).
+ After the cutoff the day is recorded as missed and excluded from
+ scoring and simulated fills, even if its bar is available on restart
+ (`test_decision_past_cutoff_is_missed_despite_present_bar`,
+ `test_catch_up_after_cutoff_is_missed`). Each daily run records its
+ own day; same-stamp consecutive days are impossible by construction.
+- Fill-price convention pinned: first daily open printing strictly
+ after the decision record time. A 01:30 UTC recording misses the
+ 00:00 open, so strategy fills use the following day's open. The
+ forward buy-and-hold benchmark uses the identical rule
+ (`benchmark_window`: enter at the first open after the first decision
+ record, exit at the first open after the last), via the shared
+ `first_open_after` helper — strategy and benchmark cannot diverge in
+ timing (`test_execution_timing_matches_for_strategy_and_benchmark`).
+- Note: the historical backtest executes at the next open (T+1), while
+ forward fills under 01:30 recording execute at the following day's
+ open (T+2). The backtest stays labeled characterization; it is not
+ directly comparable to forward fills. The hosted workflow stays a
+ collection-only dry run.
+- P07 session rehearsal: one command-equivalent run now bundles the
+ research chain and one shadow day into a single session manifest
+ (chain ids, shadow result, log hashes), with reruns reusing both
+ halves (`test_session_bundles_chain_and_shadow_evidence`,
+ `test_session_rerun_reuses_both_halves`).
+
+## Amendment 10 (2026-11-17, before any forward scoring)
+
+Amendments 1-9 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- Correction: the recording cutoff is exclusive. A decision must record
+ strictly before `close(D) + 24h`; the exact cutoff instant is missed
+ (`test_decision_at_exact_cutoff_instant_is_missed`). Amendment 9's
+ timing convention is otherwise unchanged.
+- Scoring rules pinned (`btc_scoring.score_window`): missed or
+ quarantined days hold the prior position; position changes execute at
+ the recorded fill and pay `costs_bps` per unit; a traded day without
+ a fill fails closed; both sides mark at the final close; the
+ benchmark enters at the first open after the first decision record.
+- Offline rehearsal (`test_scoring_rehearsal_with_entry_miss_restart_
+ and_valuation`, March 2024 fixture only): flat Mar 4, long entry Mar 5
+ (filled Mar 7 open 209.0), Mar 6 missed across a restart (position
+ held, pre-outage bytes preserved), long through Mar 10, marked at
+ 205.0. Strategy 0.998 x 205/209 = 0.97889952; benchmark 0.998 x
+ 205/207.50 = 0.98597590 (entered Mar 6 open). Hold-day fills are
+ logged but correctly unused (4 fills, 1 execution).
+
+## Amendment 11 (2026-11-17, before any forward scoring)
+
+Amendments 1-10 are preserved; where this conflicts, it governs. Still no
+forward results inspected: no signal or return has been computed on any
+bar completing after 2026-09-30. Replay economics and plumbing totals
+are unchanged by this amendment.
+
+- End-of-window accounting pinned (`btc_scoring.score_window`): a fill
+  printing after the valuation mark is refused, so a post-mark price can
+  never change the portfolio value at the earlier mark
+  (`test_scorer_rejects_fill_printing_after_mark`); a benchmark entry
+  after the mark fails closed under the same timing rule
+  (`test_scorer_rejects_benchmark_entry_after_mark`). A traded day whose
+  fill is not yet observable at the mark is reported as pending until
+  its expected fill date (`test_scorer_reports_pending_fill_without_
+  moving_window`); the window is never moved to accommodate it.

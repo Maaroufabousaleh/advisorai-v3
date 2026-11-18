@@ -171,6 +171,7 @@ class ReplayReport:
     policy_id: str
     exposures: tuple[ExposureResult, ...]
     failed: tuple[str, ...]
+    failed_ids: tuple[UUID, ...] = ()
 
 
 def load_snapshot_bars(snapshot_root: Path) -> tuple[dict[str, tuple[dict[str, Any], ...]], str]:
@@ -474,14 +475,162 @@ def _run_path(
         "accuracy": accuracy,
         "drawdown_bps": state["drawdown"],
         "regime": tuple(
-            (name, count, f"{value:.2f}")
-            for name, (count, value) in sorted(state["regime"].items())
+            (name, count, str(value)) for name, (count, value) in sorted(state["regime"].items())
         ),
         "window": tuple(
             (name, count, trades, value)
             for name, (count, trades, value) in sorted(state["window"].items())
         ),
     }
+
+
+_EXPERIMENT_SEEDS = (20261114,)
+
+_RECORDED_ERROR_TYPES: dict[str, type[Exception]] = {
+    "ValueError": ValueError,
+    "KeyError": KeyError,
+    "TypeError": TypeError,
+    "RuntimeError": RuntimeError,
+    "AssertionError": AssertionError,
+}
+
+
+def _experiment_identity(
+    *,
+    factor_id: UUID,
+    policy_id: str,
+    code_hash: str,
+    snapshot_hash: str,
+    environment_hash: str,
+    costs: tuple[str, str, str],
+    require_all_windows: bool,
+) -> UUID:
+    """Deterministic id for one exposure replay: identical scientific inputs
+    reuse the stored experiment (or its recorded failure) instead of
+    writing a duplicate row. Code, data, environment, policy, costs, and
+    the window requirement all feed the key, so any of them changing
+    correctly yields a fresh experiment. Costs arrive as strings so even
+    unresolvable overrides key deterministically."""
+
+    key = "|".join(
+        (
+            "research-experiment:v1",
+            str(factor_id),
+            policy_id,
+            code_hash,
+            snapshot_hash,
+            environment_hash,
+            ",".join(costs),
+            ",".join(str(seed) for seed in _EXPERIMENT_SEEDS),
+            "all-windows" if require_all_windows else "any-windows",
+        )
+    )
+    return uuid.uuid5(uuid.NAMESPACE_URL, key)
+
+
+def _rebuild_exposure_result(
+    record: research_cards.ExperimentArtifact, symbol: str
+) -> ExposureResult:
+    """Rebuild the exact result from a stored experiment (no recompute)."""
+
+    metrics = record.metrics
+    accuracy = metrics.get("directional_accuracy", "n/a")
+    windows = tuple(
+        WindowResult(
+            name=name,
+            observations=int(metrics[f"{name}_obs"]),
+            trade_count=int(metrics[f"{name}_trades"]),
+            net_bps=Decimal(metrics[f"{name}_net_bps"]),
+            baseline_net_bps=Decimal(metrics[f"{name}_baseline_net_bps"]),
+        )
+        for name in metrics["window_names"].split(",")
+        if name
+    )
+    regime: list[tuple[str, int, str]] = []
+    for index in range(int(metrics.get("regime_count", "0"))):
+        name, count, value = metrics[f"regime_{index}"].split(":")
+        regime.append((name, int(count), value))
+    return ExposureResult(
+        symbol=symbol,
+        observations=int(metrics["observations"]),
+        trade_count=int(metrics["trade_count"]),
+        gross_bps=Decimal(metrics["gross_bps"]),
+        costs_bps=Decimal(metrics["costs_bps"]),
+        net_bps=Decimal(metrics["net_bps"]),
+        baseline_net_bps=Decimal(metrics["baseline_net_bps"]),
+        directional_accuracy=None if accuracy == "n/a" else Decimal(accuracy),
+        max_drawdown_bps=Decimal(metrics["max_drawdown_bps"]),
+        experiment_id=record.artifact_id,
+        regime_slices=tuple(regime),
+        windows=windows,
+    )
+
+
+def _recorded_error(record: research_cards.ExperimentArtifact) -> Exception:
+    """Re-raise a stored exposure failure with its original type and message."""
+
+    name = record.metrics.get("error_type", "ValueError")
+    return _RECORDED_ERROR_TYPES.get(name, ValueError)(record.metrics.get("error", ""))
+
+
+def _record_failure(
+    registry: ResearchRegistry,
+    *,
+    experiment_id: UUID,
+    candidate_id: UUID,
+    symbol: str,
+    policy_id: str,
+    code_hash: str,
+    snapshot_hash: str,
+    environment_hash: str,
+    costs: tuple[str, str, str],
+    exc: Exception,
+) -> UUID:
+    """Persist a per-exposure failure as a rejected experiment (get-or-create).
+
+    Negative results are first-class registry rows, so a retry reuses the
+    recorded failure instead of duplicating it, and outcome memory can
+    retrieve rejected experiments alongside accepted ones. A success row
+    under the same identity would mean nondeterministic replay and fails
+    loudly instead of being overwritten."""
+
+    prior = registry.get(experiment_id)
+    if prior is not None:
+        if not isinstance(prior, research_cards.ExperimentArtifact):
+            raise ValueError(f"experiment identity {experiment_id} holds a non-experiment record")
+        if prior.status is not research_cards.ArtifactStatus.REJECTED:
+            raise RuntimeError(
+                f"nondeterministic replay for {symbol}: stored success but replay failed"
+            )
+        return prior.artifact_id
+    failure = f"{symbol}: {type(exc).__name__}: {exc}"
+    stored = registry.store(
+        research_cards.ExperimentArtifact(
+            artifact_id=experiment_id,
+            candidate_id=candidate_id,
+            code_hash=code_hash,
+            data_snapshot_hash=snapshot_hash,
+            environment_hash=environment_hash,
+            seeds=_EXPERIMENT_SEEDS,
+            metrics={
+                "symbol": symbol,
+                "policy_id": policy_id,
+                "failure": failure,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            },
+            costs={
+                "fee_bps": costs[0],
+                "spread_bps": costs[1],
+                "slippage_bps": costs[2],
+            },
+            exposures={symbol: "1.0"},
+            trial_count=1,
+            status=research_cards.ArtifactStatus.REJECTED,
+        ),
+        record_type="experiment",
+    )
+    return stored.artifact_id
 
 
 def run_exposure(
@@ -497,7 +646,32 @@ def run_exposure(
     hypothesis_id: UUID | None = None,
     require_all_windows: bool = True,
 ) -> ExposureResult:
-    """Replay one exposure; record factor, experiment, and validation artifacts."""
+    """Replay one exposure; record factor, experiment, and validation artifacts.
+
+    Retries reuse the stored experiment instead of writing duplicates: a
+    recorded success rebuilds the identical result without recomputing,
+    and a recorded failure re-raises the original error.
+    """
+    fee, spread, slippage = exposure.resolved_costs()
+    exposure_factor_id = uuid.uuid5(
+        uuid.NAMESPACE_URL, f"research-replay:{factor_hash}:{exposure.symbol}"
+    )
+    experiment_id = _experiment_identity(
+        factor_id=exposure_factor_id,
+        policy_id=spec.policy_id,
+        code_hash=code_hash,
+        snapshot_hash=snapshot_hash,
+        environment_hash=environment_hash,
+        costs=(str(fee), str(spread), str(slippage)),
+        require_all_windows=require_all_windows,
+    )
+    prior = registry.get(experiment_id)
+    if prior is not None:
+        if not isinstance(prior, research_cards.ExperimentArtifact):
+            raise ValueError(f"experiment identity {experiment_id} holds a non-experiment record")
+        if prior.status is research_cards.ArtifactStatus.REJECTED:
+            raise _recorded_error(prior)
+        return _rebuild_exposure_result(prior, exposure.symbol)
     momentum = evaluate_momentum(exposure.bars)
     observations, predictions = build_observations(
         exposure.symbol,
@@ -520,9 +694,6 @@ def run_exposure(
         ),
         SignalPolicySpec(policy_id="baseline-always-long-v1", family=SignalPolicyFamily.SIGN_ONLY),
     )
-    exposure_factor_id = uuid.uuid5(
-        uuid.NAMESPACE_URL, f"research-replay:{factor_hash}:{exposure.symbol}"
-    )
     stored_factor = registry.get(exposure_factor_id)
     if stored_factor is None:
         stored_factor = registry.store(
@@ -543,7 +714,6 @@ def run_exposure(
         )
     elif not isinstance(stored_factor, research_cards.CandidateFactorArtifact):
         raise ValueError(f"factor identity {exposure_factor_id} holds a non-factor record")
-    fee, spread, slippage = exposure.resolved_costs()
     baseline_window = {name: value for name, _, _, value in baseline["window"]}
     window_results = tuple(
         WindowResult(
@@ -556,11 +726,12 @@ def run_exposure(
         for name, count, trades, value in candidate["window"]
     )
     experiment = research_cards.ExperimentArtifact(
+        artifact_id=experiment_id,
         candidate_id=stored_factor.artifact_id,
         code_hash=code_hash,
         data_snapshot_hash=snapshot_hash,
         environment_hash=environment_hash,
-        seeds=(20261114,),
+        seeds=_EXPERIMENT_SEEDS,
         windows=tuple(
             f"{exposure.symbol}:{name}={first}..{last} ({count} obs)"
             for name, (first, last, count) in sorted(window_proof.items())
@@ -568,21 +739,28 @@ def run_exposure(
         metrics={
             "observations": str(candidate["observations"]),
             "units": "bps of notional; 100bps=1pct; net=sum(position*realized)-sum(change*all_in)",
-            "net_bps": f"{candidate['net_bps']:.2f}",
-            "baseline_net_bps": f"{baseline['net_bps']:.2f}",
-            "gross_bps": f"{candidate['gross_bps']:.2f}",
-            "costs_bps": f"{candidate['costs_bps']:.2f}",
+            "net_bps": str(candidate["net_bps"]),
+            "baseline_net_bps": str(baseline["net_bps"]),
+            "gross_bps": str(candidate["gross_bps"]),
+            "costs_bps": str(candidate["costs_bps"]),
             "directional_accuracy": (
-                f"{candidate['accuracy']:.4f}" if candidate["accuracy"] is not None else "n/a"
+                str(candidate["accuracy"]) if candidate["accuracy"] is not None else "n/a"
             ),
-            "max_drawdown_bps": f"{candidate['drawdown_bps']:.2f}",
+            "max_drawdown_bps": str(candidate["drawdown_bps"]),
             "trade_count": str(candidate["trades"]),
-            **{f"{item.name}_net_bps": f"{item.net_bps:.2f}" for item in window_results},
+            "window_names": ",".join(item.name for item in window_results),
+            "regime_count": str(len(candidate["regime"])),
             **{
-                f"{item.name}_baseline_net_bps": f"{item.baseline_net_bps:.2f}"
+                f"regime_{index}": f"{name}:{count}:{value}"
+                for index, (name, count, value) in enumerate(candidate["regime"])
+            },
+            **{f"{item.name}_net_bps": str(item.net_bps) for item in window_results},
+            **{
+                f"{item.name}_baseline_net_bps": str(item.baseline_net_bps)
                 for item in window_results
             },
             **{f"{item.name}_obs": str(item.observations) for item in window_results},
+            **{f"{item.name}_trades": str(item.trade_count) for item in window_results},
         },
         costs={
             "fee_bps": str(fee),
@@ -659,7 +837,11 @@ def run_replay(
     environment_hash: str | None = None,
     require_all_windows: bool = True,
 ) -> ReplayReport:
-    """Run every exposure independently; one failure never masks another."""
+    """Run every exposure independently; one failure never masks another.
+
+    Per-exposure failures are stored as rejected experiments, so negative
+    results persist in the registry and retries reuse them.
+    """
     bars, snapshot_hash = load_snapshot_bars(snapshot_root)
     missing = [item.symbol for item in exposures if item.symbol not in bars]
     if missing:
@@ -669,6 +851,7 @@ def run_replay(
     environment = environment_hash or hashlib.sha256(b"research-replay-env-v1").hexdigest()
     results: list[ExposureResult] = []
     failed: list[str] = []
+    failed_ids: list[UUID] = []
     factor_id = uuid.uuid5(uuid.NAMESPACE_URL, f"research-replay:{factor_hash}")
     for exposure in exposures:
         tailored = ExposureSpec(
@@ -694,6 +877,43 @@ def run_replay(
                 )
             )
         except Exception as exc:  # noqa: BLE001 - per-exposure failure is evidence
+            try:
+                fee, spread, slippage = exposure.resolved_costs()
+                costs = (str(fee), str(spread), str(slippage))
+            except ValueError:
+                # Unresolvable overrides still key deterministically off the
+                # raw values, so the caller error is recorded per exposure
+                # instead of aborting the whole run.
+                costs = tuple(
+                    f"raw:{value!r}"
+                    for value in (exposure.fee_bps, exposure.spread_bps, exposure.slippage_bps)
+                )
+            candidate_id = uuid.uuid5(
+                uuid.NAMESPACE_URL, f"research-replay:{factor_hash}:{exposure.symbol}"
+            )
+            experiment_id = _experiment_identity(
+                factor_id=candidate_id,
+                policy_id=spec.policy_id,
+                code_hash=code_hash,
+                snapshot_hash=snapshot_hash,
+                environment_hash=environment,
+                costs=costs,
+                require_all_windows=require_all_windows,
+            )
+            failed_ids.append(
+                _record_failure(
+                    registry,
+                    experiment_id=experiment_id,
+                    candidate_id=candidate_id,
+                    symbol=exposure.symbol,
+                    policy_id=spec.policy_id,
+                    code_hash=code_hash,
+                    snapshot_hash=snapshot_hash,
+                    environment_hash=environment,
+                    costs=costs,
+                    exc=exc,
+                )
+            )
             failed.append(f"{exposure.symbol}: {type(exc).__name__}: {exc}")
     return ReplayReport(
         schema_version=REPLAY_SCHEMA_VERSION,
@@ -703,6 +923,7 @@ def run_replay(
         policy_id=spec.policy_id,
         exposures=tuple(results),
         failed=tuple(failed),
+        failed_ids=tuple(failed_ids),
     )
 
 

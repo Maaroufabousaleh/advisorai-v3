@@ -1,0 +1,250 @@
+# BTCUSDT forward-shadow recording (prepared; live NOT enabled).
+#
+# One workflow, two modes sharing the same recording code path:
+# - rehearsal (dispatch with mode=rehearsal, or a push touching
+#   .github/shadow-rehearsal.json): deterministic March-2024 fixture, fixed
+#   receipts. Safe on any branch; this is the rehearsal path. The push
+#   trigger exists because GitHub only dispatches workflows registered on
+#   the default branch; it reads its dates/stamp from the trigger file and
+#   otherwise runs the identical job. Fixture only — no live input path.
+# - live (schedule, or dispatch with mode=live): qualified snapshot +
+#   read-only forward segment, then recording. TRIPLE-GATED and currently
+#   unreachable: the job refuses unless (1) the run is on the default
+#   branch (schedule only fires there anyway), (2) the repository variable
+#   SHADOW_LIVE_ARMED is exactly "true" (owner-held, unset by default),
+#   and (3) the record script gets --allow-live with BTC_SHADOW_LIVE_ARMED
+#   set. No scoring happens in either mode; artifacts only.
+#
+# State continuity: each run downloads the previous successful run's
+# artifact as its prior state (explicit prior_run_id, else latest
+# successful run on the same branch). The script re-verifies the prior
+# report hashes, seeds from it, asserts append-only, and links the prior
+# report hash — a tampered or mixed-up prior fails the run.
+#
+# Activation (owner decision, NOT done): set the SHADOW_LIVE_ARMED repo
+# variable to "true" AFTER this file is merged to the default branch and
+# P04 has landed. The next 01:30 UTC schedule then records live. Until
+# then every live trigger fails loudly at the gate step.
+on:
+  schedule:
+    # 01:30 UTC daily: after the 00:00 UTC close plus formation buffer.
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "rehearsal (fixture) or live (qualified inputs)"
+        required: true
+        default: rehearsal
+        type: choice
+        options: [rehearsal, live]
+      dates:
+        description: "Comma-separated decision dates (dispatch only)"
+        required: false
+        default: ""
+      recorded_at_ms:
+        description: "Record stamp ms (dispatch only; schedule uses run time)"
+        required: false
+        default: ""
+      prior_run_id:
+        description: "Prior run id for state continuity (default: latest)"
+        required: false
+        default: ""
+  push:
+    paths:
+      - .github/shadow-rehearsal.json
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: btc-shadow-record
+  cancel-in-progress: false
+
+jobs:
+  record-rehearsal:
+    name: Record rehearsal day (fixture)
+    if: (github.event_name == 'workflow_dispatch' && inputs.mode == 'rehearsal') || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: 0.13.7
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Resolve parameters
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            uv run --locked python - <<'EOF'
+          import json, os
+          params = json.load(open(".github/shadow-rehearsal.json"))
+          with open(os.environ["GITHUB_ENV"], "a") as handle:
+              handle.write(f"dates={params['dates']}\n")
+              handle.write(f"stamp_ms={params['recorded_at_ms']}\n")
+              handle.write(f"prior_run_id={params.get('prior_run_id', '')}\n")
+              handle.write(f"fresh_chain={'true' if params.get('fresh_chain') else 'false'}\n")
+          EOF
+          else
+            {
+              echo "dates=${{ inputs.dates }}"
+              echo "stamp_ms=${{ inputs.recorded_at_ms }}"
+              echo "prior_run_id=${{ inputs.prior_run_id }}"
+              echo "fresh_chain=false"
+            } >> "$GITHUB_ENV"
+          fi
+      - name: Download prior state (if any)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRIOR="$prior_run_id"
+          if [ -z "$PRIOR" ] && [ "$fresh_chain" != "true" ]; then
+            PRIOR=$(gh run list --workflow btc-shadow-record.yml \
+              --branch "${{ github.ref_name }}" --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId // empty') \
+              || { echo "prior lookup failed; pin prior_run_id explicitly"; exit 1; }
+          fi
+          if [ -n "$PRIOR" ]; then
+            echo "prior_run_id=$PRIOR" >> "$GITHUB_ENV"
+            gh run download "$PRIOR" --name shadow-record-state --dir /tmp/prior-state
+          else
+            echo "fresh_chain=true; starting a new chain with no prior."
+          fi
+      - name: Record rehearsal day
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          PRIOR_ARG=""
+          [ -d /tmp/prior-state ] && PRIOR_ARG="--prior-state-dir /tmp/prior-state"
+          # shellcheck disable=SC2086
+          uv run --locked python scripts/run_shadow_record_day.py \
+            --mode rehearsal \
+            --dates "$dates" \
+            --recorded-at-ms "$stamp_ms" \
+            --state-dir /tmp/shadow-state $PRIOR_ARG
+      - name: Upload evidence
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: shadow-record-state
+          path: /tmp/shadow-state/
+          retention-days: 365
+          if-no-files-found: error
+
+  record-live:
+    name: Record live day (triple-gated)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'live')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Refuse unless live is armed on the default branch
+        run: |
+          test "${{ github.ref }}" = "refs/heads/main" || \
+            { echo "live recording runs only on the default branch"; exit 1; }
+          test "${{ vars.SHADOW_LIVE_ARMED }}" = "true" || \
+            { echo "live recording is not armed (SHADOW_LIVE_ARMED != true)"; exit 1; }
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: 0.13.7
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Rebuild frozen snapshot and verify pinned hash
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+          EXPECTED_BARS_SHA256: 1ee07b5b24a5640da47e8be89964daf63a9bee86e18e8488fbf7136a10e53dce
+        run: |
+          mkdir -p /tmp/btcusdt-snapshot /tmp/btc-forward
+          uv run --locked python scripts/fetch_btcusdt_snapshot.py \
+            --start 2017-08 --end 2026-09 --out /tmp/btcusdt-snapshot
+          ACTUAL=$(uv run --locked python -c "import json; print(json.load(open('/tmp/btcusdt-snapshot/manifest.json'))['bars_sha256'])")
+          test "$ACTUAL" = "$EXPECTED_BARS_SHA256"
+      - name: Collect forward segment (read-only)
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          uv run --locked python scripts/collect_btc_forward.py \
+            --snapshot /tmp/btcusdt-snapshot \
+            --out /tmp/btc-forward
+          date +%s%3N > /tmp/btc-forward/collected_at_ms
+      - name: Qualify inputs and build receipts
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: |
+          uv run --locked python scripts/run_btc_input_qualification.py \
+            --snapshot /tmp/btcusdt-snapshot
+          uv run --locked python scripts/run_btc_input_qualification.py \
+            --snapshot /tmp/btc-forward
+          uv run --locked python - <<'EOF'
+          import json
+          from datetime import datetime
+          snap = json.load(open("/tmp/btcusdt-snapshot/manifest.json"))
+          fwd = json.load(open("/tmp/btc-forward/manifest.json"))
+          collected = int(open("/tmp/btc-forward/collected_at_ms").read().strip())
+          fetched = int(datetime.fromisoformat(snap["fetched_at"]).timestamp() * 1000)
+          receipts = {}
+          for row in json.load(open("/tmp/btcusdt-snapshot/bars.json"))["BTCUSDT"]:
+              receipts[row["date"]] = fetched
+          for row in json.load(open("/tmp/btc-forward/bars.json"))["BTCUSDT"]:
+              receipts[row["date"]] = collected
+          json.dump(receipts, open("/tmp/btc-forward/receipts.json", "w"), sort_keys=True)
+          json.dump(
+              {"snapshot_hash": snap["bars_sha256"], "forward_hash": fwd["bars_sha256"]},
+              open("/tmp/btc-forward/hashes.json", "w"),
+              sort_keys=True,
+          )
+          EOF
+      - name: Resolve decision dates and record stamp
+        run: |
+          if [ -n "${{ inputs.dates }}" ]; then
+            echo "dates=${{ inputs.dates }}" >> "$GITHUB_ENV"
+            echo "stamp_ms=${{ inputs.recorded_at_ms }}" >> "$GITHUB_ENV"
+          else
+            YESTERDAY=$(date -u -d "yesterday" +%F)
+            echo "dates=$YESTERDAY" >> "$GITHUB_ENV"
+            echo "stamp_ms=$(date +%s%3N)" >> "$GITHUB_ENV"
+          fi
+      - name: Download prior state (if any)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PRIOR="${{ inputs.prior_run_id }}"
+          if [ -z "$PRIOR" ]; then
+            PRIOR=$(gh run list --workflow btc-shadow-record.yml \
+              --branch "${{ github.ref_name }}" --status success --limit 1 \
+              --json databaseId --jq '.[0].databaseId // empty') \
+              || { echo "prior lookup failed; pin prior_run_id explicitly"; exit 1; }
+          fi
+          if [ -n "$PRIOR" ]; then
+            echo "prior_run_id=$PRIOR" >> "$GITHUB_ENV"
+            gh run download "$PRIOR" --name shadow-record-state --dir /tmp/prior-state
+          else
+            echo "No prior successful run; starting a fresh chain."
+          fi
+      - name: Record live day
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+          BTC_SHADOW_LIVE_ARMED: ${{ vars.SHADOW_LIVE_ARMED }}
+        run: |
+          PRIOR_ARG=""
+          [ -d /tmp/prior-state ] && PRIOR_ARG="--prior-state-dir /tmp/prior-state"
+          # shellcheck disable=SC2086
+          uv run --locked python scripts/run_shadow_record_day.py \
+            --mode live --allow-live \
+            --dates "$dates" \
+            --recorded-at-ms "$stamp_ms" \
+            --snapshot-dir /tmp/btcusdt-snapshot \
+            --forward-dir /tmp/btc-forward \
+            --receipts /tmp/btc-forward/receipts.json \
+            --state-dir /tmp/shadow-state $PRIOR_ARG
+      - name: Upload evidence
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: shadow-record-state
+          path: /tmp/shadow-state/
+          retention-days: 365
+          if-no-files-found: error

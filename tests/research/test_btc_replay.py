@@ -14,6 +14,8 @@ from advisorai.research.btc_replay import (
 )
 from advisorai.research.btc_spot import check_continuity, validate_manifest_values
 
+COST = Decimal("0.998")
+
 
 def _bars(n: int, close: str = "100.0") -> tuple[dict, ...]:
     base = datetime(2024, 1, 1, tzinfo=UTC).date()
@@ -40,7 +42,10 @@ def test_cost_pin_is_twenty_bps_all_in():
 def test_flat_market_three_way_agreement_is_exact():
     bars = _bars(66)
     first = replay_sign_only(bars)
-    assert first == {"net_bps": "0", "baseline_bps": "-20", "trades": 0, "obs": 2}
+    assert first["trades"] == 0
+    assert first["obs"] == 2
+    assert Decimal(str(first["net_bps"])) == Decimal("0")
+    assert Decimal(str(first["baseline_bps"])) == (COST - 1) * Decimal("10000")
     assert mirror_accounting(bars) == first
     assert plain_loop(bars) == first
     assert agree(bars) == first
@@ -66,14 +71,16 @@ def test_rising_market_three_way_agreement():
     result = agree(bars)
     assert result["obs"] == 70 - 1 - 63
     assert result["trades"] == 1
-    expected_base = (Decimal("169") - Decimal("163")) / Decimal("163") * Decimal("10000") - Decimal(
-        "20"
-    )
-    assert Decimal(str(result["baseline_bps"])) == expected_base
+    expected_value = Decimal("169") / Decimal("163") * COST
+    assert Decimal(str(result["baseline_bps"])) == (expected_value - 1) * Decimal("10000")
+    quantum = Decimal("0.01")
+    assert Decimal(str(result["net_bps"])).quantize(quantum) == Decimal(
+        str(result["baseline_bps"])
+    ).quantize(quantum)
 
 
 def test_two_consecutive_long_days_with_gap_move():
-    """Entry fill skips the overnight gap; the exit fill ends attribution."""
+    """Entry fill skips the overnight gap; value compounds from the fill."""
     base = datetime(2024, 1, 1, tzinfo=UTC).date()
     rows = []
     for i in range(66):
@@ -93,14 +100,10 @@ def test_two_consecutive_long_days_with_gap_move():
     result = agree(bars)
     assert result["obs"] == 2
     assert result["trades"] == 1
-    expected_net = (Decimal("200.0") - Decimal("205.0")) / Decimal("205.0") * Decimal(
-        "10000"
-    ) - Decimal("20")
-    assert Decimal(str(result["net_bps"])) == expected_net
-    expected_base = (Decimal("0") - Decimal("20")) + (
-        Decimal("200.0") - Decimal("100.0")
-    ) / Decimal("100.0") * Decimal("10000")
-    assert Decimal(str(result["baseline_bps"])) == expected_base
+    expected_value = COST * (Decimal("200.0") / Decimal("205.0"))
+    assert Decimal(str(result["net_bps"])) == (expected_value - 1) * Decimal("10000")
+    expected_base = Decimal("200.0") / Decimal("100.0") * COST
+    assert Decimal(str(result["baseline_bps"])) == (expected_base - 1) * Decimal("10000")
 
 
 def test_exit_attributes_gap_through_the_fill():
@@ -125,13 +128,11 @@ def test_exit_attributes_gap_through_the_fill():
     result = agree(bars)
     assert result["obs"] == 3
     assert result["trades"] == 2
-    entry_leg = (Decimal("50.0") - Decimal("205.0")) / Decimal("205.0") * Decimal("10000")
-    exit_leg = (Decimal("40.0") - Decimal("50.0")) / Decimal("50.0") * Decimal("10000")
-    assert Decimal(str(result["net_bps"])) == entry_leg + exit_leg - Decimal("40")
-    expected_base = (Decimal("50.0") - Decimal("100.0")) / Decimal("100.0") * Decimal(
-        "10000"
-    ) - Decimal("20")
-    assert Decimal(str(result["baseline_bps"])) == expected_base
+    value = Decimal("1") * COST * (Decimal("50.0") / Decimal("205.0"))
+    value = value * COST * (Decimal("40.0") / Decimal("50.0"))
+    assert Decimal(str(result["net_bps"])) == (value - 1) * Decimal("10000")
+    expected_base = Decimal("50.0") / Decimal("100.0") * COST
+    assert Decimal(str(result["baseline_bps"])) == (expected_base - 1) * Decimal("10000")
 
 
 def test_manifest_values_reject_mismatch():
