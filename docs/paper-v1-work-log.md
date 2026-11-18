@@ -228,3 +228,14 @@ Credentials and raw private data never enter this log.
 - P08/P09 acceptance needs integrated evidence on the reviewed release
   revision (approved strategy + merged base) — impossible before P04
   lands. This PR is offline prep only; integrated runs come later.
+
+## 2026-11-17 — P10 campaign prep (preparation only, campaign BLOCKED)
+
+- `docs/paper-v1-p10-campaign-prep.md`: entry criteria, session matrix,
+  per-session evidence checklist, abort rules, no-compression rules,
+  tracking convention, resume trigger. No sessions run — entry needs the
+  reviewed P08 revision with P09 evidence accepted.
+- Blocker chain: P04 merge → P05/P06/P07 close on merged base → P08
+  integrated revision → P09 integrated evidence → campaign revision pin.
+- Docs branch: `omp/paper-v1-docs` (work log + P10 prep), pushed, no PR
+  yet — PR once the next checkpoint lands or on owner request.
