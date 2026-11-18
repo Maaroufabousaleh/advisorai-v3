@@ -64,6 +64,10 @@ REVIEWED_CONSUMERS = {
     # Profile composition is the supervised boundary that binds provider
     # credentials to exact sandbox connector builders.
     "session/provider_profiles.py": (set(), {"CredentialResolver", "CredentialScope"}),
+    # Supervised composition of the reviewed profiles into the owner app.
+    "session/testnet_launch.py": (set(), {"CredentialResolver"}),
+    # Supervised owner entry point: testnet profile only, scoped inventory read.
+    "app.py": (set(), {"CredentialResolver"}),
 }
 
 

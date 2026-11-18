@@ -1,0 +1,805 @@
+"""Offline contracts for bounded testnet launcher controls.
+
+All transports are synthetic doubles. No network, no credentials.
+Covers the three enforced bounds: wall-clock deadline, venue-boundary
+submission cap, and verified clean stop with reconciliation.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from uuid import uuid4
+
+import pytest
+
+from advisorai.config import CredentialResolver
+from advisorai.contracts import ExecutionPlan, Fill, InstrumentIdentity, Order, OrderState
+from advisorai.execution import NativeVenueAdapter, NativeVenueProjectionError, OrderManager
+from advisorai.execution.reconciliation import VenueAccountSnapshot
+from advisorai.integrations import (
+    BINANCE_SPOT_TESTNET_BASE_URL,
+    BINANCE_SPOT_TESTNET_HOST,
+)
+from advisorai.integrations.http import HttpClientConfig, SafeHttpClient
+from advisorai.ledger import LedgerNamespace, SqliteLedgers
+from advisorai.session.application import OwnerApplicationConfig, PaperOwnerApplication
+from advisorai.session.testnet_launch import (
+    SandboxLaunchRequest,
+    build_testnet_owner_application,
+)
+
+_NOW = datetime(2026, 11, 12, 16, 0, tzinfo=UTC)
+
+
+class _CountingTransport:
+    """Synthetic double that counts signed-style submissions."""
+
+    venue_name = "binance_spot_testnet"
+    environment = "paper_testnet"
+    verified_symbol_ids = ("BTCUSDT",)
+
+    def __init__(self) -> None:
+        self.client = SafeHttpClient(
+            HttpClientConfig(allowed_hosts=(BINANCE_SPOT_TESTNET_HOST,)),
+            base_url=BINANCE_SPOT_TESTNET_BASE_URL,
+            requester=lambda *_args: (200, b"{}", ()),
+            sleeper=lambda _seconds: None,
+        )
+        self.submit_calls = 0
+
+    def list_products(self):
+        return ({"symbol": "BTCUSDT"},)
+
+    def verify_symbol_mappings(self, _products, *, required):
+        assert tuple(required) == ("BTCUSDT",)
+
+    def verified_symbol_spec(self, symbol: str):
+        from types import SimpleNamespace
+
+        assert symbol == "BTCUSDT"
+        return SimpleNamespace(base_asset="BTC", quote_asset="USDT")
+
+    def canonical_instrument_id(self, symbol: str) -> str:
+        return f"crypto:{symbol}:binance_spot_testnet:spot"
+
+    def submit_order(self, payload):
+        self.submit_calls += 1
+        client_id = str(payload["client_order_id"])
+        return {"venue_order_id": f"provider-{client_id}", "accepted": True}
+
+    def query_order(self, *, client_order_id: str):
+        return None
+
+    def list_open_orders(self):
+        return ()
+
+    def cancel_order(self, *, client_order_id: str):
+        return {"cancelled": True}
+
+    def fetch_account_snapshot(self):
+        return VenueAccountSnapshot(
+            as_of=_NOW, cash=Decimal("100000"), positions={}
+        )
+
+    def list_fills(self):
+        return ()
+
+    def fill_contract_values(self, _record):
+        raise AssertionError("synthetic transport holds no fills")
+
+
+def _resolver() -> CredentialResolver:
+    return CredentialResolver.from_mapping(
+        {
+            "ADVISORAI_VENUE_API_KEY": "synthetic-testnet-key",
+            "ADVISORAI_VENUE_API_SECRET": "synthetic-testnet-secret",
+            "ADVISORAI_VENUE_NAME": "binance_spot_testnet",
+            "ADVISORAI_VENUE_ENVIRONMENT": "testnet",
+            "ADVISORAI_VENUE_BASE_URL": BINANCE_SPOT_TESTNET_BASE_URL,
+        }
+    )
+
+
+def _order() -> Order:
+    instrument = InstrumentIdentity(
+        canonical_id="BTC",
+        asset_class="crypto",
+        venue="paper",
+        venue_symbol="BTCUSDT",
+    )
+    plan = ExecutionPlan(
+        created_at=_NOW,
+        risk_decision_id=uuid4(),
+        target_portfolio_id=uuid4(),
+        policy_version="bounded-test-v1",
+        instructions=("limit",),
+        expires_at=_NOW + timedelta(minutes=5),
+    )
+    return Order(
+        parent_intent_id=uuid4(),
+        execution_plan_id=plan.artifact_id,
+        instrument=instrument,
+        side="buy",
+        quantity=Decimal("0.01"),
+        order_type="limit",
+        price=Decimal("50000"),
+        time_in_force="GTC",
+        idempotency_key=f"bounded-test-{uuid4()}",
+    )
+
+
+def test_native_submission_cap_refuses_before_transport_call(tmp_path) -> None:
+    transport = _CountingTransport()
+    native = NativeVenueAdapter(
+        venue="binance_spot_testnet",
+        environment="paper_testnet",
+        transport=transport,
+        max_submissions=1,
+    )
+    ledgers = SqliteLedgers(tmp_path / "cap.sqlite3")
+    oms = OrderManager(ledgers, native)
+    first = _order()
+    oms.create(first)
+    oms.transition(first.artifact_id, OrderState.RISK_APPROVED)
+    oms.route(first.artifact_id)
+    assert transport.submit_calls == 1
+    assert native.submission_count == 1
+    second = _order()
+    oms.create(second)
+    oms.transition(second.artifact_id, OrderState.RISK_APPROVED)
+    with pytest.raises(NativeVenueProjectionError, match="submission cap reached"):
+        oms.route(second.artifact_id)
+    assert transport.submit_calls == 1
+    assert native.submission_count == 1
+
+
+def test_launch_builder_threads_submission_cap_to_native_boundary(tmp_path) -> None:
+    ledgers = SqliteLedgers(tmp_path / "capped-owner.sqlite3")
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "state",
+        lock_identity="bounded-cap-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(scenario="quiet", interval_seconds=3600),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    native = app.adapters.paper_venue.native
+    assert native.max_submissions == 0
+    with pytest.raises(NativeVenueProjectionError, match="submission cap reached"):
+        native.submit(_order())
+    assert transport.submit_calls == 0
+
+
+def test_owner_deadline_stops_session_without_scheduler_cycles(tmp_path, monkeypatch) -> None:
+    ledgers = SqliteLedgers(tmp_path / "deadline.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    app = PaperOwnerApplication(
+        ledgers=ledgers,
+        state_dir=tmp_path / "deadline-state",
+        lock_identity="deadline-test",
+        code_hash="a" * 64,
+        config_hash="b" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=3600,
+            max_runtime_seconds=1,
+        ),
+    )
+    started = datetime.now(UTC)
+    exit_code = app.run(reason="deadline test")
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+    assert exit_code == 0
+    assert elapsed < 30
+    end = app.supervisor.active_session_id()
+    assert end is None
+
+
+def test_bounded_testnet_run_stops_clean_with_reconciliation(
+    tmp_path, monkeypatch
+) -> None:
+    ledgers = SqliteLedgers(tmp_path / "bounded.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "bounded-state",
+        lock_identity="bounded-run-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=1,
+        ),
+        transport=transport,
+    )
+    exit_code = app.run(reason="bounded offline test")
+    assert exit_code == 0
+    assert transport.submit_calls <= 1
+    assert app.supervisor.active_session_id() is None
+
+
+def test_startup_abstains_on_diverged_account_before_session_ready(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: startup abstains on unreconciled account state.
+
+    Startup runs recovery checks inside ``supervisor.start()`` before
+    the scheduler lease, before the worker thread, and before SESSION
+    READY. If local cash diverges from the venue snapshot, the
+    ``account_order_reconciliation`` check fails, startup records
+    ABSTAIN with an unclean stop, returns exit 2, and never reaches
+    SESSION READY. Offline only; the venue is the synthetic counting
+    transport, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "startup-diverged.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "startup-diverged-state",
+        lock_identity="startup-diverged-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    # Venue snapshot reports cash 100000; diverge local cash so the real
+    # reconciler refuses at the startup recovery gate.
+    app.account.cash = Decimal("1")
+    exit_code = app.run(reason="diverged startup test")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "recovery_mode=abstain" in output
+    assert "decision=failed_check:account_order_reconciliation" in output
+    assert "RECOVERY INCOMPLETE" in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "recovery_checks_failed" in end.payload["end"]["unfinished_work"]
+    assert "SESSION READY" not in output
+    assert app._lease_id is None
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0
+
+
+def test_prepare_current_state_raises_on_late_divergence(tmp_path, monkeypatch) -> None:
+    """P02/P09 prep: the inner startup gate raises on late divergence.
+
+    ``_prepare_current_state`` is defense-in-depth behind the recovery
+    checks: if reconciliation passes at ``supervisor.start()`` but the
+    account diverges before state preparation, startup raises
+    ``RuntimeError`` and the runtime trips its kill switch with
+    ``paper_reconciliation_mismatch``. Offline only; synthetic
+    venue, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "late-diverged.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "late-diverged-state",
+        lock_identity="late-diverged-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    assert app.runtime.risk_kernel.kill_switch.tripped is False
+    # Venue snapshot reports cash 100000; diverge local cash after the
+    # passing check, as if state changed between the two gates.
+    app.account.cash = Decimal("1")
+    with pytest.raises(RuntimeError, match="current paper account/order reconciliation failed"):
+        app._prepare_current_state()
+    assert app.runtime.risk_kernel.kill_switch.tripped is True
+    assert app.runtime.risk_kernel.kill_switch.reason == "paper_reconciliation_mismatch"
+
+
+def test_startup_abstains_on_venue_fill_for_unknown_local_order(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: startup abstains on an orphan venue fill.
+
+    Recovery checks run ``_prepare_current_state`` inside
+    ``supervisor.start()`` before the scheduler lease and SESSION
+    READY: a venue fill whose order is absent from the local OMS
+    (hydration mismatch) fails the ``account_order_reconciliation``
+    check, startup records ABSTAIN with an unclean stop, returns
+    exit 2, and never reaches SESSION READY. Offline only; the
+    venue is the synthetic counting transport, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "unknown-fill.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "unknown-fill-state",
+        lock_identity="unknown-fill-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    orphan = Fill(
+        order_id=uuid4(),
+        venue_fill_id="orphan-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0"),
+        occurred_at=_NOW,
+    )
+    monkeypatch.setattr(type(app.venue), "fills", property(lambda _self: (orphan,)))
+    exit_code = app.run(reason="unknown fill startup test")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "recovery_mode=abstain" in output
+    assert "decision=failed_check:account_order_reconciliation" in output
+    assert "RECOVERY INCOMPLETE" in output
+    assert "SESSION READY" not in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "recovery_checks_failed" in end.payload["end"]["unfinished_work"]
+    assert app._lease_id is None
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0
+
+
+def test_settle_venue_fills_raises_on_late_orphan_fill(tmp_path, monkeypatch) -> None:
+    """P02/P09 prep: fill settlement raises on a late orphan fill.
+
+    ``_settle_venue_fills`` names the exact fault: a venue fill
+    appearing after a passing reconciliation — whose order is absent
+    from the local OMS — raises ``RuntimeError`` instead of
+    applying an unattributable fill. Offline only; synthetic
+    venue, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "late-orphan.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "late-orphan-state",
+        lock_identity="late-orphan-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    app._prepare_current_state()
+    orphan = Fill(
+        order_id=uuid4(),
+        venue_fill_id="late-orphan-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0"),
+        occurred_at=_NOW,
+    )
+    monkeypatch.setattr(type(app.venue), "fills", property(lambda _self: (orphan,)))
+    with pytest.raises(
+        RuntimeError, match="paper venue contains a fill for an unknown local order"
+    ):
+        app._prepare_current_state()
+
+
+def test_run_reports_startup_error_on_fill_arriving_after_recovery(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: the run exception path pins a post-recovery orphan.
+
+    If a venue fill for an unknown local order appears after
+    ``supervisor.start()`` recorded NORMAL recovery, the real
+    ``_prepare_current_state`` raises, the ``run`` exception path
+    records an unclean stop naming ``startup_or_runtime_error``,
+    prints ``outcome=unclean``, and re-raises. Offline only;
+    the venue is the synthetic counting transport, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "post-recovery-orphan.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "post-recovery-orphan-state",
+        lock_identity="post-recovery-orphan-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    orphan = Fill(
+        order_id=uuid4(),
+        venue_fill_id="post-recovery-orphan-fill-1",
+        quantity=Decimal("0.01"),
+        price=Decimal("50000"),
+        fee=Decimal("0"),
+        occurred_at=_NOW,
+    )
+    accesses: list[str] = []
+
+    def evolving_fills(_self):
+        accesses.append("fills")
+        if len(accesses) == 1:
+            return ()
+        return (orphan,)
+
+    monkeypatch.setattr(type(app.venue), "fills", property(evolving_fills))
+    with pytest.raises(
+        RuntimeError, match="paper venue contains a fill for an unknown local order"
+    ):
+        app.run(reason="post-recovery orphan test")
+    output = capsys.readouterr().out
+    assert "recovery_mode=normal" in output
+    assert "outcome=unclean" in output
+    assert "SESSION READY" not in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "startup_or_runtime_error:RuntimeError" in end.payload["end"][
+        "unfinished_work"
+    ]
+    assert app._lease_id is None
+    assert app.supervisor.active_session_id() is None
+    assert len(accesses) == 2
+
+
+def test_run_records_worker_error_when_data_snapshot_fails(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: a scheduler fault ends the session unclean, not hung.
+
+    If the data adapter raises inside the scheduler thread, the
+    worker records ``_scheduler_error``, wakes the stop loop, and
+    ``_wait_and_stop`` records an unclean stop naming
+    ``worker_error`` with exit 2 — the session neither hangs nor
+    reports clean. Offline only; the venue is the synthetic
+    counting transport, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "worker-error.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "worker-error-state",
+        lock_identity="worker-error-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.1,
+            max_runtime_seconds=30,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+
+    def failing_snapshot_at(_cutoff):
+        raise RuntimeError("synthetic data outage")
+
+    monkeypatch.setattr(app.adapters.data, "snapshot_at", failing_snapshot_at)
+    started = datetime.now(UTC)
+    exit_code = app.run(reason="worker error shutdown test")
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert elapsed < 30
+    assert "SESSION READY" in output
+    assert "outcome=unclean" in output
+    assert isinstance(app._scheduler_error, RuntimeError)
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "worker_error:RuntimeError" in end.payload["end"]["unfinished_work"]
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0
+
+
+def test_run_names_open_orders_remaining_at_deadline_stop(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P02/P09 prep: an order still open at stop ends the session unclean.
+
+    A synthetic order submitted before the run stays acknowledged at
+    the venue through the deadline stop. ``_wait_and_stop`` records
+    an unclean stop naming ``paper_open_orders_remain`` with exit 2
+    instead of reporting a clean bounded session. Offline only; the
+    venue is the synthetic counting transport, no network, no
+    credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "open-orders.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "open-orders-state",
+        lock_identity="open-orders-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.1,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=1,
+        ),
+        transport=transport,
+    )
+    order = _order()
+    app.orders.create(order)
+    app.orders.transition(order.artifact_id, OrderState.RISK_APPROVED)
+    acknowledgement = app.orders.route(order.artifact_id)
+    assert acknowledgement is not None and acknowledgement.accepted
+    assert transport.submit_calls == 1
+    # The venue projection is authoritative for the open set: the double
+    # keeps reporting the submitted order as open so the local ack
+    # survives reconciliation and is still open at the deadline stop.
+    transport.list_open_orders = lambda: (
+        {
+            "client_order_id": order.idempotency_key,
+            "venue_order_id": acknowledgement.venue_order_id,
+            "accepted": True,
+        },
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    exit_code = app.run(reason="open orders shutdown test")
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert "stop_reason=runtime_deadline_reached" in output
+    assert "outcome=unclean" in output
+    assert "SESSION READY" in output
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "paper_open_orders_remain" in end.payload["end"]["unfinished_work"]
+    assert str(order.artifact_id) in end.payload["end"]["open_orders"]
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 1
+
+
+def test_reconcile_once_trips_venue_error_and_fails_closed_on_snapshot_outage(
+    tmp_path, monkeypatch
+) -> None:
+    """P09 prep: a mid-session venue-read outage fails closed, distinctly.
+
+    If ``fetch_account_snapshot`` raises during ``reconcile_once`` (venue
+    or network interruption mid-session), the runtime trips its kill
+    switch with ``paper_venue_reconciliation_error`` — distinct from the
+    ``paper_reconciliation_mismatch`` value-divergence reason — and
+    re-raises instead of reporting reconciled. The startup/recovery
+    boolean gates (``_verify_current_order_account``,
+    ``_prepare_current_state_result``) both resolve to ``False`` so the
+    supervisor refuses to start or recover. Offline only; synthetic
+    venue, no network, no credentials.
+    """
+    ledgers = SqliteLedgers(tmp_path / "venue-outage.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "venue-outage-state",
+        lock_identity="venue-outage-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=2,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    assert app.runtime.reconcile_once().reconciled is True
+    assert app.runtime.risk_kernel.kill_switch.tripped is False
+
+    def failing_snapshot():
+        raise RuntimeError("synthetic venue outage")
+
+    monkeypatch.setattr(transport, "fetch_account_snapshot", failing_snapshot)
+    with pytest.raises(RuntimeError, match="synthetic venue outage"):
+        app.runtime.reconcile_once()
+    assert app.runtime.risk_kernel.kill_switch.tripped is True
+    assert app.runtime.risk_kernel.kill_switch.reason == "paper_venue_reconciliation_error"
+    assert app.runtime.risk_kernel.kill_switch.reason != "paper_reconciliation_mismatch"
+    assert app._verify_current_order_account() is False
+    assert app._prepare_current_state_result() is False
+    assert transport.submit_calls == 0
+
+
+def test_run_stops_unclean_on_rss_envelope_breach_without_new_orders(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    """P09 prep: an RSS-envelope breach ends the session UNCLEAN, fast.
+
+    The ``_wait_and_stop`` resource monitor polls the owner RSS each
+    0.25s; a reading above ``max_rss_mb`` records a ``MemoryError``
+    scheduler error, stops the scheduler, and ends UNCLEAN with
+    ``worker_error:MemoryError`` and exit 2 — no hang until the
+    runtime deadline, no new submissions. Offline only; synthetic
+    venue, stubbed RSS reading, no network, no credentials.
+    """
+    import psutil
+
+    ledgers = SqliteLedgers(tmp_path / "rss-breach.sqlite3")
+    monkeypatch.setattr(
+        PaperOwnerApplication, "_apply_resource_envelope", staticmethod(lambda: None)
+    )
+    transport = _CountingTransport()
+    app = build_testnet_owner_application(
+        ledgers=ledgers,
+        state_dir=tmp_path / "rss-breach-state",
+        lock_identity="rss-breach-test",
+        code_hash="c" * 64,
+        config_hash="d" * 64,
+        config=OwnerApplicationConfig(
+            scenario="quiet",
+            interval_seconds=0.5,
+            max_runtime_seconds=30,
+            max_rss_mb=256,
+        ),
+        resolver=_resolver(),
+        launch=SandboxLaunchRequest(
+            provider="binance_spot_testnet",
+            provider_instrument_id="BTCUSDT",
+            quote_currency="USDT",
+            max_submissions=0,
+        ),
+        transport=transport,
+    )
+    real_process = psutil.Process
+
+    class _BreachedMemory:
+        rss = 300 * 1024 * 1024
+
+    class _BreachedProcess:
+        def memory_info(self):
+            return _BreachedMemory()
+
+        def create_time(self):
+            return real_process().create_time()
+
+    monkeypatch.setattr(psutil, "Process", lambda *args, **kwargs: _BreachedProcess())
+    started = datetime.now(UTC)
+    exit_code = app.run(reason="rss breach shutdown test")
+    elapsed = (datetime.now(UTC) - started).total_seconds()
+    output = capsys.readouterr().out
+    assert exit_code == 2
+    assert elapsed < 30
+    assert "SESSION READY" in output
+    assert "outcome=unclean" in output
+    assert isinstance(app._scheduler_error, MemoryError)
+    end = next(
+        event
+        for event in ledgers.events(LedgerNamespace.MISSION)
+        if event.event_type == "session_ended"
+    )
+    assert end.payload["end"]["outcome"] == "unclean"
+    assert "worker_error:MemoryError" in end.payload["end"]["unfinished_work"]
+    assert app.supervisor.active_session_id() is None
+    assert transport.submit_calls == 0

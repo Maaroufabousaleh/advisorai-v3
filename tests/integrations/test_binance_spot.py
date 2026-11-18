@@ -132,6 +132,40 @@ def test_binance_product_truth_requires_btc_and_eth():
         transport.verify_symbol_mappings(_symbols()[:1])
 
 
+def test_binance_open_order_sweep_refuses_off_profile_orders():
+    """P02: open orders outside the verified profile fail closed.
+
+    The per-symbol read covers strategy symbols; the unfiltered sweep
+    catches orders on any other symbol (external interference on the
+    shared multi-asset Testnet account) and refuses with the venue
+    identity, never the order economics.
+    """
+    transport, calls = _transport(
+        [
+            (200, b"[]", ()),
+            (200, b"[]", ()),
+            (
+                200,
+                json.dumps(
+                    [
+                        {
+                            "orderId": 77,
+                            "clientOrderId": "external-x",
+                            "symbol": "SOLUSDT",
+                            "status": "NEW",
+                        }
+                    ]
+                ).encode(),
+                (),
+            ),
+        ]
+    )
+    transport.verify_symbol_mappings(_symbols())
+    with pytest.raises(VenueTransportError, match="outside the verified profile"):
+        transport.list_open_orders()
+    assert len(calls) == 3
+
+
 def test_binance_book_ticker_is_public_and_bound_to_an_admitted_symbol():
     responses = [
         (
@@ -164,7 +198,9 @@ def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
         (200, json.dumps({"symbols": _symbols()}).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000004000}).encode(), ()),
         (200, json.dumps(_account()).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000005000}).encode(), ()),
     ]
     transport, calls = _transport(responses)
     transport.server_time()
@@ -177,9 +213,11 @@ def test_binance_read_schema_maps_account_balances_positions_and_snapshot():
     snapshot = transport.fetch_account_snapshot()
     assert snapshot.cash == Decimal("1000")
     assert snapshot.positions == {"crypto:BTCUSDT:binance_spot_testnet:spot": Decimal("0.010")}
-    assert len(calls) == 5
+    assert len(calls) == 7
     assert "X-MBX-APIKEY" not in calls[0][2]
-    assert all("X-MBX-APIKEY" in calls[index][2] for index in (2, 3, 4))
+    assert all("X-MBX-APIKEY" in calls[index][2] for index in (2, 3, 5))
+    assert "X-MBX-APIKEY" not in calls[4][2]
+    assert "X-MBX-APIKEY" not in calls[6][2]
 
 
 def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
@@ -187,7 +225,9 @@ def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
     account["balances"].append({"asset": "BNB", "free": "0.25", "locked": "0"})
     responses = [
         (200, json.dumps({"serverTime": 1700000000000}).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000004000}).encode(), ()),
         (200, json.dumps(account).encode(), ()),
+        (200, json.dumps({"serverTime": 1700000005000}).encode(), ()),
     ]
     transport, _calls = _transport(responses)
     transport.server_time()
@@ -201,7 +241,12 @@ def test_binance_account_snapshot_preserves_nonzero_unmapped_asset_balances():
 def test_binance_account_snapshot_rejects_duplicate_asset_rows():
     account = _account()
     account["balances"].append({"asset": "BTC", "free": "0.2", "locked": "0"})
-    transport, _calls = _transport([(200, json.dumps(account).encode(), ())])
+    transport, _calls = _transport(
+        [
+            (200, json.dumps({"serverTime": 1794547200000}).encode(), ()),
+            (200, json.dumps(account).encode(), ()),
+        ]
+    )
     transport._last_server_time = datetime(2026, 11, 12, tzinfo=UTC)
     transport.verify_symbol_mappings(_symbols())
 
@@ -356,3 +401,139 @@ def test_binance_builder_is_scoped_and_rejects_coinbase_identity():
     )
     with pytest.raises(ValueError, match="binance_spot_testnet"):
         build_binance_spot_testnet_transport(resolver)
+
+
+def test_public_truth_qualify_refuses_network_without_explicit_opt_in(
+    monkeypatch,
+) -> None:
+    """P02 gate parity: public-truth qualify refuses without the env opt-in.
+
+    The lifecycle and recovery runners both refuse network access
+    unless ADVISORAI_RUN_NETWORK_SMOKE=1; the public-truth runner
+    must refuse identically instead of hitting the venue on import.
+    """
+    import sys
+
+    sys.path.insert(0, "scripts")
+    import qualify_binance_spot_testnet_public as public_truth
+
+    monkeypatch.delenv("ADVISORAI_RUN_NETWORK_SMOKE", raising=False)
+    monkeypatch.setattr(sys, "argv", ["qualify_binance_spot_testnet_public.py"])
+    with pytest.raises(SystemExit) as exc:
+        public_truth.main()
+    assert "refusing network access" in str(exc.value.code)
+
+
+def test_public_truth_main_passes_from_foreign_cwd_with_stubbed_venue(
+    tmp_path, monkeypatch
+) -> None:
+    """P02 robustness: the runner passes from any cwd, not just repo root.
+
+    Behavioral: chdir to an empty dir, stub the venue client, run
+    ``main()`` end to end. Pre-fix this raised FileNotFoundError on
+    the cwd-relative adapter path; post-fix the script-anchored path
+    resolves and the run passes with a 64-char adapter SHA.
+    """
+    import sys
+    from types import SimpleNamespace
+
+    sys.path.insert(0, "scripts")
+    import qualify_binance_spot_testnet_public as public_truth
+
+    def _symbol(symbol: str, base: str) -> dict[str, object]:
+        return {
+            "symbol": symbol,
+            "baseAsset": base,
+            "quoteAsset": "USDT",
+            "status": "TRADING",
+            "filters": [
+                {"filterType": "LOT_SIZE", "stepSize": "0.00001000", "minQty": "0.00001000"},
+                {"filterType": "PRICE_FILTER", "tickSize": "0.01000000"},
+            ],
+        }
+
+    bodies = {
+        "time": b'{"serverTime": 1790000000000}',
+        "exchangeInfo": json.dumps(
+            {"symbols": [_symbol("BTCUSDT", "BTC"), _symbol("ETHUSDT", "ETH")]}
+        ).encode(),
+    }
+
+    class _StubClient:
+        request_count = 0
+
+        def __init__(self, *args, **kwargs) -> None:
+            self.base_url = BINANCE_SPOT_TESTNET_BASE_URL
+            self.config = SimpleNamespace(allowed_hosts=(BINANCE_SPOT_TESTNET_HOST,))
+
+        def request(self, method, url, **kwargs):
+            type(self).request_count += 1
+            key = "exchangeInfo" if "exchangeInfo" in url else "time"
+            return SimpleNamespace(body=bodies[key])
+
+    _StubClient.request_count = 0
+    monkeypatch.setattr(public_truth, "SafeHttpClient", _StubClient)
+    monkeypatch.setenv("ADVISORAI_RUN_NETWORK_SMOKE", "1")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "qualify_binance_spot_testnet_public.py",
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+        ],
+    )
+    assert public_truth.main() == 0
+    run_dirs = [p for p in (tmp_path / "evidence").iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    manifest = json.loads((run_dirs[0] / "binance-spot-testnet-public-truth.json").read_text())
+    assert manifest["result"]["status"] == "passed"
+    assert len(manifest["result"]["adapter_source_sha256"]) == 64
+    assert manifest["result"]["network_calls"] == 2
+
+
+def _commission_record(symbol="BTCUSDT"):
+    legs = {
+        "maker": "0.00000000",
+        "taker": "0.00100000",
+        "buyer": "0.00000000",
+        "seller": "0.00000000",
+    }
+    return {
+        "symbol": symbol,
+        "standardCommission": dict(legs),
+        "specialCommission": {**legs, "taker": "0.00000000"},
+        "taxCommission": {**legs, "taker": "0.00000000"},
+        "discount": {
+            "enabledForAccount": False,
+            "enabledForSymbol": True,
+            "discountAsset": "BNB",
+            "discount": "0.75000000",
+        },
+    }
+
+
+def test_binance_symbol_commission_is_signed_and_symbol_bound():
+    transport, calls = _transport([(200, json.dumps(_commission_record()).encode(), ())])
+    transport.verify_symbol_mappings(_symbols())
+    record = transport.symbol_commission("BTCUSDT")
+    assert record["symbol"] == "BTCUSDT"
+    assert record["standardCommission"]["taker"] == "0.00100000"
+    assert calls[0][2]["X-MBX-APIKEY"] == "fixture-key"
+    assert "symbol=BTCUSDT" in calls[0][1]
+    with pytest.raises(VenueTransportError, match="not admitted"):
+        transport.symbol_commission("DOGEUSDT")
+
+
+def test_binance_symbol_commission_rejects_wrong_symbol_and_missing_blocks():
+    wrong = _transport([(200, json.dumps(_commission_record("ETHUSDT")).encode(), ())])[0]
+    wrong.verify_symbol_mappings(_symbols())
+    with pytest.raises(VenueTransportError, match="different symbol"):
+        wrong.symbol_commission("BTCUSDT")
+    record = _commission_record()
+    del record["taxCommission"]
+    partial = _transport([(200, json.dumps(record).encode(), ())])[0]
+    partial.verify_symbol_mappings(_symbols())
+    with pytest.raises(VenueTransportError, match="lacks taxCommission"):
+        partial.symbol_commission("BTCUSDT")

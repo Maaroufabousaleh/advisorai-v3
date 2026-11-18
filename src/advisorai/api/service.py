@@ -312,12 +312,20 @@ class AdvisorService:
 
     @staticmethod
     def _known_instruments(account: AccountState, market_or_marks):
-        """Union of account and market instruments for fail-closed no-trade targets."""
+        """Union of account and market instruments for fail-closed no-trade targets.
+
+        Frozen ``asset:`` custody keys (Binance Testnet faucet holdings
+        outside strategy authority) are excluded: they carry no mark and
+        can never be proposal targets. The Portfolio Constructor would
+        otherwise demand a mark for them and fail every decision cycle.
+        """
         from advisorai.contracts import AssetClass, InstrumentIdentity
 
         marks = market_or_marks.marks if hasattr(market_or_marks, "marks") else market_or_marks
         seen: dict[str, object] = {}
         for canonical_id in (*account.positions, *account.marks, *marks):
+            if canonical_id.startswith("asset:"):
+                continue
             if canonical_id not in seen:
                 seen[canonical_id] = InstrumentIdentity(
                     canonical_id=canonical_id, asset_class=AssetClass.CRYPTO, venue="paper"

@@ -331,3 +331,100 @@ def test_fastapi_route_contract_keeps_login_json_and_request_context():
     assert [item.name for item in login.dependant.body_params] == ["payload"]
     assert not login.dependant.query_params
     assert not overview.dependant.query_params
+
+
+def test_ledger_overview_surfaces_latest_cycle_reasons(tmp_path: Path):
+    """P02 operator visibility: a failed cycle shows its reason codes.
+
+    The runtime card's detail must render ``latest cycle: failed
+    (<reasons>)`` so an owner watching a canary sees why cycles
+    fail without querying the ledger. Cycles without reasons keep
+    the bare ``latest cycle: <stage>`` form.
+    """
+    from advisorai.runtime import RuntimeCycle, RuntimeStage
+
+    ledgers = SqliteLedgers(tmp_path / "dashboard-cycle.sqlite3")
+    cutoff = datetime(2026, 11, 16, 14, 0, tzinfo=UTC)
+    failed = RuntimeCycle(
+        run_id="advisorai-owner-paper",
+        cutoff=cutoff,
+        stage=RuntimeStage.FAILED,
+        reasons=("ValidationError",),
+        created_at=cutoff,
+    )
+    ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.MISSION,
+            event_type="paper_runtime_cycle",
+            idempotency_key="dashboard-cycle-failed",
+            occurred_at=cutoff,
+            payload={"cycle": failed.model_dump(mode="json", round_trip=True)},
+        )
+    )
+    runtime = build_ledger_overview(ledgers).metrics[0]
+    assert runtime.key == "runtime"
+    assert runtime.value == "failed"
+    assert runtime.detail == "latest cycle: failed (ValidationError)"
+
+    abstained = RuntimeCycle(
+        run_id="advisorai-owner-paper",
+        cutoff=cutoff,
+        stage=RuntimeStage.ABSTAINED,
+        created_at=cutoff,
+    )
+    ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.MISSION,
+            event_type="paper_runtime_cycle",
+            idempotency_key="dashboard-cycle-abstained",
+            occurred_at=cutoff,
+            payload={"cycle": abstained.model_dump(mode="json", round_trip=True)},
+        )
+    )
+    runtime = build_ledger_overview(ledgers).metrics[0]
+    assert runtime.detail == "latest cycle: abstained"
+
+
+def test_ledger_overview_redacts_compared_amounts_in_cycle_reasons(tmp_path: Path):
+    """P02 disclosure boundary: the runtime card shows codes, not amounts.
+
+    Reconciliation discrepancies carry exact compared values
+    (``venue_cash_mismatch:9994.52...!=10000...``) and flow into
+    ``RuntimeCycle.reasons``. The card must render the code prefix only
+    so balance state stays out of the dashboard surface by default,
+    consistent with the ``--print-baseline`` stdout gate. Reasons
+    without compared values render whole.
+    """
+    from advisorai.runtime import RuntimeCycle, RuntimeStage
+
+    ledgers = SqliteLedgers(tmp_path / "dashboard-redact.sqlite3")
+    cutoff = datetime(2026, 11, 16, 15, 0, tzinfo=UTC)
+    failed = RuntimeCycle(
+        run_id="advisorai-owner-paper",
+        cutoff=cutoff,
+        stage=RuntimeStage.FAILED,
+        reasons=(
+            "venue_cash_mismatch:9994.52922080!=10000.00000000",
+            "venue_position_mismatch:crypto:BTC:0.00008000!=0.00009000",
+            "snapshot_after_cutoff",
+        ),
+        created_at=cutoff,
+    )
+    ledgers.append(
+        LedgerEvent(
+            namespace=LedgerNamespace.MISSION,
+            event_type="paper_runtime_cycle",
+            idempotency_key="dashboard-cycle-redact",
+            occurred_at=cutoff,
+            payload={"cycle": failed.model_dump(mode="json", round_trip=True)},
+        )
+    )
+    runtime = build_ledger_overview(ledgers).metrics[0]
+    assert runtime.key == "runtime"
+    assert runtime.detail == (
+        "latest cycle: failed (venue_cash_mismatch, "
+        "venue_position_mismatch:crypto:BTC, snapshot_after_cutoff)"
+    )
+    assert "!=" not in runtime.detail
+    assert "9994.52922080" not in runtime.detail
+    assert "10000.00000000" not in runtime.detail

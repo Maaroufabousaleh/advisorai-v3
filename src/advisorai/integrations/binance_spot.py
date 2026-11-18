@@ -391,6 +391,29 @@ class BinanceSpotTestnetTransport(NativeTransport):
             raise VenueTransportError("Binance Spot Testnet account is not trade-enabled")
         return dict(payload)
 
+    def symbol_commission(self, symbol: str) -> Mapping[str, object]:
+        """Return validated per-symbol commission rates (read-only GET).
+
+        Shape follows the documented ``GET /api/v3/account/commission``
+        response: ``standardCommission`` / ``specialCommission`` /
+        ``taxCommission`` legs plus the BNB ``discount`` object.
+        """
+        spec = self._verified_symbol(symbol)
+        payload = self._request(
+            "GET",
+            "/api/v3/account/commission",
+            params={"symbol": spec.symbol},
+            authenticated=True,
+        )
+        if not isinstance(payload, Mapping):
+            raise VenueTransportError("Binance commission response must be an object")
+        if str(payload.get("symbol", "")).strip().upper() != spec.symbol:
+            raise VenueTransportError("Binance commission response named a different symbol")
+        for block in ("standardCommission", "specialCommission", "taxCommission"):
+            if not isinstance(payload.get(block), Mapping):
+                raise VenueTransportError(f"Binance commission response lacks {block}")
+        return dict(payload)
+
     @staticmethod
     def _balances(payload: Mapping[str, object]) -> tuple[Mapping[str, object], ...]:
         return BinanceSpotTestnetTransport._records(payload.get("balances"), "balances")
@@ -426,6 +449,16 @@ class BinanceSpotTestnetTransport(NativeTransport):
         return tuple(positions)
 
     def fetch_account_snapshot(self) -> VenueAccountSnapshot:
+        # The account response carries no timestamp of its own. Bound the
+        # balance read with a server time on each side: the pre-read
+        # balance_cutoff is the latest instant the balances can reflect,
+        # so only fills strictly before it can be settled inside them.
+        # A fill that lands between the balance read and the post-read
+        # as_of cannot be proven included, however well its economics
+        # fit. Monotonic guards keep either clock from going backwards.
+        self.server_time()
+        balance_cutoff = self._last_server_time
+        assert balance_cutoff is not None
         payload = self.account_state()
         balances = self._balances(payload)
         by_asset: dict[str, Mapping[str, object]] = {}
@@ -462,17 +495,18 @@ class BinanceSpotTestnetTransport(NativeTransport):
                 # Preserve nonzero out-of-profile balances so an owner adapter
                 # can reject them instead of silently understating account state.
                 positions[f"asset:{asset}"] = quantity
+        self.server_time()
         as_of = self._last_server_time
-        if as_of is None:
-            self.server_time()
-            as_of = self._last_server_time
         assert as_of is not None
+        if as_of < balance_cutoff:
+            as_of = balance_cutoff
         return VenueAccountSnapshot(
             as_of=as_of,
             cash=cash,
             positions=positions,
             margin_used=Decimal("0"),
             margin_available=_decimal(quote_record.get("free", "0"), f"{quote_asset} free balance"),
+            balance_cutoff=balance_cutoff,
         )
 
     @staticmethod
@@ -502,6 +536,17 @@ class BinanceSpotTestnetTransport(NativeTransport):
             records.extend(
                 self._normalize_order(item) for item in self._records(payload, "open orders")
             )
+        # The multi-asset Testnet account may hold orders on symbols outside
+        # the verified profile. Those locks are outside strategy authority
+        # and must fail closed rather than hide. One unfiltered sweep (a
+        # supported account endpoint) detects them; any hit raises.
+        sweep = self._request("GET", "/api/v3/openOrders", authenticated=True)
+        for item in self._records(sweep, "open orders"):
+            symbol = str(item.get("symbol", "")).strip().upper()
+            if symbol and symbol not in self.verified_symbol_ids:
+                raise VenueTransportError(
+                    "Binance account holds an open order outside the verified profile"
+                )
         for record in records:
             client_order_id = str(record.get("client_order_id", "")).strip()
             if client_order_id:
