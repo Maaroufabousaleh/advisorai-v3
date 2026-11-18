@@ -1,8 +1,8 @@
 # Technology and integration decision register
 
-**Evaluation snapshot:** 2026-11-11. This is a planning register, not an
-implementation inventory or an operational admission record. A listed tool is
-not installed, trusted, or authorized by virtue of appearing here.
+**Evaluation snapshots:** 2026-11-11 for the base register and 2026-11-17
+for the equity and paper-to-code follow-up. This register records planning
+decisions. Installation and operational admission require separate evidence.
 
 The accepted near-term milestone remains **AdvisorAI Integrated Alpha**: a
 safe owner session that recovers and reconciles state, processes point-in-time
@@ -110,6 +110,22 @@ failure policy; and last review date.
 | OpenTerminal ([JamievanRiel/OpenTerminal](https://github.com/JamievanRiel/openterminal)); OpenTerminalUI candidates [Hitheshkaranth/OpenTerminalUI](https://github.com/Hitheshkaranth/OpenTerminalUI) and [laanito/OpenTerminalUI](https://github.com/laanito/OpenTerminalUI) | **REJECTED as runtime or operator-console replacements.** Existing React/FastAPI console, provider ports, portfolio, and execution owners already cover those responsibilities. | The linked repositories currently declare MIT. No second portfolio store, operator control plane, canonical cache, alert authority, or execution path. UX and provider ideas may be reviewed without importing a runtime. Revisit only for a named, non-duplicative component with exact upstream and license. | NOT PRESENT; NOT ADMITTED. |
 | Official-text-first event intelligence | **PROTOTYPE/EXPERIMENT after Integrated Alpha.** Add an EventEvidencePort or existing equivalent for SEC filings, issuer earnings releases, official statements, and IR event metadata. | Every item carries source identity, publication/retrieval time, extraction model/version, confidence, and deduplication identity. Verify numerical claims against filings or official structured releases. Third-party transcripts/audio require source-specific rights to access, record, store, transform, and redistribute, plus latency/retention review. Only afterward consider [OpenAI Whisper](https://github.com/openai/whisper), whose code repository declares MIT; review checkpoint/model assets separately. No event-to-order path. | NOT PRESENT; RESEARCH ONLY; Phase 9. |
 
+### Equity and ETF follow-up
+
+The [equity integration plan](../plans/equity-data-and-research-integrations.md)
+records endpoint selection, source lineage, qualification tests, and the
+external-project evaluation. All entries below are unadmitted.
+
+| Candidate | Decision and initial role |
+|---|---|
+| Alpaca historical SIP | **PROTOTYPE/EXPERIMENT.** First U.S. daily research-bar candidate, subject to account, feed and rights checks. Keep IEX and consolidated SIP observations distinct. |
+| Massive / Tiingo | **PROTOTYPE/EXPERIMENT.** Candidates for one secondary daily-bar check. Trial Massive Basic first and consider Tiingo where history, coverage or action fields justify it. Shared exchange/SIP lineage can limit source independence. |
+| EdgarTools / TradingAgents SEC connector | **PROTOTYPE/EXPERIMENT.** Compare parser approaches behind the existing provider port. SEC EDGAR and issuer documents own the facts. |
+| Financial Datasets / FMP | **DEFERRED enrichment.** Revisit a named gap in normalized metrics with exact terms and point-in-time evidence. |
+| Databento corporate actions | **DEFERRED coverage upgrade.** Revisit if split, dividend, inactive-symbol or delisting history has an established gap. |
+| IBKR via NautilusTrader / Alpaca Paper | **DEFERRED venue qualification.** Evaluate IBKR first if account entitlements and integration fit. Keep market-data and order/reconciliation evidence separate. |
+| Awesome Quant | **DISCOVERY ONLY.** Review the linked upstream provider directly. Canli PIT Lake is a test-design reference, and Yahoo-derived tools share source lineage. |
+
 ## Decision models and forecast challengers
 
 ADR 0009 remains the vendor-neutral authority for DecisionModelPort. The
@@ -142,7 +158,11 @@ license, reproducibility, and rollback.
 | [Firecracker](https://github.com/firecracker-microvm/firecracker) | **DEFERRED.** Upstream declares Apache-2.0. Consider only if a concrete native workload needs a microVM and no simpler qualified backend meets its threat model. | Additional KVM, image, orchestration, lifecycle, and operator cost must be measured against the workload. | NOT PRESENT; NOT ADMITTED. |
 | [elizaOS](https://github.com/elizaOS/eliza) | **REJECTED as a second agent runtime** for the current roadmap. Hermes/Skill Foundry remains the agent boundary. | Upstream declares MIT. Revisit only for an essential capability Hermes cannot expose through a narrow adapter, with exact revision, permission, provenance, resource, and authority review. | NOT PRESENT; NOT ADMITTED. |
 | [Optuna](https://github.com/optuna/optuna) | **ADOPTED-IN-PLAN** for bounded hyperparameter/experiment search inside the Alpha Team, if the existing workflow has no equivalent. | Upstream declares MIT and documents a lightweight search framework. Require preregistered search space, trial budget, seed/snapshot, no test-set optimization, immutable trial ledger, pruning/cost limits, and predeclared best-trial rule. It emits AdvisorAI-native artifacts only. | NOT PRESENT as a dependency; PLAN ONLY; Phase 9. |
-| [Qlib](https://github.com/microsoft/qlib) | **PROTOTYPE/EXPERIMENT** as an external comparison/validation environment, never a V3 data, backtest, or execution authority. | Upstream declares MIT. Pin dependencies and compare on frozen snapshots; reproduce finalists independently in AdvisorAI's canonical Nautilus pipeline. | NOT PRESENT; RESEARCH ONLY; Phase 9. |
+| [Qlib](https://github.com/microsoft/qlib) | **PROTOTYPE/EXPERIMENT** as the first external quantitative equity benchmark. RD-Agent is deferred until there is a measured automation need. | Run Alpha158 + LightGBM on a frozen AdvisorAI snapshot and reproduce finalists independently in the canonical Nautilus pipeline. See the [equity integration plan](../plans/equity-data-and-research-integrations.md). | NOT PRESENT; RESEARCH ONLY; Phase 9. |
+| [TradingAgents](https://github.com/TauricResearch/TradingAgents) | **PROTOTYPE/EXPERIMENT.** First external qualitative equity challenger, limited to the bull/bear research stage. | Use the same dated evidence packet as the Council. Measure verified corrections and novel objections against cost. Exercise a late-filing fixture. | NOT PRESENT; RESEARCH ONLY; Phase 9. |
+| [Trading-R1](https://github.com/TauricResearch/Trading-R1) and [ai-hedge-fund](https://github.com/virattt/ai-hedge-fund) | **REFERENCE / MANUAL TRIAL.** Trading-R1 for missing primary evidence and ai-hedge-fund for a separate valuation calculation. | Require source provenance and sync/retention review for Trading-R1. Reuse only a specific valuation method if it adds value. | NOT PRESENT; RESEARCH ONLY. |
+| FinceptTerminal, daily_stock_analysis, bbfamily/abu, myhhub/stock | **REFERENCE or DEFERRED.** Use named connector/UX or methods references. Regional collectors and CYQ require a qualified regional use case. | The [equity integration plan](../plans/equity-data-and-research-integrations.md) defines the separate triggers. | NOT PRESENT; NOT ADMITTED. |
+| [Paper2Code](https://github.com/going-doer/Paper2Code) | **PROTOTYPE/EXPERIMENT.** Adapt a bounded, AdvisorAI-owned paper-to-code component for Hermes Builder. | Pin Apache-2.0 upstream provenance and notices, reuse ModelGateway and Skill Foundry boundaries, and compare with plain Hermes and a withheld reference. See the [prototype plan](../plans/paper-to-code-prototype.md). | NOT PRESENT; RESEARCH ONLY; Phase 8/9. |
 | [QuantaAlpha](https://github.com/QuantaAlpha/QuantaAlpha) | **DEFERRED / quarantined benchmark only.** Its factor-mining role overlaps Alpha Team. | GitHub reported no SPDX license assertion and a last-push date of 2026-06-29 on the evaluation date. Do not import or depend on it until an explicit license, exact revision, remote model/provider dependencies, credential flow, data lineage, PIT behavior, and resource use are reviewed. | NOT PRESENT; NOT ADMITTED. |
 | [AlphaAgent](https://arxiv.org/abs/2502.16789) and related repositories | **RESEARCHED as a methods reference; no framework adoption.** Multiple repositories use the AlphaAgent name, so no single code upstream is selected. | Use published concepts only until the exact paper-linked upstream, license, data rights, dependencies, and marginal value are verified. Any trial must emit AdvisorAI-native artifacts and pass the same PIT/red-team review. | NOT PRESENT; RESEARCH ONLY. |
 | [WorldQuant BRAIN](https://www.worldquant.com/terms-and-conditions/) / referenced WorldQuant Miner workflow | **REQUIRES-MORE-INFORMATION / DEFERRED.** Treat as an external platform, not an SDK or canonical validator. | Obtain authoritative BRAIN product/API terms, account permissions, data and submission rights. Do not scrape, automate submissions, put credentials in agents, or treat platform scores as independent validation. | NOT PRESENT; NOT ADMITTED. |

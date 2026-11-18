@@ -171,7 +171,7 @@ may start early; each gate controls operational admission or promotion only.
 | E2 - Controlled Alpha Lab | Inside Phase 9: DSL, feature catalog, baseline suite, fast screen, manifests, validation/red-team workflow, dashboard views | Deliberately leaky/overfit candidates are rejected and a known baseline reproduces |
 | E3 - First V3 strategy challenger | Small BTC/ETH research-only candidate set using `MarketStateArtifact` and independent Nautilus replay | Incremental net value over the V3 baseline across preregistered regimes; eligible only for paper shadow |
 | E4 - Optional capability adapters | Use the decision register: bounded Optuna search may be adopted in-plan; Qlib may be a quarantined comparison; QuantaAlpha and DEAP are deferred; AlphaAgent concepts are reference-only until an exact upstream/license is selected | Removable adapter cannot escape its sandbox, has a reviewed license and source boundary, and emits a replayable AdvisorAI-native artifact |
-| E5 - Equity and long-horizon extension | SEC/IR/corporate-action snapshots, equity factor families, research cards, and paper ledger | Clean point-in-time/corporate-action history; crypto assumptions are not reused blindly |
+| E5 - Equity and long-horizon extension | [Qualified research bars, SEC/IR and corporate-action snapshots, equity factor and thesis challengers](equity-data-and-research-integrations.md) | Clean point-in-time history, a qualified secondary check where needed, and separate evidence for broker-paper execution |
 | E6 - Controlled candidate expansion | Limited approved-paper candidates, decay monitoring, and allocation research | Accumulated evidence across independent sessions and relevant market states; no unresolved safety/reconciliation/data-quality incident. A provisional 20–30 meaningful sessions / 100–150 operating hours may inform review, not act as a calendar-time pass rule |
 | E7 - Optional bounded-live scope | No new architecture: use the existing Phase 10 credential enclave, caps, approvals, and emergency controls | Separate explicit go-live review, operational parity, and tested immediate paper rollback |
 
@@ -181,6 +181,11 @@ under Phase 9 ownership; E7 does not reduce the Phase 10 gate. Historical
 24-hour/60-day requirements remain facts about prior plans/evidence but are
 superseded as primary workstation readiness criteria. Optional server profiles
 may retain duration-specific gates.
+
+For papers without usable author code, the Strategy Engineer can request a
+Hermes Builder job through the [paper-to-code prototype](paper-to-code-prototype.md).
+The Experiment Conductor and Statistical Red Team verify the candidate through
+the existing artifact and replay workflow.
 
 ## Capability and dependency admission
 

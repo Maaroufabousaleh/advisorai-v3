@@ -16,6 +16,18 @@ belong in this file.
 | Census | Not added | — | Deferred previously | No key provisioned; add only after scope/use review |
 | OpenBB V5 | Optional architecture evaluation only; not installed or enabled | Design guardrails documented | No adapter-level verification | Future opt-in decision after isolated provider and provenance review |
 
+## U.S. equity and ETF planning follow-up
+
+As of the 2026-11-17 review, the [equity integration plan](../plans/equity-data-and-research-integrations.md)
+lists Alpaca historical SIP, SEC EDGAR/issuer releases, and a secondary daily
+bar candidate (Massive or Tiingo). These are proposed qualifications. The
+private Yahoo replay reported in [PR #215](https://github.com/Maaroufabousaleh/advisorai-v3/pull/215)
+and its synthetic Git fixtures establish research evidence only. No equity
+market-data feed or broker-paper route is admitted. IBKR via NautilusTrader
+and Alpaca Paper are separate venue candidates.
+
+## Credential snapshot as of 2026-11-13
+
 Infisical state remains: project `AdvisorAI V3`; `dev` contains only the existing
 `EIA_API_KEY`; `paper-testnet` and `prod` are empty; no machine identity exists.
 The EIA value has not been read by the coding agent. No new provider credentials

@@ -71,8 +71,9 @@ The second rule is:
 | LiteLLM | provisional gateway baseline after a Phase-0 test |
 | OmniRoute | optional gateway adapter/challenger; identity, privacy, resource and failure policies apply |
 | OmniCloud | optional archive UI/allocator after restore tests; never required |
-| TradingAgents | offline shadow council after V3-Core is stable |
-| RD-Agent/Qlib | isolated research challengers; do not own production features, risk, backtests or execution |
+| TradingAgents | on-demand offline bull/bear challenger for selected Equity Council cases |
+| Qlib | isolated equity factor/model benchmark on an AdvisorAI snapshot. RD-Agent is deferred pending a measured automation need. |
+| Paper2Code | optional modifiable base for a bounded paper-to-code capability inside Hermes Skill Foundry |
 | LEAN | selected cross-engine oracle cases only |
 | VectorBT | rapid research screen, never the realism gate |
 | NautilusTrader | canonical event replay and execution engine |
@@ -217,7 +218,7 @@ Priority families:
 | Family | Initial/target sources | Intended use |
 |---|---|---|
 | Crypto market | native venue REST/WebSocket; CCXT for backfill/cross-venue normalization | bars, trades, books, funding and open interest |
-| Equities | broker/paper feed, official exchange/calendar/corporate-action references, London Strategic Edge as audited corroboration | daily/intraday research and later paper execution |
+| Equities and ETFs | Alpaca historical SIP as the first research-bar candidate, official exchange/calendar/corporate-action references, one qualified secondary daily check | U.S. daily research first. Broker data and the equity paper route require separate qualification. |
 | Corporate/fundamental | SEC EDGAR, company facts, financial statement/notes and DERA bulk sets, official investor relations | point-in-time fundamentals, filings and events |
 | Macro | FRED/ALFRED first; BLS, BEA, Treasury, central-bank sources as needed | vintaged releases, surprises and regimes |
 | News | official/company RSS, GDELT, direct origin pages | event, novelty, source reliability and reaction |
@@ -226,7 +227,10 @@ Priority families:
 | Government/alternative | House/Senate disclosures, Capitol Trades as verifier, contracts, patents and trials | delayed contextual evidence only |
 | Research benchmarks | Numerai, free LOBSTER samples, SSRN/papers | pipeline/model validation, never assumed production truth |
 
-OpenBB may normalize selected research feeds; it is not a source of truth itself. QuantLib supplies pricing/risk mathematics when derivatives enter scope.
+OpenBB may normalize an allowlisted research endpoint. Retain the original
+publisher and feed identity. QuantLib supplies pricing/risk mathematics when
+derivatives enter scope. See the [equity integration plan](docs/plans/equity-data-and-research-integrations.md)
+for provider choices, secondary verification, and the separate broker track.
 
 ### 4.4 Acquisition ladder
 
@@ -506,6 +510,9 @@ All outputs pass Pydantic schema validation, security review, reproducibility te
 - immutable base image plus task overlay;
 - record Git commit, `uv.lock`, container digest, dataset/model revisions, skill hashes, seeds and tool versions;
 - export persistent Hermes skills into AdvisorAI `CapabilityBundle`s; Hermes memory is never the only copy or authority.
+- consider the [AdvisorAI-owned Paper2Code adaptation](docs/plans/paper-to-code-prototype.md)
+  for missing research code. Route its output through the same quarantine and
+  independent validation workflow.
 
 ### 8.3 Capability lifecycle
 
@@ -832,7 +839,8 @@ implementation by a Phase-7 duration gate.
   layer, and isolated Scout/Experiment Factory/Red Team workflows;
 - after integrated-system evidence exists, challenge with TimesFM 3, TTM-R3,
   Kronos-base, TabPFN-TS, Kev/Jev and other models; also consider
-  TradingAgents, RD-Agent/Qlib, selected LEAN or QuantLib one at a time;
+  the bounded TradingAgents and Qlib trials, or selected LEAN and QuantLib
+  work, one capability at a time;
 - add archive automation and optional OmniCloud view;
 - expand asset universe and horizons only after capacity/data-quality tests.
 

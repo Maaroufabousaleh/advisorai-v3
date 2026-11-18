@@ -23,6 +23,10 @@ and the capability lifecycle.
    and permission boundary, one admitted adapter at a time. Qanat may be
    evaluated as an optional research-only MCP adapter; independent AdvisorAI
    checks remain authoritative.
+6. Evaluate the [Paper2Code adaptation](paper-to-code-prototype.md) as an
+   optional Builder capability after author-code discovery. Use the existing
+   model route, artifact lifecycle, and trust-class sandbox. Compare against
+   ordinary Hermes and a withheld reference before considering adoption.
 
 ## Exit and admission gate
 
