@@ -11,6 +11,13 @@ Baseline: 2026-11-14. Scope: `PAPER-V1`. This tracker defines the next ten jobs,
 - Override: the owner explicitly ordered these merges despite the red Dashboard build check (upstream picomatch ReDoS advisory GHSA-fc5q-39xc-vjpf, no patched release; all other CI green on both heads). `main` has no branch protection, so no GitHub gate was bypassed or waived — the exception is procedural and owned: P04's green-CI criterion is recorded as EXCEPTED, not met. Re-run the Dashboard audit and confirm green once an upstream picomatch fix exists.
 - P05 stays OPEN: closeout needs its accepted evidence re-verified against the merged base (`536c517`); the prior evidence references pre-merge commits.
 
+## Merge note 2 — 2026-11-18 (#220/#221/#222, same Dashboard exception)
+
+- Merged #221 (`8b6b173`, equity-docs, 9 markdown files) as `ee98795`, #222 (`58d1152`, P08/P09 offline fault tests, 1 test file) as `efaa89d`, and #220 (`6307f68`, P06/P07 Amendments 4–11 + recording workflow) as `c12e41c`, via `gh pr merge --merge` in that order. All reviewed heads merged byte-identical (verified ancestors of `main`); no conflicts.
+- Review: independent AI review (fresh sessions, labeled "AI review" on each PR), all three APPROVE — #220: 226 research tests, Amendment-4 economics exact, live gate proven refusing, no scoring in record path; #221: docs-only, claims verified vs merged code; #222: 7/7 hermetic fault tests with real recovery assertions. Full records in PR comments; heads unchanged at merge, so verdicts stand.
+- Same owner Dashboard exception as Merge note 1 (red on all three heads, all other CI green, no GitHub gate bypassed). Consequences of #220 landing: `btc-shadow-dry-run.yml` schedule is now registered on `main` (collection-only, read-only — its design purpose); `btc-shadow-record.yml` schedule likewise registered but live stays triple-gated and UNARMED (no `SHADOW_LIVE_ARMED` var); the push-trigger rehearsal path is fixture-only.
+- No row flips in this note: P06 needs forward observations (first signal 2026-12-04); P07 closeout needs a criteria check on the merged base; P08/P09 need integrated (non-fixture) evidence. Count unchanged: 4/10.
+
 ## Finish line
 
 An owner starts one supervised release on an explicitly approved fake-funds venue profile. During the session, AdvisorAI independently collects approved data, generates or abstains on decisions, routes only approved paper orders through the deterministic RiskKernel and OMS, reconciles with the venue, records outcomes, and stops safely or alerts on faults. Its bounded research jobs can find papers and code, implement candidates, replay them independently, and save both positive and negative results. New strategies, models, venues and permissions are never self-approved.
