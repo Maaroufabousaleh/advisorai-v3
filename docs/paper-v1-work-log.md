@@ -239,3 +239,58 @@ Credentials and raw private data never enter this log.
   integrated revision → P09 integrated evidence → campaign revision pin.
 - Docs branch: `omp/paper-v1-docs` (work log + P10 prep), pushed, no PR
   yet — PR once the next checkpoint lands or on owner request.
+
+## 2026-11-18 — P06 hosted recording workflow prepared + rehearsed (live NOT enabled)
+
+- Branch `omp/btc-shadow-accounting` (#220 line), commits `3cb4011`
+  (record workflow + script + 5 tests), `bcea270` (push-triggered
+  rehearsal path), `3d4fbf9` (run-2 trigger). #215/#216 untouched.
+- `.github/workflows/btc-shadow-record.yml`: rehearsal mode (fixture,
+  any branch) + live mode (qualified snapshot + forward + recording).
+  Live is triple-gated — default branch AND `SHADOW_LIVE_ARMED==true`
+  repo variable AND script `--allow-live` + env — and unreachable now.
+  No scoring in either mode; artifacts retained 365d.
+- Why push-triggered: `workflow_dispatch` 404s for workflows not yet
+  registered on the default branch (proven 3x), and this file cannot
+  reach main before #215 (script imports `btc_shadow_job`). Pushes
+  touching `.github/shadow-rehearsal.json` run the identical rehearsal
+  job with dates/stamp/prior from the file. Schedule/dispatch paths
+  remain for post-merge use.
+- Hosted rehearsal (ubuntu-latest, persistent artifacts):
+  - Run 1 (#44213457255): 2024-03-05 fresh chain, success; decisions +
+    state byte-identical to the local run; forward hash `88a3eacb…f42f5`.
+  - Missed run: no dispatch for 03-06. Run 2 (#44213609731, pinned
+    prior 44213457255): 03-06 quarantined/missed, 03-07 scored long,
+    03-05 fill observed at 209.0 (matches offline economics),
+    `prior_report_sha256` linked.
+  - Restart: `gh run rerun 44213609731` → byte-identical decisions,
+    fills, state, report.
+- Offline: 226/226 `tests/research/` green; ruff clean. New tests pin
+  the two-run chain, missed day, idempotent rerun, tampered-prior
+  refusal, and live-mode refusal without flag+arm.
+- **Activation (owner step, NOT done):** after this file is merged to
+  the default branch and P04 has landed, set repo variable
+  `SHADOW_LIVE_ARMED=true` (`gh variable set SHADOW_LIVE_ARMED -b true`
+  or web UI Settings → Variables). The next 01:30 UTC schedule then
+  records live. Until then every live trigger fails loudly at the gate.
+
+## 2026-11-18 — Independent AI review of #215/#216 (both APPROVE, merges BLOCKED on CI)
+
+- Owner accepted independent AI review (fresh reviewer sessions, not
+  the implementers) in place of human review. Heads confirmed unchanged
+  at review time: #215 `7b05ce6`, #216 `b64d5c0`.
+- #215 verdict APPROVE: 189 tests; fixture/replay values exact;
+  multi-asset scope with venue boundaries; both code-scanning findings
+  addressed in live paths with regression tests. Full record:
+  PR #215 comment 6965903294.
+- #216 verdict APPROVE: P03 DONE re-certified from existing artifacts
+  only (no reruns/orders) — manifest hash, validator exit 0 18/18,
+  ledger fill chain all match. Full record: PR #216 comment 6965905394.
+- Verdicts also recorded in the tracker on this branch (seeded from
+  `b64d5c0`, the newest tracker state; rows unchanged).
+- **Merge decision: NOT merged.** `main` has no branch protection, so
+  no eligible-account approval is required — but both PRs fail the
+  Dashboard build check (upstream picomatch advisory, no patched
+  release), and the merge instruction requires green CI without
+  waiving the audit. Sole blocker: red Dashboard check. Verdicts lapse
+  if either head moves (recheck then).
