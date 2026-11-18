@@ -1,8 +1,12 @@
 # BTCUSDT forward-shadow recording (prepared; live NOT enabled).
 #
 # One workflow, two modes sharing the same recording code path:
-# - rehearsal (workflow_dispatch, mode=rehearsal): deterministic March-2024
-#   fixture, fixed receipts. Safe on any branch; this is the rehearsal path.
+# - rehearsal (dispatch with mode=rehearsal, or a push touching
+#   .github/shadow-rehearsal.json): deterministic March-2024 fixture, fixed
+#   receipts. Safe on any branch; this is the rehearsal path. The push
+#   trigger exists because GitHub only dispatches workflows registered on
+#   the default branch; it reads its dates/stamp from the trigger file and
+#   otherwise runs the identical job. Fixture only — no live input path.
 # - live (schedule, or dispatch with mode=live): qualified snapshot +
 #   read-only forward segment, then recording. TRIPLE-GATED and currently
 #   unreachable: the job refuses unless (1) the run is on the default
@@ -12,10 +16,10 @@
 #   set. No scoring happens in either mode; artifacts only.
 #
 # State continuity: each run downloads the previous successful run's
-# artifact as its prior state (explicit prior_run_id input, else latest
-# on the same branch). The script re-verifies the prior report hashes,
-# seeds from it, asserts append-only, and links the prior report hash —
-# a tampered or mixed-up prior fails the run instead of corrupting logs.
+# artifact as its prior state (explicit prior_run_id, else latest
+# successful run on the same branch). The script re-verifies the prior
+# report hashes, seeds from it, asserts append-only, and links the prior
+# report hash — a tampered or mixed-up prior fails the run.
 #
 # Activation (owner decision, NOT done): set the SHADOW_LIVE_ARMED repo
 # variable to "true" AFTER this file is merged to the default branch and
@@ -45,6 +49,9 @@ on:
         description: "Prior run id for state continuity (default: latest)"
         required: false
         default: ""
+  push:
+    paths:
+      - .github/shadow-rehearsal.json
 
 permissions:
   contents: read
@@ -57,7 +64,7 @@ concurrency:
 jobs:
   record-rehearsal:
     name: Record rehearsal day (fixture)
-    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'rehearsal'
+    if: (github.event_name == 'workflow_dispatch' && inputs.mode == 'rehearsal') || github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -69,21 +76,42 @@ jobs:
           version: 0.13.7
           python-version: "3.12"
       - run: uv sync --locked
+      - name: Resolve parameters
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            uv run --locked python - <<'EOF'
+          import json, os
+          params = json.load(open(".github/shadow-rehearsal.json"))
+          with open(os.environ["GITHUB_ENV"], "a") as handle:
+              handle.write(f"dates={params['dates']}\n")
+              handle.write(f"stamp_ms={params['recorded_at_ms']}\n")
+              handle.write(f"prior_run_id={params.get('prior_run_id', '')}\n")
+              handle.write(f"fresh_chain={'true' if params.get('fresh_chain') else 'false'}\n")
+          EOF
+          else
+            {
+              echo "dates=${{ inputs.dates }}"
+              echo "stamp_ms=${{ inputs.recorded_at_ms }}"
+              echo "prior_run_id=${{ inputs.prior_run_id }}"
+              echo "fresh_chain=false"
+            } >> "$GITHUB_ENV"
+          fi
       - name: Download prior state (if any)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          PRIOR="${{ inputs.prior_run_id }}"
-          if [ -z "$PRIOR" ]; then
+          PRIOR="$prior_run_id"
+          if [ -z "$PRIOR" ] && [ "$fresh_chain" != "true" ]; then
             PRIOR=$(gh run list --workflow btc-shadow-record.yml \
               --branch "${{ github.ref_name }}" --status success --limit 1 \
-              --json databaseId --jq '.[0].databaseId // empty')
+              --json databaseId --jq '.[0].databaseId // empty') \
+              || { echo "prior lookup failed; pin prior_run_id explicitly"; exit 1; }
           fi
           if [ -n "$PRIOR" ]; then
             echo "prior_run_id=$PRIOR" >> "$GITHUB_ENV"
             gh run download "$PRIOR" --name shadow-record-state --dir /tmp/prior-state
           else
-            echo "No prior successful run; starting a fresh chain."
+            echo "fresh_chain=true; starting a new chain with no prior."
           fi
       - name: Record rehearsal day
         env:
@@ -94,8 +122,8 @@ jobs:
           # shellcheck disable=SC2086
           uv run --locked python scripts/run_shadow_record_day.py \
             --mode rehearsal \
-            --dates "${{ inputs.dates }}" \
-            --recorded-at-ms "${{ inputs.recorded_at_ms }}" \
+            --dates "$dates" \
+            --recorded-at-ms "$stamp_ms" \
             --state-dir /tmp/shadow-state $PRIOR_ARG
       - name: Upload evidence
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
@@ -188,7 +216,8 @@ jobs:
           if [ -z "$PRIOR" ]; then
             PRIOR=$(gh run list --workflow btc-shadow-record.yml \
               --branch "${{ github.ref_name }}" --status success --limit 1 \
-              --json databaseId --jq '.[0].databaseId // empty')
+              --json databaseId --jq '.[0].databaseId // empty') \
+              || { echo "prior lookup failed; pin prior_run_id explicitly"; exit 1; }
           fi
           if [ -n "$PRIOR" ]; then
             echo "prior_run_id=$PRIOR" >> "$GITHUB_ENV"
