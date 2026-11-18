@@ -355,3 +355,19 @@ Credentials and raw private data never enter this log.
   P08/P09 need integrated evidence. Count stays 4/10.
 - Live schedules now registered on `main` (dry-run collection-only by
   design; record-live triple-gated, UNARMED).
+
+## 2026-11-18 — P07 DONE on merged base (`81db5f4`)
+
+- Live re-verification on `main@3847694` (`/tmp/p07main`, fixture only):
+  run 1 → 2 accepted + 1 rejected (FIXC), 3 exp / 2 val rows; rerun
+  identical ids, stable rows; crash resume (dropped `experiments` step)
+  identical with rejection preserved; retrieval `KEEP FIXA/FIXB`,
+  `DROP FIXC: ValueError: …no eligible month-end cutoffs…`.
+- Tests 17/17 on `3847694` (`test_p07_rehearsal/session/registry_dsl`,
+  incl. cancel→memory→resume). Isolation: zero secret/order refs in
+  workflow/jobs; `var/advisorai` exclusion enforced
+  (`run_research_workflow.py:79-83`); separate research SQLite files.
+- Hermes RECORDED DEFERRED for PAPER-V1 (tracker bullet): Hermes path
+  refuses without an admitted Phase 8 gate; no admission exists; the
+  verified worker path never invokes it.
+- Tracker on `main` at `81db5f4`: P07 DONE, count 5/10.
