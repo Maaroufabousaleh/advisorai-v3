@@ -294,3 +294,20 @@ Credentials and raw private data never enter this log.
   release), and the merge instruction requires green CI without
   waiving the audit. Sole blocker: red Dashboard check. Verdicts lapse
   if either head moves (recheck then).
+
+## 2026-11-18 — #215 + #216 MERGED per owner override (green CI excepted)
+
+- Owner ordered the merge without green CI. #216 (`b64d5c0`) merged as
+  `f5d053b`, #215 (`7b05ce6`) as `536c517` (local merge into a `main`
+  worktree, pushed; reviewed heads byte-identical ancestors, AI verdicts
+  stand). Only conflict: `.gitignore` (both append) → union in the merge
+  commit. Merged tree re-verified: 189/189 `tests/research/` with the
+  reviewer's extras env (plain env skips/fails lightgbm tests —
+  environmental, also true on the reviewed head).
+- Docs note: tracker on `main` at `d8b5a5d` — Merge-note section (verdict
+  summary, override, Dashboard exception, re-audit trigger), P04 row
+  DONE-with-override, count 3/10, P04-MERGED evidence bullet. P05 stays
+  OPEN pending re-verification of its accepted evidence on `536c517`.
+- The tracker copy seeded on this docs branch is SUPERSEDED by `main`;
+  `main` is canonical from here on. PR comments posted on both PRs.
+- Next runnable: P05 closeout verification on the merged base.
