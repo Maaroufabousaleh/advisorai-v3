@@ -334,3 +334,24 @@ Credentials and raw private data never enter this log.
   edit --base` exits 1 with a swallowed error on this repo).
 - #220 diff vs `main` is now exactly Amendments 4–11 + the recording
   workflow. Still draft; forward data gates P06, review gates the merge.
+
+## 2026-11-18 — #220 + #221 + #222 MERGED (AI-reviewed, Dashboard excepted)
+
+- Owner ordered all three merged correctly. Landings first: #221
+  (`ee79d74` docs-only, stale vs new `main`) merged `main@f499709`
+  cleanly → `8b6b173`; #222 merged `main` → `58d1152` (7/7 new tests +
+  301 session/execution/runtime green, ruff clean).
+- Fresh AI reviews, all APPROVE, no findings: #220@`6307f68` (226
+  tests, Amendment-4 economics, live-gate refusal, no scoring);
+  #221@`8b6b173` (9 md files, claims verified); #222@`58d1152` (7
+  hermetic fault tests, real assertions). Verdicts posted on each PR.
+- Merged via `gh pr merge --merge` in order #221 → #222 → #220:
+  `ee98795`, `efaa89d`, `c12e41c` (#220 marked ready first — `gh pr
+  ready` works; only `gh pr edit --base` is broken on this repo).
+  Reviewed heads verified ancestors; all other CI green, Dashboard red
+  under the same owner exception.
+- Tracker Merge note 2 on `main` at `3847694`. No row flips: P06 needs
+  12-04 forward data; P07 needs a criteria check on the merged base;
+  P08/P09 need integrated evidence. Count stays 4/10.
+- Live schedules now registered on `main` (dry-run collection-only by
+  design; record-live triple-gated, UNARMED).
