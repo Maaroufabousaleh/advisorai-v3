@@ -391,3 +391,13 @@ Credentials and raw private data never enter this log.
 - This PR also lands the work log + P10 campaign prep on `main`
   (docs-branch tracker copy stays behind — `main` is canonical).
   Later log entries go directly to `main`.
+
+## 2026-11-18 — #223 MERGED (P08 prep + docs on `main`)
+
+- Fresh AI review APPROVE at `aeae651` (no findings; reviewer
+  independently reproduced the prep run and the config hash). All CI
+  green except Dashboard (excepted). Merged as `9d8b6a0`; reviewed head
+  verified ancestor.
+- Tracker P08 PREP bullet on `main` (this commit): prep pin + gap
+  (P06 strategy approval + integrated P09 evidence). Row stays OPEN,
+  count stays 5/10. `omp/paper-v1-docs` retired (frozen, preserved).
