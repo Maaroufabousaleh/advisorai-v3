@@ -472,3 +472,14 @@ Credentials and raw private data never enter this log.
   run corrected it: per-cycle empty reconciliations are the expected
   evidence, not orders.)
 - Rows stay OPEN. No tracker row change.
+
+## 2026-11-20 — Prep-script regression test (same branch/PR #224)
+
+- New `tests/session/test_p08_prep_script.py`: black-box runs of
+  `run_p08_prep_session.py` in both modes (`--cycles 1` default and
+  `+ --route-cycles 1`), asserting the P10-shaped report (abstain
+  counts, route counts, reconciled flags, order ids, clean end,
+  leases released). Locks the rehearsal the owner will run so script
+  rot is caught by CI, not at rehearsal time.
+- Verification: 2 passed in ~15s; `ruff check` + `format --check`
+  clean. Rows stay OPEN. No tracker row change.
