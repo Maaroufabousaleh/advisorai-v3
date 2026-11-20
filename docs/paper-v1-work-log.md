@@ -456,3 +456,19 @@ Credentials and raw private data never enter this log.
   abstained, clean. `ruff check` + `format --check` clean.
 - Row stays OPEN (needs P06-approved strategy + integrated P09
   evidence). No tracker row change.
+
+## 2026-11-20 — Owner-level stale-data abstention test (same branch/PR #224)
+
+- New `tests/session/test_owner_stale_data_abstains.py`: the integrated
+  owner stack (qualification scenario: passing council + LONG stance that
+  would route) served a stale-flagged snapshot abstains every cycle as
+  `data_quality:stale` with traceable ids, zero order ids, no risk
+  decision; the ORDER namespace holds only empty `reconciliation_recorded`
+  events, venue submissions stay 0, and the supervised session stops
+  clean (code 0). Covers the P10 matrix's stale-source cell through the
+  integrated app, not a bare runtime.
+- Verification: 1 passed; `ruff check` + `format --check` clean.
+  (Assertion drafted too strong first — empty ORDER namespace — and the
+  run corrected it: per-cycle empty reconciliations are the expected
+  evidence, not orders.)
+- Rows stay OPEN. No tracker row change.
