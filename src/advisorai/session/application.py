@@ -429,6 +429,11 @@ class PaperOwnerApplication:
                 decision_interval_seconds=3600,
                 run_id="advisorai-owner-paper",
                 max_order_count_per_cycle=1,
+                # Rehearsal-only approval: this scaffold wires the local
+                # reference adapter, so it approves exactly that adapter name.
+                # A reviewed PAPER-V1 release must pin the P06-approved
+                # strategy adapter here instead; nothing self-approves.
+                approved_strategy_adapter="owner-paper-reference-v1",
             ),
             snapshot_provider=self.adapters.data.snapshot_at,
             market_provider=self.adapters.data.market_at,

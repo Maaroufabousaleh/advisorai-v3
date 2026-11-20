@@ -17,6 +17,7 @@ from advisorai.contracts import (
     TargetPortfolio,
     TargetPosition,
 )
+from advisorai.decision import DecisionProposal, DecisionStance
 from advisorai.execution import (
     AccountLedger,
     AccountState,
@@ -80,6 +81,20 @@ def _runtime(
         created_at=cutoff,
         gate=gate,
     )
+    proposal = DecisionProposal(
+        mission_id=decision.mission_id,
+        snapshot_id=snapshot.artifact_id,
+        model_artifact_id=uuid4(),
+        adapter_name="test-direct-v1",
+        stance=DecisionStance.FLAT if admitted else DecisionStance.ABSTAIN,
+        probabilities={"flat": Decimal("1")} if admitted else {},
+        calibrated_confidence=Decimal("0.5") if admitted else Decimal("0"),
+        horizon="1h",
+        uncertainty=Decimal("0.5") if admitted else Decimal("1"),
+        evidence_ids=decision.evidence_ids,
+        expires_at=cutoff + timedelta(hours=1),
+        abstained=not admitted,
+    )
     account = AccountState(cash=Decimal("1000"), as_of=cutoff)
     policy = RiskPolicy(
         policy_version="risk-v1",
@@ -91,12 +106,14 @@ def _runtime(
     learning = PaperLearningLoop(ledgers) if with_learning else None
     orders = OrderManager(ledgers, adapter or PaperVenueAdapter(venue="paper"))
     runtime = PaperRuntime(
-        config=PaperRuntimeConfig(),
+        config=PaperRuntimeConfig(approved_strategy_adapter="test-direct-v1"),
         snapshot_provider=lambda requested: snapshot,
         market_provider=lambda _: RiskMarketState(
             marks={"BTC": Decimal("100")}, venue_healthy={"BTC": True}
         ),
-        decision_builder=lambda *_: DecisionPipelineResult(decision=decision, risk_decision=None),
+        decision_builder=lambda *_: DecisionPipelineResult(
+            decision=decision, risk_decision=None, proposal=proposal
+        ),
         account=account,
         risk_policy=policy,
         orders=orders,

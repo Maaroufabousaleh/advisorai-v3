@@ -273,6 +273,7 @@ class AdvisorService:
                 mission_id=request.mission_id,
                 snapshot_id=snapshot.artifact_id,
                 model_artifact_id=fallback_artifact.artifact_id,
+                adapter_name=fallback_artifact.adapter_name,
                 stance=DecisionStance.ABSTAIN,
                 calibrated_confidence=Decimal("0"),
                 score=Decimal("0"),

@@ -401,3 +401,35 @@ Credentials and raw private data never enter this log.
 - Tracker P08 PREP bullet on `main` (this commit): prep pin + gap
   (P06 strategy approval + integrated P09 evidence). Row stays OPEN,
   count stays 5/10. `omp/paper-v1-docs` retired (frozen, preserved).
+
+## 2026-11-20 — P08 strategy-approval gate (branch `omp/paper-v1-strategy-gate`, row OPEN)
+
+- Product enforcement that unapproved research outputs cannot reach OMS:
+  `DecisionProposal.adapter_name` provenance (populated from the authoring
+  artifact in both `ReferenceDecisionAdapter` paths + the service fallback)
+  plus an `approved_strategy_adapter` gate in `PaperRuntime.run_once`
+  before RiskKernel/OMS. Fail-closed default: `None` approves nothing;
+  a missing or mismatched proposal abstains as
+  `unapproved_strategy:<observed>` with decision/snapshot ids recorded,
+  zero orders, and no risk decision. The name is ledger-visible via the
+  existing `proposal_recorded` events.
+- Rehearsal scaffold (`session/application.py`) pins
+  `approved_strategy_adapter="owner-paper-reference-v1"` explicitly,
+  documented as rehearsal-only — NOT a strategy approval. A reviewed
+  release must pin the P06-approved adapter name instead.
+- Tests: new `tests/session/test_strategy_approval_gate.py` (5 tests:
+  approved routes with traceable ids; unapproved abstains with zero
+  orders and clean reconcile; `None` denies routing; missing proposal
+  fails closed; blocked-cycle rerun returns the prior without orders).
+  Updated the `test_paper_runtime` helper (proposal + pin), pinned the
+  fault-recovery/e2e builders, and fixed the `test_proposal` negative
+  constructions for the new required field.
+- Verification on `34e53a5` + gate: new + proposal 9 passed;
+  session/runtime/decision/api 262 passed, 1 skipped (one subprocess
+  rollback `TimeoutExpired` under full-suite load; isolated rerun green
+  in 95s); research/learning 233 passed; `ruff check` + `ruff format
+  --check` clean on all touched files; `run_p08_prep_session.py` on
+  the gated tree: 6/6 abstained, clean end, leases released.
+- Row stays OPEN: acceptance still needs the P06-approved strategy
+  (forward data from 2026-12-04) and integrated (non-fixture) P09
+  fault evidence on the final revision. No tracker row change.

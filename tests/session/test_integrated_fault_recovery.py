@@ -117,7 +117,9 @@ class _Session:
         self.adapter = PaperVenueAdapter()
         self.orders = OrderManager(self.ledgers, self.adapter)
         self.runtime = PaperRuntime(
-            config=PaperRuntimeConfig(run_id=f"fault-{name}"),
+            config=PaperRuntimeConfig(
+                run_id=f"fault-{name}", approved_strategy_adapter="reference-long-v1"
+            ),
             snapshot_provider=lambda cutoff: Snapshot(as_of=cutoff, purpose="fault-fixture"),
             market_provider=lambda snapshot: self.market,
             decision_builder=self._decide,
@@ -352,7 +354,9 @@ def test_restart_reconciles_open_orders_before_new_action(tmp_path):
     assert clean.decisions == ()
 
     runtime = PaperRuntime(
-        config=PaperRuntimeConfig(run_id="fault-restart"),
+        config=PaperRuntimeConfig(
+            run_id="fault-restart", approved_strategy_adapter="reference-long-v1"
+        ),
         snapshot_provider=lambda cutoff: Snapshot(as_of=cutoff, purpose="fault-fixture"),
         market_provider=lambda snapshot: session.market,
         decision_builder=session._decide,
