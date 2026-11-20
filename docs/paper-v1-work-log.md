@@ -401,3 +401,85 @@ Credentials and raw private data never enter this log.
 - Tracker P08 PREP bullet on `main` (this commit): prep pin + gap
   (P06 strategy approval + integrated P09 evidence). Row stays OPEN,
   count stays 5/10. `omp/paper-v1-docs` retired (frozen, preserved).
+
+## 2026-11-20 — P08 strategy-approval gate (branch `omp/paper-v1-strategy-gate`, row OPEN)
+
+- Product enforcement that unapproved research outputs cannot reach OMS:
+  `DecisionProposal.adapter_name` provenance (populated from the authoring
+  artifact in both `ReferenceDecisionAdapter` paths + the service fallback)
+  plus an `approved_strategy_adapter` gate in `PaperRuntime.run_once`
+  before RiskKernel/OMS. Fail-closed default: `None` approves nothing;
+  a missing or mismatched proposal abstains as
+  `unapproved_strategy:<observed>` with decision/snapshot ids recorded,
+  zero orders, and no risk decision. The name is ledger-visible via the
+  existing `proposal_recorded` events.
+- Rehearsal scaffold (`session/application.py`) pins
+  `approved_strategy_adapter="owner-paper-reference-v1"` explicitly,
+  documented as rehearsal-only — NOT a strategy approval. A reviewed
+  release must pin the P06-approved adapter name instead.
+- Tests: new `tests/session/test_strategy_approval_gate.py` (5 tests:
+  approved routes with traceable ids; unapproved abstains with zero
+  orders and clean reconcile; `None` denies routing; missing proposal
+  fails closed; blocked-cycle rerun returns the prior without orders).
+  Updated the `test_paper_runtime` helper (proposal + pin), pinned the
+  fault-recovery/e2e builders, and fixed the `test_proposal` negative
+  constructions for the new required field.
+- Verification on `34e53a5` + gate: new + proposal 9 passed;
+  session/runtime/decision/api 262 passed, 1 skipped (one subprocess
+  rollback `TimeoutExpired` under full-suite load; isolated rerun green
+  in 95s); research/learning 233 passed; `ruff check` + `ruff format
+  --check` clean on all touched files; `run_p08_prep_session.py` on
+  the gated tree: 6/6 abstained, clean end, leases released.
+- Row stays OPEN: acceptance still needs the P06-approved strategy
+  (forward data from 2026-12-04) and integrated (non-fixture) P09
+  fault evidence on the final revision. No tracker row change.
+
+## 2026-11-20 — P08 prep route-rehearsal phase (same branch/PR #224)
+
+- `run_p08_prep_session.py` gains `--route-cycles N` (default 0,
+  abstain-only behavior unchanged): a third post-restart phase with
+  LONG stance through the app's passing fixture council
+  (`PaperOwnerApplication._council`, `RECOMMENDATION` mission) and
+  `reference-v1` explicitly approved — rehearsal-only, NOT a strategy
+  approval. Exercises `orders_routed` plus cancel → acknowledge →
+  reconcile to a verified clean stop (`SessionStopChecks` against the
+  live route runtime; default checks force UNCLEAN once any order
+  exists). Builder parameterized (council/stance/mission/approval/
+  risk limits); route phase uses supported `max_*_notional` limits
+  (the abstain legs' `gross` name is never risk-evaluated).
+- Debugging trail kept: TRADE mission runs only the initial roles
+  (gate `source_families:1<2`), RECOMMENDATION runs the full waves;
+  `unsupported_hard_limit:gross` named the exact limit-name contract.
+- Verification: `--cycles 3 --route-cycles 2` → 6 abstained + 2
+  orders_routed with risk decisions, every cycle reconciled, all OMS
+  orders closed, clean end, leases released; default mode still 6
+  abstained, clean. `ruff check` + `format --check` clean.
+- Row stays OPEN (needs P06-approved strategy + integrated P09
+  evidence). No tracker row change.
+
+## 2026-11-20 — Owner-level stale-data abstention test (same branch/PR #224)
+
+- New `tests/session/test_owner_stale_data_abstains.py`: the integrated
+  owner stack (qualification scenario: passing council + LONG stance that
+  would route) served a stale-flagged snapshot abstains every cycle as
+  `data_quality:stale` with traceable ids, zero order ids, no risk
+  decision; the ORDER namespace holds only empty `reconciliation_recorded`
+  events, venue submissions stay 0, and the supervised session stops
+  clean (code 0). Covers the P10 matrix's stale-source cell through the
+  integrated app, not a bare runtime.
+- Verification: 1 passed; `ruff check` + `format --check` clean.
+  (Assertion drafted too strong first — empty ORDER namespace — and the
+  run corrected it: per-cycle empty reconciliations are the expected
+  evidence, not orders.)
+- Rows stay OPEN. No tracker row change.
+
+## 2026-11-20 — Prep-script regression test (same branch/PR #224)
+
+- New `tests/session/test_p08_prep_script.py`: black-box runs of
+  `run_p08_prep_session.py` in both modes (`--cycles 1` default and
+  `+ --route-cycles 1`), asserting the P10-shaped report (abstain
+  counts, route counts, reconciled flags, order ids, clean end,
+  leases released). Locks the rehearsal the owner will run so script
+  rot is caught by CI, not at rehearsal time.
+- Verification: 2 passed in ~15s; `ruff check` + `format --check`
+  clean. Rows stay OPEN. No tracker row change.
