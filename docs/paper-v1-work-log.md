@@ -433,3 +433,26 @@ Credentials and raw private data never enter this log.
 - Row stays OPEN: acceptance still needs the P06-approved strategy
   (forward data from 2026-12-04) and integrated (non-fixture) P09
   fault evidence on the final revision. No tracker row change.
+
+## 2026-11-20 — P08 prep route-rehearsal phase (same branch/PR #224)
+
+- `run_p08_prep_session.py` gains `--route-cycles N` (default 0,
+  abstain-only behavior unchanged): a third post-restart phase with
+  LONG stance through the app's passing fixture council
+  (`PaperOwnerApplication._council`, `RECOMMENDATION` mission) and
+  `reference-v1` explicitly approved — rehearsal-only, NOT a strategy
+  approval. Exercises `orders_routed` plus cancel → acknowledge →
+  reconcile to a verified clean stop (`SessionStopChecks` against the
+  live route runtime; default checks force UNCLEAN once any order
+  exists). Builder parameterized (council/stance/mission/approval/
+  risk limits); route phase uses supported `max_*_notional` limits
+  (the abstain legs' `gross` name is never risk-evaluated).
+- Debugging trail kept: TRADE mission runs only the initial roles
+  (gate `source_families:1<2`), RECOMMENDATION runs the full waves;
+  `unsupported_hard_limit:gross` named the exact limit-name contract.
+- Verification: `--cycles 3 --route-cycles 2` → 6 abstained + 2
+  orders_routed with risk decisions, every cycle reconciled, all OMS
+  orders closed, clean end, leases released; default mode still 6
+  abstained, clean. `ruff check` + `format --check` clean.
+- Row stays OPEN (needs P06-approved strategy + integrated P09
+  evidence). No tracker row change.
