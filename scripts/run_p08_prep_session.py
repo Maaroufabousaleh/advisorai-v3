@@ -10,6 +10,11 @@ model is the `reference` adapter, not an approved strategy (P06 open), and
 inputs are fixtures. Asserts only structural invariants: terminal stages,
 no duplicate order ids, reconciliation clean after every cycle, no open
 orders at the end, leases released, restart links the prior end.
+Optional `--route-cycles N` adds a third phase after the restart: LONG-stance
+decisions through a passing fixture council with the reference adapter
+explicitly approved (rehearsal-only; NOT a strategy approval), exercising
+`orders_routed`/`risk_rejected` plus cancel → acknowledge → reconcile to a
+clean close. Default 0 preserves the abstain-only rehearsal.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from uuid import UUID
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
@@ -36,7 +42,11 @@ from advisorai.contracts import (  # noqa: E402
     RiskPolicy,
     Snapshot,
 )
-from advisorai.decision import DecisionModelArtifact, ReferenceDecisionAdapter  # noqa: E402
+from advisorai.decision import (  # noqa: E402
+    DecisionModelArtifact,
+    DecisionStance,
+    ReferenceDecisionAdapter,
+)
 from advisorai.execution import (  # noqa: E402
     AccountState,
     OrderManager,
@@ -45,7 +55,8 @@ from advisorai.execution import (  # noqa: E402
 )
 from advisorai.ledger import SqliteLedgers  # noqa: E402
 from advisorai.runtime import PaperRuntime, PaperRuntimeConfig  # noqa: E402
-from advisorai.session import SessionSupervisor  # noqa: E402
+from advisorai.session import SessionStopChecks, SessionSupervisor  # noqa: E402
+from advisorai.session.application import PaperOwnerApplication  # noqa: E402
 
 STRATEGY_LABEL = "reference-v1-NOT-APPROVED (P06 open; rehearsal only)"
 TERMINAL_STAGES = {"abstained", "no_trade", "orders_routed", "risk_rejected"}
@@ -64,7 +75,19 @@ def _ledgers_and_supervisor(state_dir: Path, label: str, code_hash: str, config_
     return supervisor, ledgers, ledger_path
 
 
-def _runtime(ledgers, run_id: str, code_hash: str, config_hash: str):
+def _runtime(
+    ledgers,
+    run_id: str,
+    code_hash: str,
+    config_hash: str,
+    *,
+    council=None,
+    stance=None,
+    mission_kind=MissionKind.TRADE,
+    user_text="p08 prep session",
+    approved_strategy_adapter: str | None = None,
+    risk_limits: tuple | None = None,
+):
     btc = InstrumentIdentity(canonical_id="BTC", asset_class=AssetClass.CRYPTO, venue="paper")
     cutoff = datetime(2026, 8, 5, 15, 0, tzinfo=UTC)
     snapshot = Snapshot(as_of=cutoff, purpose="p08-prep-fixture")
@@ -78,24 +101,32 @@ def _runtime(ledgers, run_id: str, code_hash: str, config_hash: str):
         snapshot_id=snapshot.artifact_id,
     )
     service = AdvisorService(
-        EvidenceCouncil({}),
+        council if council is not None else EvidenceCouncil({}),
         ledgers,
-        decision_model=ReferenceDecisionAdapter(artifact),
+        decision_model=ReferenceDecisionAdapter(artifact, directional_stance=stance),
     )
     assert isinstance(service.decision_model, ReferenceDecisionAdapter)
     policy = RiskPolicy(
         policy_version="risk-v1",
         effective_at=cutoff,
-        hard_limits=(RiskLimit(name="gross", limit=Decimal("50000"), unit="USD"),),
+        hard_limits=(
+            risk_limits
+            if risk_limits is not None
+            else (RiskLimit(name="gross", limit=Decimal("50000"), unit="USD"),)
+        ),
         approved_by="owner",
     )
     orders = OrderManager(ledgers, PaperVenueAdapter())
     return PaperRuntime(
-        config=PaperRuntimeConfig(run_id=run_id, environment="paper"),
+        config=PaperRuntimeConfig(
+            run_id=run_id,
+            environment="paper",
+            approved_strategy_adapter=approved_strategy_adapter,
+        ),
         snapshot_provider=lambda cutoff: snapshot,
         market_provider=lambda snapshot: market,
         decision_builder=lambda snapshot, account, market: service.build_decision(
-            request=MissionRequest(kind=MissionKind.TRADE, user_text="p08 prep session"),
+            request=MissionRequest(kind=mission_kind, user_text=user_text),
             snapshot=snapshot,
             account=account,
             market=market,
@@ -113,6 +144,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state-dir", required=True, help="Out-of-tree evidence root.")
     parser.add_argument("--cycles", type=int, default=3, help="Cycles per leg (pre/post restart).")
+    parser.add_argument(
+        "--route-cycles",
+        type=int,
+        default=0,
+        help=(
+            "Optional third phase: LONG-stance route rehearsal with the "
+            "reference adapter explicitly approved (rehearsal-only, NOT a "
+            "strategy approval). Exercises orders_routed/risk_rejected plus "
+            "cancel-to-clean through the same stack. Default 0 preserves the "
+            "abstain-only rehearsal."
+        ),
+    )
     args = parser.parse_args()
     state_dir = Path(args.state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -174,17 +217,90 @@ def main() -> None:
             assert start2.prior_end_record_id == end.artifact_id
             assert recovery.recovery_mode.value == "normal", recovery.recovery_mode.value
             supervisor = supervisor2
+    route_cycles: list[dict] = []
+    route_order_ids: list[str] = []
+    if args.route_cycles > 0:
+        # Rehearsal-only route leg: the reference adapter is explicitly
+        # approved here so the run exercises routing, risk decisions, and
+        # cancel-to-clean. This is NOT a strategy approval (P06 open).
+        route_runtime = _runtime(
+            ledgers,
+            "p08-prep-route-run",
+            code_hash,
+            config_hash,
+            council=PaperOwnerApplication._council(),
+            stance=DecisionStance.LONG,
+            mission_kind=MissionKind.RECOMMENDATION,
+            user_text="scheduled owner paper evaluation",
+            approved_strategy_adapter="reference-v1",
+            risk_limits=(
+                RiskLimit(name="max_gross_notional", limit=Decimal("500000"), unit="USD"),
+                RiskLimit(name="max_order_notional", limit=Decimal("500000"), unit="USD"),
+            ),
+        )
+        route_base = base_cutoff + timedelta(hours=2 * args.cycles)
+        for i in range(args.route_cycles):
+            cutoff = route_base + timedelta(hours=i)
+            cycle = route_runtime.run_once(cutoff)
+            assert cycle.stage.value in TERMINAL_STAGES, cycle.stage.value
+            recon = route_runtime.reconcile_once()
+            assert recon.reconciled, recon.discrepancies
+            order_ids.extend(str(item) for item in cycle.order_ids)
+            route_order_ids.extend(str(item) for item in cycle.order_ids)
+            route_cycles.append(
+                {
+                    "leg": "route",
+                    "cycle_id": str(cycle.cycle_id),
+                    "stage": cycle.stage.value,
+                    "decision_id": str(cycle.decision_id) if cycle.decision_id else None,
+                    "risk_decision_id": str(cycle.risk_decision_id)
+                    if cycle.risk_decision_id
+                    else None,
+                    "order_ids": [str(item) for item in cycle.order_ids],
+                    "reconciliation_id": str(recon.artifact_id),
+                    "reconciled": recon.reconciled,
+                }
+            )
+        # Close every routed order: cancel → acknowledge → reconcile, so the
+        # session ends with no open OMS orders, then verify clean reconcile.
+        for item in route_cycles:
+            for raw in item["order_ids"]:
+                order_id = UUID(raw)
+                route_runtime.orders.cancel(order_id)
+                route_runtime.orders.acknowledge_cancel(order_id)
+                route_runtime.orders.reconcile(order_id)
+        closing = route_runtime.reconcile_once()
+        assert closing.reconciled, closing.discrepancies
+        assert all(
+            order.state.value == "reconciled" for order in route_runtime.orders.orders.values()
+        ), [order.state.value for order in route_runtime.orders.orders.values()]
     assert len(set(order_ids)) == len(order_ids), "duplicate order ids"
     supervisor.checkpoint()
-    final_end = supervisor.stop()
+    # With routed orders in the ledger, the default stop checks require an
+    # explicit current order/account verifier; verify against the live route
+    # runtime (absent in the default abstain-only path, where it stays None).
+    stop_checks = None
+    if args.route_cycles > 0:
+        stop_checks = SessionStopChecks(
+            current_order_account_verifier=lambda ledgers: route_runtime.reconcile_once().reconciled
+        )
+    final_end = supervisor.stop(stop_checks=stop_checks)
     assert final_end.leases_released is True
 
     stages: dict[str, int] = {}
     for entry in cycles:
         stages[entry["stage"]] = stages.get(entry["stage"], 0) + 1
+    route_stages: dict[str, int] = {}
+    for entry in route_cycles:
+        route_stages[entry["stage"]] = route_stages.get(entry["stage"], 0) + 1
     report = {
         "label": "P08-PREP-REHEARSAL (not qualification evidence)",
         "strategy": STRATEGY_LABEL,
+        "route_phase_approval": (
+            "reference-v1 (rehearsal-only explicit approval; NOT a strategy approval)"
+            if args.route_cycles > 0
+            else None
+        ),
         "revision": revision,
         "config_hash": config_hash,
         "venue_profile": "paper (PaperVenueAdapter, in-memory)",
@@ -195,6 +311,8 @@ def main() -> None:
         "operator": "integration-lead-agent",
         "stage_counts": stages,
         "cycles": cycles,
+        "route_stage_counts": route_stages,
+        "route_cycles": route_cycles,
         "order_ids": order_ids,
         "end_outcome": final_end.outcome.value,
         "leases_released": final_end.leases_released,
