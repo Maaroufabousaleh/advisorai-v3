@@ -151,7 +151,7 @@ license, reproducibility, and rollback.
 
 ## Portfolio optimization: optional OSS selection
 
-**Planning only, not an installed feature:** The deterministic \`TargetPortfolioBuilder\` on main validates allocations, cash/costs and hard construction constraints; no skfolio/CVXPY/HiGHS/CP-SAT integration is asserted. The [full evaluation and test protocol](../plans/portfolio-optimization-evaluation.md) defines the single \`PortfolioOptimizerPort\`, PIT input and solver identity, independent feasibility checks, no-trade fallback, baselines, measured resource fit and promotion gates. Existing Portfolio Constructor, RiskKernel, OMS and NautilusTrader remain authoritative. Neither V3-Core nor PAPER-V1 depends on this extension; \`multiple_optimizers\` remains excluded from the current release.
+**Planning only, not an installed feature:** The deterministic `TargetPortfolioBuilder` on main validates allocations, cash/costs and hard construction constraints; no skfolio/CVXPY/HiGHS/CP-SAT integration is asserted. The [full evaluation and test protocol](../plans/portfolio-optimization-evaluation.md) defines the single `PortfolioOptimizerPort`, PIT input and solver identity, independent feasibility checks, no-trade fallback, baselines, measured resource fit and promotion gates. Existing Portfolio Constructor, RiskKernel, OMS and NautilusTrader remain authoritative. Neither V3-Core nor PAPER-V1 depends on this extension; `multiple_optimizers` remains excluded from the current release.
 
 | Candidate and upstream | Decision, scope and owner | Qualification and overlap guard | Current state |
 |---|---|---|---|
