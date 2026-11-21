@@ -1,7 +1,8 @@
 # Technology and integration decision register
 
-**Evaluation snapshots:** 2026-11-11 for the base register and 2026-11-17
-for the equity and paper-to-code follow-up. This register records planning
+**Evaluation snapshots:** 2026-11-11 for the base register, 2026-11-17
+for the equity and paper-to-code follow-up, and 2026-11-21 for the optional
+portfolio optimizer/OSS comparison. This register records planning
 decisions. Installation and operational admission require separate evidence.
 
 The accepted near-term milestone remains **AdvisorAI Integrated Alpha**: a
@@ -147,6 +148,23 @@ No candidate is promoted because of release novelty. A challenger sheet must
 name the deficiency, PIT dataset, horizon, baseline, preregistered metrics,
 system-level incrementality, latency, peak RAM/VRAM, load time, failure rate,
 license, reproducibility, and rollback.
+
+## Portfolio optimization: optional OSS selection
+
+**Planning only, not an installed feature:** The deterministic \`TargetPortfolioBuilder\` on main validates allocations, cash/costs and hard construction constraints; no skfolio/CVXPY/HiGHS/CP-SAT integration is asserted. The [full evaluation and test protocol](../plans/portfolio-optimization-evaluation.md) defines the single \`PortfolioOptimizerPort\`, PIT input and solver identity, independent feasibility checks, no-trade fallback, baselines, measured resource fit and promotion gates. Existing Portfolio Constructor, RiskKernel, OMS and NautilusTrader remain authoritative. Neither V3-Core nor PAPER-V1 depends on this extension; \`multiple_optimizers\` remains excluded from the current release.
+
+| Candidate and upstream | Decision, scope and owner | Qualification and overlap guard | Current state |
+|---|---|---|---|
+| [skfolio](https://github.com/skfolio/skfolio) | **PROTOTYPE/EXPERIMENT; first portfolio-framework research challenger.** Test mean-risk, robust/tail-risk, risk-budgeting and cross-validation on frozen AdvisorAI snapshots. | Compare net OOS value after costs vs no-trade/equal/inverse-volatility/simple-risk-budget/prior-champion; preserve PIT, return periodicity and covariance provenance. It does not become canonical data, OMS, or replay engine. | NOT PRESENT; PLAN ONLY; RESEARCH ONLY. |
+| [CVXPY](https://github.com/cvxpy/cvxpy) + [Clarabel](https://github.com/oxfordcontrol/Clarabel.rs) / [OSQP](https://github.com/osqp/OSQP) | **PROTOTYPE/EXPERIMENT; first native convex portfolio formulation/backends.** CVXPY is modeling, not numerical solving. | Benchmark solver-specific supported formulations, residuals, error/timeout behavior and feasible rounded quantities; use one selected optimizer implementation, not several production owners. | NOT PRESENT as an AdvisorAI optimizer integration; RESEARCH ONLY. |
+| [HiGHS](https://github.com/ERGO-Code/HiGHS) | **PROTOTYPE/EXPERIMENT, conditional.** LP/MILP and native convex QP where the selected interface supports it; useful for discrete lots/cardinality. | A measurable need for MILP or LP; audit numerical tolerance, gap, price/lot/cash conversion and timeout. Do not infer that CVXPY exposes every native HiGHS capability. | NOT PRESENT as an AdvisorAI optimizer integration; RESEARCH ONLY. |
+| [Riskfolio-Lib](https://github.com/dcajasn/Riskfolio-Lib) | **DEFERRED** specialist risk-method challenger, not a second permanent portfolio framework. | Revisit for a named risk formulation or deficiency not handled satisfactorily by skfolio/native convex candidate; compare like-for-like. | NOT PRESENT; NOT ADMITTED. |
+| [cvxportfolio](https://github.com/cvxgrp/cvxportfolio) | **DEFERRED** isolated multi-period formulation reference; never replaces NautilusTrader. | GPLv3 license/distribution review, exact dependency and PIT/cost/replay parity, and proven multi-period incremental benefit. | NOT PRESENT; RESEARCH ONLY if separately approved. |
+| [OR-Tools CP-SAT](https://github.com/google/or-tools) | **DEFERRED** integer/logic solver for bounded discrete selection or resource scheduling. | Real hard combinatorial case, integer scaling correctness and demonstrable improvement over HiGHS for allocations or Prefect/Resource Governor for jobs. No live hot-path scheduling service. | NOT PRESENT; NOT ADMITTED. |
+| [OR-Tools MathOpt](https://developers.google.com/optimization/math_opt), [SciPy optimize](https://docs.scipy.org/doc/scipy/reference/optimize.html), [SCIP/PySCIPOpt](https://github.com/scipopt/PySCIPOpt) | **DEFERRED** alternative model/API or advanced mixed-integer solver choices. | Add only for a proved unsupported formulation or materially simpler integration. Validate backend coverage, license and resource fit. | NOT PRESENT; NOT ADMITTED. |
+| [PyPortfolioOpt](https://github.com/PyPortfolio/PyPortfolioOpt), [pymoo](https://github.com/anyoptimization/pymoo) | **REFERENCE ONLY** for classical/multi-objective experiments. | Avoid duplicate allocation engines or duplicated Optuna/DEAP research-search roles. | NOT PRESENT; NOT ADMITTED. |
+
+The existing [Optuna](https://github.com/optuna/optuna) Phase-9 decision below is unchanged: it is a **bounded Alpha Team experiment/hyperparameter search tool, not a mathematical portfolio solver**. All third-party code still requires exact repository/revision/license/dependency assessment and an isolated reproducible trial before admission.
 
 ## Agent sandbox and research frameworks
 
