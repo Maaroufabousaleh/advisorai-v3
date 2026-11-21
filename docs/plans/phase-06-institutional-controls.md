@@ -12,6 +12,10 @@ controls needed for defensible integrated paper/testnet operation.
 2. Add robust covariance/factors, liquidity/capacity, margin,
    scenario/stress, drawdown, and expected-shortfall diagnostics. RiskKernel
    remains the sole deterministic approval/reduction/rejection authority.
+   Optional mathematical allocation research follows the
+   [OSS portfolio optimization evaluation plan](portfolio-optimization-evaluation.md):
+   the existing builder and hard constraints remain the baseline, and no
+   third-party solver becomes an approval, risk, or order authority.
 3. Complete OMS, venue reconciliation, TCA, and P&L/risk/execution
    attribution.
 4. Add purged walk-forward, multiple-testing, sensitivity, regime,
