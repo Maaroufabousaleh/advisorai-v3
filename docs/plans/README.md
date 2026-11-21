@@ -40,6 +40,11 @@ near-term milestone is **AdvisorAI Integrated Alpha**: start, recover, run the
 paper/testnet chain through reconciliation and outcome memory, then stop and
 resume safely. It is not a profitability or live-capital claim.
 
+The [optional portfolio optimization evaluation plan](portfolio-optimization-evaluation.md)
+describes bounded, PIT-safe OSS solver/framework comparisons behind the existing
+deterministic Portfolio Constructor. It is research-only and is not a PAPER-V1
+or V3-Core requirement.
+
 Cross-cutting technology and data-source decisions are recorded in the
 [technology and integration decision register](../reference/technology-decision-register.md).
 It is the single planning inventory for external candidates, source tiers,
