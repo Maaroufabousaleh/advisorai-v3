@@ -7,9 +7,9 @@
 
 ## Why this is an extension, not a replacement
 
-The implemented \`src/advisorai/execution/portfolio.py\` contains \`TargetPortfolioBuilder\` and \`PortfolioConstraints\`. It constructs cost-aware targets, preserves cash accounting, applies no-trade/minimum-notional bands, and **validates** gross/net exposure, turnover, position size, leverage, concentration, minimum cash, and liquidity participation. It does **not** presently solve a mathematical optimization problem to select the best feasible weights.
+The implemented `src/advisorai/execution/portfolio.py` contains `TargetPortfolioBuilder` and `PortfolioConstraints`. It constructs cost-aware targets, preserves cash accounting, applies no-trade/minimum-notional bands, and **validates** gross/net exposure, turnover, position size, leverage, concentration, minimum cash, and liquidity participation. It does **not** presently solve a mathematical optimization problem to select the best feasible weights.
 
-The target architecture already requires: point-in-time forecast/evidence → typed proposal → deterministic Portfolio Constructor → \`TargetPortfolio\` → independent \`RiskKernel\` → OMS/NautilusTrader → reconciliation/attribution. Keep those owners. An optimizer proposes a candidate allocation *inside* portfolio construction; it never grants order, risk-limit, broker, strategy-promotion, or live-capital authority. Current V3-Core and the real-API paper transition explicitly exclude multiple optimizers. This is an optional research extension, **not a PAPER-V1 release requirement**.
+The target architecture already requires: point-in-time forecast/evidence → typed proposal → deterministic Portfolio Constructor → `TargetPortfolio` → independent `RiskKernel` → OMS/NautilusTrader → reconciliation/attribution. Keep those owners. An optimizer proposes a candidate allocation *inside* portfolio construction; it never grants order, risk-limit, broker, strategy-promotion, or live-capital authority. Current V3-Core and the real-API paper transition explicitly exclude multiple optimizers. This is an optional research extension, **not a PAPER-V1 release requirement**.
 
 ## Decision: select a narrow stack by measured value
 
@@ -33,7 +33,7 @@ Official documentation confirms that CVXPY is a modeling layer rather than the n
 
 ## Architecture and typed boundary
 
-\`\`\`text
+```text
 validated PIT snapshot + approved forecasts + account state + risk-policy version
                                     |
                              DecisionProposal
@@ -58,14 +58,14 @@ validated PIT snapshot + approved forecasts + account state + risk-policy versio
                   OMS -> NautilusTrader
                          |
                    ledger + attribution
-\`\`\`
+```
 
-The optimizer must not read order credentials, submit orders, edit \`RiskPolicy\`, bypass \`TargetPortfolioBuilder\`, mutate account state, or write canonical records. No LLM/agent can relax constraints or select a model for execution by prose. An infeasible, time-limited, non-convergent, numerically unstable, invalidly rounded, unsupported, or missing-data result is **rejected**, and the deterministic safe path is abstention/no-trade (or an already-approved fallback explicitly validated by RiskKernel); never silently route an unchecked solution.
+The optimizer must not read order credentials, submit orders, edit `RiskPolicy`, bypass `TargetPortfolioBuilder`, mutate account state, or write canonical records. No LLM/agent can relax constraints or select a model for execution by prose. An infeasible, time-limited, non-convergent, numerically unstable, invalidly rounded, unsupported, or missing-data result is **rejected**, and the deterministic safe path is abstention/no-trade (or an already-approved fallback explicitly validated by RiskKernel); never silently route an unchecked solution.
 
 ### Candidate interface (design sketch, not implemented)
 
-- Input: \`snapshot_id\`, \`as_of\`/availability cutoff, instrument identities/universe, frozen expected-return/scenario/covariance artifacts, approved account positions/cash/marks, costs/impact/lot rules, \`risk_policy_version\`, objective/constraint schema, deadline and resource envelope.
-- Output: \`OptimizationCandidate\` with signed target quantities or weights, expected net utility, predicted costs/turnover/risk, solver/backend/method/code/version/config identity, deterministic seed if relevant, termination status/gap, primal feasibility/constraint residuals, time/memory, input hashes and explicit rejection reasons.
+- Input: `snapshot_id`, `as_of`/availability cutoff, instrument identities/universe, frozen expected-return/scenario/covariance artifacts, approved account positions/cash/marks, costs/impact/lot rules, `risk_policy_version`, objective/constraint schema, deadline and resource envelope.
+- Output: `OptimizationCandidate` with signed target quantities or weights, expected net utility, predicted costs/turnover/risk, solver/backend/method/code/version/config identity, deterministic seed if relevant, termination status/gap, primal feasibility/constraint residuals, time/memory, input hashes and explicit rejection reasons.
 - Validation: a separately coded deterministic validator converts quantities to executable venue increments, recomputes cash including fees/spread/impact, tests concentration/exposure/liquidity/turnover against current authoritative account state, and rejects impossible quantities. RiskKernel independently rechecks again at order time.
 - Reproducibility: immutable problem manifest and snapshots; solver options and tolerances; deterministic tie-breaking if possible; every attempted and rejected optimization is recorded. No forward label enters a decision-time fit or optimizer input.
 
@@ -77,7 +77,7 @@ The optimizer must not read order credentials, submit orders, edit \`RiskPolicy\
 4. **Discrete trade constraints:** indivisible shares, min lots, cardinality, fixed trade cost, venue tick/step sizing; formulate an appropriate MILP with HiGHS first. Try CP-SAT only if logical/complex combinatorial benefits justify scaled-integer modeling.
 5. **Research job scheduling (separate concern):** optional CP-SAT experiment for bounded CPU/GPU/RAM/deadline dependencies, measured against existing Prefect + Resource Governor behavior. Prefect remains workflow owner; Resource Governor remains the physical admission authority. Do not put a solver into the live event/order hot path.
 
-An illustrative continuous objective is \`maximize(mu.T @ w - lambda * quad_form(w, covariance) - transaction_cost(w, current_w))\`, subject to explicitly versioned feasible bounds. It is not an alpha generator; \`mu\` and covariance must be point-in-time, estimated from training data only, and robust to estimation error. Convexity, unit/periodicity consistency and solver support are prerequisites.
+An illustrative continuous objective is `maximize(mu.T @ w - lambda * quad_form(w, covariance) - transaction_cost(w, current_w))`, subject to explicitly versioned feasible bounds. It is not an alpha generator; `mu` and covariance must be point-in-time, estimated from training data only, and robust to estimation error. Convexity, unit/periodicity consistency and solver support are prerequisites.
 
 ## Offline bake-off and promotion protocol
 
@@ -87,7 +87,7 @@ An illustrative continuous objective is \`maximize(mu.T @ w - lambda * quad_form
 4. **Baseline and compare:** no-trade, equal-weight, inverse-volatility, simple risk-budget and prior champion; use identical cost/spread/impact, instrument universe, risk bounds, calendar, snapshot, seed and constraints for every candidate. Compare net utility, max drawdown, tail loss, concentration, turnover, failed/abstained allocations, constraint violations and stability across markets/regimes.
 5. **Solver validation:** infeasible and unbounded instances; conflicting bounds; near-singular covariance; numerical overflow; zero liquidity; disconnected market; lot rounding; stale/negative cash; fixed cost and integer precision; deadline expiration; resource exhaustion. Require exact typed failure and zero downstream order effect. Verify optimality/status and feasibility independently of the solver's own report.
 6. **Independent replay:** screen on frozen copies, use holdout/purged walk-forward and multiple-testing accounting, and independently replay finalists through the canonical AdvisorAI/NautilusTrader market/cost/latency model; forward shadow is separate from historical selection.
-7. **Go/no-go and rollback:** retain at most one primary optimizer method per qualified profile behind \`PortfolioOptimizerPort\`; admit only for the specifically tested assets/venue/mode with human-reviewed change, pinned manifest and measured incremental net utility without safety/resource regression. On invalid result or regression, disable the port and use the existing approved deterministic no-trade/baseline path. Never self-promote.
+7. **Go/no-go and rollback:** retain at most one primary optimizer method per qualified profile behind `PortfolioOptimizerPort`; admit only for the specifically tested assets/venue/mode with human-reviewed change, pinned manifest and measured incremental net utility without safety/resource regression. On invalid result or regression, disable the port and use the existing approved deterministic no-trade/baseline path. Never self-promote.
 
 **Exit evidence:** a benchmark report with immutable manifests, exact versions/hashes, trial ledger (including failures), constraint/residual checks, CPU/RAM/latency profiles on the target workstation, OOS net-cost comparison, independent replay, forward shadow evidence if seeking paper admission, and a rollback rehearsal. A better in-sample Sharpe ratio or solver objective is *not* sufficient.
 
@@ -96,9 +96,9 @@ An illustrative continuous objective is \`maximize(mu.T @ w - lambda * quad_form
 - **Portfolio Constructor:** sole owner of the typed optimizer port and cost/quantity/feasibility conversion. Solver and high-level framework are replaceable implementations, not separate owners.
 - **RiskKernel:** unchanged independent hard-limit approval/reduction/rejection, kill switch, authoritative account state and final order-time veto.
 - **OMS/NautilusTrader:** unchanged event replay, orders, fills, reconciliation, execution costs/latency and paper-testnet venue adapter.
-- **Alpha Team / Hermes:** may research or implement candidates in sandbox and emit versioned \`ExperimentArtifact\`/\`ValidationReport\`. They cannot activate optimizer backends or write production trading state.
+- **Alpha Team / Hermes:** may research or implement candidates in sandbox and emit versioned `ExperimentArtifact`/`ValidationReport`. They cannot activate optimizer backends or write production trading state.
 - **Prefect / Resource Governor:** unchanged scheduler and hard physical resource authority; no permanent CP-SAT scheduling service.
-- **Current release:** \`configs/v3_core.yaml\` excludes \`multiple_optimizers\`; \`docs/plans/real-api-paper-transition.md\` and PAPER-V1 readiness gates remain authoritative. This plan does not expand BTC/ETH paper execution, add equity/bond routing, replace the existing Phase 6 work, or authorize live capital.
+- **Current release:** `configs/v3_core.yaml` excludes `multiple_optimizers`; `docs/plans/real-api-paper-transition.md` and PAPER-V1 readiness gates remain authoritative. This plan does not expand BTC/ETH paper execution, add equity/bond routing, replace the existing Phase 6 work, or authorize live capital.
 
 ## Related plans and references
 
