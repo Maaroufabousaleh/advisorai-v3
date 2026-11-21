@@ -423,6 +423,14 @@ The constructor accounts for:
 
 Compare every optimized portfolio with no-trade, equal weight, inverse volatility, simple risk-budget and the prior champion. Complexity is admitted only when it improves stable out-of-sample net utility.
 
+#### Optional mathematical portfolio optimization (research/shadow only until admitted)
+
+The current `TargetPortfolioBuilder` constructs and **checks** target quantities, cash, costs, no-trade bands, and exposure/liquidity/concentration constraints; it does not yet search for an optimal feasible allocation. A future disabled-by-default, typed `PortfolioOptimizerPort` **inside the existing deterministic Portfolio Constructor** may propose allocations, but the builder independently rechecks executable quantities and cash after rounding, and RiskKernel retains the final veto. Solvers never become trading authorities.
+
+The [OSS portfolio optimization evaluation plan](docs/plans/portfolio-optimization-evaluation.md) defines the bounded, PIT-safe comparison of [skfolio](https://github.com/skfolio/skfolio) (first portfolio-research challenger) against an AdvisorAI-native convex modeling candidate using [CVXPY](https://github.com/cvxpy/cvxpy) with Clarabel/OSQP numerical backends. HiGHS is a conditional LP/MILP candidate; OR-Tools CP-SAT is deferred for demonstrated integer/logical allocation or scheduling needs. Riskfolio-Lib and cvxportfolio are non-duplicative research alternatives only; Optuna retains its existing bounded Alpha Team experiment-search role. No package is selected or qualified by this planning entry.
+
+Preserve the existing Phase-6 baselines, exact point-in-time inputs and snapshot/solver manifests, cost and lot-size treatment, infeasible/timeout abstention, independent constraint validation, out-of-sample net-utility comparisons, Nautilus replay, resource caps and rollback. Current V3-Core/PAPER-V1 excludes multiple optimizers: implementation can be isolated, but no runtime activation, new execution venue, equity/bond paper routing, live-capital authority, or additional PAPER-V1 dependency is implied.
+
 ### 7.3 Deterministic risk hierarchy
 
 `RiskPolicy` is versioned, reviewed, immutable during a decision, and auditable. The RiskKernel independently recomputes from authoritative account/order/market state and may only approve, reduce or reject.
