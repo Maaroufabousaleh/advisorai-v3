@@ -54,6 +54,14 @@ may begin before Phase 7; promotion remains gated.
   decisions. Retrieval systems never replace this truth. Cognee, Mem0, and
   alternatives remain optional challengers.
 
+The [optional OSS portfolio optimization bake-off](portfolio-optimization-evaluation.md)
+is a later, bounded allocation research extension that compares skfolio and
+CVXPY/native convex candidates against existing baselines. HiGHS and CP-SAT
+are conditional problem-specific tools, not a required second optimizer stack;
+no entry expands the current PAPER-V1 venue/asset scope. The Portfolio
+Constructor, RiskKernel, OMS, NautilusTrader, Prefect and Resource Governor
+retain their existing authority.
+
 The [technology and integration decision register](../reference/technology-decision-register.md)
 is the canonical inventory for source tiers and tool decisions. It records
 implementation and admission separately. OpenBB is only a provider experiment;
