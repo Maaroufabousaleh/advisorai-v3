@@ -388,6 +388,7 @@ class PaperOwnerApplication:
         self._lease_id = None
 
         self._marks = {"BTC": Decimal("50000")}
+        local_rehearsal = venue_profile == "local-simulator"
         if adapters is None:
             venue: OwnerPaperVenueAdapter = SimulatedPaperVenueAdapter(
                 ledgers,
@@ -429,6 +430,11 @@ class PaperOwnerApplication:
                 decision_interval_seconds=3600,
                 run_id="advisorai-owner-paper",
                 max_order_count_per_cycle=1,
+                # Rehearsal-only approval: this scaffold wires the local
+                # reference adapter, so it approves exactly that adapter name.
+                # A reviewed PAPER-V1 release must pin the P06-approved
+                # strategy adapter here instead; nothing self-approves.
+                approved_strategy_adapter="owner-paper-reference-v1" if local_rehearsal else None,
             ),
             snapshot_provider=self.adapters.data.snapshot_at,
             market_provider=self.adapters.data.market_at,

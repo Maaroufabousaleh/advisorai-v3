@@ -44,6 +44,7 @@ class DecisionProposal(ArtifactModel):
     mission_id: UUID
     snapshot_id: UUID
     model_artifact_id: UUID
+    adapter_name: str | None = Field(default=None, min_length=1)
     stance: DecisionStance
     probabilities: dict[str, Decimal] = Field(default_factory=dict)
     calibrated_confidence: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
@@ -150,6 +151,7 @@ class ReferenceDecisionAdapter:
                 mission_id=request.mission_id,
                 snapshot_id=request.snapshot_id,
                 model_artifact_id=self._artifact.artifact_id,
+                adapter_name=self._artifact.adapter_name,
                 stance=DecisionStance.ABSTAIN,
                 calibrated_confidence=Decimal("0"),
                 score=Decimal("0"),
@@ -186,6 +188,7 @@ class ReferenceDecisionAdapter:
             mission_id=request.mission_id,
             snapshot_id=request.snapshot_id,
             model_artifact_id=self._artifact.artifact_id,
+            adapter_name=self._artifact.adapter_name,
             stance=stance,
             probabilities=probabilities,
             calibrated_confidence=Decimal("0.5"),

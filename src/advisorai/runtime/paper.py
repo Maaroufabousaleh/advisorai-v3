@@ -65,6 +65,15 @@ class PaperRuntimeConfig(BaseModel):
     run_id: str = Field(default_factory=lambda: f"paper-{uuid4()}", min_length=1)
     max_order_count_per_cycle: int = Field(default=8, ge=0, le=100)
     owner_session_id: UUID | None = None
+    approved_strategy_adapter: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Owner-pinned decision-adapter name allowed to route orders "
+            "(P06-approved strategy). None approves nothing: any decision "
+            "that would route abstains fail-closed as unapproved_strategy."
+        ),
+    )
 
     @field_validator("environment")
     @classmethod
@@ -280,6 +289,34 @@ class PaperRuntime:
                     base,
                     RuntimeStage.ABSTAINED,
                     reasons=result.decision.missing_evidence or result.decision.gate.reasons,
+                )
+            proposal = result.proposal
+            approved = self.config.approved_strategy_adapter
+            model_artifact = result.model_artifact
+            if (
+                proposal is None
+                or model_artifact is None
+                or model_artifact.adapter_name != approved
+                or proposal.adapter_name != model_artifact.adapter_name
+                or proposal.model_artifact_id != model_artifact.artifact_id
+                or model_artifact.snapshot_id != snapshot.artifact_id
+                or proposal.fallback_used
+            ):
+                # P08: only the owner-pinned strategy may reach RiskKernel/OMS.
+                # Anything else — research output, fallback, or no approval
+                # configured — abstains here with traceable ids, zero orders.
+                self._record_learning_decision(result, snapshot=snapshot, risk=None, order_ids=())
+                observed = (
+                    model_artifact.adapter_name
+                    if model_artifact is not None
+                    else "missing-provenance"
+                    if proposal is not None
+                    else "missing-proposal"
+                )
+                return self._finish(
+                    base,
+                    RuntimeStage.ABSTAINED,
+                    reasons=(f"unapproved_strategy:{observed}",),
                 )
             risk = self.risk_kernel.evaluate(
                 RiskRequest(

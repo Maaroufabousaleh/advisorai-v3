@@ -48,7 +48,7 @@ def _build(tmp_path, name="session-e2e.sqlite3"):
     )
     orders = OrderManager(ledgers, PaperVenueAdapter())
     runtime = PaperRuntime(
-        config=PaperRuntimeConfig(run_id="e2e-run"),
+        config=PaperRuntimeConfig(run_id="e2e-run", approved_strategy_adapter="reference-v1"),
         snapshot_provider=lambda cutoff: snapshot,
         market_provider=lambda snapshot: market,
         decision_builder=lambda snapshot, account, market: service.build_decision(

@@ -40,6 +40,7 @@ class DecisionPipelineResult:
     decision: DecisionBundle
     risk_decision: RiskDecision | None
     proposal: DecisionProposal | None = None
+    model_artifact: DecisionModelArtifact | None = None
 
 
 class AdvisorService:
@@ -103,7 +104,7 @@ class AdvisorService:
         dissent = tuple(item for role_result in role_results for item in role_result.dissent)
         # Proposal first: it is the sole authority for executable intent.
         # The Portfolio Constructor below is deterministic and bound to it.
-        proposal = self._build_proposal(
+        proposal, model_artifact = self._build_proposal(
             request=request,
             snapshot=snapshot,
             gate=gate,
@@ -117,6 +118,16 @@ class AdvisorService:
             evidence_ids=evidence_ids,
             evaluation_at=snapshot.as_of,
         )
+        if (
+            proposal_failure is None
+            and model_artifact is not None
+            and (
+                proposal.model_artifact_id != model_artifact.artifact_id
+                or proposal.adapter_name != model_artifact.adapter_name
+                or model_artifact.snapshot_id != snapshot.artifact_id
+            )
+        ):
+            proposal_failure = "proposal_model_identity_mismatch"
         if proposal_failure is None:
             bound_targets = self._proposal_bound_targets(
                 proposal, account=account, marks=market.marks
@@ -234,7 +245,9 @@ class AdvisorService:
                     payload={"proposal": proposal.model_dump(mode="json", round_trip=True)},
                 )
             )
-        return DecisionPipelineResult(decision=decision, risk_decision=None, proposal=proposal)
+        return DecisionPipelineResult(
+            decision=decision, risk_decision=None, proposal=proposal, model_artifact=model_artifact
+        )
 
     def _build_proposal(self, *, request, snapshot, gate, evidence_ids, dissent):
         """Typed proposal behind the port; never order or risk authority."""
@@ -249,7 +262,8 @@ class AdvisorService:
             )
             adapter = ReferenceDecisionAdapter(fallback_artifact)
         try:
-            return adapter.propose(
+            model_artifact = adapter.artifact if self.decision_model is not None else None
+            proposal = adapter.propose(
                 DecisionModelInput(
                     mission_id=request.mission_id,
                     snapshot_id=snapshot.artifact_id,
@@ -261,6 +275,7 @@ class AdvisorService:
                 ),
                 now=snapshot.as_of,
             )
+            return proposal, model_artifact
         except Exception:
             fallback_artifact = DecisionModelArtifact(
                 model_name="reference",
@@ -269,10 +284,11 @@ class AdvisorService:
                 config_hash="0" * 64,
                 snapshot_id=snapshot.artifact_id,
             )
-            return DecisionProposal(
+            proposal = DecisionProposal(
                 mission_id=request.mission_id,
                 snapshot_id=snapshot.artifact_id,
                 model_artifact_id=fallback_artifact.artifact_id,
+                adapter_name=fallback_artifact.adapter_name,
                 stance=DecisionStance.ABSTAIN,
                 calibrated_confidence=Decimal("0"),
                 score=Decimal("0"),
@@ -286,6 +302,7 @@ class AdvisorService:
                 fallback_used=True,
                 rationale="decision model failure converted to typed ABSTAIN",
             )
+            return proposal, None
 
     @staticmethod
     def _proposal_failure_reason(
@@ -384,6 +401,7 @@ class AdvisorService:
                     ),
                 ),
                 proposal=result.proposal,
+                model_artifact=result.model_artifact,
             )
         if evaluation_at is None:
             decision_cutoff = account.as_of.astimezone(UTC)
@@ -404,6 +422,7 @@ class AdvisorService:
                     reasons=("decision_expired",),
                 ),
                 proposal=result.proposal,
+                model_artifact=result.model_artifact,
             )
         risk_decision = RiskKernel().evaluate(
             request=RiskRequest(
@@ -414,5 +433,8 @@ class AdvisorService:
             )
         )
         return DecisionPipelineResult(
-            decision=result.decision, risk_decision=risk_decision, proposal=result.proposal
+            decision=result.decision,
+            risk_decision=risk_decision,
+            proposal=result.proposal,
+            model_artifact=result.model_artifact,
         )
