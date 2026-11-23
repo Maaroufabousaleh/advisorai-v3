@@ -19,9 +19,10 @@ implementation priority and acceptance evidence. NautilusTrader,
 PydanticAI/Graph, Prefect/Hamilton, selected local models and an OpenAI
 gateway route, read-only OpenBB V5, and Hermes are selected for the full
 paper workstation. Qlib with RD-Agent, TradingAgents and Optuna have
-bounded research roles and native evaluation gates. The roadmap records
-the outstanding SnowLLMs upstream identity and the initial Binance and
-IBKR Paper venue priorities. Dated implementation and admission evidence
+bounded research roles and native evaluation gates. I4 covers compact
+local forecasting models, including Chronos and a required TimesFM native
+comparison with permitted weights. The roadmap also records the initial
+Binance and IBKR Paper venue priorities. Dated implementation and admission evidence
 below applies to the exact scope reviewed.
 
 ## Decision and evidence vocabulary
@@ -151,6 +152,7 @@ reference, and an on-demand reasoning LLM. ADR 0008 owns that roster.
 | Laya | **PROTOTYPE/EXPERIMENT** behind DecisionModelPort, local and shadow-only. | Pin exact upstream/checkpoint and license; measure within the 8 GB VRAM/16 GB RAM envelope; validate schema, timeout, abstention, malformed output, calibration, privacy, fallback, replay, and zero authority. | Existing planning reference only; no admission implied. Phase 5. |
 | Kev | **PROTOTYPE/EXPERIMENT** with the smallest feasible local checkpoint only. | Same typed-port checks as Laya. Measure exact peak RAM/VRAM, load latency, and failure rate; do not infer large-checkpoint feasibility. | NOT PRESENT or admitted unless separately evidenced. Phase 5. |
 | Jev | **REQUIRES-MORE-INFORMATION.** No official API is assumed. | Require authoritative provider identity, current API/model docs, pricing, terms, data retention, privacy/training-on-input, region, rate limits, availability, and commercial-use rights before any adapter plan. Third-party compatibility servers do not establish provider terms. | NOT PRESENT; NOT ADMITTED. |
+| TimesFM 2.5 | **ADOPTED-IN-PLAN** for a required I4 native forecast comparison alongside Chronos and simple baselines. | Pin and verify the checkpoint and weight terms. Report forecast error, calibration where available, peak RAM/VRAM and wall time on the same frozen data and horizons. Use independent admission evidence for any strategy use. | PLAN ONLY; I4 comparison. |
 | TimesFM 3 | **DEFERRED isolated challenger.** Do not reopen the core bake-off or duplicate PR #205. | Google source code is Apache-2.0, while TimesFM 3 pretrained weights use a separate non-commercial license. Require permitted intended use, exact weight revision, a preregistered forecast deficiency, PIT snapshot, baseline, latency/RAM/VRAM/load/failure measurements, and positive incremental system value. | PR #205 is OPEN, non-draft, against main; BRANCH ONLY and research-only. No core roster change. |
 | TTM-R3 | **DEFERRED challenger.** Keep TTM-R2 in the frozen reference fabric. | The existing license audit treats checkpoint/model-card rights separately and says exact artifact and revision must be reviewed before use or bundling. Reopen only for a measured roster deficiency and an exact rights-cleared checkpoint. | Existing historical research remains research-only; no promotion from this entry. |
 | [Kronos-base](https://github.com/NeoQuasar/Kronos) | **DEFERRED challenger.** Keep Kronos-small in the reference fabric. | Require exact upstream/checkpoint/license review, a measured deficiency, same-snapshot comparison, resource profile, and positive marginal value after costs. | NOT PRESENT in the admitted roster; Phase 9 only if triggered. |

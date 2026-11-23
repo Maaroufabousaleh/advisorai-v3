@@ -46,6 +46,15 @@ regimes, and incremental contribution.
 such as TimesFM 3, TTM-R3, Kronos-base, TabPFN-TS, newer TSFMs, and new
 decision models. These comparisons do not block core infrastructure.
 
+## Compact local forecasting model comparison
+
+The [I4 native integration roadmap](native-first-integration-roadmap.md#i4--selected-local-models-openai-and-inference-gateway)
+requires an actual TimesFM comparison alongside Chronos-2-small. Start by
+qualifying a compatible TimesFM 2.5 checkpoint. Pin its exact weights and
+runtime, use matching point-in-time inputs and forecast horizons, compare
+against a simple baseline, and record latency, peak RAM/VRAM and error.
+Keep TimesFM 3 under its separate research scope below.
+
 ## TimesFM 3 research challenger (post-design discovery)
 
 TimesFM 3 (`google/timesfm-3.0-pytorch`) is recorded as a

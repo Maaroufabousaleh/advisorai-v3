@@ -48,6 +48,10 @@ research reading, and an owner-started agent trader for approved paper
 strategies. The [PAPER-V1 tracker](AdvisorAI_Paper_Readiness_Tracker.md)
 records qualification for the first bounded crypto release.
 
+The [professional dashboard plan](docs/plans/secure-operator-dashboard.md)
+covers portfolio and performance, paper execution, news and events, risk,
+research and model evidence, and a dedicated Markets & OpenBB workspace.
+
 ## Current capabilities
 
 | State | Capability | Where it lives |
