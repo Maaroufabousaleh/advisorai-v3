@@ -19,6 +19,12 @@ The roadmap has two independent tracks:
 
 Phase order governs admission and promotion where safety requires it. It does not prohibit implementation of later components. A component may be built before an earlier admission gate passes when it remains typed, quarantined, research/shadow/paper-only, has no broker/order/risk-limit authority, and cannot grant itself admission. These tracks are reflected in the [phase plans](docs/plans/README.md), [gate matrix](docs/plans/gate-matrix.md), and [session lifecycle plan](docs/plans/session-oriented-runtime.md).
 
+The [native integration delivery roadmap](docs/plans/native-first-integration-roadmap.md)
+sets the implementation sequence and acceptance tests. It starts with direct
+NautilusTrader, then real PydanticAI agents, and leads to an owner-started
+paper workstation for crypto spot, U.S. equities/ETFs and listed options.
+PAPER-V1 admission remains scoped to the first bounded crypto profile.
+
 Until the Integrated Alpha milestone, planning effort should focus roughly
 70–80% on infrastructure, session lifecycle/recovery, data catch-up,
 agent orchestration, Research Brain, evidence/Decision Model contracts,
@@ -72,7 +78,7 @@ The second rule is:
 | OmniRoute | optional gateway adapter/challenger; identity, privacy, resource and failure policies apply |
 | OmniCloud | optional archive UI/allocator after restore tests; never required |
 | TradingAgents | on-demand offline bull/bear challenger for selected Equity Council cases |
-| Qlib | isolated equity factor/model benchmark on an AdvisorAI snapshot. RD-Agent is deferred pending a measured automation need. |
+| Qlib | isolated equity factor/model benchmark on an AdvisorAI snapshot. One Qlib research adapter also owns the bounded RD-Agent quant workflow for factor discovery and model optimization. |
 | Paper2Code | optional modifiable base for a bounded paper-to-code capability inside Hermes Skill Foundry |
 | LEAN | selected cross-engine oracle cases only |
 | VectorBT | rapid research screen, never the realism gate |

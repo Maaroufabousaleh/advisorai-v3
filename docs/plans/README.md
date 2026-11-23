@@ -6,6 +6,15 @@ They preserve one roadmap and the existing deterministic owners. The 2026-09-30
 planning rebaseline makes implementation readiness and operational admission
 separate tracks.
 
+## Native integration delivery
+
+The [I1–I9 delivery roadmap](native-first-integration-roadmap.md) specifies
+the native tools, runnable demonstrations, pass/fail criteria and dependencies
+for implementing the full paper workstation. Start with NautilusTrader
+directly, then real PydanticAI agents. Use Phase 0–10 below for existing
+architecture and operational gates and the [PAPER-V1 tracker](../../AdvisorAI_Paper_Readiness_Tracker.md)
+for first-release crypto evidence.
+
 ## Two-track phase model
 
 **Implementation readiness** covers architecture, interfaces, services,

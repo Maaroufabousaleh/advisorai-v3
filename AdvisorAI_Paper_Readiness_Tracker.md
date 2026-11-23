@@ -4,6 +4,16 @@ Baseline: 2026-11-14. Scope: `PAPER-V1`. This tracker defines the next ten jobs,
 
 **Verified: 5/10. Partial: 1. Open: 4. Release: NOT READY.** Partial evidence is real progress, but it does not increment the release count. P04 counts as DONE per explicit owner override (Dashboard audit excepted, see note below); the exception is recorded, not hidden.
 
+The [native integration roadmap](docs/plans/native-first-integration-roadmap.md)
+tracks full-workstation delivery, including OpenBB, the agent trader and
+separately qualified stock/ETF and listed options paper profiles. PAPER-V1
+covers the first bounded crypto paper release. Its remaining jobs are P06
+strategy approval and P08–P10 integrated qualification. The P08 rehearsal
+merged in [#223](https://github.com/Maaroufabousaleh/advisorai-v3/pull/223)
+is preparation. The strategy gate proposed in
+[#224](https://github.com/Maaroufabousaleh/advisorai-v3/pull/224) is review
+work and does not close P08.
+
 ## Merge note — 2026-11-18 (owner override, green CI excepted)
 
 - Merged #216 (`b64d5c0`, testnet launch path) as `f5d053b` and #215 (`7b05ce6`, research-to-paper integration) as `536c517`. Reviewed heads merged byte-identical; the only merge conflict (.gitignore, both PRs append) resolved as a mechanical union in the merge commit. No branch content changed by the merge.

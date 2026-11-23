@@ -39,8 +39,9 @@ may begin before Phase 7; promotion remains gated.
    broad third-party transcript and audio ingestion until access, recording,
    storage, transformation, retention, latency, and redistribution rights are
    established. Verify material numbers against an official filing or release.
-8. Benchmark Qlib on a frozen equity snapshot and TradingAgents on selected
-   dated Equity Council cases. Use Awesome Quant as a discovery list and
+8. Benchmark Qlib on a frozen equity snapshot before running bounded RD-Agent
+   search inside the Qlib adapter. Test TradingAgents on selected dated Equity
+   Council cases. Use Awesome Quant as a discovery list and
    route missing research implementations through the optional
    [Hermes paper-to-code trial](paper-to-code-prototype.md).
 
@@ -64,10 +65,10 @@ retain their existing authority.
 
 The [technology and integration decision register](../reference/technology-decision-register.md)
 is the canonical inventory for source tiers and tool decisions. It records
-implementation and admission separately. OpenBB is only a provider experiment;
-Optuna is a bounded experiment-search candidate; Qlib is a comparison
-environment; cloud workers remain optional escape hatches. None may write
-canonical data or gain trading authority.
+implementation and admission separately. The [native integration roadmap](native-first-integration-roadmap.md)
+selects read-only OpenBB, bounded Optuna search, and Qlib/RD-Agent equity
+research for the full paper workstation. These tools operate behind existing
+AdvisorAI contracts with research-only permissions. Cloud workers remain optional.
 
 ## Admission gate
 
