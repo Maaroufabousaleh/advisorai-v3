@@ -59,13 +59,13 @@ Suggested direct acceptance test namespace to create as the implementation progr
 | **I6 — Hermes + Research Brain** | Real sandboxed builder/research worker and durable experiment memory | Paper → sourced hypothesis → code candidate → independent test → stored accepted/rejected result | **OPEN** — registry and bounded rehearsals exist; native Hermes pipeline not admitted |
 | **I7 — External quant/agent capability suite** | Qlib, TradingAgents, Optuna and scoped external tools | Qlib/RD-Agent benchmark and search on a frozen equity snapshot, plus a TradingAgents dissent trial against the same packet as the Equity Council | **OPEN** — evaluations/design only |
 | **I8 — Multi-asset paper trading** | U.S. stocks, ETFs and listed options, plus crypto spot | Auditable research and separate order/fill/reconciliation evidence for equity, options, and crypto paper profiles | **OPEN** — equity research and fixtures exist. Stock and options routes still need qualification. |
-| **I9 — Autonomous integrated paper workstation** | Whole native pipeline, supervision, outcome feedback | Operator starts session; approved strategy drives paper decision/orders/reconciliation; recovery and research outcomes survive restart | **OPEN** — PAPER-V1 is 5/10 per tracker. Strategy and integrated crypto evidence plus stock and options profile proofs are outstanding. |
+| **I9 — Autonomous integrated paper workstation** | Whole native pipeline, supervision, outcome feedback | Operator starts session; approved strategy drives paper decision/orders/reconciliation; recovery and research outcomes survive restart | **OPEN** — strategy and integrated crypto evidence plus stock and options profile proofs are outstanding. Follow the [PAPER-V1 tracker](../../AdvisorAI_Paper_Readiness_Tracker.md) for the current count. |
 
 No percentage of project completeness should be inferred from the number of passed milestones. The current evidence snapshots are not newly executed audit results.
 
 ## I1 — NautilusTrader: direct engine first
 
-**Goal:** NautilusTrader is truly doing replay and paper-event/execution work; AdvisorAI is no longer using a custom ReplayEngine disguised as NautilusTrader.
+**Goal:** Use NautilusTrader's actual event engine for historical replay and its selected execution client for paper routing. The existing deterministic replay remains a comparison and fault-test path.
 
 **Use existing code:** reuse the paper venue/OMS, account ledger, RiskKernel and
 PIT data lake. Start by checking the repository lock for NautilusTrader
@@ -74,14 +74,25 @@ version change explicitly if necessary. Use `BacktestEngine` or
 `BacktestNode` from the pinned release and record the actual import, engine
 invocation and configured execution client in the acceptance manifest. A
 native replay can be delivered first. I1 stays open until the native paper
-route passes.
+route passes. Use source/API documentation for the pinned release. The
+latest upstream tutorials may target a different major version.
+
+**First implementation PR:** Add one direct, credential-free replay command
+and its acceptance test using the real `BacktestEngine` or `BacktestNode`.
+Load one frozen, licensed BTCUSDT market slice from the PIT lake/catalog,
+produce at least one native engine fill, and reconcile its cash, positions
+and fees with the AdvisorAI ledger. Run it twice and include the command,
+engine type, input hash, per-run economic totals, host measurements, and
+discrepancy test. Use the frozen market slice or report exactly which
+entitlement or artifact is missing. Build I2 once this slice is runnable.
+External credentials and venue writes belong to the independent paper slice.
 
 **Required executable demonstration:**
 1. Run a native NautilusTrader backtest using a pinned, nonempty historical BTCUSDT (and then ETHUSDT) dataset loaded from AdvisorAI's PIT-safe lake/catalog. Show the actual upstream engine object, event counts, generated orders, genuine engine fills, position changes, fees and P&L. At least one trade must occur in the controlled example.
 2. Run the identical snapshot, strategy version, start equity, instrument definition and cost model twice. Economic outputs, instrument/order count, signed fills/quantities, final cash, positions and P&L must match within documented numerical precision. Random run IDs need not match.
 3. Verify independent cash/position/fee/mark accounting against AdvisorAI's ledger and detect intentional disagreement. Prevent duplicate submissions or double-application of a fill when the same event is presented twice.
 4. Prove one risk-rejected trade leads to **zero** venue submissions. Kill-switch and stale-input scenarios also produce zero submissions; a deliberate late bar must never influence an earlier decision.
-5. With explicitly authorized fake-funds credentials, prove a bounded native-engine-to-approved paper-venue lifecycle (submit/ack or reject, cancel/fill as obtainable, reconcile and restart without duplication). If the pinned upstream version does not support the required Binance Spot Testnet mode, document the exact missing capability, use a narrow reviewed adapter to connect the native engine, or qualify another compatible paper venue. Do not silently substitute the legacy native-only route and declare NautilusTrader complete.
+5. With explicitly authorized fake-funds credentials, prove a bounded lifecycle through the native engine and approved paper venue. Record at least one venue-generated fill, exact cash, position and fee reconciliation, cancel or rejection handling, and restart with zero resubmissions. Acknowledgement or cancellation alone is route progress. If the pinned upstream version lacks the required Binance Spot Testnet mode, record the exact gap and qualify a narrow native execution client adapter or a separately approved alternate venue.
 6. Supply one copyable direct invocation command plus a manifest proving the invoked upstream engine and venue pathway.
 
 **PASS:** I1.1–I1.6 above have evidence on the reviewed code and profile
@@ -166,6 +177,12 @@ original publisher or author, verify each displayed citation, and include a
 paywalled or unavailable example plus an as-of test for a later filing or
 paper revision.
 
+Qualify one real issuer, filings or news feed through to the operator view.
+Record the publication and availability times, permitted display fields,
+source link, deduplication result and correction history. Report licensed
+coverage and use linked summaries or source links where full-text display
+rights are unavailable.
+
 ## I6 — Hermes and Research Brain: actual research factory
 
 **Goal:** Real isolated Hermes agents create useful, testable research capabilities, while the Research Brain durably remembers sources, experiments, failures and outcomes.
@@ -198,7 +215,7 @@ data and strategy allowlist.
 
 | Profile | First route | Required proof |
 | --- | --- | --- |
-| Crypto spot | Binance Spot Testnet first. Kraken Pro/Spot is a candidate for approved market data and venue coverage. Qualify a Kraken venue route only after verifying a supported fake-funds spot endpoint and account. | Exercise BTC and ETH coverage, venue symbol and precision rules, fees, partial fills, outage, restart and reconciliation. Kraken's [documented derivatives demo](https://support.kraken.com/ca/articles/360024809011-api-testing-environment-derivatives) is scoped to derivatives. |
+| Crypto spot | Binance Spot Testnet first. Evaluate Kraken Spot for entitled market data and [its official CLI's spot paper workflow](https://github.com/krakenfx/kraken-cli/blob/main/README.md) as a rehearsal candidate. Qualify a Kraken venue route only after verifying a supported fake-funds spot endpoint and account. | Exercise BTC and ETH coverage, venue symbol and precision rules, fees, partial fills, outage, restart and reconciliation. Local CLI simulated fills are rehearsal evidence. Kraken's [documented derivatives demo](https://support.kraken.com/ca/articles/360024809011-api-testing-environment-derivatives) covers derivatives. |
 | U.S. stocks and ETFs | IBKR Paper through the pinned NautilusTrader adapter. Alpaca Paper is a separately qualified fallback candidate. | Exercise AAPL, SPY and TLT research. Prove routing, fill, fees, account/position reconciliation, corporate-action accounting and market-calendar handling. Verify [paper account and market-data entitlements](https://www.ibkrguides.com/clientportal/aboutpapertradingaccounts.htm). |
 | U.S. listed equity/ETF options | IBKR Paper first. Validate option discovery, underlying/contract identity, data permissions and support in the pinned adapter. | Start with a long, single-leg, defined-risk contract. Validate expiry, strike, right, multiplier, tick/lot size, quote/chain freshness, spread and mark, max premium loss, fee and position math. Test expiration/exercise/assignment records in replay and require a demonstrated close or operational management path before admitting a profile. Broader contract types and strategies require their own qualification. |
 
@@ -226,6 +243,12 @@ endpoint configuration must fail closed before submission.
 8. For the full workstation, demonstrate the same query → source-linked evidence → agent proposal → eligible paper intent → reconciliation → saved outcome workflow for separately admitted crypto, equity/ETF and options profiles. Test an agent request to submit directly, expand its scope or change risk limits. Each must be denied with no venue call. A missing market or route stays visible in the operator surface.
 
 **PASS (INTEGRATION):** native components and end-to-end fault/recovery proofs all pass. **PAPER ADMITTED:** additionally the exact approved strategy/venue/data/resource profile passes PAPER-V1 with human review. **LIVE:** never implied or authorized by either result.
+
+Before enabling an external venue profile, bind its owner approval to the
+exact strategy code and configuration, allowed instrument set, paper account,
+and reviewed data/risk profile. Check that approval using the trusted runtime
+identity. Model- or proposal-supplied labels cannot grant it. A local reference
+strategy is suitable for simulator rehearsal only.
 
 ## Tool policy: core is not the same as admitted
 

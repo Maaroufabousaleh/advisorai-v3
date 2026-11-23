@@ -25,7 +25,8 @@ NautilusTrader, then real PydanticAI agents, and leads to an owner-started
 paper workstation for crypto spot, U.S. equities/ETFs and listed options.
 PAPER-V1 admission remains scoped to the first bounded crypto profile.
 
-Until the Integrated Alpha milestone, planning effort should focus roughly
+For background on the earlier Integrated Alpha plan, the original planning
+allocation was roughly
 70–80% on infrastructure, session lifecycle/recovery, data catch-up,
 agent orchestration, Research Brain, evidence/Decision Model contracts,
 portfolio/risk/OMS/Nautilus integration, dashboard traceability, and complete

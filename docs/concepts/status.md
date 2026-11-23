@@ -19,10 +19,10 @@ AdvisorAI V3 contains a substantial set of contracts, local data/ledger primitiv
 | Production deployment, certificates, monitoring, and incident response | Not supplied as a turnkey package | Operators must provide and review those controls outside this checkout |
 | Technology decision register | Planning-only inventory | External tools and sources are not installed, admitted, or authorized by appearing in the register |
 
-PAPER-V1 is at **5/10 verified, 1 partial, 4 open** as recorded in the
-[tracker](../../AdvisorAI_Paper_Readiness_Tracker.md). P06 strategy approval
-and P08–P10 integrated qualification remain open. The full workstation
-has separate gates for U.S. equity/ETF and listed options paper trading.
+The [PAPER-V1 tracker](../../AdvisorAI_Paper_Readiness_Tracker.md) records
+the current count. P06 strategy approval and P08–P10 integrated qualification
+remain open. The full workstation has separate gates for U.S. equity/ETF
+and listed options paper trading.
 
 ## How to read the phase documents
 
