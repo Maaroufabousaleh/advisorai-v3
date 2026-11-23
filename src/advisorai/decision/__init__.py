@@ -44,7 +44,7 @@ class DecisionProposal(ArtifactModel):
     mission_id: UUID
     snapshot_id: UUID
     model_artifact_id: UUID
-    adapter_name: str = Field(min_length=1)
+    adapter_name: str | None = Field(default=None, min_length=1)
     stance: DecisionStance
     probabilities: dict[str, Decimal] = Field(default_factory=dict)
     calibrated_confidence: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))

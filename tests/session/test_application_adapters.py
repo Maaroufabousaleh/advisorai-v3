@@ -112,6 +112,7 @@ def _owner(
     lock_identity: str,
     adapters: OwnerApplicationAdapters | None = None,
     stop_requested: threading.Event | None = None,
+    venue_profile: str = "local-simulator",
 ) -> PaperOwnerApplication:
     return PaperOwnerApplication(
         ledgers=ledgers,
@@ -124,7 +125,23 @@ def _owner(
         ),
         adapters=adapters,
         stop_requested=stop_requested,
+        venue_profile=venue_profile,
     )
+
+
+def test_external_profiles_do_not_inherit_rehearsal_approval(tmp_path):
+    ledgers = SqliteLedgers(tmp_path / "ledgers.sqlite3")
+    simulator = _owner(tmp_path, ledgers, lock_identity="simulator")
+    assert simulator.runtime.config.approved_strategy_adapter == "owner-paper-reference-v1"
+    for profile in ("binance_spot_testnet", "coinbase_exchange_sandbox"):
+        owner = _owner(
+            tmp_path,
+            ledgers,
+            lock_identity=profile,
+            adapters=simulator.adapters,
+            venue_profile=profile,
+        )
+        assert owner.runtime.config.approved_strategy_adapter is None
 
 
 def test_injected_data_model_and_paper_venue_run_under_supervised_owner(tmp_path, monkeypatch):

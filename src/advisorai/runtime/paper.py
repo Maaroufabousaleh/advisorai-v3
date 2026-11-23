@@ -67,6 +67,7 @@ class PaperRuntimeConfig(BaseModel):
     owner_session_id: UUID | None = None
     approved_strategy_adapter: str | None = Field(
         default=None,
+        min_length=1,
         description=(
             "Owner-pinned decision-adapter name allowed to route orders "
             "(P06-approved strategy). None approves nothing: any decision "
@@ -291,12 +292,27 @@ class PaperRuntime:
                 )
             proposal = result.proposal
             approved = self.config.approved_strategy_adapter
-            if proposal is None or proposal.adapter_name != approved:
+            model_artifact = result.model_artifact
+            if (
+                proposal is None
+                or model_artifact is None
+                or model_artifact.adapter_name != approved
+                or proposal.adapter_name != model_artifact.adapter_name
+                or proposal.model_artifact_id != model_artifact.artifact_id
+                or model_artifact.snapshot_id != snapshot.artifact_id
+                or proposal.fallback_used
+            ):
                 # P08: only the owner-pinned strategy may reach RiskKernel/OMS.
                 # Anything else — research output, fallback, or no approval
                 # configured — abstains here with traceable ids, zero orders.
                 self._record_learning_decision(result, snapshot=snapshot, risk=None, order_ids=())
-                observed = proposal.adapter_name if proposal is not None else "missing-proposal"
+                observed = (
+                    model_artifact.adapter_name
+                    if model_artifact is not None
+                    else "missing-provenance"
+                    if proposal is not None
+                    else "missing-proposal"
+                )
                 return self._finish(
                     base,
                     RuntimeStage.ABSTAINED,

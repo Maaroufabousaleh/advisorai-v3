@@ -22,7 +22,7 @@ from advisorai.contracts import (
     TargetPortfolio,
     TargetPosition,
 )
-from advisorai.decision import DecisionProposal, DecisionStance
+from advisorai.decision import DecisionModelArtifact, DecisionProposal, DecisionStance
 from advisorai.execution import AccountState, OrderManager, PaperVenueAdapter, RiskMarketState
 from advisorai.ledger import SqliteLedgers
 from advisorai.runtime import PaperRuntime, PaperRuntimeConfig, RuntimeStage
@@ -32,6 +32,7 @@ def _result(
     snapshot: Snapshot,
     *,
     proposal_adapter: str | None,
+    actual_adapter: str | None = None,
     admitted: bool = True,
 ) -> DecisionPipelineResult:
     btc = InstrumentIdentity(canonical_id="BTC", asset_class=AssetClass.CRYPTO, venue="paper")
@@ -63,13 +64,20 @@ def _result(
             reasons=(),
         ),
     )
+    artifact = DecisionModelArtifact(
+        model_name="fixture",
+        adapter_name=actual_adapter or proposal_adapter or "missing",
+        code_hash="a" * 64,
+        config_hash="b" * 64,
+        snapshot_id=snapshot.artifact_id,
+    )
     proposal = (
         None
         if proposal_adapter is None
         else DecisionProposal(
             mission_id=decision.mission_id,
             snapshot_id=snapshot.artifact_id,
-            model_artifact_id=uuid4(),
+            model_artifact_id=artifact.artifact_id,
             adapter_name=proposal_adapter,
             stance=DecisionStance.FLAT,
             probabilities={"flat": Decimal("1")},
@@ -80,10 +88,17 @@ def _result(
             expires_at=snapshot.as_of + timedelta(hours=1),
         )
     )
-    return DecisionPipelineResult(decision=decision, risk_decision=None, proposal=proposal)
+    return DecisionPipelineResult(
+        decision=decision,
+        risk_decision=None,
+        proposal=proposal,
+        model_artifact=artifact if proposal is not None else None,
+    )
 
 
-def _runtime(tmp_path, name, *, approved: str | None, proposal_adapter: str | None):
+def _runtime(
+    tmp_path, name, *, approved: str | None, proposal_adapter: str | None, actual_adapter=None
+):
     cutoff = datetime(2026, 8, 5, 15, 0, tzinfo=UTC)
     snapshot = Snapshot(as_of=cutoff, purpose="approval-gate-fixture")
     ledgers = SqliteLedgers(tmp_path / name)
@@ -94,7 +109,9 @@ def _runtime(tmp_path, name, *, approved: str | None, proposal_adapter: str | No
         market_provider=lambda _: RiskMarketState(
             marks={"BTC": Decimal("100")}, venue_healthy={"BTC": True}
         ),
-        decision_builder=lambda *_: _result(snapshot, proposal_adapter=proposal_adapter),
+        decision_builder=lambda *_: _result(
+            snapshot, proposal_adapter=proposal_adapter, actual_adapter=actual_adapter
+        ),
         account=AccountState(cash=Decimal("1000"), as_of=cutoff),
         risk_policy=RiskPolicy(
             policy_version="risk-v1",
@@ -148,6 +165,22 @@ def test_no_approval_configured_denies_routing(tmp_path):
     cycle = runtime.run_once(cutoff)
     assert cycle.stage is RuntimeStage.ABSTAINED
     assert cycle.reasons == ("unapproved_strategy:strat-a",)
+    assert cycle.order_ids == ()
+    assert adapter.open_orders() == ()
+
+
+def test_proposal_cannot_claim_another_adapters_approval(tmp_path):
+    runtime, cutoff, adapter = _runtime(
+        tmp_path,
+        "gate-forged-name.sqlite3",
+        approved="strat-a",
+        proposal_adapter="strat-a",
+        actual_adapter="research-candidate",
+    )
+    cycle = runtime.run_once(cutoff)
+    assert cycle.stage is RuntimeStage.ABSTAINED
+    assert cycle.reasons == ("unapproved_strategy:research-candidate",)
+    assert cycle.risk_decision_id is None
     assert cycle.order_ids == ()
     assert adapter.open_orders() == ()
 

@@ -17,7 +17,7 @@ from advisorai.contracts import (
     TargetPortfolio,
     TargetPosition,
 )
-from advisorai.decision import DecisionProposal, DecisionStance
+from advisorai.decision import DecisionModelArtifact, DecisionProposal, DecisionStance
 from advisorai.execution import (
     AccountLedger,
     AccountState,
@@ -81,10 +81,17 @@ def _runtime(
         created_at=cutoff,
         gate=gate,
     )
+    model_artifact = DecisionModelArtifact(
+        model_name="fixture",
+        adapter_name="test-direct-v1",
+        code_hash="a" * 64,
+        config_hash="b" * 64,
+        snapshot_id=snapshot.artifact_id,
+    )
     proposal = DecisionProposal(
         mission_id=decision.mission_id,
         snapshot_id=snapshot.artifact_id,
-        model_artifact_id=uuid4(),
+        model_artifact_id=model_artifact.artifact_id,
         adapter_name="test-direct-v1",
         stance=DecisionStance.FLAT if admitted else DecisionStance.ABSTAIN,
         probabilities={"flat": Decimal("1")} if admitted else {},
@@ -112,7 +119,7 @@ def _runtime(
             marks={"BTC": Decimal("100")}, venue_healthy={"BTC": True}
         ),
         decision_builder=lambda *_: DecisionPipelineResult(
-            decision=decision, risk_decision=None, proposal=proposal
+            decision=decision, risk_decision=None, proposal=proposal, model_artifact=model_artifact
         ),
         account=account,
         risk_policy=policy,
