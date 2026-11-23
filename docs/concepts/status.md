@@ -12,12 +12,17 @@ AdvisorAI V3 contains a substantial set of contracts, local data/ledger primitiv
 | React/FastAPI operator console | Implemented locally | The dashboard can show a clearly labelled synthetic fixture or configured ledger projection |
 | Native venue adapters and remote/provider transports | Optional / experimental | Source seams and qualification scripts exist; availability does not imply admission |
 | Model gateway and model candidates | Optional / phase-gated | Routes and adapters are policy checked; no model is silently treated as authoritative |
-| PydanticAI/Prefect/Hamilton/LiteLLM/Nautilus runtime wrappers | Optional / phase-gated | Install extras only for the relevant qualification or development workflow |
+| NautilusTrader, PydanticAI/Graph, Prefect, Hamilton and model routes | Core delivery pending | Existing adapters, extras and isolated runs are starting evidence. The [native delivery board](../plans/native-first-integration-roadmap.md#one-screen-delivery-board) tracks the required end-to-end demonstrations. |
 | Multi-process service topology | Target architecture | `ServiceRegistry` is an ownership/dependency manifest, not a supervisor |
 | Session lifecycle / crash recovery | Implemented (local) | `src/advisorai/session/` records start/checkpoint/end/recovery/data-gap/leases and supervises one owner session; operational admission remains separate |
 | Live capital operation | Not enabled by the quickstart | Requires external timed evidence, readiness, authorization, and phase admission |
 | Production deployment, certificates, monitoring, and incident response | Not supplied as a turnkey package | Operators must provide and review those controls outside this checkout |
 | Technology decision register | Planning-only inventory | External tools and sources are not installed, admitted, or authorized by appearing in the register |
+
+The [PAPER-V1 tracker](../../AdvisorAI_Paper_Readiness_Tracker.md) records
+the current count. P06 strategy approval and P08–P10 integrated qualification
+remain open. The full workstation has separate gates for U.S. equity/ETF
+and listed options paper trading.
 
 ## How to read the phase documents
 

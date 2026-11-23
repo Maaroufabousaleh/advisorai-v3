@@ -1,6 +1,10 @@
 # Equity data and research integrations
 
-**Review date:** 2026-11-17. These are Phase 9 / E5 experiment decisions.
+**Review dates:** 2026-11-17 and 2026-11-23. The
+[native roadmap](native-first-integration-roadmap.md) selects OpenBB V5 and
+Qlib/RD-Agent for the full workstation and defines stock/ETF and listed
+options paper qualification in I8. The scope below covers equity research
+inputs and pilot qualification.
 The [technology decision register](../reference/technology-decision-register.md)
 tracks integration and admission. The [provider authority ADR](../decisions/0011-provider-source-authority-and-pit.md)
 governs source qualification. Each prototype has a separate review and may run
@@ -38,8 +42,8 @@ independently of the others.
 
 | Project | Decision and specific role | Acceptance or revisit trigger |
 |---|---|---|
-| [OpenBB V5](../architecture/openbb-v5-research-adapter.md) | Prototype one allowlisted read-only connector when a named endpoint fills a gap. [Cboe historical bars](https://docs.openbb.co/odp/python/reference/cboe/equity/historical) are a secondary-check candidate if instrument coverage and field definitions match. Use V5 provider namespaces. | Compare against a direct client for the same endpoint and retain the upstream dataset and feed identity. V5 is Apache-2.0 and [V4 Yahoo/FMP connectors did not carry forward](https://docs.openbb.co/odp/python/migration-from-v4). Compare it with the Massive/Tiingo options for the same slot before adding another price connector. |
-| [Qlib](https://github.com/microsoft/qlib) | First isolated quantitative challenger. Run Alpha158 + LightGBM on an AdvisorAI frozen snapshot against a preregistered simple ranking baseline. | Pin feature and label definitions, train/validation/test windows and universe. Compare out-of-sample rank IC, turnover and behavior after realistic costs. Independently replay finalists in NautilusTrader. An upstream Yahoo collector or sample dataset is for tooling checks. RD-Agent can be revisited if experiment automation becomes a measured bottleneck. |
+| [OpenBB V5](../architecture/openbb-v5-research-adapter.md) | Deliver one allowlisted read-only market-data or options-chain connector through an entitled provider. [Cboe historical bars](https://docs.openbb.co/odp/python/reference/cboe/equity/historical) are a secondary-check candidate if instrument coverage and field definitions match. Use V5 provider namespaces. | Compare against a direct client for the same endpoint and retain the upstream dataset and feed identity. V5 is Apache-2.0 and [V4 Yahoo/FMP connectors did not carry forward](https://docs.openbb.co/odp/python/migration-from-v4). Compare it with the Massive/Tiingo options for the same slot before adding another price connector. |
+| [Qlib](https://github.com/microsoft/qlib) | First isolated quantitative challenger. Run Alpha158 + LightGBM on a frozen AdvisorAI snapshot against a preregistered simple ranking baseline. Deliver bounded [RD-Agent quant research](#qlib-research-workflow) through the same adapter after the baseline passes. | Compare out-of-sample rank IC, turnover and behavior after realistic costs. Independently replay finalists in NautilusTrader. An upstream Yahoo collector or sample dataset is for tooling checks. |
 | [TradingAgents](https://github.com/TauricResearch/TradingAgents) | Sole initial external qualitative challenger. Run the bull/bear stage on selected Equity Council disagreements and stop at the research artifact. | Use the same dated evidence packet and restrict retrieval to that cutoff. Compare verified corrections, novel source-backed objections, latency and cost against the Council alone. Regression-test late filings. Upstream defaults include Yahoo for prices/news and SEC EDGAR then Yahoo for financial statements. The connector evaluation is independent of the agent trial. |
 | [`ai-hedge-fund`](https://github.com/virattt/ai-hedge-fund) | Valuation-method reference, with scenario DCF or owner earnings as potential narrow cross-checks. Its portfolio simulator and investor personas duplicate existing responsibilities. | Compare one independently specified valuation on the same statement snapshot when assumptions materially affect the thesis. Record each assumption's effect. Evaluate its Financial Datasets provider separately if needed. Verify the exact upstream version if adapting an older implementation. |
 | [Trading-R1](https://github.com/TauricResearch/Trading-R1) | Manual, on-demand trial for hard filing, earnings, or valuation questions where Hermes/Deep research has a gap. | Use public cases. Disable [default Tauric session sync](https://github.com/TauricResearch/Trading-R1/blob/main/MANUAL.md#session-sync) for the trial and verify data/model/retention terms before sending anything private. Count an original source the baseline missed; keep Tauric results as leads until upstream provenance and publication time are verified. |
@@ -52,6 +56,24 @@ Freqtrade/FreqAI remains a crypto testing reference, such as for
 [lookahead analysis](https://www.freqtrade.io/en/latest/lookahead-analysis/).
 OctoBot remains rejected as a second runtime in the decision register. Neither
 is part of this equity integration sequence.
+
+## Qlib research workflow
+
+1. Reproduce the Alpha158 + LightGBM benchmark from a frozen, point-in-time
+   AdvisorAI U.S. equity snapshot. Pin the universe, calendar, feature and label
+   definitions, and train/validation/test windows. Keep the benchmark runnable
+   without an LLM.
+2. Run Microsoft's [RD-Agent quant workflow](https://github.com/microsoft/RD-Agent/blob/main/docs/scens/quant_agent_fin.rst)
+   as an opt-in factor and model search within the Qlib adapter. Pin Qlib and
+   RD-Agent separately and override upstream data, universe and benchmark
+   defaults for the approved snapshot. AdvisorAI schedules both workloads
+   through the same adapter and runs generated code in the existing research
+   sandbox. Bound trials, runtime and model spend. Use training and validation
+   for search and withhold final test data and results from the search loop.
+3. Export factor proposals as `CandidateFactorArtifact` and model experiments
+   as `ExperimentArtifact` with snapshot, configuration, dependency revisions,
+   and trial lineage. Reproduce finalists through independent NautilusTrader
+   replay before promotion. The adapter has research-only permissions.
 
 ## Awesome Quant intake
 
@@ -102,7 +124,8 @@ license grants neither provider entitlement nor data redistribution rights.
    and failures each check cannot detect.
 4. **Run the research pilots.** Once immutable prices, corporate actions,
    instrument history and filings are available, run Qlib on a frozen snapshot
-   and test TradingAgents when the Equity Council can emit a dated packet.
+   before qualifying bounded RD-Agent search in that adapter. Test TradingAgents
+   when the Equity Council can emit a dated packet.
    Record outcomes, rejected trials, runtime and marginal cost in existing
    AdvisorAI artifacts. Keep each challenger optional and removable.
 5. **Qualify broker paper separately.** Only the existing Decision Model,

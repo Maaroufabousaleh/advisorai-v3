@@ -2,7 +2,17 @@
 
 Baseline: 2026-11-14. Scope: `PAPER-V1`. This tracker defines the next ten jobs, not a percentage of the entire codebase.
 
-**Verified: 5/10. Partial: 1. Open: 4. Release: NOT READY.** Partial evidence is real progress, but it does not increment the release count. P04 counts as DONE per explicit owner override (Dashboard audit excepted, see note below); the exception is recorded, not hidden.
+**Complete: 6/10. Open: 4. Release: NOT READY.** The completed jobs are P01–P05 and P07. The count includes the explicit owner override for P04's Dashboard audit, documented below.
+
+The [native integration roadmap](docs/plans/native-first-integration-roadmap.md)
+tracks full-workstation delivery, including OpenBB, the agent trader and
+separately qualified stock/ETF and listed options paper profiles. PAPER-V1
+covers the first bounded crypto paper release. Its remaining jobs are P06
+strategy approval and P08–P10 integrated qualification. The P08 rehearsal
+merged in [#223](https://github.com/Maaroufabousaleh/advisorai-v3/pull/223)
+and the strategy gate in [#224](https://github.com/Maaroufabousaleh/advisorai-v3/pull/224)
+are P08 preparation. Qualification still requires the P06-approved strategy
+and integrated P09 fault evidence.
 
 ## Merge note — 2026-11-18 (owner override, green CI excepted)
 

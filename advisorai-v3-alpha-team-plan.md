@@ -244,7 +244,9 @@ Use two independent implementations before promotion:
 
 For U.S. equities, Qlib is an isolated benchmark environment. Start with
 Alpha158 + LightGBM on an AdvisorAI frozen snapshot and reproduce finalists
-in the canonical replay. QuantaAlpha remains deferred. Its published
+in the canonical replay. Run bounded RD-Agent factor discovery and model
+optimization inside the same Qlib adapter after establishing the benchmark.
+QuantaAlpha remains deferred. Its published
 configuration centers on Chinese daily data and a Top-K/Dropout simulation
 that needs separate evaluation for a different market. See the [equity data
 and research integration plan](docs/plans/equity-data-and-research-integrations.md).
@@ -257,8 +259,7 @@ and research integration plan](docs/plans/equity-data-and-research-integrations.
 | [Inalpha](https://github.com/mirror29/inalpha) | **Architecture reference only initially** | factor-timing, candidate audit trail, plan/approve/execute separation, sandbox gates and factor-decay monitoring patterns | code-level integration or a production dependency; it is alpha status and AGPL-3.0, so direct reuse would carry strong copyleft obligations |
 | [WorldQuant Miner](https://github.com/zhutoutoutousan/worldquant-miner) | **Reference and isolated external-platform experiment only** | restricted-expression-mining ideas, run dashboards, trial logging and rate-limit concepts | its credential file pattern, automatic submission, WorldQuant API automation, or treating platform scores as AdvisorAI validation |
 | [awesome-quant](https://github.com/wilsonfreitas/awesome-quant) | **Curated discovery index** | source catalogue for a Scout allow-list, each candidate reviewed individually | mass-installing its contents or using a list entry as endorsement |
-| Qlib | **Phase 9 equity benchmark** | Alpha158/LightGBM comparison on a frozen AdvisorAI snapshot | upstream sample data as canonical input, production risk, backtest or execution ownership |
-| RD-Agent | **Deferred** | later evaluation if experiment automation is a measured bottleneck | a second research orchestrator |
+| Qlib | **Phase 9 equity benchmark** | Alpha158/LightGBM on a frozen AdvisorAI snapshot, with bounded [RD-Agent](https://github.com/microsoft/RD-Agent) factor and model search in the same adapter | a separate RD-Agent orchestrator, upstream sample data as canonical input, or production risk, backtest or execution ownership |
 | Investing Algorithm Framework / VectorBT | **Research challengers** | rapid sweeps, robustness reports and experiment comparison | broker/live deployment or a second risk/OMS engine |
 | TradingAgents | **One bounded qualitative challenger** | bull/bear review of selected dated Equity Council cases | trader/risk stages, portfolio authority, order access |
 | ai-hedge-fund | **Valuation reference** | one alternate valuation calculation when assumptions are material | investor-agent roster, portfolio simulator, order access |
@@ -272,7 +273,7 @@ The named projects point to a broader set of useful capability classes. Keep V3 
 
 | Extension capability | Good candidates to evaluate | Adapter contract into V3 | When to evaluate |
 |---|---|---|---|
-| Agentic factor discovery | [QuantaAlpha](https://github.com/QuantaAlpha/QuantaAlpha), [AlphaAgent](https://github.com/RndmVariableQ/AlphaAgent), [RD-Agent](https://github.com/microsoft/RD-Agent) | `CandidateFactorArtifact` only | after the internal DSL/baseline lab works |
+| Agentic factor discovery | [QuantaAlpha](https://github.com/QuantaAlpha/QuantaAlpha), [AlphaAgent](https://github.com/RndmVariableQ/AlphaAgent), RD-Agent via the Qlib adapter | `CandidateFactorArtifact` only | after the internal DSL/baseline lab works |
 | Classic/evolutionary symbolic search | [DEAP](https://github.com/DEAP/deap), [gplearn](https://github.com/trevorstephens/gplearn), a small native grammar search | restricted AST + all-trials manifest | before any LLM miner becomes trusted for idea volume |
 | Quant research platform / benchmark replication | [Qlib](https://github.com/microsoft/qlib), original paper code, the Investing Algorithm Framework | `ExperimentArtifact` on a frozen V3 snapshot | with the US-equity research expansion |
 | Factor diagnostics | [Alphalens Reloaded](https://github.com/stefan-jansen/alphalens-reloaded), native exposure/decay reports | `FactorDiagnosticArtifact` | early alpha-lab work |

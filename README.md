@@ -40,6 +40,18 @@ The system addresses two failure modes that are easy to hide in an AI-heavy trad
 
 This makes the repository useful as a safety-oriented foundation and testbed. It is not a claim of live trading readiness or investment performance.
 
+The [native integration roadmap](docs/plans/native-first-integration-roadmap.md)
+starts with direct NautilusTrader replay and paper execution, followed by
+real PydanticAI agents. The full product target adds broad U.S. stock
+research, listed U.S. equity/ETF options and crypto spot, source-linked
+research reading, and an owner-started agent trader for approved paper
+strategies. The [PAPER-V1 tracker](AdvisorAI_Paper_Readiness_Tracker.md)
+records qualification for the first bounded crypto release.
+
+The [professional dashboard plan](docs/plans/secure-operator-dashboard.md)
+covers portfolio and performance, paper execution, news and events, risk,
+research and model evidence, and a dedicated Markets & OpenBB workspace.
+
 ## Current capabilities
 
 | State | Capability | Where it lives |
@@ -53,7 +65,7 @@ This makes the repository useful as a safety-oriented foundation and testbed. It
 | Implemented | Session lifecycle records and single-owner supervisor: start/checkpoint/stop/restart, crash classification, recovery mode, data gaps, worker leases, idempotent append-only events | [`src/advisorai/session`](src/advisorai/session) |
 | Implemented | Generic `DecisionModelPort`, typed `DecisionProposal` (LONG/SHORT/FLAT/ABSTAIN), and a deterministic local reference adapter with fail-closed abstention; service records proposals with evidence lineage | [`src/advisorai/decision`](src/advisorai/decision), [`src/advisorai/api/service.py`](src/advisorai/api/service.py) |
 | Implemented | Research Brain record types (`PaperCard`, `HypothesisCard`, `CandidateFactor`, `ExperimentArtifact`, `ValidationReport`, `PromotionDecision`) and dashboard session/recovery/research projections | [`src/advisorai/research/cards.py`](src/advisorai/research/cards.py), [`src/advisorai/api/dashboard.py`](src/advisorai/api/dashboard.py) |
-| Gated / experimental | Optional PydanticAI/Graph, Prefect, Hamilton, LiteLLM, NautilusTrader, model runtimes, public-data qualification, and paper/testnet connector smoke tests | [`pyproject.toml`](pyproject.toml), [`docs/plans`](docs/plans), [`docs/runbooks`](docs/runbooks) |
+| Core integrations in delivery | Direct NautilusTrader replay and paper execution, real PydanticAI agents, Prefect/Hamilton, local models and an OpenAI route, qualified data and OpenBB, and sandboxed Hermes | [Native integration roadmap](docs/plans/native-first-integration-roadmap.md) |
 | Planned / not integrated | Empirical Research Brain registries/Alpha Team job orchestration beyond record types, persistent experiment/outcome memory wiring, and bounded challenger evaluation | [`docs/concepts/status.md`](docs/concepts/status.md), [`docs/plans/README.md`](docs/plans/README.md) |
 | Not enabled | Live-capital operation, unrestricted browser/agent authority, and automatic model promotion | [`docs/concepts/status.md`](docs/concepts/status.md) |
 

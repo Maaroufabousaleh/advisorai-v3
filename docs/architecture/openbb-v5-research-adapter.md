@@ -1,8 +1,9 @@
-# Optional OpenBB V5 research adapter
+# OpenBB V5 read-only research adapter
 
-Status: design evaluation only. The adapter is not enabled, is not a dependency,
-and has no credentials. Direct AdvisorAI providers remain the execution-grade
-feeds and the only operational source of truth.
+The [native integration roadmap](../plans/native-first-integration-roadmap.md)
+selects one entitled OpenBB V5 endpoint for I5. Implementation and provider
+qualification are pending. Direct AdvisorAI providers remain the sources for
+execution-grade feeds.
 
 ## Intended role
 
@@ -39,9 +40,9 @@ validation pipeline remains responsible for acceptance and durable truth.
 
 1. Pin a V5-compatible OpenBB core/provider set in an isolated research extra;
    verify current API shape, licenses, and runtime dependencies.
-2. Prototype one keyless metadata/data provider and compare its output against
-   the existing direct connector for timestamps, units, revisions, and source
-   identity.
+2. Run one native read-only market-data or options-chain endpoint with an
+   entitled provider. Compare the output against the direct upstream for
+   timestamps, units, revisions and source identity.
 3. Benchmark coverage, latency, limits, and maintenance cost. Keep the direct
    connector authoritative; add OpenBB only where it improves discovery or
    provides genuinely independent corroboration.

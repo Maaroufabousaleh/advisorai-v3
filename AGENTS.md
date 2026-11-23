@@ -1,5 +1,12 @@
 # Instructions for AI agents
 
+## Workstation delivery
+
+- Use [I1–I9](docs/plans/native-first-integration-roadmap.md) for implementation order and acceptance. Start with a runnable NautilusTrader replay, then build real PydanticAI agent execution on the existing Evidence Council boundary. Use [PAPER-V1](AdvisorAI_Paper_Readiness_Tracker.md) for first-release crypto admission. The full workstation also includes U.S. stocks, ETFs and listed options.
+- For a selected upstream tool, inspect the locked version and existing integration, then invoke the upstream engine or library through its supported interface. Reuse AdvisorAI's data, account, RiskKernel, OMS and reconciliation owners. Use test doubles for fault coverage and the simulator for labeled rehearsals. A new stand-in engine, a successful import, or a fixture alone cannot satisfy a native milestone.
+- Ship a runnable operator path with each milestone. Record the exact command, upstream invocation, input and revision pins, expected and actual results, and remaining blockers. If a native route is missing or blocked, record the failing step and keep working on the runnable portion. Replacing a selected engine or changing scope requires a reviewed roadmap decision.
+- Keep strategy, venue, data and account approval separate from integration. Research and dashboard code have no direct venue write authority. Approved paper execution must route through the deterministic controls and preserve the evidence-to-fill trace. Require a real fake-funds venue fill, exact reconciliation and restart without duplicate orders before claiming paper qualification.
+
 ## Required security review before any push
 
 Before running `git push`, review the exact commits and files that will reach
