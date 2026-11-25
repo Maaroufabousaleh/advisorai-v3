@@ -171,6 +171,12 @@ and original publisher. Use entitled options-chain and quote history for
 options replay. Record date and contract coverage and treat missing quote,
 spread or contract data as unavailable for the affected strategies.
 
+Re-evaluate [London Strategic Edge](equity-data-and-research-integrations.md#london-strategic-edge-evaluation)
+as an optional read-only provider. Start with a small U.S. options chain and
+completed-session prints comparison. Review Parquet backfill and macro
+coverage as separate candidates. Record a decision by dataset before exposing
+LSE in the dashboard or using its data for replay.
+
 The research intake must make a permitted paper or primary document readable
 from each of equity, options and crypto searches. Test retrieval from the
 original publisher or author, verify each displayed citation, and include a
@@ -218,6 +224,10 @@ data and strategy allowlist.
 | Crypto spot | Binance Spot Testnet first. Evaluate Kraken Spot for entitled market data and [its official CLI's spot paper workflow](https://github.com/krakenfx/kraken-cli/blob/main/README.md) as a rehearsal candidate. Qualify a Kraken venue route only after verifying a supported fake-funds spot endpoint and account. | Exercise BTC and ETH coverage, venue symbol and precision rules, fees, partial fills, outage, restart and reconciliation. Local CLI simulated fills are rehearsal evidence. Kraken's [documented derivatives demo](https://support.kraken.com/ca/articles/360024809011-api-testing-environment-derivatives) covers derivatives. |
 | U.S. stocks and ETFs | IBKR Paper through the pinned NautilusTrader adapter. Alpaca Paper is a separately qualified fallback candidate. | Exercise AAPL, SPY and TLT research. Prove routing, fill, fees, account/position reconciliation, corporate-action accounting and market-calendar handling. Verify [paper account and market-data entitlements](https://www.ibkrguides.com/clientportal/aboutpapertradingaccounts.htm). |
 | U.S. listed equity/ETF options | IBKR Paper first. Validate option discovery, underlying/contract identity, data permissions and support in the pinned adapter. | Start with a long, single-leg, defined-risk contract. Validate expiry, strike, right, multiplier, tick/lot size, quote/chain freshness, spread and mark, max premium loss, fee and position math. Test expiration/exercise/assignment records in replay and require a demonstrated close or operational management path before admitting a profile. Broader contract types and strategies require their own qualification. |
+
+A [London Strategic Edge](equity-data-and-research-integrations.md#london-strategic-edge-evaluation)
+research result may inform options discovery. I8 requires entitled quote
+and venue evidence for the selected IBKR Paper route.
 
 **PASS:** each profile records an eligible nonzero order, venue paper or testnet
 acknowledgement and fill, matching ledger cash/positions/fees, cancel or reject

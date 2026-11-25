@@ -1,6 +1,6 @@
 # Equity data and research integrations
 
-**Review dates:** 2026-11-17 and 2026-11-23. The
+**Review dates:** 2026-11-17, 2026-11-23, and 2026-11-25. The
 [native roadmap](native-first-integration-roadmap.md) selects OpenBB V5 and
 Qlib/RD-Agent for the full workstation and defines stock/ETF and listed
 options paper qualification in I8. The scope below covers equity research
@@ -35,8 +35,50 @@ independently of the others.
 | U.S. filings and issuer events | [SEC EDGAR](https://www.sec.gov/search-filings/edgar-application-programming-interfaces) and issuer IR releases are the primary candidates. Compare the [TradingAgents EDGAR implementation](https://github.com/TauricResearch/TradingAgents/blob/main/tradingagents/default_config.py) with [EdgarTools](https://github.com/dgunning/edgartools) on a 10-K, 10-Q, amendment, and earnings release. Use one parsing path behind the existing collector and retain the source accession and acceptance time. | [Financial Datasets](https://www.financialdatasets.ai/pricing), used by `ai-hedge-fund`, is an optional paid enrichment trial for normalized statements, earnings and operating metrics. Require accession or source linkage and replayable filing/amendment times. A second EDGAR parser tests interpretation of the same filing. |
 | Corporate actions and universe history | Use permitted official publisher/exchange records and verify provider action records against them. Capture splits, dividends, symbol/identifier changes, listing state, and delistings. Preserve both effective and first-known times. | Evaluate [Databento corporate actions](https://databento.com/docs/datasets/corporate-actions) only if the available feeds cannot supply auditable action or delisting history. Expand beyond the smoke-test symbols only after historical universe membership and inactive-symbol coverage are verified. |
 | Macro context | [FRED/ALFRED](https://fred.stlouisfed.org/docs/api/fred/) for release-time and vintage-aware series. | Use the [New York Fed Markets API](https://markets.newyorkfed.org/static/docs/markets-api.html) directly when SOFR/EFFR or publisher verification is required. A FRED copy of a NY Fed series shares the same original publisher. |
-| Limited research or discovery | Yahoo Finance has the documented private replay. [Alpha Vantage](https://www.alphavantage.co/support/) is a keyed spot-check candidate; its standard free limit is 25 requests/day. [London Strategic Edge](https://github.com/londonstrategicedge/lse-data) remains optional corroboration pending provenance and rights review. | Yahoo wrappers, Qlib's Yahoo collector, and the [defeatbeta Yahoo-derived snapshot](https://huggingface.co/datasets/defeatbeta/yahoo-finance-data) belong to the same upstream family. Different wrappers can test ingestion behavior. Qualify source rights and provenance before collecting, retaining, or sharing data. |
+| Limited research or discovery | Yahoo Finance has the documented private replay. [Alpha Vantage](https://www.alphavantage.co/support/) is a keyed spot-check candidate; its standard free limit is 25 requests/day. | Yahoo wrappers, Qlib's Yahoo collector, and the [defeatbeta Yahoo-derived snapshot](https://huggingface.co/datasets/defeatbeta/yahoo-finance-data) belong to the same upstream family. Different wrappers can test ingestion behavior. Qualify source rights and provenance before collecting, retaining, or sharing data. |
 | Equity paper venue | Use the existing execution boundary to evaluate [NautilusTrader's upstream IBKR adapter](https://nautilustrader.io/docs/latest/integrations/interactive_brokers/), which supports IB Gateway/TWS paper access. Confirm account permissions and [market-data subscriptions](https://www.ibkrguides.com/clientportal/aboutpapertradingaccounts.htm). | [Alpaca Paper](https://docs.alpaca.markets/us/docs/paper-trading) is an alternative if IBKR access or integration effort warrants it. Qualify venue data, permissions, order/fill/cancel behavior, reconciliation, restart and recovery separately. Alpaca research-feed access alone establishes none of that venue evidence. |
+
+## London Strategic Edge evaluation
+
+**Decision (2026-11-25):** Queue a read-only I5 pilot, starting with U.S.
+options. [LSE Data 3.0](https://londonstrategicedge.com/data/) is a candidate
+for discovery and frozen research inputs. Authenticated coverage, accuracy,
+latency and access on the intended account are unverified. Review each
+dataset and the Terminal separately.
+
+| Candidate | Test and decision |
+|---|---|
+| Options chains, prints and contract candles | **First pilot.** Use SPY and AAPL, two expiries each and one completed U.S. session. Compare contract identity, multiplier, venue, trade price and size, timestamps and any available bid/ask against an entitled IBKR or other qualified reference. Declare comparison tolerances and a coverage target before collecting. Admit for discovery or historical prints only if those fields pass. Test quote continuity, spreads and availability separately before considering fill-sensitive replay. |
+| Implied volatility and Greeks | The [SDK](https://pypi.org/project/lse-data/) describes twice-daily calculations and says session prints are archived after the session. Record when each input and calculated value became available. Show only as dated analytics if the calculation or availability cannot be established. |
+| Equity and ETF Parquet | Compare AAPL, SPY and TLT bars with the planned Alpaca SIP check on completed, aligned sessions. Verify adjustments, split/dividend handling, gaps, timestamps and revisions. Evaluate as a secondary backfill or frozen research input where the checks pass and there is a documented coverage or cost benefit. |
+| Macro releases, yields and reference data | Test one named dataset for calendar or instrument context. Compare availability times and historical revisions with the original publisher. Keep FRED/ALFRED for vintage-aware U.S. workflows unless equivalent evidence is established for the proposed series. |
+| [LSE Terminal](https://github.com/londonstrategicedge/lse-terminal) | In I9 dashboard work, compare one separable feature, starting with options-flow exploration or a backtest results view. Review the exact revision, MIT obligations, dependencies, data rights and effort saved. Reuse only a component that improves the existing dashboard. |
+
+**Evidence to retain.** Pin the client/API revision, endpoint, account tier,
+instrument and session. Use the provider's documented API or SDK. Keep raw
+payloads in an entitled private store with export hashes, event, availability
+and retrieval timestamps, and observed revisions. Record coverage, field-level
+discrepancies, freshness/latency, throttling, and quota cost. Verify limits
+against the actual account at the time of the trial. The November review
+found SDK documentation of 2.5 million rows per export and 12.5 GiB per
+week on the free plan. Where upstream lineage is undisclosed, label it unknown and exclude it from independent-source counts.
+LSE says its own-market prices use its methodology, are not official exchange
+or consolidated prices, and can change after publication.
+
+**Rights and routing.** Review the [terms](https://londonstrategicedge.com/terms/)
+and [data licence](https://londonstrategicedge.com/licence/) for each use.
+The provider describes personal, individually run use with the operator's own
+key. Shared dashboards, redistribution and organisational or commercial use
+require separate rights. The SDK and Terminal code licences do not convey
+market-data rights. Nasdaq TotalView and CME Globex are paid feed entitlements
+with exchange-specific terms. Keep keys and restricted rows out of source
+control and shared artifacts.
+
+Record **adopt for a named read-only use**, **defer with missing evidence**,
+or **reject** for each candidate, with scope and reasons. A passing display or
+research pilot can feed a provider-labeled view in Markets & OpenBB. Keep
+LSE research data outside paper routing, order reconciliation and I8 venue
+qualification.
 
 ## Evaluation of external projects
 

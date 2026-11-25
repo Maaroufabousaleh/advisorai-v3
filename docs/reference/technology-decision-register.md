@@ -124,7 +124,7 @@ failure policy; and last review date.
 | OpenTerminal ([JamievanRiel/OpenTerminal](https://github.com/JamievanRiel/openterminal)); OpenTerminalUI candidates [Hitheshkaranth/OpenTerminalUI](https://github.com/Hitheshkaranth/OpenTerminalUI) and [laanito/OpenTerminalUI](https://github.com/laanito/OpenTerminalUI) | **REJECTED as runtime or operator-console replacements.** Existing React/FastAPI console, provider ports, portfolio, and execution owners already cover those responsibilities. | The linked repositories currently declare MIT. No second portfolio store, operator control plane, canonical cache, alert authority, or execution path. UX and provider ideas may be reviewed without importing a runtime. Revisit only for a named, non-duplicative component with exact upstream and license. | NOT PRESENT; NOT ADMITTED. |
 | Official-text-first event intelligence | **PROTOTYPE/EXPERIMENT after Integrated Alpha.** Add an EventEvidencePort or existing equivalent for SEC filings, issuer earnings releases, official statements, and IR event metadata. | Every item carries source identity, publication/retrieval time, extraction model/version, confidence, and deduplication identity. Verify numerical claims against filings or official structured releases. Third-party transcripts/audio require source-specific rights to access, record, store, transform, and redistribute, plus latency/retention review. Only afterward consider [OpenAI Whisper](https://github.com/openai/whisper), whose code repository declares MIT; review checkpoint/model assets separately. No event-to-order path. | NOT PRESENT; RESEARCH ONLY; Phase 9. |
 
-### Equity and ETF follow-up
+### Equity, ETF and options follow-up
 
 The [equity integration plan](../plans/equity-data-and-research-integrations.md)
 records endpoint selection, source lineage, qualification tests, and the
@@ -134,6 +134,7 @@ external-project evaluation. All entries below are unadmitted.
 |---|---|
 | Alpaca historical SIP | **PROTOTYPE/EXPERIMENT.** First U.S. daily research-bar candidate, subject to account, feed and rights checks. Keep IEX and consolidated SIP observations distinct. |
 | Massive / Tiingo | **PROTOTYPE/EXPERIMENT.** Candidates for one secondary daily-bar check. Trial Massive Basic first and consider Tiingo where history, coverage or action fields justify it. Shared exchange/SIP lineage can limit source independence. |
+| [London Strategic Edge Data 3.0 and Terminal](../plans/equity-data-and-research-integrations.md#london-strategic-edge-evaluation) | **PROTOTYPE/EXPERIMENT (2026-11-25).** I5 read-only options pilot first. Evaluate equity backfill and macro by dataset, and a single Terminal UI feature during I9. Require authenticated coverage, timing, provenance, rights and a measured benefit. Research and display only for admitted uses. |
 | EdgarTools / TradingAgents SEC connector | **PROTOTYPE/EXPERIMENT.** Compare parser approaches behind the existing provider port. SEC EDGAR and issuer documents own the facts. |
 | Financial Datasets / FMP | **DEFERRED enrichment.** Revisit a named gap in normalized metrics with exact terms and point-in-time evidence. |
 | Databento corporate actions | **DEFERRED coverage upgrade.** Revisit if split, dividend, inactive-symbol or delisting history has an established gap. |
