@@ -35,6 +35,12 @@ without losing the current workspace.
 | [AG Grid Community](https://www.ag-grid.com/eula/community/) | First direct grid integration candidate for dense positions, fills, news and option chains. Use Community features for sorting/filtering and measured rendering; use typed server pagination for views beyond the client budget. |
 | [FinceptTerminal](https://github.com/Fincept-Corporation/FinceptTerminal) and [Ghostfolio](https://github.com/ghostfolio/ghostfolio) | Evaluate one concrete Fincept market or research workflow and use Ghostfolio as an allocation/returns reference. Review the exact AGPL-licensed component, deployment terms, data rights and incremental value before deciding on code reuse. Keep AdvisorAI's own visual design and existing account projections. |
 
+After the [London Strategic Edge pilot](equity-data-and-research-integrations.md#london-strategic-edge-evaluation),
+consider one entitled read-only options view inside Markets & OpenBB.
+Use the existing provider port and show feed, delay, entitlement and missing
+fields. Review one LSE Terminal feature against the current views before
+adopting code, and record display rights for the dashboard's deployment scope.
+
 ### Delivery and acceptance
 
 1. **Portfolio and execution first.** On a permitted paper session, compare

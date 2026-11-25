@@ -33,6 +33,9 @@ may begin before Phase 7; promotion remains gated.
    Alpaca historical SIP and SEC EDGAR first, then a secondary daily-bar
    candidate. Admit provider adapters and optional tools one at a time. Keep
    equity broker-paper qualification separate from frozen research replay.
+   Revisit the [London Strategic Edge pilot](equity-data-and-research-integrations.md#london-strategic-edge-evaluation)
+   for a specific options, backfill or macro gap. Admit only the dataset and
+   use justified by the recorded evidence and rights.
    Keep browser collectors and optional cloud workers behind their existing
    ports and qualification boundaries.
 7. Prototype official-text-first event evidence after Integrated Alpha. Defer
