@@ -191,6 +191,11 @@ rights are unavailable.
 
 **Tests:** genuine Hermes task transcript with fixed turn/tool/resource budget and artifact hashes; network/filesystem/credential denials demonstrated by adversarial probes; no write to trusted repository or trading services; repeat task without duplicate ledger artifacts; terminate mid-task and record interrupted truth; trace PaperCard → HypothesisCard → Candidate → Experiment → Validation → Decision. Paper2Code may supply a specific paper-without-code capability only if its code materially improves reproduction, with the exact upstream license and independent replay. Cognee/LLM Wiki/Qanat are retrieval or experiment adapters only if they add measured value without replacing canonical research truth.
 
+The [QuantMind paper-evidence prototype](quantmind-paper-evidence.md) is a
+focused Research Brain adaptation for extracting and retrieving page-cited
+findings from an admitted PDF. Its first slice includes an exact-page
+citation regression test.
+
 **PASS:** actual upstream Hermes work safely exports one reproducible candidate; durable source-linked good and bad outcomes survive restart. A stand-in research script or a sandbox-only demo is insufficient.
 
 ## I7 — External quantitative and finance-agent capabilities
