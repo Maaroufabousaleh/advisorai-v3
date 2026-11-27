@@ -45,6 +45,10 @@ may begin before Phase 7; promotion remains gated.
    route missing research implementations through the optional
    [Hermes paper-to-code trial](paper-to-code-prototype.md).
 
+9. Evaluate the [QuantMind paper-evidence prototype](quantmind-paper-evidence.md)
+   inside the existing Research Brain. Start with one admitted, versioned
+   PDF and verify the exact page and supporting passage for each finding.
+
 ## Research Brain separation
 
 - **Knowledge/literature layer:** papers, concepts, equations, methods,
