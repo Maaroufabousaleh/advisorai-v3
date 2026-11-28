@@ -26,6 +26,16 @@ and its synthetic Git fixtures establish research evidence only. No equity
 market-data feed or broker-paper route is admitted. IBKR via NautilusTrader
 and Alpaca Paper are separate venue candidates.
 
+## 2026-11-27 candidate planning follow-up
+
+The [free-first intelligence plan](../plans/free-first-live-intelligence.md)
+adds a multi-asset/live-news provider qualification inventory, a lightweight
+collector design and paid escalation criteria. LSE, Alpaca, OANDA, official
+RSS, news APIs, on-chain and prediction-market sources are feed-specific
+candidates, not new authenticated tests or entitlements. The dated credential
+and verification records below are unchanged. All new keys must use reviewed
+scopes; no keys or restricted data belong in the repository.
+
 ## Credential snapshot as of 2026-11-13
 
 Infisical state remains: project `AdvisorAI V3`; `dev` contains only the existing
