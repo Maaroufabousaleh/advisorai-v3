@@ -26,6 +26,8 @@ The repository is intentionally documented in layers. The root [README](../READM
 - [Execution model](concepts/execution-model.md) — the proposal-to-paper-order lifecycle, risk vetoes, order state machine, reconciliation, and live guard.
 - [Project status](concepts/status.md) — implemented, gated/experimental, planned, and deliberately absent capabilities.
 
+- [Free-first live intelligence and adaptive AI routing (target)](plans/free-first-live-intelligence.md) — source qualification, real-time collection, parallel event analysis, privacy-aware model routing and research-led optimization.
+
 ## Guides
 
 - [Operator console](guides/operator-console.md) — screens, synthetic versus ledger-backed data, protected mode, and guarded commands.
