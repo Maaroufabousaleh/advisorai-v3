@@ -52,6 +52,11 @@ The [professional dashboard plan](docs/plans/secure-operator-dashboard.md)
 covers portfolio and performance, paper execution, news and events, risk,
 research and model evidence, and a dedicated Markets & OpenBB workspace.
 
+The planned [free-first live intelligence and adaptive AI routing extension](docs/plans/free-first-live-intelligence.md)
+adds qualified live feeds, lightweight news collection, parallel rapid AI,
+privacy-aware inference routing and research-led capability optimization.
+It does not change the current implemented capabilities or PAPER-V1 scope.
+
 ## Current capabilities
 
 | State | Capability | Where it lives |
