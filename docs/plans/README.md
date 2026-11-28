@@ -15,6 +15,15 @@ directly, then real PydanticAI agents. Use Phase 0–10 below for existing
 architecture and operational gates and the [PAPER-V1 tracker](../../AdvisorAI_Paper_Readiness_Tracker.md)
 for first-release crypto evidence.
 
+## Free-first intelligence expansion (target)
+
+The [live intelligence and adaptive AI routing plan](free-first-live-intelligence.md)
+maps LI-0–LI-6 work packages to existing I3–I9, Phase 0–9 and Alpha Team
+admission stages. It covers real-time sources, lightweight collectors, parallel
+news AI, OpenCode Go/Hermes, free/low-cost inference and GPT-6.2 Sol effort
+routing. These are full-product foundational capabilities, not additions to
+the first bounded crypto PAPER-V1 gate or changes to the frozen reference roster.
+
 ## Two-track phase model
 
 **Implementation readiness** covers architecture, interfaces, services,

@@ -184,6 +184,19 @@ Load-shedding order is archive → browser → Hermes/Skill Foundry → low-prio
 
 ---
 
+### Foundational intelligence extension (2026-11-27)
+
+The [free-first live intelligence and adaptive AI routing plan](docs/plans/free-first-live-intelligence.md)
+is the accepted target extension of V3: continuous in-session collection,
+optional separately admitted read-only always-on acquisition, original-source
+news/event processing, parallel local NLP/rapid AI/market reaction, and adaptive
+privacy-first inference routing are foundational capabilities of the full
+workstation. Providers remain replaceable, source- and model-specific
+qualification candidates. Prefer free historical coverage plus independent
+validation (LSE is not exchange truth), and spend only on measured live-data
+or historical quality gaps. Preserve the frozen reference fabric and exact
+PAPER-V1 gates. No new authority, process owner, database or roadmap is created.
+
 ## 4. Data system
 
 ### 4.1 Point-in-time contract

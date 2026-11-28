@@ -133,6 +133,17 @@ but promotion and authority remain gated. Historical timed evidence is
 preserved; session recovery is the primary future workstation validation
 focus.
 
+## Target foundational intelligence extension
+
+The [2026-11-27 intelligence plan](../plans/free-first-live-intelligence.md)
+extends existing owners, not the implemented-state diagram above. Collectors
+feed the canonical PIT data plane; local NLP, rapid remote AI and deterministic
+market reaction run independently under deadlines and emit typed evidence.
+ModelGatewayPort remains the single policy-checked inference boundary.
+Hermes and Alpha Team propose improvements; independent tests and approved
+activation remain mandatory. The execution hot path never waits for AI.
+This is planned capability work, not a deployed always-on service.
+
 ## Further reading
 
 - [Data flow](data-flow.md)
