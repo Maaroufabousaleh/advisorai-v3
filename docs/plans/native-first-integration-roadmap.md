@@ -12,6 +12,18 @@ An owner starts an AdvisorAI session and the actual selected open-source engines
 
 This is a **delivery sequence**, not a reset of the historical Phase 0–10 gates, the PAPER-V1 P01–P10 records, or existing evidence. Those remain historical/operational qualification records. The integration milestones I1–I9 below define **what must actually work** and take priority for new feature implementation. An existing component can be reused without rewriting it.
 
+## Foundational intelligence delivery overlay (2026-11-27)
+
+The [free-first live intelligence plan](free-first-live-intelligence.md)
+defines bounded LI-0–LI-6 work packages within this delivery sequence:
+I3/I5 source collection and event pipelines, I4 adaptive AI gateway and
+parallel news inference, I6/I7 research-driven capability comparisons, and
+I8/I9 scoped expansion and joined workstation validation. Do not replace
+native engines, broaden first-release acceptance, or rebaseline existing
+milestones. The owner session remains canonical; an always-on read-only
+collector is optional. Provider and model choices remain candidates until
+qualified by exact scope. No subscription is a PAPER-V1 prerequisite.
+
 ## What the owner must be able to do
 
 | Workflow | Full-product acceptance |
