@@ -77,6 +77,20 @@ self-promotion authority. It remains outside the deterministic execution path
 (`TimesFM3 -> research Forecast artifact -> evaluation evidence`, never
 `TimesFM3 -> orders`).
 
+## Research-led intelligence improvement (target)
+
+Extend the existing Alpha Team and Hermes roles to discover, replicate,
+enhance, combine, falsify, adapt and retire not only strategies/factors but
+also collectors, source choices, model routes and resource optimizations.
+Use the shared laboratory and champion/challenger scorecards in the
+[free-first intelligence plan](free-first-live-intelligence.md). Compare
+prospective time-to-event, unique coverage, rights, reliability, latency,
+cost per validated task and incremental net utility; preserve negative
+results in existing Research Brain registries. A researcher may propose a
+new capability but cannot buy subscriptions, grant credentials, relax policy,
+mutate production or activate itself. Keep independent evaluation and owner
+approval. This extension changes no E-stage, PAPER-V1 or live gate.
+
 ## Typed research boundary
 
 E1 introduces typed artifacts and registries without changing canonical trading
