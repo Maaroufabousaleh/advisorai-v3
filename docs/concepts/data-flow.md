@@ -56,6 +56,17 @@ The evidence gate requires at least two source families and three factor familie
 
 Source diversity is not a guarantee of independence. `EvidenceGraph` discounts or rejects correlated evidence using source and model ancestry metadata. A source can be available and still be unusable for a decision if it is stale, expired, disagreed, unsupported, or outside the cutoff.
 
+## Target live and news acquisition
+
+The [free-first intelligence plan](../plans/free-first-live-intelligence.md)
+specifies the proposed shared source registry, native push/conditional polling,
+deduplication, licensing and quota enforcement, optional collector profile,
+and parallel event-processing branches. LSE proprietary history/live series
+remain non-authoritative until feed-specific review and cross-checks.
+Store raw payloads and derived artifacts only as permitted; record retention
+limitations rather than claiming unsupported replay. Late model output cannot
+enter an earlier snapshot. No new provider is admitted by this plan.
+
 ## Failure behavior
 
 | Condition | Data-path response | Decision/execution consequence |
