@@ -25,6 +25,31 @@ comparison with permitted weights. The roadmap also records the initial
 Binance and IBKR Paper venue priorities. Dated implementation and admission evidence
 below applies to the exact scope reviewed.
 
+## Free-first intelligence review (2026-11-27)
+
+**ADOPTED-IN-PLAN / PLAN ONLY:** shared acquisition, rapid parallel event
+intelligence, adaptive ModelGateway routing, privacy/rights and quota
+policy, and research-led champion/challenger optimization. See the
+[extension specification and provider inventory](../plans/free-first-live-intelligence.md)
+for the authoritative new candidate matrix, source links, price assumptions,
+acceptance tests and work-package binding. Existing admitted scopes and
+the frozen native reference fabric are unchanged.
+
+- **Priority prototypes:** LSE historical/live corroboration (not exchange
+  truth), native streams, official RSS/releases, Alpaca, targeted permitted
+  feed adapters, Groq/Gemma/OpenRouter and direct OpenAI Sol effort routing.
+- **Scoped prototypes:** OpenNews MCP, World Monitor, on-chain/prediction
+  feeds, OpenCode Go through eligible Hermes coding harnesses, Muse Spark
+  Contributor for training-permitted isolated data only, Muse Ember,
+  DeepSeek/Luna/Haiku challengers, optional Jev decision endpoint.
+- **Deferred paid sources:** licensed real-time broker/news feeds only when
+  a measured gap justifies cost; historical subscriptions only for verified
+  missing data. Black Friday offers and free quotas are not entitlements.
+- **Rejected:** account/trial circumvention, paywall bypass, unlicensed
+  retention/training, consumer news subscriptions as automatic AI feeds,
+  unofficial consumer LLM sessions as runtime dependencies, unconditional
+  multi-agent calls or always-on GPU/browser swarms.
+
 ## Decision and evidence vocabulary
 
 | Decision | Meaning |
